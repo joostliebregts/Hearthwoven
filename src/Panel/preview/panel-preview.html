@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hearthwoven panel preview</title>
+<!-- Static preview of the in-game panel. It draws window.PANEL_DATA, written by `test-panel --dump` from PanelModel.Build
+     on a fictional sample evening, with the layout numbers of PanelUi.cs (1180 x 760 panel, chapter row 60-130,
+     left list 270 wide, content from 140). Stand-ins: Averia Serif Libre from Google Fonts for the game's own font, a serif
+     for Norse; item, piece and skill slots show the initial PanelUi draws when a sprite is missing, because the game's
+     sprites only exist inside the game; status icons are drawn as a dot in the fallback colour. -->
+<link href="https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:ital,wght@0,400;0,700;1,400&family=Cinzel:wght@600&display=swap" rel="stylesheet">
+<script src="preview-data.js"></script>
+<style>
+  :root { --panel:rgba(19,15,11,.88); --edge:#6b5232; --slot:rgba(28,22,15,.95); --slotedge:#4a3a28; --sel:rgba(92,61,23,.75); --text:#e9dcc4; --muted:#b9a688;
+          --faint:#8c7b62; --gold:#e8c27a; --accent:#e8a948; --track:#2b2117; --rule:rgba(107,82,51,.6); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { width:1280px; height:860px; font-family:"Averia Serif Libre", Georgia, serif; color:var(--text);
+         background: radial-gradient(ellipse at 30% 70%, #5a3a1c 0%, #2a2018 35%, #121417 75%), #121417; position:relative; overflow:hidden; }
+  .world { position:absolute; inset:0; background: repeating-linear-gradient(100deg, rgba(0,0,0,.25) 0 40px, rgba(255,255,255,.02) 40px 90px); }
+  .panel { position:absolute; left:50px; top:30px; width:1180px; height:760px; background:var(--panel); box-shadow:0 0 0 2px var(--edge), 0 18px 60px rgba(0,0,0,.6); }
+  .wordmark { position:absolute; left:24px; top:14px; font-family:Cinzel, serif; font-size:30px; color:var(--gold); letter-spacing:1px; }
+  .owner { position:absolute; left:300px; top:24px; font-size:18px; color:var(--muted); }
+  .players { position:absolute; right:20px; top:14px; height:36px; display:flex; gap:6px; }
+  .chip { height:100%; display:flex; align-items:center; gap:8px; padding:0 14px; background:var(--slot); box-shadow:0 0 0 1px var(--slotedge); color:var(--text); font-size:16px; white-space:nowrap; }
+  .chip.on { background:var(--sel); box-shadow:0 0 0 1px var(--accent); color:var(--gold); }
+  .chip .m { margin-left:-8px; }
+  .chapters { position:absolute; left:20px; right:20px; top:60px; height:70px; display:flex; gap:6px; }
+  .chapters .chip { flex:1; height:64px; flex-direction:column; justify-content:flex-end; padding:6px 4px 6px; gap:2px; font-size:15px; }
+  .chapters .chip .m { margin-left:0; }
+  .list { position:absolute; left:20px; top:140px; width:270px; bottom:50px; display:flex; flex-direction:column; gap:8px; overflow:hidden; }
+  .list .chip { height:52px; flex:none; padding-left:16px; }
+  .content { position:absolute; left:308px; right:20px; top:140px; bottom:50px; }
+  .heading { font-size:28px; color:var(--gold); height:36px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .scope { font-size:15px; color:var(--muted); margin-top:2px; height:22px; }
+  .blocks { position:absolute; top:68px; left:0; right:0; bottom:0; overflow:hidden; display:flex; flex-direction:column; gap:8px; }
+  .row { display:flex; gap:10px; align-items:center; }
+  .m { flex:none; display:flex; align-items:center; justify-content:center; background:var(--slot); color:var(--gold); font-family:Cinzel, serif; overflow:hidden; }
+  .m img { width:100%; height:100%; object-fit:contain; }
+  .m.person { border-radius:50%; color:#fff; }
+  .section { font-size:17px; color:var(--gold); margin-top:4px; }
+  .note { font-size:12.5px; color:var(--faint); }
+  .plain { font-size:14px; color:var(--muted); }
+  .hint { display:flex; gap:10px; font-size:15px; } .hint::before { content:""; width:3px; flex:none; background:var(--accent); }
+  .stat { display:flex; gap:12px; align-items:flex-start; } .stat .v { font-size:26px; } .stat .t { font-size:18px; } .stat .s { font-size:15px; color:var(--muted); } .stat .n { font-size:12.5px; color:var(--faint); }
+  .tiles { display:grid; grid-template-columns:repeat(7, 100px); gap:8px 12px; }
+  .tile { height:128px; display:flex; flex-direction:column; align-items:center; }
+  .tile .slot { width:84px; height:84px; background:var(--slot); box-shadow:0 0 0 1px var(--slotedge); display:flex; align-items:center; justify-content:center; }
+  .tile .nm { margin-top:4px; font-size:13px; width:100px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .tile .ct { font-size:17px; color:var(--gold); }
+  .bar { display:flex; gap:10px; align-items:center; } .bar .lb { width:130px; font-size:17px; } .bar.sel .lb { color:var(--gold); }
+  .bar .tr { flex:1; height:13px; background:var(--track); } .bar.sel .tr { height:16px; } .bar .fl { height:100%; } .bar .vl { width:80px; text-align:right; font-size:17px; }
+  .bar .ic { width:24px; height:24px; display:flex; align-items:center; justify-content:center; } .bar .ic i { width:16px; height:16px; border-radius:50%; }
+  .rows .r { display:flex; gap:12px; align-items:center; min-height:34px; border-bottom:1px solid var(--rule); font-size:17px; } .rows .r .t { flex:1; } .rows .r .v { width:160px; text-align:right; }
+  .titles { display:grid; grid-template-columns:repeat(3, 268px); gap:8px 10px; }
+  .tcard { position:relative; height:72px; background:var(--slot); box-shadow:0 0 0 1px var(--slotedge); }
+  .tcard .m { position:absolute; left:10px; top:12px; } .tcard .tn { position:absolute; left:68px; top:5px; font-size:17px; color:var(--gold); }
+  .tcard .tv { position:absolute; left:68px; top:27px; width:194px; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tcard .tt { position:absolute; left:68px; top:47px; width:194px; font-size:11px; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .thread .ends { display:flex; justify-content:space-between; font-size:16px; color:var(--muted); } .thread .line { height:2px; background:var(--accent); margin:4px 0 8px; }
+  .empty { font-size:18px; font-style:italic; color:var(--muted); } .emptytext { font-size:15px; color:var(--faint); }
+  .badges { display:flex; gap:14px; } .badges span { font-size:16px; color:var(--gold); }
+  .controls { display:flex; gap:6px; height:30px; } .toggle { display:flex; gap:10px; height:38px; }
+  .how { align-self:flex-start; height:28px; font-size:14px; flex:none; }
+  .sharenote { position:absolute; left:24px; bottom:10px; width:560px; height:30px; display:flex; align-items:center; font-size:13px; font-style:italic; color:var(--muted); }
+  .keys { position:absolute; right:24px; bottom:10px; height:30px; display:flex; align-items:center; gap:28px; font-size:14px; color:var(--muted); }
+  .caption { position:absolute; left:50px; bottom:14px; font-size:12px; color:#9a8a74; font-family:Georgia, serif; }
+</style>
+</head>
+<body>
+<div class="world"></div>
+<div id="app"></div>
+<p class="caption" id="caption"></p>
+<script>
+// fallback colours from PanelLook: the game shows status effects in these hues; in game the colour comes from the status icon
+const TONE = { poison:"#6fae3a", fire:"#e0582a", frost:"#8ec9e8", lightning:"#8d7be6", spirit:"#c9e4e0",
+  slash:"#a8a49b", pierce:"#c4bfb4", blunt:"#8a867e", chop:"#736f68", pickaxe:"#5f5b55", damage:"#9b8f80", ember:"#e8a948" };
+const PEOPLE = ["#9b3b2e", "#3b5f8f", "#c9c2b0", "#5f7f3b", "#8a5a2b", "#6b4a8a", "#2f7a74", "#a8842e"];
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" })[c]);
+function personColor(name) { let h = 0; for (const ch of name.toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) | 0; return PEOPLE[((h % 8) + 8) % 8]; }
+// as PanelUi.Marker: Hearthwoven title art, a person's disc, or the initial where the game's sprite would be
+function marker(icon, label, size) {
+  const s = `width:${size}px;height:${size}px;font-size:${size * 0.5}px`;
+  if (icon && icon.startsWith("title:")) {
+    const id = icon.slice(6), letter = esc((label || "?")[0].toUpperCase());
+    return `<span class="m" style="${s}"><img src="../icons/${esc(id)}.png" alt="" onerror="this.replaceWith('${letter}')"></span>`;
+  }
+  if (icon && icon.startsWith("status:")) return `<span class="m" style="${s};background:none"><i style="width:${size * 0.6}px;height:${size * 0.6}px;border-radius:50%;background:${TONE[icon.slice(7)]}"></i></span>`;
+  if (icon && icon.startsWith("person:")) return `<span class="m person" style="${s};background:${personColor(icon.slice(7))}">${esc((label || "?")[0].toUpperCase())}</span>`;
+  return `<span class="m" style="${s}">${esc((label || "?")[0].toUpperCase())}</span>`;
+}
+const tiles = items => `<div class="tiles">${items.map(t => `<div class="tile"><div class="slot">${marker(t.icon, t.title, 66)}</div><div class="nm">${esc(t.title)}</div>${t.value ? `<div class="ct">${esc(t.value)}</div>` : ""}</div>`).join("")}</div>`;
+const note = n => n ? `<div class="note">${esc(n)}</div>` : "";
+function block(b) {
+  switch (b.kind) {
+    case "section": return `<div class="section">${esc(b.title)}</div>`;
+    case "stat": return `<div class="stat">${b.icon ? marker(b.icon, b.title, 40) : ""}<div><div class="row" style="align-items:baseline;gap:8px">${b.value ? `<span class="v">${esc(b.value)}</span>` : ""}<span class="t">${esc(b.title)}</span></div>
+      ${b.text ? `<div class="s">${esc(b.text)}</div>` : ""}${b.note ? `<div class="n">${esc(b.note)}</div>` : ""}</div></div>`;
+    case "tiles": return tiles(b.items) + note(b.note);
+    case "bars": return b.items.map(i => `<div class="bar${i.selected ? " sel" : ""}"><span class="ic">${i.icon ? `<i style="background:${TONE[i.tone]}"></i>` : ""}</span><span class="lb">${esc(i.title)}</span>
+      <span class="tr"><div class="fl" style="width:${(i.fraction * 100).toFixed(2)}%;background:${TONE[i.tone] || TONE.ember}"></div></span><span class="vl">${esc(i.value)}</span></div>`).join("") + note(b.note);
+    case "rows": return `<div class="rows">${b.items.map(i => `<div class="r">${i.icon ? marker(i.icon, i.title, 30) : ""}<span class="t">${esc(i.title)}</span><span class="v">${esc(i.value)}</span></div>`).join("")}</div>` + note(b.note);
+    case "titles": return `<div class="titles">${b.items.map(t => `<div class="tcard">${marker(t.icon, t.title, 48)}<div class="tn">${esc(t.title)}</div><div class="tv">${esc(t.value)}</div><div class="tt">${esc(t.note)}</div></div>`).join("")}</div>`;
+    case "thread": return `<div class="thread"><div class="ends"><span>${esc(b.title)}</span><span>${esc(b.text)}</span></div><div class="line"></div>${tiles(b.items)}</div>`;
+    case "empty": return `<div class="empty">${esc(b.title)}</div>` + (b.text ? `<div class="emptytext">${esc(b.text)}</div>` : "");
+    default: return b.tone === "hint" ? `<div class="hint"><span>${esc(b.text)}</span></div>` : `<div class="plain">${esc(b.text)}</div>`;
+  }
+}
+const chip = (c, cls = "") => `<div class="chip${c.selected ? " on" : ""} ${cls}">${c.icon ? marker(c.icon, c.label, cls === "ch" ? 32 : 40) : ""}${esc(c.label)}</div>`;
+
+const name = new URLSearchParams(location.search).get("view") || "deeds";
+const v = window.PANEL_DATA[name];
+const sel = v.biomes.find(b => b.selected) || v.biomes[0];
+let inner = "";
+if (v.badges.length) inner += `<div class="badges">${v.badges.map(b => `<div class="row" style="gap:6px">${marker(b.icon, b.label, 28)}<span>${esc(b.label)}</span></div>`).join("")}</div>`;
+if (v.hasFilters) inner += `<div class="controls">${v.windows.map(w => chip(w)).join("")}${chip({ label: "Biome: " + sel.label, selected: !!sel.id })}</div>`;
+if (v.toggle.length) inner += `<div class="toggle">${v.toggle.map(t => chip(t)).join("")}</div>`;
+inner += v.blocks.map(block).join("");
+if (v.howCounted) inner += `<div class="chip how">${v.showHow ? "Hide" : "Show"} how this was counted [I]</div>` + (v.showHow ? `<div class="plain">${esc(v.howCounted)}</div>` : "");
+document.getElementById("app").innerHTML = `
+<div class="panel">
+  <div class="wordmark">HEARTHWOVEN</div>
+  ${v.players.length ? `<div class="players">${v.players.slice(0, 6).map(p => chip(p)).join("")}${v.players.length > 6 ? `<div class="chip">More</div>` : ""}</div>` : `<div class="owner">${esc(v.owner)}</div>`}
+  <div class="chapters">${v.chapters.map(c => chip(c, "ch")).join("")}</div>
+  <div class="list">${v.list.map(c => chip(c)).join("")}</div>
+  <div class="content"><div class="heading">${esc(v.heading)}</div><div class="scope">${esc(v.scope)}</div><div class="blocks">${inner}</div></div>
+  <div class="sharenote">${esc(v.shareNote)}</div>
+  <div class="keys">${v.keys.map(k => `<span>${esc(k.text)}</span>`).join("")}</div>
+</div>`;
+document.getElementById("caption").textContent = `Preview "${name}": PanelModel output on fictional sample data, drawn with PanelUi's layout. In game, items, pieces and skills show the game's own sprites where these show initials.`;
+</script>
+</body>
+</html>

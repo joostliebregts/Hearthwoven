@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <AssemblyName>Hearthwoven</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+  <ItemGroup><PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" /></ItemGroup>
+  <ItemGroup>
+    <!-- game + BepInEx assemblies: copy them into lib/ (see lib/README.md); not redistributed here -->
+    <Reference Include="BepInEx"><HintPath>lib/BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>lib/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="assembly_valheim"><HintPath>lib/assembly_valheim.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="assembly_utils"><HintPath>lib/assembly_utils.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>lib/UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>lib/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <!-- in-game panel (src/Panel): UGUI, TextMeshPro and the game's Localization, same read-only source -->
+    <Reference Include="UnityEngine.UI"><HintPath>lib/UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>lib/UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>lib/UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="assembly_guiutils"><HintPath>lib/assembly_guiutils.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.TextMeshPro"><HintPath>lib/Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <!-- role icons: original art made for Hearthwoven (work/branding-kritterstats/icons), embedded so nothing ships loose -->
+  <ItemGroup><EmbeddedResource Include="src/Panel/icons/*.png" LogicalName="Hearthwoven.icons.%(Filename).png" /></ItemGroup>
+  <ItemGroup><Compile Remove="test/**;test-panel/**;selftest/**" /></ItemGroup>
+</Project>
