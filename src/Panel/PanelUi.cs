@@ -4,6 +4,7 @@ using System.Linq;
 using BepInEx.Configuration;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Hearthwoven.Panel
@@ -11,8 +12,8 @@ namespace Hearthwoven.Panel
     /// <summary>
     /// The Hearthwoven panel in game: a compact dark menu over the world that draws whatever PanelModel.Build returns.
     /// Built on first open, so a player who never presses the key gets no UI objects at all. Reads only; changes nothing.
-    /// While open it reports itself as a store window (PanelHooks), which is how the game itself frees the cursor and
-    /// keeps movement, camera and hotbar from reacting to keys; the panel reads its own keys meanwhile.
+    /// While open the character takes no input (PanelHooks), the way chat and the console block it, and the panel reads
+    /// its own keys; none of them reach the game while any text field has focus.
     /// </summary>
     public class PanelUi : MonoBehaviour
     {
@@ -42,7 +43,7 @@ namespace Hearthwoven.Panel
         int playerPage;
         GameObject root;
         RectTransform frame, players, chapters, list, content;
-        TextMeshProUGUI owner, heading, scope, shareNote, keys;
+        TextMeshProUGUI owner, heading, scope, keys, listTitle;
 
         void Awake() => Instance = this;
         void OnDestroy() { if (Instance == this) Instance = null; if (root) Destroy(root); }
@@ -52,6 +53,17 @@ namespace Hearthwoven.Panel
         static bool Key(KeyCode k) => ZInput.GetKeyDown(k, false);
         static bool Button(string b) => ZInput.GetButtonDown(b);
 
+        // someone is typing: chat, console, a sign, a map pin, the build search, or any other mod's text field
+        static bool Typing()
+        {
+            if ((Chat.instance && Chat.instance.HasFocus()) || global::Console.IsVisible() || TextInput.IsVisible() || Minimap.InTextInput()) return true;
+            if (Hud.instance && Hud.instance.m_buildUi != null && Hud.instance.m_buildUi.SearchFieldFocused) return true;
+            var selected = EventSystem.current ? EventSystem.current.currentSelectedGameObject : null;
+            if (!selected) return false;
+            var tmp = selected.GetComponent<TMP_InputField>(); if (tmp && tmp.isFocused) return true;
+            var field = selected.GetComponent<InputField>(); return field && field.isFocused;
+        }
+
         void Update()
         {
             try
@@ -59,9 +71,10 @@ namespace Hearthwoven.Panel
                 if (!open)
                 {
                     if (hiddenFrames < 99) hiddenFrames++;
-                    if (Enabled.Value && Pressed() && CanOpen()) Open();
+                    if (Enabled.Value && !Typing() && Pressed() && CanOpen()) Open();
                     return;
                 }
+                if (Typing()) return;
                 if (Pressed() || Key(KeyCode.Escape) || Button("JoyButtonB") || !Player.m_localPlayer ||
                     InventoryGui.IsVisible() || Minimap.IsOpen() || Menu.IsVisible() || Player.m_localPlayer.IsDead())
                 { Close(); return; }
@@ -93,21 +106,33 @@ namespace Hearthwoven.Panel
                    (!TextViewer.instance || !TextViewer.instance.IsVisible());
         }
 
+        CursorLockMode lockBefore; bool cursorBefore;
+
         void Open()
         {
             PanelLook.Resolve();
+            PanelLook.RetryMissing();
             if (!root) Build();
             root.SetActive(true);
+            lockBefore = ZCursor.LockState; cursorBefore = ZCursor.IsRequested;
             open = true; hiddenFrames = 0; shown = null;
             GroupShare.Request();   // fellow players' stats, if you share; rate-limited inside
             Render(true);
         }
 
+        // give the cursor back as it was when the panel opened (playing: locked and hidden)
         void Close()
         {
+            var wasOpen = open;
             open = false; hiddenFrames = 0;
             if (root) root.SetActive(false);
+            if (!wasOpen) return;
+            ZCursor.LockState = lockBefore;
+            if (cursorBefore) ZCursor.Show(); else ZCursor.Hide();
         }
+
+        // a click runs outside Update: same safety net
+        Action Safe(Action a) => () => { try { a(); } catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel click: " + e.Message); Close(); } };
 
         // ---------- data ----------
 
@@ -124,7 +149,13 @@ namespace Hearthwoven.Panel
                 if (token == null)
                 {
                     var go = ZNetScene.instance ? ZNetScene.instance.GetPrefab(key) : null;
-                    if (go) { var ch = go.GetComponent<Character>(); if (ch) token = ch.m_name; var pc = go.GetComponent<Piece>(); if (token == null && pc) token = pc.m_name; }
+                    if (go)
+                    {
+                        var ch = go.GetComponent<Character>(); if (ch) token = ch.m_name;
+                        var pc = go.GetComponent<Piece>(); if (token == null && pc) token = pc.m_name;
+                        var r5 = go.GetComponent<MineRock5>(); if (token == null && r5) token = r5.m_name;
+                        var r = go.GetComponent<MineRock>(); if (token == null && r) token = r.m_name;
+                    }
                     if (token == null)
                     {
                         var item = go ? go : ObjectDB.instance ? ObjectDB.instance.GetItemPrefab(key) : null;
@@ -146,7 +177,7 @@ namespace Hearthwoven.Panel
         PanelInput Fellow(string name, PanelInput self)
         {
             if (string.IsNullOrEmpty(name) || !GroupShare.Sharing() || !GroupShare.Group.TryGetValue(name, out var json)) return null;
-            if (!parsed.TryGetValue(name, out var hit) || !ReferenceEquals(hit.Key, json))
+            if (!parsed.TryGetValue(name, out var hit) || !string.Equals(hit.Key, json, StringComparison.Ordinal))   // the server resends unchanged copies
                 parsed[name] = hit = new KeyValuePair<string, PanelInput>(json, PanelInput.FromSnapshot(json));
             var other = hit.Value;
             if (other == null) return null;
@@ -207,8 +238,11 @@ namespace Hearthwoven.Panel
         }
 
         // ---------- building the frame (once) ----------
+        // Layout follows the UI kit's assembly (ui-kit/preview-company.png, preview-battle.png): a 1180 x 760 nine-sliced
+        // frame, header text clear of the 56 px corner ornaments, six tabs, a 268 px left list, content to the right.
 
-        const float W = 1180, H = 760, ListW = 270;
+        const float W = 1180, H = 760, Inset = 32, ListW = 268, Top = 180, Foot = 72;
+        static readonly Color Amber = new Color(1f, 0.81f, 0.5f);
 
         void Build()
         {
@@ -221,48 +255,51 @@ namespace Hearthwoven.Panel
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = 1f;
+            scaler.referencePixelsPerUnit = 100;   // kit sprites are 100 px per unit, borders in source pixels
             root.AddComponent<GraphicRaycaster>();
 
-            // the panel only: the world stays visible around it
-            var bg = Img(root.transform, "Panel", null, PanelLook.Panel, raycast: true);
+            // the panel only: the world stays visible around it (the frame's centre is translucent)
+            var bg = Kit(root.transform, "Panel", "frame", raycast: true);
             frame = bg.rectTransform;
             frame.anchorMin = frame.anchorMax = new Vector2(0.5f, 0.5f);
             frame.sizeDelta = new Vector2(W, H);
             frame.localScale = Vector3.one * Mathf.Clamp(Scale.Value, 0.6f, 1.4f);
-            var edge = bg.gameObject.AddComponent<Outline>(); edge.effectColor = PanelLook.Edge; edge.effectDistance = new Vector2(2, -2);
 
-            var title = Label(frame, "HEARTHWOVEN", 30, PanelLook.Gold, title: true);
-            title.rectTransform.Box(24, 14, 300, 40);
-            owner = Label(frame, "", 18, PanelLook.Muted);
-            owner.rectTransform.Box(300, 24, 300, 28);
+            var title = Label(frame, "HEARTHWOVEN", 32, PanelLook.Gold, title: true, align: TextAlignmentOptions.MidlineLeft);
+            title.rectTransform.Box(66, 22, 300, 44);
+            owner = Label(frame, "", 20, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+            owner.rectTransform.Box(385, 22, 300, 44);
 
             players = Node("Players", frame);
             players.anchorMin = players.anchorMax = players.pivot = new Vector2(1, 1);
-            players.anchoredPosition = new Vector2(-20, -14); players.sizeDelta = new Vector2(640, 36);
-            Layout(players.gameObject.AddComponent<HorizontalLayoutGroup>(), 6, TextAnchor.MiddleRight);
+            players.anchoredPosition = new Vector2(-64, -20); players.sizeDelta = new Vector2(620, 48);
+            Layout(players.gameObject.AddComponent<HorizontalLayoutGroup>(), 8, TextAnchor.MiddleRight);
 
             chapters = Node("Chapters", frame);
             chapters.anchorMin = new Vector2(0, 1); chapters.anchorMax = new Vector2(1, 1); chapters.pivot = new Vector2(0.5f, 1);
-            chapters.offsetMin = new Vector2(20, -130); chapters.offsetMax = new Vector2(-20, -60);
-            var cl = chapters.gameObject.AddComponent<HorizontalLayoutGroup>(); Layout(cl, 6, TextAnchor.MiddleCenter); cl.childForceExpandWidth = true;
+            chapters.offsetMin = new Vector2(Inset, -155); chapters.offsetMax = new Vector2(-Inset, -77);
+            var cl = chapters.gameObject.AddComponent<HorizontalLayoutGroup>(); Layout(cl, 12, TextAnchor.MiddleCenter); cl.childForceExpandWidth = true;
 
-            list = Scroller("List", frame, 20, 140, ListW, 50);
+            listTitle = Label(frame, "", 24, PanelLook.Gold, align: TextAlignmentOptions.MidlineLeft);
+            listTitle.rectTransform.Box(Inset, Top, ListW, 36);
+            list = Scroller("List", frame, Inset, Top + 46, ListW, Foot, 16);
+
             var right = Node("Content", frame);
             right.anchorMin = Vector2.zero; right.anchorMax = Vector2.one;
-            right.offsetMin = new Vector2(20 + ListW + 18, 50); right.offsetMax = new Vector2(-20, -140);
-            heading = Label(right, "", 28, PanelLook.Gold); heading.rectTransform.Box(0, 0, 820, 36); heading.textWrappingMode = TextWrappingModes.NoWrap; heading.overflowMode = TextOverflowModes.Ellipsis;
-            scope = Label(right, "", 15, PanelLook.Muted); scope.rectTransform.Box(0, 38, 820, 22); scope.textWrappingMode = TextWrappingModes.NoWrap; scope.overflowMode = TextOverflowModes.Ellipsis;
-            content = Scroller("Blocks", right, 0, 68, -1, 0);
+            right.offsetMin = new Vector2(Inset + ListW + 43, Foot); right.offsetMax = new Vector2(-Inset - 8, -Top);
+            heading = Label(right, "", 26, PanelLook.Gold, align: TextAlignmentOptions.MidlineLeft); heading.rectTransform.Box(0, 0, 790, 36);
+            heading.textWrappingMode = TextWrappingModes.NoWrap; heading.overflowMode = TextOverflowModes.Ellipsis;
+            scope = Label(right, "", 18, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); scope.rectTransform.Box(0, 38, 790, 26);
+            scope.textWrappingMode = TextWrappingModes.NoWrap; scope.overflowMode = TextOverflowModes.Ellipsis;
+            content = Scroller("Blocks", right, 0, 76, -1, 0, 12);
 
-            shareNote = Label(frame, "", 13, PanelLook.Muted, style: FontStyles.Italic, align: TextAlignmentOptions.MidlineLeft);
-            shareNote.rectTransform.Bottom(24, 10, 560, 30);
-            keys = Label(frame, "", 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight);
-            keys.rectTransform.Bottom(-24, 10, 560, 30, right: true);
+            keys = Label(frame, "", 15, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
+            keys.rectTransform.Bottom(64, 22, W - 128, 30);
             root.SetActive(false);
         }
 
         // a vertical list that scrolls inside its box (mouse wheel), never drawing over its neighbours
-        RectTransform Scroller(string name, RectTransform parent, float left, float top, float width, float bottom)
+        RectTransform Scroller(string name, RectTransform parent, float left, float top, float width, float bottom, float spacing)
         {
             var box = Node(name, parent);
             box.anchorMin = new Vector2(0, 0); box.anchorMax = new Vector2(width < 0 ? 1 : 0, 1);
@@ -272,7 +309,8 @@ namespace Hearthwoven.Panel
             var inner = Node("Items", box);
             inner.anchorMin = new Vector2(0, 1); inner.anchorMax = new Vector2(1, 1); inner.pivot = new Vector2(0.5f, 1);
             inner.offsetMin = inner.offsetMax = Vector2.zero;
-            var v = inner.gameObject.AddComponent<VerticalLayoutGroup>(); v.spacing = 8; v.childControlWidth = v.childControlHeight = true; v.childForceExpandWidth = true; v.childForceExpandHeight = false;
+            var v = inner.gameObject.AddComponent<VerticalLayoutGroup>(); v.spacing = spacing; v.childControlWidth = v.childControlHeight = true; v.childForceExpandWidth = true; v.childForceExpandHeight = false;
+            v.padding = new RectOffset(2, 2, 2, 2);   // room for the slices' outer glow
             inner.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             var scroll = box.gameObject.AddComponent<ScrollRect>();
             scroll.content = inner; scroll.viewport = box; scroll.horizontal = false; scroll.vertical = true;
@@ -282,152 +320,191 @@ namespace Hearthwoven.Panel
 
         // ---------- filling it from the model ----------
 
+        static Dictionary<string, int> personColors = new Dictionary<string, int>();
+
         void Fill(PanelView v)
         {
+            personColors = v.PersonColors;
             var pageKey = v.Active + "/" + v.Page + "/" + state.Player;
             var newPage = pageKey != lastPage; lastPage = pageKey;
 
-            owner.text = v.Owner;
+            owner.text = v.Players.Count > 0 ? "" : v.Owner;
+            listTitle.text = v.ListTitle ?? "";
             heading.text = v.Heading ?? "";
             scope.text = v.Scope ?? "";
-            shareNote.text = v.ShareNote ?? "";
-            keys.text = string.Join("    ", v.Keys.ToArray());
+            keys.text = string.Join("      ", v.Keys.ToArray());
 
             Clear(players);
+            if (!string.IsNullOrEmpty(v.ShareNote))   // the sharing line sits in the header, left of the chips
+            {
+                var note = Label(players, v.ShareNote, 13, PanelLook.Muted, style: FontStyles.Italic, align: TextAlignmentOptions.MidlineRight);
+                var nl = note.gameObject.AddComponent<LayoutElement>(); nl.preferredWidth = nl.minWidth = v.Players.Count > 0 ? 330 : 420;
+            }
             const int perPage = 5;
             var others = v.Players.Skip(1).ToList();
             if (playerPage * perPage >= others.Count) playerPage = 0;
-            if (v.Players.Count > 0) PlayerChip(v.Players[0]);
-            foreach (var c in others.Skip(playerPage * perPage).Take(perPage)) PlayerChip(c);
-            if (others.Count > perPage) Chip(players, "More", "", false, () => { playerPage++; Render(true); }, 0, 34);
+            if (v.Players.Count > 0) Entry(players, v.Players[0].Label, v.Players[0].Icon, v.Players[0].Selected, PlayerClick(v.Players[0]), 48);
+            foreach (var c in others.Skip(playerPage * perPage).Take(perPage)) Entry(players, c.Label, c.Icon, c.Selected, PlayerClick(c), 48);
+            if (others.Count > perPage) Entry(players, "More", "", false, () => { playerPage++; Render(true); }, 48);
 
             Clear(chapters);
             foreach (var c in v.Chapters)
             {
                 var id = (Chapter)Enum.Parse(typeof(Chapter), c.Id);
-                var cell = Chip(chapters, c.Label, c.Icon, c.Selected, () => { state.Chapter = id; Render(true); }, 0, 64, vertical: true);
-                cell.GetComponent<LayoutElement>().flexibleWidth = 1;
+                Tab(c, () => { state.Chapter = id; Render(true); });
             }
 
             Clear(list);
+            var compact = v.List.Count > 5;   // long lists (Deeds, Skills) use the kit's minimum row height so they fit
+            list.GetComponent<VerticalLayoutGroup>().spacing = compact ? 4 : 16;
             foreach (var c in v.List)
             {
                 var id = c.Id; var chapter = v.Active;
-                var row = Chip(list, c.Label, c.Icon, c.Selected, () => { state.Page[chapter] = id; Render(true); }, 0, 52);
-                row.GetComponentInChildren<TextMeshProUGUI>().alignment = TextAlignmentOptions.MidlineLeft;
+                Entry(list, c.Label, c.Icon, c.Selected, () => { state.Page[chapter] = id; Render(true); }, compact ? 48 : 68, stretch: true);
             }
 
             Clear(content);
             if (v.Badges.Count > 0)
             {
-                var badges = Row(content, 14);
-                foreach (var b in v.Badges) { var r = Row(badges, 6); Marker(r, b.Icon, b.Label, 28); Label(r, b.Label, 16, PanelLook.Gold); }
+                var badges = Row(content, 18);
+                foreach (var b in v.Badges) { var r = Row(badges, 8); r.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft; Marker(r, b.Icon, 34); Label(r, b.Label, 18, PanelLook.Gold); }
             }
             if (v.HasFilters)
             {
-                var row = Row(content, 6);
-                foreach (var w in v.Windows) { var id = (TimeWindow)Enum.Parse(typeof(TimeWindow), w.Id); Chip(row, w.Label, "", w.Selected, () => { state.Window = id; Render(true); }, 0, 30); }
+                var row = Row(content, 8);
+                foreach (var w in v.Windows) { var id = (TimeWindow)Enum.Parse(typeof(TimeWindow), w.Id); Entry(row, w.Label, "", w.Selected, () => { state.Window = id; Render(true); }, 48); }
                 var at = Math.Max(0, v.Biomes.FindIndex(c => c.Selected));
                 var biomes = v.Biomes;
-                Chip(row, "Biome: " + biomes[at].Label, "", !string.IsNullOrEmpty(biomes[at].Id), () => { state.Biome = biomes[(at + 1) % biomes.Count].Id; Render(true); }, 0, 30);
+                Entry(row, "Biome: " + biomes[at].Label, "", !string.IsNullOrEmpty(biomes[at].Id), () => { state.Biome = biomes[(at + 1) % biomes.Count].Id; Render(true); }, 48);
             }
             if (v.Toggle.Count > 0)
             {
-                var row = Row(content, 10);
-                foreach (var t in v.Toggle) { var they = t.Id == "they"; Chip(row, t.Label, "", t.Selected, () => { state.TheyReceived = they; Render(true); }, 0, 38); }
+                var row = Row(content, 14);
+                foreach (var t in v.Toggle) { var they = t.Id == "they"; Toggle(row, t, () => { state.TheyReceived = they; Render(true); }); }
             }
             foreach (var b in v.Blocks) Draw(content, b);
             if (!string.IsNullOrEmpty(v.HowCounted))
             {
-                Spacer(content, 6);
-                var how = Chip(content, (v.ShowHow ? "Hide" : "Show") + " how this was counted [I]", "", false, () => { state.ShowHow = !state.ShowHow; Render(true); }, 0, 28);
+                Spacer(content, 4);
+                var how = Entry(content, (v.ShowHow ? "Hide" : "Show") + " how this was counted [I]", "", false, () => { state.ShowHow = !state.ShowHow; Render(true); }, 48);
                 how.GetComponent<LayoutElement>().flexibleWidth = 0;
-                if (v.ShowHow) Label(content, v.HowCounted, 14, PanelLook.Muted);
+                if (v.ShowHow) Label(content, v.HowCounted, 15, PanelLook.Muted);
             }
             if (newPage) { Canvas.ForceUpdateCanvases(); content.parent.GetComponent<ScrollRect>().verticalNormalizedPosition = 1f; }
         }
 
-        void PlayerChip(Choice c)
-        {
-            var id = c.Id;
-            Chip(players, c.Label, c.Icon, c.Selected, () => { state.Player = id; Render(true); }, 0, 34);
-        }
+        Action PlayerClick(Choice c) { var id = c.Id; return () => { state.Player = id; Render(true); }; }
 
         void Draw(RectTransform col, Block b)
         {
             switch (b.Kind)
             {
-                case "section": Spacer(col, 4); Label(col, b.Title, 17, PanelLook.Gold); break;
+                case "section": Spacer(col, 4); Label(col, b.Title, 20, PanelLook.Gold); break;
+                case "divider": Divider(col); break;
                 case "stat": Stat(col, b); break;
-                case "tiles": Tiles(col, b.Items, 7); Note(col, b.Note); break;
+                case "tiles": Tiles(col, b.Items, 6); Note(col, b.Note); break;
                 case "bars": Bars(col, b); Note(col, b.Note); break;
                 case "rows": Rows(col, b); Note(col, b.Note); break;
                 case "titles": Titles(col, b); break;
-                case "thread": Thread(col, b); break;
+                case "thread": Thread(col, b); Note(col, b.Note); break;
+                case "link":
+                    {
+                        var target = b.Id;
+                        var link = Entry(col, b.Title, b.Icon, false, () => { PanelModel.Jump(state, target); Render(true); }, 48);
+                        link.GetComponent<LayoutElement>().flexibleWidth = 0;
+                        break;
+                    }
                 case "empty":
-                    Label(col, b.Title, 18, PanelLook.Muted, style: FontStyles.Italic);
-                    if (!string.IsNullOrEmpty(b.Text)) Label(col, b.Text, 15, PanelLook.Faint);
+                    Label(col, b.Title, 20, PanelLook.Muted, style: FontStyles.Italic);
+                    if (!string.IsNullOrEmpty(b.Text)) Label(col, b.Text, 16, PanelLook.Faint);
                     break;
                 default:   // note, or a hint before setting out
                     if (b.Tone == "hint")
                     {
                         var row = Row(col, 10);
                         var mark = Img(row, "Mark", null, PanelLook.Accent); var le = mark.gameObject.AddComponent<LayoutElement>(); le.minWidth = le.preferredWidth = 3; le.flexibleHeight = 1;
-                        Label(row, b.Text, 15, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                        Label(row, b.Text, 17, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
                     }
-                    else Label(col, b.Text, 14, PanelLook.Muted);
+                    else Label(col, b.Text, 15, PanelLook.Muted);
                     break;
             }
         }
 
-        void Note(RectTransform col, string note) { if (!string.IsNullOrEmpty(note)) Label(col, note, 12.5f, PanelLook.Faint); }
+        void Note(RectTransform col, string note) { if (!string.IsNullOrEmpty(note)) Label(col, note, 13, PanelLook.Faint); }
+
+        void Divider(RectTransform col)
+        {
+            var d = Kit(col, "Divider", "divider"); var le = d.gameObject.AddComponent<LayoutElement>(); le.minHeight = le.preferredHeight = 16;   // fixed height (kit)
+        }
 
         void Stat(RectTransform col, Block b)
         {
-            var row = Row(col, 12);
-            if (!string.IsNullOrEmpty(b.Icon)) Marker(row, b.Icon, b.Title, 40);
+            var row = Row(col, 16);
+            row.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
+            if (!string.IsNullOrEmpty(b.Icon)) Marker(row, b.Icon, 52);
             var texts = VStack(row, 0); texts.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-            var line = Row(texts, 8);
+            var line = Row(texts, 10);
             line.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.LowerLeft;
-            if (!string.IsNullOrEmpty(b.Value)) Label(line, b.Value, 26, PanelLook.Text);
-            Label(line, b.Title, 18, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-            if (!string.IsNullOrEmpty(b.Text)) Label(texts, b.Text, 15, PanelLook.Muted);
-            if (!string.IsNullOrEmpty(b.Note)) Label(texts, b.Note, 12.5f, PanelLook.Faint);
+            if (!string.IsNullOrEmpty(b.Value)) Label(line, b.Value, 30, PanelLook.Text);
+            Label(line, b.Title, 22, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            if (!string.IsNullOrEmpty(b.Text)) Label(texts, b.Text, 18, PanelLook.Muted);
+            if (!string.IsNullOrEmpty(b.Note)) Label(texts, b.Note, 13, PanelLook.Faint);
         }
 
-        // item slots like the inventory's: the game's own sprite, its name and count beneath
+        // the kit's slot with the game's own sprite inside (about 14 px of 128 inset, as the kit asks), its name beneath
+        RectTransform Slot(RectTransform parent, string icon, float size)
+        {
+            var slot = Kit(parent, "Slot", "slot").rectTransform;
+            slot.sizeDelta = new Vector2(size, size);
+            var sprite = PanelLook.Icon(icon);
+            if (sprite) { var i = Img(slot, "Item", sprite, Color.white).rectTransform; i.Stretch(); var inset = size * 14f / 128f; i.offsetMin = new Vector2(inset, inset); i.offsetMax = new Vector2(-inset, -inset); }
+            return slot;
+        }
+
         void Tiles(RectTransform col, List<Block> items, int columns)
         {
             var grid = Node("Tiles", col);
             var g = grid.gameObject.AddComponent<GridLayoutGroup>();
-            g.cellSize = new Vector2(100, 128); g.spacing = new Vector2(12, 8);
+            g.cellSize = new Vector2(112, 150); g.spacing = new Vector2(16, 8);
             g.constraint = GridLayoutGroup.Constraint.FixedColumnCount; g.constraintCount = columns;
             foreach (var t in items ?? new List<Block>())
             {
                 var cell = Node(t.Title, grid);
-                var slot = Img(cell, "Slot", null, PanelLook.Slot); var o = slot.gameObject.AddComponent<Outline>(); o.effectColor = PanelLook.SlotEdge; o.effectDistance = new Vector2(1, -1);
-                slot.rectTransform.anchorMin = slot.rectTransform.anchorMax = slot.rectTransform.pivot = new Vector2(0.5f, 1);
-                slot.rectTransform.anchoredPosition = Vector2.zero; slot.rectTransform.sizeDelta = new Vector2(84, 84);
-                var m = Marker(slot.rectTransform, t.Icon, t.Title, 66, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0.5f, 0.5f); m.anchoredPosition = Vector2.zero;
-                var name = Label(cell, t.Title, 13, PanelLook.Text, align: TextAlignmentOptions.Top); name.rectTransform.Box(0, 88, 100, 18); name.textWrappingMode = TextWrappingModes.NoWrap; name.overflowMode = TextOverflowModes.Ellipsis;
-                if (!string.IsNullOrEmpty(t.Value)) { var count = Label(cell, t.Value, 17, PanelLook.Gold, align: TextAlignmentOptions.Top); count.rectTransform.Box(0, 106, 100, 22); }
+                var slot = Slot(cell, t.Icon, 96);
+                slot.anchorMin = slot.anchorMax = slot.pivot = new Vector2(0.5f, 1); slot.anchoredPosition = Vector2.zero;
+                var name = Label(cell, t.Title, 15, PanelLook.Text, align: TextAlignmentOptions.Top); name.rectTransform.Box(0, 100, 112, 22); name.textWrappingMode = TextWrappingModes.NoWrap; name.overflowMode = TextOverflowModes.Ellipsis;
+                if (!string.IsNullOrEmpty(t.Value)) { var count = Label(cell, t.Value, 19, PanelLook.Gold, align: TextAlignmentOptions.Top); count.rectTransform.Box(0, 122, 112, 26); }
             }
         }
 
-        // one scale per block, lengths computed from the numbers; elemental types carry the game's status icon
+        // the kit's meter: track and grey fill tinted by the damage type, one zero-based scale, its ends written beneath
         void Bars(RectTransform col, Block b)
         {
             foreach (var i in b.Items ?? new List<Block>())
             {
-                var row = Row(col, 10);
+                var row = Row(col, 14);
                 row.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
-                var icon = Node("Icon", row); var il = icon.gameObject.AddComponent<LayoutElement>(); il.minWidth = il.preferredWidth = 24; il.minHeight = il.preferredHeight = 24;
-                if (!string.IsNullOrEmpty(i.Icon)) { var s = PanelLook.Icon(i.Icon); if (s) Img(icon, "Status", s, Color.white).rectTransform.Stretch(); }
-                var label = Label(row, i.Title, 17, i.Selected ? PanelLook.Gold : PanelLook.Text); var ll = label.gameObject.AddComponent<LayoutElement>(); ll.minWidth = ll.preferredWidth = 130;
-                var track = Img(row, "Track", null, PanelLook.Track); var tl = track.gameObject.AddComponent<LayoutElement>(); tl.flexibleWidth = 1; tl.minHeight = tl.preferredHeight = i.Selected ? 16 : 13;
-                var fill = Img(track.transform, "Fill", null, PanelLook.Tone(i.Tone)).rectTransform;
-                fill.anchorMin = Vector2.zero; fill.anchorMax = new Vector2(Mathf.Clamp01(i.Fraction), 1); fill.offsetMin = fill.offsetMax = Vector2.zero;
-                var value = Label(row, i.Value, 17, PanelLook.Text, align: TextAlignmentOptions.MidlineRight); var vl = value.gameObject.AddComponent<LayoutElement>(); vl.minWidth = vl.preferredWidth = 80;
+                var icon = Node("Icon", row); var il = icon.gameObject.AddComponent<LayoutElement>(); il.minWidth = il.preferredWidth = 26; il.minHeight = il.preferredHeight = 26;
+                var s = PanelLook.Icon(i.Icon); if (s) Img(icon, "Status", s, Color.white).rectTransform.Stretch();
+                var tone = PanelLook.Tone(i.Tone);
+                var label = Label(row, i.Title, 20, i.Tone == "ember" ? (i.Selected ? PanelLook.Gold : PanelLook.Text) : Color.Lerp(tone, PanelLook.Text, 0.25f), align: TextAlignmentOptions.MidlineLeft);
+                var ll = label.gameObject.AddComponent<LayoutElement>(); ll.minWidth = ll.preferredWidth = 120;
+                var track = Kit(row, "Track", "meter-track"); var tl = track.gameObject.AddComponent<LayoutElement>(); tl.flexibleWidth = 1; tl.minHeight = tl.preferredHeight = 20;
+                if (i.Fraction > 0)
+                {
+                    var fill = Kit(track.transform, "Fill", "meter-fill"); fill.color = tone;
+                    var fr = fill.rectTransform; fr.anchorMin = Vector2.zero; fr.anchorMax = new Vector2(Mathf.Clamp01(i.Fraction), 1);
+                    fr.offsetMin = new Vector2(3, 3); fr.offsetMax = new Vector2(-3, -3);   // fill inset 3 px inside the track (kit)
+                }
+                var value = Label(row, i.Value, 20, PanelLook.Text, align: TextAlignmentOptions.MidlineRight); var vl = value.gameObject.AddComponent<LayoutElement>(); vl.minWidth = vl.preferredWidth = 80;
+            }
+            if (!string.IsNullOrEmpty(b.Value))
+            {
+                var axis = Row(col, 0);
+                var pad = Node("Pad", axis).gameObject.AddComponent<LayoutElement>(); pad.minWidth = pad.preferredWidth = 26 + 14 + 120 + 14;
+                Label(axis, "0", 13, PanelLook.Faint).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                Label(axis, b.Value, 13, PanelLook.Faint, align: TextAlignmentOptions.TopRight);
+                var end = Node("End", axis).gameObject.AddComponent<LayoutElement>(); end.minWidth = end.preferredWidth = 14 + 80;
             }
         }
 
@@ -436,12 +513,12 @@ namespace Hearthwoven.Panel
         {
             foreach (var i in b.Items ?? new List<Block>())
             {
-                var row = Row(col, 12);
+                var row = Row(col, 14);
                 row.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
-                row.gameObject.AddComponent<LayoutElement>().minHeight = 34;
-                if (!string.IsNullOrEmpty(i.Icon)) Marker(row, i.Icon, i.Title, 30);
-                Label(row, i.Title, 17, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-                var value = Label(row, i.Value, 17, PanelLook.Text, align: TextAlignmentOptions.MidlineRight); var vl = value.gameObject.AddComponent<LayoutElement>(); vl.minWidth = vl.preferredWidth = 160;
+                row.gameObject.AddComponent<LayoutElement>().minHeight = 38;
+                if (!string.IsNullOrEmpty(i.Icon)) Marker(row, i.Icon, 34);
+                Label(row, i.Title, 19, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                var value = Label(row, i.Value, 19, PanelLook.Text, align: TextAlignmentOptions.MidlineRight); var vl = value.gameObject.AddComponent<LayoutElement>(); vl.minWidth = vl.preferredWidth = 170;
                 var rule = Img(col, "Rule", null, PanelLook.Rule); var rl = rule.gameObject.AddComponent<LayoutElement>(); rl.minHeight = rl.preferredHeight = 1;
             }
         }
@@ -451,30 +528,94 @@ namespace Hearthwoven.Panel
         {
             var grid = Node("Titles", col);
             var g = grid.gameObject.AddComponent<GridLayoutGroup>();
-            g.cellSize = new Vector2(268, 72); g.spacing = new Vector2(10, 8);   // six rows hold all eighteen titles without scrolling
+            g.cellSize = new Vector2(258, 64); g.spacing = new Vector2(10, 6);   // six rows hold all eighteen titles
             g.constraint = GridLayoutGroup.Constraint.FixedColumnCount; g.constraintCount = 3;
             foreach (var t in b.Items ?? new List<Block>())
             {
                 var target = t.Id;
-                var cell = Img(grid, t.Title, null, PanelLook.Slot, raycast: true);
-                var o = cell.gameObject.AddComponent<Outline>(); o.effectColor = PanelLook.SlotEdge; o.effectDistance = new Vector2(1, -1);
+                var cell = Kit(grid, t.Title, "row", raycast: true);
                 var button = cell.gameObject.AddComponent<UnityEngine.UI.Button>(); button.targetGraphic = cell;
-                button.onClick.AddListener(() => { PanelModel.Jump(state, target); Render(true); });
-                var m = Marker(cell.rectTransform, t.Icon, t.Title, 48, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0, 0.5f); m.anchoredPosition = new Vector2(10, 0);
-                var name = Label(cell.transform, t.Title, 17, PanelLook.Gold); name.rectTransform.Box(68, 5, 194, 22);
-                var value = Label(cell.transform, t.Value, 13.5f, PanelLook.Text); value.rectTransform.Box(68, 27, 194, 19); value.textWrappingMode = TextWrappingModes.NoWrap; value.overflowMode = TextOverflowModes.Ellipsis;
-                var note = Label(cell.transform, t.Note, 11f, PanelLook.Faint); note.rectTransform.Box(68, 47, 194, 17); note.textWrappingMode = TextWrappingModes.NoWrap; note.overflowMode = TextOverflowModes.Ellipsis;
+                button.onClick.AddListener(() => Safe(() => { PanelModel.Jump(state, target); Render(true); })());
+                var m = Marker(cell.rectTransform, t.Icon, 40, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0, 0.5f); m.anchoredPosition = new Vector2(12, 0);
+                var name = Label(cell.transform, t.Title, 17, PanelLook.Gold); name.rectTransform.Box(60, 6, 190, 22);
+                var value = Label(cell.transform, t.Value, 12.5f, PanelLook.Muted, style: FontStyles.Italic); value.rectTransform.Box(60, 27, 190, 32);
             }
         }
 
-        // maker -> food -> eater: labels on both ends, the foods with their game sprite and count along a thin line
+        // the food in its slot, the count over the kit's woven thread, the eater's shield: one row per food
         void Thread(RectTransform col, Block b)
         {
-            var top = Row(col, 0);
-            Label(top, b.Title, 16, PanelLook.Muted).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-            Label(top, b.Text, 16, PanelLook.Muted, align: TextAlignmentOptions.TopRight).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-            var line = Img(col, "Thread", null, PanelLook.Accent); var ll = line.gameObject.AddComponent<LayoutElement>(); ll.minHeight = ll.preferredHeight = 2;
-            Tiles(col, b.Items, 7);
+            var ends = Row(col, 0);
+            Label(ends, b.Title, 20, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            Label(ends, b.Text, 20, PanelLook.Text, align: TextAlignmentOptions.TopRight).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            var first = true;
+            foreach (var t in b.Items ?? new List<Block>())
+            {
+                var row = Row(col, 20);
+                row.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
+                var item = VStack(row, 4); var il = item.gameObject.AddComponent<LayoutElement>(); il.minWidth = il.preferredWidth = 120;
+                var slotBox = Node("SlotBox", item); var sl = slotBox.gameObject.AddComponent<LayoutElement>(); sl.minHeight = sl.preferredHeight = 112;
+                var slot = Slot(slotBox, t.Icon, 112); slot.anchorMin = slot.anchorMax = slot.pivot = new Vector2(0.5f, 0.5f); slot.anchoredPosition = Vector2.zero;
+                Label(item, t.Title, 18, PanelLook.Text, align: TextAlignmentOptions.Top);
+                var mid = VStack(row, 2); mid.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                mid.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
+                Label(mid, t.Value + " " + t.Title.ToLowerInvariant(), 24, PanelLook.Text, align: TextAlignmentOptions.Center);
+                var threadBox = Node("ThreadBox", mid); var tb = threadBox.gameObject.AddComponent<LayoutElement>(); tb.minHeight = tb.preferredHeight = 40;
+                var thread = Kit(threadBox, "Thread", "thread").rectTransform;   // decorative direction only, uniform scale
+                thread.anchorMin = thread.anchorMax = thread.pivot = new Vector2(0.5f, 0.5f); thread.sizeDelta = new Vector2(320, 40);
+                var shieldBox = Node("Eater", row); var sb = shieldBox.gameObject.AddComponent<LayoutElement>(); sb.minWidth = sb.preferredWidth = 120; sb.minHeight = sb.preferredHeight = 112;
+                if (first) { var m = Marker(shieldBox, b.Icon, 112, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0.5f, 0.5f); m.anchoredPosition = Vector2.zero; }
+                first = false;
+            }
+            Divider(col);
+        }
+
+        // ---------- kit controls ----------
+
+        // a chapter tab: the kit's tab with its chapter icon above the name, amber when chosen
+        void Tab(Choice c, Action click)
+        {
+            var img = Kit(chapters, c.Label, c.Selected ? "tab-selected" : "tab", raycast: true);
+            var le = img.gameObject.AddComponent<LayoutElement>(); le.minHeight = le.preferredHeight = 78; le.flexibleWidth = 1;
+            var icon = PanelLook.Icon(c.Icon);
+            if (icon) { var i = Img(img.transform, "Icon", icon, c.Selected ? Amber : Color.white).rectTransform; i.anchorMin = i.anchorMax = i.pivot = new Vector2(0.5f, 1); i.anchoredPosition = new Vector2(0, -10); i.sizeDelta = new Vector2(32, 32); }
+            var label = Label(img.transform, c.Label, 20, c.Selected ? PanelLook.Gold : PanelLook.Text, align: TextAlignmentOptions.Bottom);
+            label.rectTransform.Stretch(); label.rectTransform.offsetMin = new Vector2(4, 8); label.textWrappingMode = TextWrappingModes.NoWrap;
+            Clickable(img, click);
+        }
+
+        // the kit's toggle: radio baked into its fixed 60 px left strip, height kept at 72
+        void Toggle(RectTransform row, Choice t, Action click)
+        {
+            var img = Kit(row, t.Label, t.Selected ? "toggle-selected" : "toggle", raycast: true);
+            var le = img.gameObject.AddComponent<LayoutElement>(); le.minHeight = le.preferredHeight = 72; le.flexibleWidth = 1;
+            var label = Label(img.transform, t.Label, 21, t.Selected ? PanelLook.Gold : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+            label.rectTransform.Stretch(); label.rectTransform.offsetMin = new Vector2(62, 0); label.textWrappingMode = TextWrappingModes.NoWrap;
+            Clickable(img, click);
+        }
+
+        // a list row, player chip, filter or button: the kit's row, lit when chosen; icon (or a person's shield) left of the text
+        GameObject Entry(RectTransform parent, string text, string icon, bool selected, Action click, float height, bool stretch = false)
+        {
+            var img = Kit(parent, text, selected ? "row-selected" : "row", raycast: true);
+            var le = img.gameObject.AddComponent<LayoutElement>(); le.minHeight = le.preferredHeight = height;
+            var hasIcon = !string.IsNullOrEmpty(icon) && (icon.StartsWith("person:") || PanelLook.Icon(icon) != null);
+            var size = height - 20;
+            var label = Label(img.transform, text, height >= 60 ? 22 : 18, selected ? PanelLook.Gold : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+            label.textWrappingMode = TextWrappingModes.NoWrap; label.overflowMode = TextOverflowModes.Ellipsis;
+            label.rectTransform.Stretch();
+            label.rectTransform.offsetMin = new Vector2(hasIcon ? size + 28 : 20, 0); label.rectTransform.offsetMax = new Vector2(-16, 0);
+            if (hasIcon) { var m = Marker(img.rectTransform, icon, size, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0, 0.5f); m.anchoredPosition = new Vector2(14, 0); }
+            if (!stretch) le.preferredWidth = le.minWidth = label.preferredWidth + (hasIcon ? size + 46 : 40);
+            Clickable(img, click);
+            return img.gameObject;
+        }
+
+        void Clickable(Image img, Action click)
+        {
+            var button = img.gameObject.AddComponent<UnityEngine.UI.Button>();
+            button.targetGraphic = img; button.transition = Selectable.Transition.None;
+            button.onClick.AddListener(() => Safe(click)());
         }
 
         // ---------- small UGUI helpers ----------
@@ -511,6 +652,16 @@ namespace Hearthwoven.Panel
             return img;
         }
 
+        // a kit sprite at white tint (its colour is authored), nine-sliced where the kit gives borders
+        static Image Kit(Transform parent, string name, string sprite, bool raycast = false)
+        {
+            var img = Node(name, parent).gameObject.AddComponent<Image>();
+            img.sprite = PanelLook.Ui(sprite); img.color = img.sprite ? Color.white : PanelLook.Slot; img.raycastTarget = raycast;
+            if (PanelLook.Sliced(sprite)) { img.type = Image.Type.Sliced; img.pixelsPerUnitMultiplier = 1f; }
+            else img.preserveAspect = true;
+            return img;
+        }
+
         static TextMeshProUGUI Label(Transform parent, string text, float size, Color color, bool title = false,
                                      TextAlignmentOptions align = TextAlignmentOptions.TopLeft, FontStyles style = FontStyles.Normal)
         {
@@ -522,45 +673,23 @@ namespace Hearthwoven.Panel
             return t;
         }
 
-        // the game's sprite for an icon reference; a person gets a coloured disc with an initial; anything else unknown, an initial
-        static RectTransform Marker(RectTransform parent, string icon, string label, float size, bool layout = true)
+        // the game's sprite for an icon reference; a person gets the kit's shield in their colour; a missing game sprite
+        // leaves the place empty (the kit asks not to stand in letters or new art for game objects)
+        static RectTransform Marker(RectTransform parent, string icon, float size, bool layout = true)
         {
             var box = Node("Marker", parent);
             box.sizeDelta = new Vector2(size, size);
             if (layout) { var le = box.gameObject.AddComponent<LayoutElement>(); le.minWidth = le.preferredWidth = le.minHeight = le.preferredHeight = size; }
-            var sprite = PanelLook.Icon(icon);
-            if (sprite) { Img(box, "Icon", sprite, Color.white).rectTransform.Stretch(); return box; }
-            var person = icon != null && icon.StartsWith("person:");
-            var disc = Img(box, "Disc", person ? PanelLook.Circle : null, person ? PanelLook.PersonColor(icon.Substring(7)) : PanelLook.Slot);
-            disc.rectTransform.Stretch();
-            var letter = Label(box, string.IsNullOrEmpty(label) ? "?" : label.Substring(0, 1).ToUpperInvariant(), size * 0.5f, person ? Color.white : PanelLook.Gold, title: true, align: TextAlignmentOptions.Center);
-            letter.rectTransform.Stretch();
-            return box;
-        }
-
-        // a selectable entry: chapter (icon over label), list row, chip or toggle; the chosen one is lit like the game's selection
-        GameObject Chip(RectTransform parent, string text, string icon, bool selected, Action click, float width, float height, bool vertical = false)
-        {
-            var img = Img(parent, text, null, selected ? PanelLook.Selected : PanelLook.Slot, raycast: true);
-            var o = img.gameObject.AddComponent<Outline>(); o.effectColor = selected ? PanelLook.Accent : PanelLook.SlotEdge; o.effectDistance = new Vector2(1, -1);
-            var le = img.gameObject.AddComponent<LayoutElement>(); le.minHeight = le.preferredHeight = height;
-            var hasIcon = !string.IsNullOrEmpty(icon);
-            var label = Label(img.transform, text, vertical ? 15 : 16, selected ? PanelLook.Gold : PanelLook.Text, align: vertical ? TextAlignmentOptions.Bottom : TextAlignmentOptions.Center);
-            label.textWrappingMode = TextWrappingModes.NoWrap; label.overflowMode = TextOverflowModes.Ellipsis;
-            label.rectTransform.Stretch();
-            if (hasIcon)
+            if (icon != null && icon.StartsWith("person:"))
             {
-                var size = vertical ? 32f : height - 12;
-                var m = Marker(img.rectTransform, icon, text, size, layout: false);
-                if (vertical) { m.anchorMin = m.anchorMax = m.pivot = new Vector2(0.5f, 1); m.anchoredPosition = new Vector2(0, -6); label.rectTransform.offsetMin = new Vector2(4, 6); }
-                else { m.anchorMin = m.anchorMax = m.pivot = new Vector2(0, 0.5f); m.anchoredPosition = new Vector2(8, 0); label.rectTransform.offsetMin = new Vector2(size + 16, 0); label.rectTransform.offsetMax = new Vector2(-8, 0); }
+                var name = icon.Substring(7);
+                var shield = Img(box, "Shield", PanelLook.Ui("shield"), PanelLook.PersonColor(personColors.TryGetValue(name, out var pi) ? pi : 0));
+                shield.rectTransform.Stretch();
+                return box;
             }
-            if (width > 0) le.minWidth = le.preferredWidth = width;
-            else if (!vertical) le.preferredWidth = le.minWidth = label.preferredWidth + (hasIcon ? height + 20 : 28);
-            var button = img.gameObject.AddComponent<UnityEngine.UI.Button>();
-            button.targetGraphic = img;
-            button.onClick.AddListener(() => click());
-            return img.gameObject;
+            var sprite = PanelLook.Icon(icon);
+            if (sprite) Img(box, "Icon", sprite, Color.white).rectTransform.Stretch();
+            return box;
         }
     }
 

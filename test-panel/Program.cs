@@ -127,8 +127,19 @@ Check(defense.Active == Chapter.Battle && defense.Page == "defense" && defense.B
 var blocksStat = Find(defense, "stat", b => b.Title == "successful blocks");
 Check(blocksStat != null && blocksStat.Value == "55" && blocksStat.Text == "including 27 parries", "defense: blocks phrased inclusively (55 blocks, including 27 parries)");
 Check(Find(defense, "rows", b => b.Items.Any(i => i.Title == "Defences built" && i.Value == "40")) != null, "defense: base defences live in Battle > Defense, from the character record");
-Check(!Enumerable.Range(1, 8).Select(i => Show(input, Chapter.Deeds, deeds.List[i].Id)).SelectMany(PanelModel.AllText).Any(t => t.Contains("block") || t.Contains("helm")),
-      "owner: no blocking or helm numbers on any Deeds page");
+// one owner per number: walk every page of every chapter (both Company directions) and note where each number shows up
+var pages = new List<(string where, PanelView v)>();
+foreach (Chapter ch in Enum.GetValues(typeof(Chapter)))
+    foreach (var l in PanelModel.Build(input, new PanelState { Chapter = ch }).List)
+        foreach (var they in new[] { true, false })
+            pages.Add((ch + "/" + l.Id, PanelModel.Build(input, new PanelState { Chapter = ch, Page = { [ch] = l.Id }, TheyReceived = they })));
+IEnumerable<string> WhereShown(Func<string, bool> has) => pages.Where(p => PanelModel.AllText(p.v).Any(has)).Select(p => p.where).Distinct();
+Check(WhereShown(t => t.Contains("55 block") || t.Contains("successful block") || t.Contains("27 parr")).SequenceEqual(new[] { "Battle/defense" }),
+      "owner: blocks and parries show on Battle > Defense only (not Battle > Overview, not Deeds > Overview): " + string.Join(", ", WhereShown(t => t.Contains("27 parr"))));
+Check(WhereShown(t => t.Contains("at the helm") && t.Any(char.IsDigit)).SequenceEqual(new[] { "Voyages/sailing" }), "owner: helm distance shows on Voyages > Sailing only");
+Check(Find(deeds, "titles").Items.All(t => !t.Value.Any(char.IsDigit) && string.IsNullOrEmpty(t.Note)), "owner: Deeds > Overview titles are shortcuts without numbers");
+var battleOverview = Show(input, Chapter.Battle);
+Check(Find(battleOverview, "link")?.Id == "Battle/defense" && !PanelModel.AllText(battleOverview).Any(t => t.Contains("27 parr") || t.Contains("55")), "owner: Battle > Overview links to Defense instead of repeating the count");
 var sailing = Show(input, Chapter.Voyages);
 Check(sailing.Page == "sailing" && sailing.Heading == "" + "Sailing" && Find(sailing, "stat", b => b.Title == "6.6 km at the helm") != null && sailing.Badges.Any(b => b.Label == "Helmskeeper"),
       "owner: the helm lives in Voyages > Sailing with the Helmskeeper title");
@@ -166,8 +177,9 @@ Check(PanelModel.SagaTitles.Single(t => t.Title == "Hallwright").Descriptor == "
 var battle = Show(input, Chapter.Battle, null, s => s.Biome = "Swamp");
 var bars = Find(battle, "bars");
 Check(battle.Heading == "266 damage points received" && battle.Scope == "Swamp combat · all enemies · this session", "battle: one scope per screen, stated in the header");
-Check(bars.Items.Select(b => b.Title).SequenceEqual(new[] { "Slash", "Poison" }) && Math.Abs(bars.Items[1].Fraction - 122f / 144f) < 1e-4 && bars.Items[1].Icon == "status:poison" && bars.Items[0].Icon == "",
-      "battle: bars on one scale from the numbers; poison carries the game's status icon, slash none");
+Check(bars.Items.Select(b => b.Title).SequenceEqual(new[] { "Slash", "Poison" }) && bars.Value == "150" && Math.Abs(bars.Items[1].Fraction - 122f / 150f) < 1e-4 && Math.Abs(bars.Items[0].Fraction - 144f / 150f) < 1e-4 && bars.Items[1].Icon == "status:poison" && bars.Items[0].Icon == "",
+      "battle: bars on one zero-based round scale (0 to 150) from the numbers; poison carries the game's status icon, slash none");
+Check(PanelModel.NiceMax(580) == 600 && PanelModel.NiceMax(1410) == 1500 && PanelModel.NiceMax(100) == 100 && PanelModel.NiceMax(7) == 8, "bars: the scale ends on a round number (580 -> 600, as in the kit's assembly)");
 Check(battle.HasFilters && battle.Windows.Select(w => w.Label).SequenceEqual(new[] { "Last hour", "Last three hours", "This session" }), "battle: time window choices say session, not gathering");
 Check(Find(battle, "stat", b => b.Title == "deaths from poison")?.Value == "2", "battle: deaths grouped by damage type, not pinned on an attacker");
 Check(Find(battle, "note", b => b.Tone == "hint") != null, "battle: the resistance hint is on the overview");
@@ -181,6 +193,10 @@ Check(PanelModel.Build(new PanelInput(), new PanelState { Chapter = Chapter.Batt
 var skills = Show(input, Chapter.Skills);
 Check(skills.List.Select(l => l.Id).SequenceEqual(new[] { "Axes", "Blocking", "Cooking", "Run", "Swords" }) && skills.List.All(l => l.Icon == "skill:" + l.Id), "skills: one row per skill with the game's skill icon");
 Check(Find(skills, "stat", b => b.Title == "level").Value == "38" && Find(skills, "stat", b => b.Title == "practice").Value == "14.5", "skills: level now and practice this session");
+var unpractised = new PanelInput { SkillLevels = new Dictionary<string, float> { ["Bows"] = 12f }, Events = new SessionEvents() };
+Check(Find(PanelModel.Build(unpractised, new PanelState { Chapter = Chapter.Skills }), "stat", b => b.Title == "practice") == null, "skills: no practice line when there was none (no '0 practice')");
+var colours = PanelModel.PersonColors(new[] { "Rowan", "Edda", "Tor", "Finch", "Asa", "Bo", "Gunn", "Ylva", "edda" });
+Check(colours.Count == 8 && colours.Values.Distinct().Count() == 8 && Show(input, Chapter.Company).PersonColors["Edda"] != Show(input, Chapter.Company).PersonColors["Tor"], "people: eight players get eight different colours, stable by name");
 
 // ---------- Company ----------
 var company = Show(input, Chapter.Company);
@@ -189,7 +205,8 @@ Check(company.Toggle.Select(t => t.Label).SequenceEqual(new[] { "They ate your f
 Check(Find(company, "empty").Title == "No record from Edda yet.", "company: their side without their shared record says so");
 var mine = Show(input, Chapter.Company, "Edda", s => s.TheyReceived = false);
 var thread = Find(mine, "thread");
-Check(thread.Title == "Edda made" && thread.Text == "You ate" && thread.Items.Select(i => i.Title + " " + i.Value).SequenceEqual(new[] { "Bread 3", "Fish wraps 2" }), "company: your side, maker to eater with item and count");
+Check(thread.Title == "Food Edda made" && thread.Text == "You ate" && thread.Icon == "person:Rowan" && thread.Items.Select(i => i.Title + " " + i.Value).SequenceEqual(new[] { "Bread 3", "Fish wraps 2" }), "company: your side, maker to eater with item and count");
+Check(thread.Note == PanelModel.SourceSession && mine.Scope == "Rowan and Edda · this session, since 20:54", "company: your side is scoped and labelled as your session");
 Check(Find(mine, "stat", b => b.Title == "Edda held the helm for about 15 minutes") != null && Find(mine, "stat", b => b.Title == "Sailed together for about 21 minutes") != null, "company: helm and voyages as about-minutes");
 var tor = Show(input, Chapter.Company, "Tor", s => s.TheyReceived = false);
 Check(Find(tor, "tiles").Items.Select(i => i.Title + "|" + i.Value).SequenceEqual(new[] { "Iron scale mail|", "Iron sword|" }), "company: gear shown by name, not equip counts");
@@ -231,24 +248,31 @@ Check(edda != null && !edda.IsSelf && edda.PlayerName == "Edda" && edda.PlayerId
 edda.NowUtc = now; edda.ToLocal = t => t.AddHours(2); edda.ViewerName = "Rowan"; edda.DisplayName = input.DisplayName;
 Check(edda.SkillLevels["Cooking"] == 31.2f && edda.Character["CraftFood"] == 210f, "snapshot: profile counters and skills come back");
 var eddaTitles = PanelModel.Titles(edda);
-Check(Line(eddaTitles, "Trailfinder", 0) == "52.3 km travelled" && Src(eddaTitles, "Shieldbearer", 0) == "measured, latest session", "snapshot: their values keep their source labels");
+Check(Line(eddaTitles, "Trailfinder", 0) == "52.3 km travelled" && Src(eddaTitles, "Shieldbearer", 0) == "measured in their last session", "snapshot: their values keep their source labels");
 foreach (Chapter ch in Enum.GetValues(typeof(Chapter)))
 {
     var a = PanelModel.Build(input, new PanelState { Chapter = ch }); var b = PanelModel.Build(edda, new PanelState { Chapter = ch });
-    if (!a.Chapters.Select(c => c.Label).SequenceEqual(b.Chapters.Select(c => c.Label)) || b.Blocks.Count == 0) { Check(false, "snapshot: chapter " + ch + " renders"); }
+    Check(a.Chapters.Select(c => c.Label).SequenceEqual(b.Chapters.Select(c => c.Label)) && b.Blocks.Count > 0, "snapshot: chapter " + ch + " renders for a fellow player");
 }
-Check(true, "snapshot: every chapter renders for a fellow player");
 var eddaBattle = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Battle });
-Check(eddaBattle.Scope.EndsWith("· Edda") && Find(eddaBattle, "stat", b => b.Title == "death from frost") != null, "snapshot: deaths without positions still count by type");
+Check(eddaBattle.Scope == "All biomes · all enemies · this session · Edda, their last session, 8 Oct 00:05" && Find(eddaBattle, "stat", b => b.Title == "death from frost") != null,
+      "snapshot: the Battle scope says whose copy and when it is from; deaths without positions still count by type");
+var oldCopy = PanelInput.FromSnapshot(eddaJson); oldCopy.NowUtc = now.AddDays(3); oldCopy.ToLocal = t => t.AddHours(2);
+var stale = PanelModel.Build(oldCopy, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastHour });
+Check(stale.Heading == "Edda's last record is from 8 Oct 00:05" && !PanelModel.AllText(stale).Contains(PanelModel.NoDeaths) && !PanelModel.AllText(stale).Contains("No damage received"),
+      "snapshot: a window after an old copy says when the copy is from, not that nothing happened");
 var eddaCompany = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Company });
 Check(eddaCompany.List.Select(l => l.Label).SequenceEqual(new[] { "Rowan (you)", "Tor" }), "snapshot: in their company you are marked, they are not their own company");
 edda.Fellows = new List<PanelInput> { input }; input.Fellows = new List<PanelInput> { edda };
 var eddaSide = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Company });
 var eddaThread = Find(eddaSide, "thread");
-Check(eddaSide.Toggle[0].Label == "You ate Edda's food" && eddaThread.Title == "Edda made" && eddaThread.Text == "You ate" && eddaThread.Items.Select(i => i.Title + " " + i.Value).SequenceEqual(new[] { "Bread 3", "Fish wraps 2" }),
+Check(eddaSide.Toggle[0].Label == "You ate Edda's food" && eddaThread.Title == "Food Edda made" && eddaThread.Text == "You ate" && eddaThread.Icon == "person:Rowan" && eddaThread.Items.Select(i => i.Title + " " + i.Value).SequenceEqual(new[] { "Bread 3", "Fish wraps 2" }),
       "both ways: Edda's side shows what you ate of hers, from your record");
 var rowanSide = PanelModel.Build(input, new PanelState { Chapter = Chapter.Company });
 Check(Find(rowanSide, "thread").Items.Single().Title == "Queens Jam" && Find(rowanSide, "thread").Items.Single().Value == "2", "both ways: your side shows what Edda ate of yours, from her shared record");
+Check(rowanSide.Scope == "Rowan and Edda · Edda's last session, 8 Oct 00:05" && Find(rowanSide, "thread").Note == PanelModel.SourceFellows,
+      "both ways: what she ate is scoped to her last session (with date) and labelled measured on their PCs");
+Check(Find(eddaSide, "thread").Note == "measured on your PC" && eddaSide.Scope == "Edda and Rowan · this session, since 20:54", "both ways: on Edda's page, what you ate of hers is labelled as measured on your PC");
 Check(Find(rowanSide, "tiles").Items.Single().Icon == "item:AxeBronze", "both ways: gear she equipped that you made");
 var cooking = Show(input, Chapter.Deeds, "cooking");
 Check(cooking.Heading == "2 meals eaten by companions" && Find(cooking, "rows").Items.Single().Title == "Edda" && Find(cooking, "rows").Note == PanelModel.SourceFellows,

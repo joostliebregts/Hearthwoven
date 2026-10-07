@@ -1,0 +1,431 @@
+{
+ "frame.png": {
+  "size": [
+   512,
+   512
+  ],
+  "border": [
+   56,
+   56,
+   56,
+   56
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "White. Centre already translucent; multiply overall alpha only deliberately. Header/footer text must avoid each 56 px corner square.",
+  "minimumSize": [
+   113,
+   113
+  ],
+  "contentInset": [
+   32,
+   32,
+   32,
+   32
+  ],
+  "cornerExclusion": 56
+ },
+ "tab.png": {
+  "size": [
+   200,
+   96
+  ],
+  "border": [
+   20,
+   20,
+   20,
+   16
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "Keep white; colour is authored.",
+  "minimumSize": [
+   80,
+   48
+  ]
+ },
+ "row.png": {
+  "size": [
+   320,
+   72
+  ],
+  "border": [
+   20,
+   20,
+   20,
+   20
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "Keep white; colour is authored.",
+  "minimumSize": [
+   80,
+   48
+  ]
+ },
+ "toggle.png": {
+  "size": [
+   360,
+   72
+  ],
+  "border": [
+   60,
+   16,
+   20,
+   16
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "White. Radio is baked in the fixed left strip; keep height 72. Scale the entire control uniformly for other UI scales.",
+  "minimumSize": [
+   160,
+   72
+  ],
+  "fixedHeight": 72,
+  "stretchAxes": "x",
+  "contentInset": [
+   60,
+   12,
+   20,
+   12
+  ]
+ },
+ "tab-selected.png": {
+  "size": [
+   200,
+   96
+  ],
+  "border": [
+   20,
+   20,
+   20,
+   16
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "Keep white; colour is authored.",
+  "minimumSize": [
+   80,
+   48
+  ]
+ },
+ "row-selected.png": {
+  "size": [
+   320,
+   72
+  ],
+  "border": [
+   20,
+   20,
+   20,
+   20
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "Keep white; colour is authored.",
+  "minimumSize": [
+   80,
+   48
+  ]
+ },
+ "toggle-selected.png": {
+  "size": [
+   360,
+   72
+  ],
+  "border": [
+   60,
+   16,
+   20,
+   16
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "White. Radio is baked in the fixed left strip; keep height 72. Scale the entire control uniformly for other UI scales.",
+  "minimumSize": [
+   160,
+   72
+  ],
+  "fixedHeight": 72,
+  "stretchAxes": "x",
+  "contentInset": [
+   60,
+   12,
+   20,
+   12
+  ]
+ },
+ "slot.png": {
+  "size": [
+   128,
+   128
+  ],
+  "border": [
+   16,
+   16,
+   16,
+   16
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "White or muted gold. Centre is completely transparent; place native item above this image.",
+  "minimumSize": [
+   40,
+   40
+  ]
+ },
+ "shield.png": {
+  "size": [
+   128,
+   128
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Multiply RGB by player colour; alpha unchanged. Every visible pixel is grayscale. No letters or player name baked in."
+ },
+ "chapter-deeds.png": {
+  "size": [
+   64,
+   64
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Light ivory ink. White default; amber (#ffcf80) multiply for selection. Readable at 32 px."
+ },
+ "chapter-company.png": {
+  "size": [
+   64,
+   64
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Light ivory ink. White default; amber (#ffcf80) multiply for selection. Readable at 32 px."
+ },
+ "chapter-stores.png": {
+  "size": [
+   64,
+   64
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Light ivory ink. White default; amber (#ffcf80) multiply for selection. Readable at 32 px."
+ },
+ "chapter-battle.png": {
+  "size": [
+   64,
+   64
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Light ivory ink. White default; amber (#ffcf80) multiply for selection. Readable at 32 px."
+ },
+ "chapter-voyages.png": {
+  "size": [
+   64,
+   64
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Light ivory ink. White default; amber (#ffcf80) multiply for selection. Readable at 32 px."
+ },
+ "chapter-skills.png": {
+  "size": [
+   64,
+   64
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Light ivory ink. White default; amber (#ffcf80) multiply for selection. Readable at 32 px."
+ },
+ "title-woodcutter.png": {
+  "size": [
+   128,
+   128
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Keep white: matches the existing gold role emblems. Display at 32\u2013128 px; pair with title text."
+ },
+ "title-mapmaker.png": {
+  "size": [
+   128,
+   128
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Keep white: matches the existing gold role emblems. Display at 32\u2013128 px; pair with title text."
+ },
+ "title-mender.png": {
+  "size": [
+   128,
+   128
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Keep white: matches the existing gold role emblems. Display at 32\u2013128 px; pair with title text."
+ },
+ "title-wallwarden.png": {
+  "size": [
+   128,
+   128
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Keep white: matches the existing gold role emblems. Display at 32\u2013128 px; pair with title text."
+ },
+ "title-bossbane.png": {
+  "size": [
+   128,
+   128
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Keep white: matches the existing gold role emblems. Display at 32\u2013128 px; pair with title text."
+ },
+ "divider.png": {
+  "size": [
+   512,
+   16
+  ],
+  "border": [
+   24,
+   0,
+   24,
+   0
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "Keep white; colour is authored.",
+  "fixedHeight": 16,
+  "stretchAxes": "x",
+  "minimumSize": [
+   49,
+   16
+  ]
+ },
+ "thread.png": {
+  "size": [
+   256,
+   32
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "White. Decorative direction only, never magnitude. Uniform scale only; may flip horizontally."
+ },
+ "meter-track.png": {
+  "size": [
+   240,
+   20
+  ],
+  "border": [
+   5,
+   5,
+   5,
+   5
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "White. Keep fill inset by 3 px.",
+  "minimumSize": [
+   11,
+   11
+  ]
+ },
+ "meter-fill.png": {
+  "size": [
+   240,
+   20
+  ],
+  "border": [
+   2,
+   2,
+   2,
+   2
+  ],
+  "ppu": 100,
+  "type": "sliced",
+  "tint": "Neutral grayscale base: multiply by PanelLook.Tone(damageType). Poison green, fire red-orange, other types per damage-colors.json preview fallback. Do not apply amber globally. Geometry must be data-scaled; hide at zero. At widths below 5 px clip a minimum-width sprite.",
+  "minimumSize": [
+   5,
+   5
+  ]
+ }
+}

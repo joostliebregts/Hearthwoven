@@ -23,5 +23,7 @@
   </ItemGroup>
   <!-- role icons: original art made for Hearthwoven (work/branding-kritterstats/icons), embedded so nothing ships loose -->
   <ItemGroup><EmbeddedResource Include="src/Panel/icons/*.png" LogicalName="Hearthwoven.icons.%(Filename).png" /></ItemGroup>
+  <!-- UI kit: original Hearthwoven art by Codex Finn (work/branding-kritterstats/ui-kit), with its 9-slice manifest -->
+  <ItemGroup><EmbeddedResource Include="src/Panel/ui/*.png" LogicalName="Hearthwoven.ui.%(Filename).png" /><EmbeddedResource Include="src/Panel/ui/kit.json" LogicalName="Hearthwoven.ui.kit.json" /></ItemGroup>
   <ItemGroup><Compile Remove="test/**;test-panel/**;selftest/**" /></ItemGroup>
 </Project>

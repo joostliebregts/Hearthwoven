@@ -27,14 +27,31 @@ namespace Hearthwoven.Panel
             }
         }
 
-        // While the panel is open the game treats it like the trader's window: cursor free, no walking, looking or hotbar.
+        // While the panel is open the character takes no input at all, the way chat, the console and sign text block it:
+        // W/S/A/D, Q and E are the panel's own keys then, so they must not walk, autorun, stand you up or steer a ship.
+        // (The trader-window trick alone only stops movement with a gamepad: PlayerController.TakeInput.)
+        [HarmonyPatch(typeof(PlayerController), "TakeInput")]
+        static class NoMovement
+        {
+            static bool Prefix(ref bool __result) { if (!PanelUi.Blocking) return true; __result = false; return false; }
+        }
+
+        [HarmonyPatch(typeof(Player), "TakeInput")]
+        static class NoActions
+        {
+            static bool Prefix(ref bool __result) { if (!PanelUi.Blocking) return true; __result = false; return false; }
+        }
+
+        // ...and reports itself as the trader's window for what the input block does not reach: the mouse wheel zooming
+        // the camera, the hotbar, and the Escape that closes the panel also opening the main menu. Side effect: a trader
+        // standing next to you skips its idle lines while the panel is open (Trader.RandomTalk).
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.IsVisible))]
         static class CountAsWindow
         {
             static void Postfix(ref bool __result) { if (!__result && PanelUi.Blocking) __result = true; }
         }
 
-        // "This session" (one connection) starts at the first spawn after the measurements were reset (Plugin.OnLogout makes new ones).
+        // "This session" (one connection) starts at the first spawn after the measurements were reset for a new connection.
         [HarmonyPatch(typeof(Player), "OnSpawned")]
         static class SessionStart
         {

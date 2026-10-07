@@ -16,7 +16,7 @@ namespace Hearthwoven.Panel
     {
         // compact dark translucent menu over the world, warm text, one gold accent
         public static readonly Color Panel = new Color(0.075f, 0.058f, 0.042f, 0.88f), Edge = Hex("#6b5232"), Slot = new Color(0.11f, 0.085f, 0.06f, 0.95f),
-            SlotEdge = Hex("#4a3a28"), Selected = new Color(0.36f, 0.24f, 0.09f, 0.75f), Text = Hex("#e9dcc4"), Muted = Hex("#b9a688"), Faint = Hex("#8c7b62"),
+            SlotEdge = Hex("#4a3a28"), Text = Hex("#e9dcc4"), Muted = Hex("#b9a688"), Faint = Hex("#8c7b62"),
             Gold = Hex("#e8c27a"), Accent = Hex("#e8a948"), Track = new Color(0.17f, 0.13f, 0.09f, 1f), Rule = new Color(0.42f, 0.32f, 0.2f, 0.6f);
 
         static Color Hex(string h) { ColorUtility.TryParseHtmlString(h, out var c); return c; }
@@ -49,6 +49,9 @@ namespace Hearthwoven.Panel
         static Dictionary<string, Sprite> byToken;
 
         /// <summary>Resolves "item:Bread", "item:$item_bread", "piece:Cart", "skill:Blocking", "status:poison", "title:cook"; null if not found.</summary>
+        /// <summary>Forget lookups that found nothing, so the next open tries again (prefabs may not have been loaded yet).</summary>
+        public static void RetryMissing() { foreach (var k in icons.Where(kv => kv.Value == null).Select(kv => kv.Key).ToList()) icons.Remove(k); }
+
         public static Sprite Icon(string reference)
         {
             if (string.IsNullOrEmpty(reference)) return null;
@@ -77,7 +80,10 @@ namespace Hearthwoven.Panel
                         if (hash != 0 && ObjectDB.instance) s = ObjectDB.instance.GetStatusEffect(hash)?.m_icon;
                         break;
                     case "title":
-                        s = RoleIcon(key);
+                        s = RoleIcon(key) ?? Ui("title-" + key);   // the five newer emblems come with the UI kit
+                        break;
+                    case "ui":
+                        s = Ui(key);
                         break;
                 }
             }
@@ -168,13 +174,9 @@ namespace Hearthwoven.Panel
             finally { RenderTexture.active = previous; if (rt != null) RenderTexture.ReleaseTemporary(rt); }
         }
 
-        /// <summary>A stable colour per person for their round marker (recognition, not rank).</summary>
-        public static Color PersonColor(string name)
-        {
-            var palette = new[] { "#9b3b2e", "#3b5f8f", "#c9c2b0", "#5f7f3b", "#8a5a2b", "#6b4a8a", "#2f7a74", "#a8842e" };
-            int h = 0; foreach (var ch in (name ?? "").ToLowerInvariant()) h = unchecked(h * 31 + ch);
-            return Hex(palette[(h % palette.Length + palette.Length) % palette.Length]);
-        }
+        // One colour per person in the group (PanelModel.PersonColors hands out distinct indexes, up to eight people).
+        static readonly string[] People = { "#a83a2c", "#3b62a0", "#d8d2c0", "#5f8a3b", "#c08a2e", "#7a52a0", "#2f8a82", "#8a5a3a" };
+        public static Color PersonColor(int index) => Hex(People[((index % People.Length) + People.Length) % People.Length]);
 
         // ---------- Hearthwoven title emblems (embedded) ----------
 
@@ -182,17 +184,58 @@ namespace Hearthwoven.Panel
         static readonly System.Reflection.MethodInfo LoadImage =
             Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule")?.GetMethod("LoadImage", new[] { typeof(Texture2D), typeof(byte[]) });
 
-        static Sprite RoleIcon(string id)
+        static Sprite RoleIcon(string id) => Embedded("Hearthwoven.icons." + id + ".png", Vector4.zero);
+
+        static byte[] Resource(string name)
         {
-            using (var stream = typeof(PanelLook).Assembly.GetManifestResourceStream("Hearthwoven.icons." + id + ".png"))
+            using (var stream = typeof(PanelLook).Assembly.GetManifestResourceStream(name))
             {
                 if (stream == null) return null;
                 var bytes = new byte[stream.Length]; int read = 0;
                 while (read < bytes.Length) { var n = stream.Read(bytes, read, bytes.Length - read); if (n <= 0) break; read += n; }
-                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = "hearthwoven-" + id };
-                return LoadImage != null && (bool)LoadImage.Invoke(null, new object[] { tex, bytes }) ? Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f)) : null;
+                return bytes;
             }
         }
+
+        // no mipmaps, clamped, bilinear (kit README); full-rect mesh so 9-slicing works
+        static Sprite Embedded(string name, Vector4 border)
+        {
+            var bytes = Resource(name);
+            if (bytes == null || LoadImage == null) return null;
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = name, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            if (!(bool)LoadImage.Invoke(null, new object[] { tex, bytes })) return null;
+            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, border);
+        }
+
+        // ---------- the UI kit: original Hearthwoven art by Codex Finn ----------
+
+        static Dictionary<string, Vector4> borders;
+        static readonly Dictionary<string, Sprite> kit = new Dictionary<string, Sprite>();
+
+        /// <summary>A kit sprite by name ("frame", "row-selected", "chapter-battle"), with its 9-slice border from kit.json.</summary>
+        public static Sprite Ui(string name)
+        {
+            if (kit.TryGetValue(name, out var s)) return s;
+            if (borders == null)
+            {
+                borders = new Dictionary<string, Vector4>();
+                var json = Resource("Hearthwoven.ui.kit.json");
+                if (json != null && MiniJson.Parse(System.Text.Encoding.UTF8.GetString(json)) is Dictionary<string, object> manifest)
+                    foreach (var kv in manifest)
+                        if (kv.Value is Dictionary<string, object> e && e.TryGetValue("border", out var b) && b is List<object> l && l.Count == 4)
+                            // kit.json: left, top, right, bottom; Unity: left, bottom, right, top
+                            borders[kv.Key.Replace(".png", "")] = new Vector4(Convert.ToSingle(l[0]), Convert.ToSingle(l[3]), Convert.ToSingle(l[2]), Convert.ToSingle(l[1]));
+            }
+            borders.TryGetValue(name, out var border);
+            s = Embedded("Hearthwoven.ui." + name + ".png", border);
+            if (s == null) Debug.LogWarning("[Hearthwoven] UI kit sprite missing: " + name);
+            kit[name] = s;
+            return s;
+        }
+
+        public static bool Sliced(string name) => Ui(name) != null && Ui(name).border != Vector4.zero;
+
+        public static readonly Color Selected = Hex("#ffcf80");   // chapter icons multiply to amber when chosen (kit.json)
 
         static Sprite Drawn(Texture2D t) => Sprite.Create(t, new Rect(0, 0, t.width, t.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
 
