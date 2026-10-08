@@ -22,6 +22,7 @@ namespace Hearthwoven
         public readonly Dictionary<string, float> Repairs = new Dictionary<string, float>();        // "piece" -> repairs with the hammer
         public readonly Dictionary<string, float> MapShared = new Dictionary<string, float>();      // "map table" -> times you wrote your map to it
         public readonly Dictionary<string, float> CartMeters = new Dictionary<string, float>();     // "cart" -> metres pulled
+        public readonly Dictionary<string, float> PickedUp = new Dictionary<string, float>();       // item token ("$item_wood") -> amount gathered from the world
         public int Blocks, Parries;
 
         public static void Add(Dictionary<string, float> d, string key, float v = 1f)
@@ -29,6 +30,15 @@ namespace Hearthwoven
             if (string.IsNullOrEmpty(key) || v == 0f) return;
             d.TryGetValue(key, out var o); d[key] = o + v;
         }
+
+        /// <summary>
+        /// One pickup, exactly (ClientHooks.Pickup): what the carried amount of that item grew by, at most the drop's
+        /// stack. A drop that someone already held (your own dropped stack, a fellow's) counts 0: only fresh items from the
+        /// world count, the same rule as the game's m_pickedUp flag, but without the game's gap (it skips a pickup that
+        /// lands on a stack you already carry). Inventory full: only the part that went in. Refused: 0.
+        /// </summary>
+        public static int PickedAmount(bool alreadyHeld, int dropStack, int carriedBefore, int carriedAfter) =>
+            alreadyHeld ? 0 : System.Math.Max(0, System.Math.Min(dropStack, carriedAfter - carriedBefore));
 
         public void WriteTo(Json j)
         {
@@ -39,6 +49,7 @@ namespace Hearthwoven
                 .Dict("pickaxeHits", PickaxeHits).Dict("skillPractice", SkillPractice)
                 .Dict("equippedGearMadeBy", EquippedGearMadeBy).Dict("sailedWith", SailedWith).Dict("sailedUnderHelmOf", SailedUnderHelmOf)
                 .Dict("chopHits", ChopHits).Dict("repairs", Repairs).Dict("mapShared", MapShared).Dict("cartMeters", CartMeters)
+                .Dict("pickedUp", PickedUp)
                 .Close();
         }
     }

@@ -44,9 +44,9 @@ public class SelfTest : BaseUnityPlugin
         // (no tuples: the game's Mono runtime has no System.ValueTuple)
         var types = new Type[] { typeof(Character), typeof(Character), typeof(Humanoid), typeof(MineRock5), typeof(MineRock), typeof(Destructible), typeof(Trader),
             typeof(Smelter), typeof(Smelter), typeof(Player), typeof(Feast), typeof(Skills), typeof(ZRoutedRpc), typeof(ZDO),
-            typeof(ZDOMan), typeof(Character), typeof(Player), typeof(Humanoid) };
+            typeof(ZDOMan), typeof(Character), typeof(Player), typeof(Humanoid), typeof(Humanoid) };
         var methods = new[] { "Damage", "ApplyDamage", "BlockAttack", "Damage", "Damage", "Damage", "OnBought", "OnAddOre", "OnAddFuel", "EatFood",
-            "RPC_EatConfirmation", "RaiseSkill", "RPC_RoutedRPC", "Deserialize", "RPC_ZDOData", "RPC_Damage", "OnDeath", "EquipItem" };
+            "RPC_EatConfirmation", "RaiseSkill", "RPC_RoutedRPC", "Deserialize", "RPC_ZDOData", "RPC_Damage", "OnDeath", "EquipItem", "Pickup" };
         var missing = Enumerable.Range(0, types.Length).Where(i => { var m = AccessTools.Method(types[i], methods[i]); var info = m == null ? null : Harmony.GetPatchInfo(m);
             return info == null || !info.Owners.Contains(Plugin.Guid); }).Select(i => types[i].Name + "." + methods[i]).ToList();
         Check(missing.Count == 0, "all hook targets attached" + (missing.Count > 0 ? " (missing: " + string.Join(", ", missing) + ")" : ""));
@@ -61,8 +61,12 @@ public class SelfTest : BaseUnityPlugin
         var json = Snapshot.Build(Plugin.Version, 4242L, "SelfTestViking", stats, new Snapshot.SkillInfo[0], "KdlTest", new DamageTally(), "sess", new SessionEvents());
         var parts = Fragments.Split(Transport.Pack(json));
         var playersDir = Path.Combine(root, "players");
-        var file = Path.Combine(playersDir, "0.json");   // peer 555 does not exist, so the server files it under 0
+        // filed under the player's id, never under 0: the game's peer.m_playerID is 0 on a dedicated server (PeerIdentity);
+        // this sender is no real peer, so the id comes from the snapshot itself
+        var file = Path.Combine(playersDir, "4242.json");
+        var zero = Path.Combine(playersDir, "0.json");
         if (File.Exists(file)) File.Delete(file);
+        if (File.Exists(zero)) File.Delete(zero);
         for (int i = 0; i < parts.Count; i++)
         {
             var p = new ZPackage(); p.Write("selftest"); p.Write("msg1"); p.Write(i); p.Write(parts.Count); p.Write(parts[i]);
@@ -72,6 +76,8 @@ public class SelfTest : BaseUnityPlugin
         Check(parts.Count >= 2, $"profile was split ({parts.Count} fragments)");
         var written = File.Exists(file) ? File.ReadAllText(file) : "";
         Check(written.Contains("\"SelfTestViking\"") && written.Contains("DistanceSailHelm") && written.Contains("\"reason\":\"selftest\""), "server wrote the reassembled profile");
+        Check(!File.Exists(zero) && !Directory.Exists(Path.Combine(playersDir, "0")) && written.Contains("\"playerKey\":\"4242\""), "profile filed under the player id (4242), no 0.json");
+        Check(File.Exists(file) && File.ReadAllBytes(file).Take(3).SequenceEqual(new byte[] { 0xEF, 0xBB, 0xBF }) == false, "profile file has no UTF-8 BOM");
 
         // 3. a server without the mod: an unknown routed RPC is ignored without error
         Check(Send(Routed("Hearthwoven_NotRegisteredHere", serverId, new object[] { new ZPackage() })), "unknown RPC (server without the mod) is ignored without error");

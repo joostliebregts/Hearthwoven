@@ -21,7 +21,7 @@ namespace Hearthwoven
     [BepInPlugin(Guid, "Hearthwoven", Version)]
     public class Plugin : BaseUnityPlugin
     {
-        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.2.0", RpcName = "Hearthwoven_Profile";
+        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.2.1", RpcName = "Hearthwoven_Profile";
         static ConfigEntry<bool> sendStats, logRouted, shareWithGroup;
         static ConfigEntry<float> intervalMinutes;
         // Measured this session. A session = one connection to one server; reset after the logout send.
@@ -158,27 +158,31 @@ namespace Hearthwoven
                 if (whole == null) return;   // waiting for more fragments
                 var json = Transport.Unpack(whole);
                 var peer = ZNet.instance.GetPeer(sender);
+                // who sent it: the game's peer.m_playerID is always 0 on a dedicated server (PeerIdentity), so the key comes
+                // from the character's ZDO, else the playerId this snapshot carries, bound to this peer
+                PeerIdentity.Bind(sender, PeerIdentity.SnapshotPlayerId(json));
+                var key = peer != null ? PeerIdentity.Key(peer) : PeerIdentity.KeyOf(PeerIdentity.IdOf(0, 0, PeerIdentity.SnapshotPlayerId(json)), "", sender);
+                var resolved = peer != null ? PeerIdentity.Id(peer) : null;
                 var envelope = new Json().Open()
                     .Str("received", DateTime.UtcNow.ToString("o")).Str("reason", reason)
                     .Str("peerName", peer?.m_playerName ?? "").Num("peerPlayerId", peer?.m_playerID ?? 0)
-                    .Str("platform", peer?.m_socket?.GetHostName() ?? "")
+                    .Str("playerKey", key).Str("platform", peer?.m_socket?.GetHostName() ?? "")
                     .Raw("profile", json).Close().ToString();
                 var dir = Path.Combine(Paths.BepInExRootPath, "Hearthwoven", "players");
                 Directory.CreateDirectory(dir);
-                var id = peer?.m_playerID ?? 0;
-                File.WriteAllText(Path.Combine(dir, id + ".json"), envelope, Encoding.UTF8);
+                File.WriteAllText(Path.Combine(dir, key + ".json"), envelope, PeerIdentity.Utf8);
                 // Measured values are absolute per session: keep the latest copy of EVERY session, so the sum over
                 // sessions is the measured total (players/<id>.json alone would lose earlier sessions).
                 var session = Transport.SafeName(Transport.SessionOf(json));
                 if (session.Length > 0)
                 {
-                    var sdir = Path.Combine(dir, id.ToString(), "sessions");
+                    var sdir = Path.Combine(dir, key, "sessions");
                     Directory.CreateDirectory(sdir);
-                    File.WriteAllText(Path.Combine(sdir, session + ".json"), envelope, Encoding.UTF8);
+                    File.WriteAllText(Path.Combine(sdir, session + ".json"), envelope, PeerIdentity.Utf8);
                 }
-                GroupShare.Store(id, json);
+                if (resolved.HasValue) GroupShare.Store(key, json);   // shared only under a real player id, never a platform fallback
                 File.AppendAllText(Path.Combine(dir, "received-" + DateTime.UtcNow.ToString("yyyyMMdd") + ".jsonl"),
-                                   new Json().Open().Str("t", DateTime.UtcNow.ToString("o")).Num("playerId", id).Str("name", peer?.m_playerName ?? "")
+                                   new Json().Open().Str("t", DateTime.UtcNow.ToString("o")).Num("playerId", resolved ?? 0).Str("playerKey", key).Str("name", peer?.m_playerName ?? "")
                                              .Str("reason", reason).Num("bytes", json.Length).Close() + "\n");
             }
             catch (Exception e) { log?.LogWarning("receive failed: " + e.Message); }

@@ -237,5 +237,16 @@ Check(MiniJson.Parse(new string('[', 200000)) == null, "G4 a deeply nested snaps
 // G8: the shared copy leaves out which worlds you played
 Check(!GroupShare.SharedCopy(shared).Contains("secondsPerWorld") && GroupShare.SharedCopy(shared).Contains("\"stats\""), "S2 the shared copy also leaves out the worlds you played");
 
+// ---------- server identity: ZNetPeer.m_playerID is always 0 on a dedicated server (nothing invokes "PlayerID") ----------
+Check(PeerIdentity.IdOf(0, 2718281828L, 0) == 2718281828L && PeerIdentity.IdOf(0, 0, 2718281828L) == 2718281828L && PeerIdentity.IdOf(55, 66, 77) == 55 && PeerIdentity.IdOf(0, 66, 77) == 66,
+      "ID1 a peer's id: the game's own if set, else the character ZDO's playerID, else the id its snapshot carries");
+Check(PeerIdentity.IdOf(0, 0, 0) == null && PeerIdentity.KeyOf(null, "Platform_42", 9) == "Platform42" && PeerIdentity.KeyOf(null, "", 9) == "peer-9" &&
+      PeerIdentity.KeyOf(PeerIdentity.IdOf(0, 0, 0), null, 0) != "0",
+      "ID2 no id at all: files are keyed by the platform id (file-safe), never by 0");
+var rowan = Snapshot.Build("0.2.0", 2718281828L, "Rowan", stats, new Snapshot.SkillInfo[0], "TestWorld", tally, "41f2aa004d54");
+Check(PeerIdentity.SnapshotPlayerId(rowan) == 2718281828L && PeerIdentity.KeyOf(PeerIdentity.IdOf(0, 0, PeerIdentity.SnapshotPlayerId(rowan)), "Platform_42", 1) == "2718281828",
+      "ID3 the live case (peer id 0, no ZDO yet): the snapshot is stored as 2718281828, not 0");
+Check(PeerIdentity.Utf8.GetPreamble().Length == 0, "ID4 server files are written without a BOM");
+
 System.Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
 return fails;

@@ -26,6 +26,13 @@ namespace Hearthwoven.Panel
         public IDictionary<string, float> PiecesPlaced;     // piece token ("$piece_woodwall") -> count
         public IDictionary<string, float> EnemyKills;       // enemy token ("$enemy_troll") -> kills
         public IDictionary<string, float> SkillLevels;      // skill name ("Blocking") -> level now
+        public IDictionary<string, float> ItemsPickedUp;    // item token ("$item_wood") -> amount, first time anyone held it (any source)
+
+        // what the game data says about a token, derived at runtime by PanelUi (item type, drop tables, piece components).
+        // null (or a null answer) = unknown; PanelModel then falls back to the vanilla names it knows or keeps it apart.
+        public Func<string, string> ItemKind;               // item token -> "gear" | "food" | "other"
+        public Func<string, string> GatherKind;             // item token -> "wood" (dropped by trees and logs) | "mining" (by rocks)
+        public Func<string, string> PieceKind;              // piece token -> "built" | "ground" | "planted" | "feast"
 
         // measured by Hearthwoven since installation, this session
         public DamageTally Session;
@@ -50,6 +57,7 @@ namespace Hearthwoven.Panel
                 input.Character = Dict(Obj(slot0, "counters"));
                 input.ItemsCrafted = Dict(Obj(slot0, "itemsCrafted"));
                 input.PiecesPlaced = Dict(Obj(slot0, "piecesPlaced"));
+                input.ItemsPickedUp = Dict(Obj(slot0, "itemsPickedUp"));
                 if (slot0.TryGetValue("enemyKills", out var ek) && ek is List<object> tables && tables.Count > 0 && tables[0] is Dictionary<string, object> t0)
                     input.EnemyKills = Dict(Obj(t0, "kills"));
             }
@@ -68,6 +76,7 @@ namespace Hearthwoven.Panel
             Into(Obj(ev, "skillPractice"), e.SkillPractice); Into(Obj(ev, "equippedGearMadeBy"), e.EquippedGearMadeBy);
             Into(Obj(ev, "sailedWith"), e.SailedWith); Into(Obj(ev, "sailedUnderHelmOf"), e.SailedUnderHelmOf);
             Into(Obj(ev, "chopHits"), e.ChopHits); Into(Obj(ev, "repairs"), e.Repairs); Into(Obj(ev, "mapShared"), e.MapShared); Into(Obj(ev, "cartMeters"), e.CartMeters);
+            Into(Obj(ev, "pickedUp"), e.PickedUp);
             var log = Obj(root, "measuredLog");
             Into(Obj(log, "damage"), input.Log.Damage); Into(Obj(log, "hits"), input.Log.Hits);
             DateTime? last = null;

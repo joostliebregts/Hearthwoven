@@ -49,17 +49,18 @@ namespace Hearthwoven
         public static bool Shares(string snapshotJson) => snapshotJson.Contains("\"share\":true");
 
         /// <summary>Server, on every complete snapshot: keep or remove the shared copy.</summary>
-        internal static void Store(long playerId, string json)
+        internal static void Store(string playerKey, string json)
         {
-            if (playerId == 0) return;   // unknown player: never shared
-            var file = Path.Combine(Dir, playerId + ".share.json");
-            if (Shares(json)) File.WriteAllText(file, SharedCopy(json), Encoding.UTF8);
-            else Unshare(playerId);
+            if (string.IsNullOrEmpty(playerKey) || playerKey == "0") return;   // unknown player: never shared
+            var file = Path.Combine(Dir, playerKey + ".share.json");
+            if (Shares(json)) File.WriteAllText(file, SharedCopy(json), PeerIdentity.Utf8);
+            else Unshare(playerKey);
         }
 
-        static void Unshare(long playerId)
+        static void Unshare(string playerKey)
         {
-            var file = Path.Combine(Dir, playerId + ".share.json");
+            if (string.IsNullOrEmpty(playerKey) || playerKey == "0") return;
+            var file = Path.Combine(Dir, playerKey + ".share.json");
             if (File.Exists(file)) File.Delete(file);
         }
 
@@ -79,7 +80,8 @@ namespace Hearthwoven
         {
             if (ZNet.instance == null || !ZNet.instance.IsServer() || sharing) return;   // sharing on: the next snapshot brings the copy
             var peer = ZNet.instance.GetPeer(sender);
-            if (peer != null) Unshare(peer.m_playerID);
+            // no id yet (character ZDO not synced, no snapshot this session): the next snapshot says share:false and unshares
+            if (peer != null && PeerIdentity.Id(peer).HasValue) Unshare(PeerIdentity.Key(peer));
         }
 
         /// <summary>Client: the server's current list of sharers; anyone else is forgotten (they stopped sharing).</summary>
@@ -141,7 +143,8 @@ namespace Hearthwoven
                 lastServed[sender] = now;
                 var peer = ZNet.instance.GetPeer(sender);
                 if (peer == null) return;
-                var own = Path.Combine(Dir, peer.m_playerID + ".share.json");
+                if (!PeerIdentity.Id(peer).HasValue) return;   // not known yet: no own share file can match
+                var own = Path.Combine(Dir, PeerIdentity.Key(peer) + ".share.json");
                 if (!File.Exists(own)) return;   // you see others only while you share yourself
                 foreach (var q in outbox) if (q.Target == sender) return;   // still sending your previous answer
                 if (outbox.Count > MaxQueue) return;                         // busy: ask again later (client retries every 30 s)

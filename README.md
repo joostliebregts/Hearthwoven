@@ -1,58 +1,72 @@
 # Hearthwoven
 
-A Valheim mod that shows how everyone in your group contributes, each in their own way.
+Your own book of deeds in Valheim. Press **H** and see what your viking did: trees felled, ore carried home, food
+cooked, foes fought, seas crossed. If your friends play with it too, you also see how each of you helps the group,
+each in your own way.
 
-My friends and I play on a modded server. One of us builds for hours, another keeps the smelters running, someone
-else cooks for everyone and hardly ever fights. The game counts a lot of this, but you never see it, and you never
-see who ate your food or sailed under your helm. Hearthwoven makes that visible: in game, and on a page you can
-open on your phone.
+## For you
 
-**Status: early.** Built and tested on a test server with 23 other mods. It has not been played on a real evening
-yet. Expect rough edges, and please tell me about them in the issues.
+Hearthwoven adds a book to the game. It has six chapters:
 
-## What you see
-
-Press **H** in game. Six chapters:
-
-- **Deeds**: what you make or gather: cooking, building, crafting, woodcutting, mining, farming, fishing, taming.
-- **Company**: the people your evening crosses with. Who ate food you made, whose gear you equipped, who you
-  sailed with. Both directions, no ranking.
+- **Deeds**: cooking, building, crafting, woodcutting, mining, farming, fishing, taming.
+- **Company**: the friends you play with. Who ate the food you made. Whose gear you wear. Who sailed with you.
 - **Stores**: chests, carts and the trader.
-- **Battle**: damage taken and dealt per biome, blocks and parries, deaths with what hit you in the last ten
-  seconds, and a hint for next time ("poison was behind both deaths in the swamp: bring Poison Resistance Mead").
-- **Voyages**: sailing, at the helm, on foot, maps shared at the cartography table.
-- **Skills**: levels, and what you practised this session.
+- **Battle**: damage dealt and taken per biome and per foe, blocks and parries, and what killed you.
+- **Voyages**: sailing, time at the helm, distance on foot, maps you shared.
+- **Skills**: every skill by level, and what you practised this session.
 
-Keys: Q/E chapter, W/S list, A/D direction, I for how something was counted, H or Esc to close.
+Each playstyle earns its own title: Woodcutter, Stonebreaker, Hearth Cook, Hallwright and more. There is no total
+score and no ranking. A builder and a fighter both matter.
 
-## What it counts, and how honestly
+Keys: **H** open and close, **Q/E** chapter, **W/S** list, **A/D** direction, **T** about, **Esc** back.
 
-Every number says where it comes from: the game's own counters for your character, or what Hearthwoven measured
-since you installed it. Older history is never presented as measured. The rules for "nothing counted twice,
-nothing missed" are in [INTEGRITY.md](INTEGRITY.md), each with a test. An independent review tried to break them;
-what it found is fixed and tested, apart from a few accepted risks listed there.
+## Where the numbers come from
 
-Some examples: dungeon loot is not counted as someone stocking a chest, a tombstone is not a gift to the group, and
-a chest that a mod empties by itself (like a smelter feeder) does not count as your take. With MultiUserChest, the
-mod reads that mod's own messages to see who moved what. It only reads; it never changes another mod.
+Hearthwoven uses three sources. The About page in the book (press T) explains them too.
 
-## Sharing
+| Source | What | Since |
+|---|---|---|
+| Your character | The game itself keeps many counters: trees felled, pieces built, crafts, kills, skills. | The day you made your character. Full from the first minute. |
+| Hearthwoven on your PC | What the game does not keep: damage per biome and foe, the cause of each death, exactly what you picked up, who ate your food. | The moment you install it. |
+| The server | Who put what into which chest or cart, and who took it out. | The moment the server installs it. Works for every player, also without the mod. |
 
-You see your own stats. If you also want to see your friends' stats, you share yours: one setting,
-`ShareWithGroup`, on by default. Turn it off and nobody sees yours, and you see only your own. Shared copies leave
-out where you died and which worlds you played.
+## For your group
+
+On a server with friends, everyone plays differently. One builds for hours. One keeps the smelters running. One
+cooks for everyone and hardly fights. Hearthwoven makes that visible.
+
+- Players who install it share their book with the server. You see your friends' books, and they see yours.
+  You see theirs only while you share yours. You can turn sharing off (`ShareWithGroup`). Shared copies leave out
+  where you died and which worlds you played.
+- The server keeps every session, so the history grows with every evening you play.
+- The chest log works for all players, also for friends who do not install the mod.
 
 ## Install
 
-- **Server**: put `Hearthwoven.dll` in `BepInEx/plugins/`. It works without any player having the mod: it then
-  records chests, carts and ships on its own.
-- **Players**: optional, any time. Without the mod you notice nothing and you are never kicked. With it you get the
-  panel and your measured stats.
-- Not a dependency of anything, no Jotunn, no ServerSync, no version check. Removing it leaves nothing behind in
-  your world.
+- **Player**: install it with your mod manager (Gale, r2modman). It is optional: you can play on any server with it,
+  and a server with it does not need you to have it.
+- **Server**: put the same `Hearthwoven.dll` in the server's `BepInEx/plugins` folder. The server then stores the
+  shared books and the chest log in `BepInEx/Hearthwoven/`.
+- **Remove**: delete the DLL. Hearthwoven never changes your world.
 
-The companion (the phone page and a daily picture for Discord) is a separate tool and comes later, as one command
-that installs itself as a scheduled job.
+## Tested with
+
+We play with Hearthwoven on our own server with these mods, and test new versions against them on a copy of that server first:
+Jotunn, AzuWearNTearPatches, Drop That!, ValheimArmory, OdinArchitect, MultiUserChest, AdventureBackpacks,
+BetterArchery, BottleShips, ClayBuildPieces, CoreWoodPieces, FineWoodFurnitures, RefinedStonePieces, SeedBed,
+SmelterUpgrades, XPortal, AdvancedTerrainModifiers, SailingModer, Instant Monster Drop, NetworkPerformanceSystem and
+Server Devcommands. With MultiUserChest, Hearthwoven reads that mod's messages to see who moved what. It only reads;
+it never changes another mod.
+
+## Coming later
+
+A companion tool that posts a daily picture of your group's evening to Discord, and a page you can open on your
+phone. It will install with one command.
+
+## Feedback
+
+Something odd, a number that looks wrong, or an idea? Tell us on the
+[GitHub issues page](https://github.com/joostliebregts/Hearthwoven/issues). Screenshots help a lot.
 
 ## Thanks
 

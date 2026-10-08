@@ -19,7 +19,7 @@ namespace Hearthwoven.Panel
     {
         internal static PanelUi Instance;
         internal static ConfigEntry<bool> Enabled;
-        internal static ConfigEntry<KeyCode> Hotkey;
+        internal static ConfigEntry<KeyCode> Hotkey, InfoKey;
         internal static ConfigEntry<float> Scale;
         internal static DateTime? SessionStart;
         static int hiddenFrames = 99;
@@ -33,6 +33,7 @@ namespace Hearthwoven.Panel
             Enabled = config.Bind("Panel", "Enabled", true, "Show the Hearthwoven panel on the hotkey.");
             Hotkey = config.Bind("Panel", "Hotkey", KeyCode.H, "Key that opens and closes the Hearthwoven panel. H is unbound in Valheim and in the group's other mods.");
             Scale = config.Bind("Panel", "Scale", 1f, "Size of the panel (0.6 to 1.4).");
+            InfoKey = config.Bind("Panel", "InfoKey", KeyCode.T, "Key that opens and closes the About Hearthwoven page while the panel is open. T: I opens the AdventureBackpacks backpack.");
         }
 
         readonly PanelState state = new PanelState();
@@ -75,16 +76,19 @@ namespace Hearthwoven.Panel
                     return;
                 }
                 if (Typing()) return;
+                // on the About page, Esc (or B) goes back to the page it was opened from; the hotkey still closes the panel
+                if (state.ShowAbout && !Pressed() && (Key(KeyCode.Escape) || Button("JoyButtonB"))) { state.ShowAbout = false; Render(true); return; }
                 if (Pressed() || Key(KeyCode.Escape) || Button("JoyButtonB") || !Player.m_localPlayer ||
                     InventoryGui.IsVisible() || Minimap.IsOpen() || Menu.IsVisible() || Player.m_localPlayer.IsDead())
                 { Close(); return; }
-                if (Button("TabLeft") || Button("JoyTabLeft")) { PanelModel.StepChapter(state, -1); Render(true); }
-                else if (Button("TabRight") || Button("JoyTabRight")) { PanelModel.StepChapter(state, 1); Render(true); }
-                else if (Key(KeyCode.W) || Key(KeyCode.UpArrow) || Button("JoyDPadUp")) { PanelModel.StepList(state, view, -1); Render(true); }
-                else if (Key(KeyCode.S) || Key(KeyCode.DownArrow) || Button("JoyDPadDown")) { PanelModel.StepList(state, view, 1); Render(true); }
+                if (Button("TabLeft") || Button("JoyTabLeft")) { state.ShowAbout = false; PanelModel.StepChapter(state, -1); Render(true); }
+                else if (Button("TabRight") || Button("JoyTabRight")) { state.ShowAbout = false; PanelModel.StepChapter(state, 1); Render(true); }
+                else if (Key(KeyCode.W) || Key(KeyCode.UpArrow) || Button("JoyDPadUp")) { state.ShowAbout = false; PanelModel.StepList(state, view, -1); Render(true); }
+                else if (Key(KeyCode.S) || Key(KeyCode.DownArrow) || Button("JoyDPadDown")) { state.ShowAbout = false; PanelModel.StepList(state, view, 1); Render(true); }
                 else if (view != null && view.Toggle.Count > 0 && (Key(KeyCode.A) || Key(KeyCode.LeftArrow) || Button("JoyDPadLeft"))) { state.TheyReceived = true; Render(true); }
                 else if (view != null && view.Toggle.Count > 0 && (Key(KeyCode.D) || Key(KeyCode.RightArrow) || Button("JoyDPadRight"))) { state.TheyReceived = false; Render(true); }
-                else if (Key(KeyCode.I)) { state.ShowHow = !state.ShowHow; Render(true); }
+                else if (InfoKey.Value != KeyCode.None && Key(InfoKey.Value)) { state.ShowAbout = !state.ShowAbout; Render(true); }
+                Wheel();
                 if (Time.unscaledTime >= nextRefresh) Render(false);
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel: " + e.Message); Close(); }
@@ -94,6 +98,7 @@ namespace Hearthwoven.Panel
         {
             // free the cursor while reading; the game takes it back on its own once nothing is open
             if (open && ZInput.IsMouseActive()) { ZCursor.LockState = CursorLockMode.None; ZCursor.Show(); }
+            if (open) foreach (var s in scrollers) { Ease(s); Fades(s); }
         }
 
         static bool Pressed() => Hotkey.Value != KeyCode.None && Key(Hotkey.Value);
@@ -110,6 +115,7 @@ namespace Hearthwoven.Panel
 
         void Open()
         {
+            state.ShowAbout = false;   // always reopen on the page, not on About
             PanelLook.Resolve();
             PanelLook.RetryMissing();
             if (!root) Build();
@@ -182,6 +188,7 @@ namespace Hearthwoven.Panel
             var other = hit.Value;
             if (other == null) return null;
             other.NowUtc = self.NowUtc; other.DisplayName = Localized; other.PlayerNames = self.PlayerNames; other.ViewerName = self.PlayerName;
+            other.ItemKind = GameData.ItemKind; other.GatherKind = GameData.GatherKind; other.PieceKind = GameData.PieceKind;
             return other;
         }
 
@@ -191,6 +198,7 @@ namespace Hearthwoven.Panel
             {
                 NowUtc = DateTime.UtcNow, SessionStartUtc = SessionStart,
                 Session = Plugin.Session, Events = Plugin.Events, Log = Plugin.Log, DisplayName = Localized,
+                ItemKind = GameData.ItemKind, GatherKind = GameData.GatherKind, PieceKind = GameData.PieceKind,
                 PlayerNames = new Dictionary<long, string>(),
             };
             var profile = Game.instance ? Game.instance.GetPlayerProfile() : null;
@@ -205,6 +213,7 @@ namespace Hearthwoven.Panel
                     input.Character = stats[0].m_stats.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value);
                     input.ItemsCrafted = stats[0].m_itemCraftStats;
                     input.PiecesPlaced = stats[0].m_piecesPlacedStats;
+                    input.ItemsPickedUp = stats[0].m_itemPickupStats;
                     if (stats[0].m_enemyStats != null && stats[0].m_enemyStats.Length > 0) input.EnemyKills = stats[0].m_enemyStats[0];
                 }
             }
@@ -228,6 +237,7 @@ namespace Hearthwoven.Panel
             self.Fellows = fellows;
             if (subject != null) subject.Fellows = fellows.Where(f => f != subject).Concat(new[] { self }).ToList();
             state.Hotkey = Hotkey.Value == KeyCode.None ? "" : Hotkey.Value.ToString();
+            state.InfoKey = InfoKey.Value == KeyCode.None ? "" : InfoKey.Value.ToString();
             var v = PanelModel.Build(subject ?? self, state);
             PanelModel.AddPlayers(v, self.PlayerName, GroupShare.Group.Keys, state.Player, GroupShare.Sharing());
             view = v;
@@ -314,8 +324,93 @@ namespace Hearthwoven.Panel
             inner.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             var scroll = box.gameObject.AddComponent<ScrollRect>();
             scroll.content = inner; scroll.viewport = box; scroll.horizontal = false; scroll.vertical = true;
-            scroll.movementType = ScrollRect.MovementType.Clamped; scroll.scrollSensitivity = 30f; scroll.inertia = false;
+            // the wheel is ours (Wheel): the game's input system scales a notch down to a few pixels, which felt stuck
+            scroll.movementType = ScrollRect.MovementType.Clamped; scroll.scrollSensitivity = 0f; scroll.inertia = false;
+            scrollers.Add(new Scroll { Rect = scroll, Top = Fade(box, top: true), Bottom = Fade(box, top: false), ByRow = width >= 0 });
             return inner;
+        }
+
+        // ---------- scrolling: one wheel notch moves at least one row; a soft fade where more lies beyond the edge ----------
+
+        class Scroll { public ScrollRect Rect; public Image Top, Bottom; public bool ByRow, Easing; public float Target, Velocity; }
+        readonly List<Scroll> scrollers = new List<Scroll>();
+        const float WheelStep = 64f, FadeHeight = 40f, FadeInset = 12f, EaseTime = 0.04f;   // SmoothDamp 0.04 s: settled in about 0.12 s
+        static float Room(Scroll s) => PanelModel.ScrollRoom(s.Rect.content.rect.height, s.Rect.viewport.rect.height);
+
+        void Wheel()
+        {
+            var d = ZInput.GetMouseScrollWheel();
+            if (Mathf.Approximately(d, 0f) || scrollers.Count == 0) return;
+            var pos = (Vector2)ZInput.pointerPosition;
+            // the area under the pointer, else the content column
+            var s = scrollers.FirstOrDefault(x => RectTransformUtility.RectangleContainsScreenPoint(x.Rect.viewport, pos, null)) ?? scrollers[scrollers.Count - 1];
+            var c = s.Rect.content; var room = Room(s);
+            if (room <= 0f) return;
+            var step = WheelStep;
+            if (s.ByRow && c.childCount > 0)   // the left list: exactly one entry (row plus its spacing) per notch
+            {
+                var vlg = c.GetComponent<VerticalLayoutGroup>();
+                step = Mathf.Max(step, ((RectTransform)c.GetChild(0)).rect.height + (vlg ? vlg.spacing : 0f));
+            }
+            // eased, not a jump: the wheel moves the target, Ease glides there; notches in a row add up
+            var from = s.Easing ? s.Target : c.anchoredPosition.y;
+            s.Target = Mathf.Clamp(from - Mathf.Sign(d) * step, 0f, room); s.Easing = true;
+        }
+
+        // glide toward the wheel's target; with under 12 px of overflow there is no scroll range at all (no drag either)
+        static void Ease(Scroll s)
+        {
+            if (!s.Rect) return;
+            var c = s.Rect.content; var room = Room(s); var y = c.anchoredPosition.y;
+            s.Rect.vertical = room > 0f;
+            if (room <= 0f) { s.Easing = false; s.Velocity = 0f; if (y != 0f) c.anchoredPosition = new Vector2(c.anchoredPosition.x, 0f); return; }
+            if (!s.Easing) return;
+            s.Target = Mathf.Clamp(s.Target, 0f, room);
+            y = Mathf.SmoothDamp(y, s.Target, ref s.Velocity, EaseTime, Mathf.Infinity, Time.unscaledDeltaTime);
+            if (Mathf.Abs(y - s.Target) < 0.5f) { y = s.Target; s.Easing = false; s.Velocity = 0f; }
+            c.anchoredPosition = new Vector2(c.anchoredPosition.x, y);
+        }
+
+        // a fade only on an edge that has content beyond it; nothing when everything fits
+        static void Fades(Scroll s)
+        {
+            if (!s.Rect) return;
+            var room = Room(s);                          // 0 unless there is real overflow
+            var y = s.Rect.content.anchoredPosition.y;   // 0 = top, room = bottom
+            s.Top.enabled = room > 0f && y > 1f;
+            s.Bottom.enabled = room > 0f && y < room - 1f;
+        }
+
+        // the panel's own warm tone as a pure gradient (no solid part): at most 65% at the clipped edge, gone 40 px in, kept
+        // 12 px inside the column on both sides and softened toward its ends; drawn over the items, never catching clicks
+        static Image Fade(RectTransform box, bool top)
+        {
+            var img = Img(box, top ? "FadeTop" : "FadeBottom", FadeSprite(top), new Color(PanelLook.Panel.r, PanelLook.Panel.g, PanelLook.Panel.b, 0.65f));
+            img.preserveAspect = false; img.enabled = false;
+            var r = img.rectTransform;
+            r.anchorMin = new Vector2(0, top ? 1 : 0); r.anchorMax = new Vector2(1, top ? 1 : 0); r.pivot = new Vector2(0.5f, top ? 1 : 0);
+            r.anchoredPosition = Vector2.zero; r.sizeDelta = new Vector2(-2f * FadeInset, FadeHeight);
+            return img;
+        }
+
+        static Sprite fadeTop, fadeBottom;
+        static Sprite FadeSprite(bool top)
+        {
+            if (top ? fadeTop : fadeBottom) return top ? fadeTop : fadeBottom;
+            const int h = 32, w = 32;
+            var t = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, name = "HearthwovenFade" };
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    var edge = top ? y / (h - 1f) : 1f - y / (h - 1f);          // 1 at the clipped edge, 0 inside
+                    var side = Mathf.Clamp01(Mathf.Min(x, w - 1 - x) / (w * 0.2f)); // soft ends instead of a hard cut
+                    side = side * side * (3f - 2f * side);
+                    t.SetPixel(x, y, new Color(1, 1, 1, edge * edge * side));    // quadratic: only the very edge is strongest
+                }
+            t.Apply(false, true);
+            var sprite = Sprite.Create(t, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f);
+            if (top) fadeTop = sprite; else fadeBottom = sprite;
+            return sprite;
         }
 
         // ---------- filling it from the model ----------
@@ -351,7 +446,7 @@ namespace Hearthwoven.Panel
             foreach (var c in v.Chapters)
             {
                 var id = (Chapter)Enum.Parse(typeof(Chapter), c.Id);
-                Tab(c, () => { state.Chapter = id; Render(true); });
+                Tab(c, () => { state.ShowAbout = false; state.Chapter = id; Render(true); });
             }
 
             Clear(list);
@@ -360,7 +455,7 @@ namespace Hearthwoven.Panel
             foreach (var c in v.List)
             {
                 var id = c.Id; var chapter = v.Active;
-                Entry(list, c.Label, c.Icon, c.Selected, () => { state.Page[chapter] = id; Render(true); }, compact ? 48 : 68, stretch: true);
+                Entry(list, c.Label, c.Icon, c.Selected, () => { state.ShowAbout = false; state.Page[chapter] = id; Render(true); }, compact ? 48 : 68, stretch: true);
             }
 
             Clear(content);
@@ -383,14 +478,11 @@ namespace Hearthwoven.Panel
                 foreach (var t in v.Toggle) { var they = t.Id == "they"; Toggle(row, t, () => { state.TheyReceived = they; Render(true); }); }
             }
             foreach (var b in v.Blocks) Draw(content, b);
-            if (!string.IsNullOrEmpty(v.HowCounted))
+            if (newPage)
             {
-                Spacer(content, 4);
-                var how = Entry(content, (v.ShowHow ? "Hide" : "Show") + " how this was counted [I]", "", false, () => { state.ShowHow = !state.ShowHow; Render(true); }, 48);
-                how.GetComponent<LayoutElement>().flexibleWidth = 0;
-                if (v.ShowHow) Label(content, v.HowCounted, 15, PanelLook.Muted);
+                foreach (var s in scrollers) if (s.Rect && s.Rect.content == content) { s.Easing = false; s.Velocity = 0f; }   // a new page starts at the top, no glide
+                Canvas.ForceUpdateCanvases(); content.parent.GetComponent<ScrollRect>().verticalNormalizedPosition = 1f;
             }
-            if (newPage) { Canvas.ForceUpdateCanvases(); content.parent.GetComponent<ScrollRect>().verticalNormalizedPosition = 1f; }
         }
 
         Action PlayerClick(Choice c) { var id = c.Id; return () => { state.Player = id; Render(true); }; }
@@ -517,7 +609,12 @@ namespace Hearthwoven.Panel
                 row.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
                 row.gameObject.AddComponent<LayoutElement>().minHeight = 38;
                 if (!string.IsNullOrEmpty(i.Icon)) Marker(row, i.Icon, 34);
-                Label(row, i.Title, 19, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                if (string.IsNullOrEmpty(i.Text)) Label(row, i.Title, 19, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                else   // a second, quieter number under the name (picked up: the game's own count beside the exact one)
+                {
+                    var names = VStack(row, 0); names.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                    Label(names, i.Title, 19, PanelLook.Text); Label(names, i.Text, 14, PanelLook.Muted);
+                }
                 var value = Label(row, i.Value, 19, PanelLook.Text, align: TextAlignmentOptions.MidlineRight); var vl = value.gameObject.AddComponent<LayoutElement>(); vl.minWidth = vl.preferredWidth = 170;
                 var rule = Img(col, "Rule", null, PanelLook.Rule); var rl = rule.gameObject.AddComponent<LayoutElement>(); rl.minHeight = rl.preferredHeight = 1;
             }
@@ -528,7 +625,7 @@ namespace Hearthwoven.Panel
         {
             var grid = Node("Titles", col);
             var g = grid.gameObject.AddComponent<GridLayoutGroup>();
-            g.cellSize = new Vector2(258, 64); g.spacing = new Vector2(10, 6);   // six rows hold all eighteen titles
+            g.cellSize = new Vector2(254, 64); g.spacing = new Vector2(10, 6);   // 3 x 254 + 2 x 10 = 782, inside the 797 px column   // six rows hold all eighteen titles
             g.constraint = GridLayoutGroup.Constraint.FixedColumnCount; g.constraintCount = 3;
             foreach (var t in b.Items ?? new List<Block>())
             {
@@ -590,7 +687,7 @@ namespace Hearthwoven.Panel
             var img = Kit(row, t.Label, t.Selected ? "toggle-selected" : "toggle", raycast: true);
             var le = img.gameObject.AddComponent<LayoutElement>(); le.minHeight = le.preferredHeight = 72; le.flexibleWidth = 1;
             var label = Label(img.transform, t.Label, 21, t.Selected ? PanelLook.Gold : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
-            label.rectTransform.Stretch(); label.rectTransform.offsetMin = new Vector2(62, 0); label.textWrappingMode = TextWrappingModes.NoWrap;
+            label.rectTransform.Stretch(); label.rectTransform.offsetMin = new Vector2(62, 0); label.textWrappingMode = TextWrappingModes.NoWrap; label.overflowMode = TextOverflowModes.Ellipsis;
             Clickable(img, click);
         }
 
@@ -606,7 +703,8 @@ namespace Hearthwoven.Panel
             label.rectTransform.Stretch();
             label.rectTransform.offsetMin = new Vector2(hasIcon ? size + 28 : 20, 0); label.rectTransform.offsetMax = new Vector2(-16, 0);
             if (hasIcon) { var m = Marker(img.rectTransform, icon, size, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0, 0.5f); m.anchoredPosition = new Vector2(14, 0); }
-            if (!stretch) le.preferredWidth = le.minWidth = label.preferredWidth + (hasIcon ? size + 46 : 40);
+            // preferred: the whole text; a row that runs out of width shrinks it (ellipsis) instead of spilling past the edge
+            if (!stretch) { le.preferredWidth = label.preferredWidth + (hasIcon ? size + 46 : 40); le.minWidth = Mathf.Min(le.preferredWidth, (hasIcon ? size + 46 : 40) + 48); }
             Clickable(img, click);
             return img.gameObject;
         }

@@ -155,7 +155,8 @@ namespace Hearthwoven
             {
                 var peer = ZNet.instance.GetPeer(e.Peer);
                 var parts = e.Key.Split('|');
-                lines.Append(new Json().Open().Str("t", t).Str("player", peer?.m_playerName ?? "?").Num("playerId", peer?.m_playerID ?? 0)
+                lines.Append(new Json().Open().Str("t", t).Str("player", peer?.m_playerName ?? "?").Num("playerId", (peer != null ? PeerIdentity.Id(peer) : null) ?? 0)
+                    .Str("playerKey", peer != null ? PeerIdentity.Key(peer) : "")
                     .Str("via", e.Via).Str("container", container ? container.name : "#" + zdo.GetPrefab()).Str("kind", kind)
                     .Str("containerId", zdo.m_uid.ToString()).Num("containerBuilder", builder).Num("x", pos.x).Num("z", pos.z)
                     .Str("item", ItemName(int.Parse(parts[0]))).Str("maker", parts[1]).Num("quality", int.Parse(parts[2]))

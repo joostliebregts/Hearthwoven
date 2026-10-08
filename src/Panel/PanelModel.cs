@@ -15,9 +15,10 @@ namespace Hearthwoven.Panel
         public TimeWindow Window = TimeWindow.Session;      // Battle only: filters the measured event log
         public string Biome = "";                           // Battle only: "" = all biomes; otherwise Heightmap.Biome name
         public string Player = "";                          // "" = yourself; otherwise a fellow player's name
-        public bool TheyReceived = true;                    // Company: true = "They ate your food", false = "You ate their food"
-        public bool ShowHow;                                // "How this was counted" unfolded
+        public bool TheyReceived = true;                    // Company: true = "They enjoyed your food", false = "You enjoyed their food"
+        public bool ShowAbout;                              // the one "About Hearthwoven" page is open (InfoKey)
         public string Hotkey = "H";
+        public string InfoKey = "T";                        // opens and closes the About page; T: bound by no mod in the group's client profile (I opens AdventureBackpacks)
         public string PageOf(Chapter c) => Page.TryGetValue(c, out var p) ? p : null;
     }
 
@@ -30,6 +31,10 @@ namespace Hearthwoven.Panel
     public class Block
     {
         public string Kind, Id, Icon, Title, Value, Text, Note, Tone;
+        /// <summary>Where the numbers come from, machine-readable for the source marks: "character" (the game's own counters
+        /// since the character was made), "measured" (Hearthwoven on this PC, or the player's own shared record), "fellows"
+        /// (recorded on fellow players' PCs). Items inherit their block's source.</summary>
+        public string Source;
         public float Fraction;                              // bars: value / largest value on the same scale
         public bool Selected;
         public List<Block> Items;
@@ -39,10 +44,11 @@ namespace Hearthwoven.Panel
 
     public class PanelView
     {
-        public string Title = "Hearthwoven", Owner, Scope, Heading, HowCounted, ShareNote, ListTitle;
+        public string Title = "Hearthwoven", Owner, Scope, Heading, ShareNote, ListTitle;
+        public string HeadingSource;                        // source tag of a number in the heading (see Block.Source)
         public Chapter Active;
         public string Page;
-        public bool HasFilters, ShowHow;
+        public bool HasFilters, ShowAbout;
         public readonly List<Choice> Chapters = new List<Choice>(), List = new List<Choice>(), Badges = new List<Choice>(), Toggle = new List<Choice>(),
                                      Windows = new List<Choice>(), Biomes = new List<Choice>(), Players = new List<Choice>();
         public readonly List<Block> Blocks = new List<Block>();
@@ -137,6 +143,56 @@ namespace Hearthwoven.Panel
             var r = b.ToString().Trim();
             return r.Length == 0 ? prefab : char.ToUpperInvariant(r[0]) + r.Substring(1);
         }
+
+        // ---------- what a token is: the game data first (PanelInput.*Kind), vanilla names as the fallback ----------
+
+        public const string TagCharacter = "character", TagMeasured = "measured", TagFellows = "fellows";
+
+        /// <summary>
+        /// The game's own craft switch (InventoryGui.DoCrafting): consumables are food unless the name says bait; weapons,
+        /// shields, armour, tools, utility and trinkets are gear (CraftWeapon/Armor/Tool/Trinket); the rest is "other".
+        /// Mirroring it keeps the Crafting headline and its list on the same items. null = not known.
+        /// </summary>
+        public static string ItemKindOf(string itemType, string token)
+        {
+            switch (itemType)
+            {
+                case null: case "": return null;
+                case "Consumable": return (token ?? "").ToLowerInvariant().Contains("bait") ? "other" : "food";
+                case "OneHandedWeapon": case "Bow": case "Shield": case "Hands": case "TwoHandedWeapon": case "TwoHandedWeaponLeft":
+                case "Helmet": case "Chest": case "Legs": case "Shoulder": case "Trinket": case "Utility": case "Tool":
+                    return "gear";
+                default: return "other";
+            }
+        }
+
+        /// <summary>A placed piece: hoe and cultivator work (TerrainOp) is groundwork, seeds and saplings (Plant) are planted,
+        /// a feast (Feast) is set out; everything else is built.</summary>
+        public static string PieceKindOf(bool terrainOp, bool plant, bool feast) => terrainOp ? "ground" : plant ? "planted" : feast ? "feast" : "built";
+
+        // vanilla tokens, used only when the game data gives no answer (PanelUi derives these from drop tables and components)
+        static readonly HashSet<string> VanillaGround = new HashSet<string> { "$piece_levelground", "$piece_lowerground", "$piece_raise", "$piece_path", "$piece_pavedroad", "$piece_cultivate", "$piece_replant" };
+        static readonly HashSet<string> VanillaWood = new HashSet<string> { "$item_wood", "$item_finewood", "$item_roundlog", "$item_elderbark", "$item_yggdrasilwood", "$item_blackwood", "$item_frostwood" };
+        static readonly HashSet<string> VanillaMining = new HashSet<string> { "$item_stone", "$item_copperore", "$item_tinore", "$item_ironscrap", "$item_ironore", "$item_silverore",
+            "$item_blackmetalscrap", "$item_obsidian", "$item_crystal", "$item_blackmarble", "$item_flametalore", "$item_grausten", "$item_copperscrap", "$item_bronzescrap" };
+
+        static string Ask(Func<string, string> f, string token) { try { return f?.Invoke(token); } catch { return null; } }
+        static string ItemKind(PanelInput i, string token) => Ask(i.ItemKind, token) ?? "other";   // unknown: kept out of gear and food
+        // gathering: the vanilla names first (a root or a fossil can drop wood or marble through either component), the game data for mods' items
+        static string GatherKind(PanelInput i, string token) => VanillaWood.Contains(token) ? "wood" : VanillaMining.Contains(token) ? "mining" : Ask(i.GatherKind, token);
+        static string PieceKind(PanelInput i, string token) => Ask(i.PieceKind, token) ?? (VanillaGround.Contains(token) ? "ground" : "built");
+
+        static Dictionary<string, double> Only(IDictionary<string, float> d, Func<string, bool> keep)
+        {
+            var r = new Dictionary<string, double>();
+            foreach (var kv in d ?? new Dictionary<string, float>()) if (kv.Value > 0 && keep(kv.Key)) r[kv.Key] = kv.Value;
+            return r;
+        }
+        public static Dictionary<string, double> Crafted(PanelInput i, string kind) => Only(i.ItemsCrafted, k => ItemKind(i, k) == kind);
+        public static Dictionary<string, double> Placed(PanelInput i, string kind) => Only(i.PiecesPlaced, k => PieceKind(i, k) == kind);
+        public static Dictionary<string, double> PickedUp(PanelInput i, string kind) => Only(i.ItemsPickedUp, k => GatherKind(i, k) == kind);
+        /// <summary>Picked up per item, measured exactly by Hearthwoven (ClientHooks.Pickup), this session.</summary>
+        public static Dictionary<string, double> PickedUpMeasured(PanelInput i, string kind) => Only(i.Events?.PickedUp, k => GatherKind(i, k) == kind);
 
         static string Who(PanelInput input, string source)
         {
@@ -332,12 +388,13 @@ namespace Hearthwoven.Panel
             new SagaTitle("farmer", "Fieldkeeper", "Seeds planted, harvest gathered", Chapter.Deeds, "farming",
                 new SagaLine(Profile, i => C(i, "HarvestCrop") + C(i, "HarvestBerry") + C(i, "HarvestMushroom") + C(i, "HarvestVine"), v => Plural(v, "harvest", "harvests")),
                 new SagaLine(Profile, i => C(i, "BeesHarvested") + C(i, "SapHarvested"), v => Plural(v, "honey and sap harvest", "honey and sap harvests"))),
-            new SagaTitle("cook", "Hearth Cook", "Food made, food others ate", Chapter.Deeds, "cooking",
-                new SagaLine(Fellows, FedOthers, v => Plural(v, "meal eaten by companions", "meals eaten by companions")),
+            new SagaTitle("cook", "Hearth Cook", "Food made, food others enjoyed", Chapter.Deeds, "cooking",
+                new SagaLine(Fellows, FedOthers, (v, i) => (v == 1 ? "1 time" : N(v) + " times") + " someone enjoyed food " + Subject(i) + " made"),
                 new SagaLine(Profile, i => C(i, "CraftFood") + C(i, "CraftGrill"), v => Plural(v, "dish cooked or grilled", "dishes cooked or grilled"))),
             new SagaTitle("smith", "Forgekeeper", "Gear crafted and improved", Chapter.Deeds, "crafting",
-                new SagaLine(Profile, i => { var g = C(i, "CraftWeapon") + C(i, "CraftArmor") + C(i, "CraftTool") + C(i, "Upgrades"); return g > 0 ? g : C(i, "Crafts"); },
-                             v => Plural(v, "thing crafted or upgraded", "things crafted or upgraded")),
+                // the game's gear counters: the same item types as the "Gear made most" list (ItemKindOf); upgrades on their own line
+                new SagaLine(Profile, i => C(i, "CraftWeapon") + C(i, "CraftArmor") + C(i, "CraftTool") + C(i, "CraftTrinket"), v => Plural(v, "piece of gear made", "pieces of gear made")),
+                new SagaLine(Profile, i => C(i, "Upgrades"), v => Plural(v, "upgrade", "upgrades")),
                 new SagaLine(Measured, i => M(i, e => e.SmelterAdded), v => N(v) + " ore and fuel into smelters")),
             new SagaTitle("hauler", "Storekeeper", "Supplies stowed in chests and carts", Chapter.Stores, "carts",
                 new SagaLine(Measured, i => M(i, e => e.CartMeters), v => N(v) + " m pulling a cart")),
@@ -346,7 +403,8 @@ namespace Hearthwoven.Panel
             new SagaTitle("mapmaker", "Mapmaker", "Your map shared with the group", Chapter.Voyages, "maps",
                 new SagaLine(Measured, i => M(i, e => e.MapShared), v => v == 1 ? "Map shared once at the table" : "Map shared " + N(v) + " times at the table")),
             new SagaTitle("builder", "Hallwright", "Pieces raised with the hammer", Chapter.Deeds, "building",
-                new SagaLine(Profile, i => C(i, "BuiltPiecesNoDebt") > 0 ? C(i, "BuiltPiecesNoDebt") : C(i, "Builds"), v => Plural(v, "piece built", "pieces built"))),
+                // the pieces in "Pieces built most" (groundwork, plantings and feasts left out); hammer counters only without the list
+                new SagaLine(Profile, BuiltCount, v => Plural(v, "piece built", "pieces built"))),
             new SagaTitle("mender", "Mender", "Repairs that keep the hall standing", Chapter.Deeds, "building",
                 new SagaLine(Measured, i => M(i, e => e.Repairs), v => Plural(v, "repair with the hammer", "repairs with the hammer"))),
             new SagaTitle("wallwarden", "Wallwarden", "Defences built, armed and loaded", Chapter.Battle, "defense",
@@ -374,6 +432,12 @@ namespace Hearthwoven.Panel
         }
 
         public static string SourceOf(PanelInput i, string source) => source == Profile ? SourceCharacter : source == Fellows ? SourceFellows : MeasuredOf(i);
+
+        public static double BuiltCount(PanelInput i)
+        {
+            var built = Placed(i, "built").Values.Sum();
+            return built > 0 ? built : C(i, "BuiltPiecesNoDebt") > 0 ? C(i, "BuiltPiecesNoDebt") : C(i, "BuiltPieces");
+        }
 
         /// <summary>Titles with evidence, in table order (no ranking). A zero line is left out, never shown as "0".</summary>
         public static List<TitleRow> Titles(PanelInput input)
@@ -432,7 +496,7 @@ namespace Hearthwoven.Panel
                     items = CompanyNames(input).Select(n => (n, !input.IsSelf && SameName(n, input.ViewerName) ? n + " (you)" : n, "person:" + n));
                     break;
                 default:
-                    items = SkillNames(input).Select(s => (s, SkillName(input, s), "skill:" + s));
+                    items = new[] { ("overview", "Overview", "") }.Concat(SkillNames(input).Select(s => (s, SkillName(input, s), "skill:" + s)));
                     break;
             }
             return items.Select(x => new Choice { Id = x.id, Label = x.label, Icon = x.icon }).ToList();
@@ -457,7 +521,7 @@ namespace Hearthwoven.Panel
         {
             input = input ?? new PanelInput();
             state = state ?? new PanelState();
-            var view = new PanelView { Active = state.Chapter, Owner = string.IsNullOrEmpty(input.PlayerName) ? "You" : input.PlayerName, ShowHow = state.ShowHow };
+            var view = new PanelView { Active = state.Chapter, Owner = string.IsNullOrEmpty(input.PlayerName) ? "You" : input.PlayerName, ShowAbout = state.ShowAbout };
             foreach (var c in ChapterRow) view.Chapters.Add(new Choice { Id = c.id.ToString(), Label = c.label, Icon = c.icon, Selected = c.id == state.Chapter });
             view.ListTitle = state.Chapter == Chapter.Company ? "Fireside company" : ChapterRow.First(c => c.id == state.Chapter).label;
             view.List.AddRange(ListOf(input, state.Chapter));
@@ -466,10 +530,11 @@ namespace Hearthwoven.Panel
             view.Page = page;
             foreach (var l in view.List) l.Selected = l.Id == page;
             var titles = Titles(input);
-            foreach (var t in titles.Where(t => t.Chapter == state.Chapter && t.Page == page))
+            foreach (var t in titles.Where(t => !state.ShowAbout && t.Chapter == state.Chapter && t.Page == page))
                 view.Badges.Add(new Choice { Id = t.Id, Label = t.Title, Icon = "title:" + t.Id });
 
-            switch (state.Chapter)
+            if (state.ShowAbout) About(input, view);
+            else switch (state.Chapter)
             {
                 case Chapter.Deeds: Deeds(input, page, titles, view); break;
                 case Chapter.Company: Company(input, page, state, view); break;
@@ -479,17 +544,45 @@ namespace Hearthwoven.Panel
                 default: Skills(input, page, view); break;
             }
             if (view.Blocks.Count == 0) view.Blocks.Add(new Block { Kind = "empty", Title = NotYetRecorded });
+            TagSources(view);
 
             view.Keys.Add("[Q/E] Chapter");
             if (view.List.Count > 1) view.Keys.Add("[W/S] " + (state.Chapter == Chapter.Company ? "Companion" : "List"));
             if (view.Toggle.Count > 0) view.Keys.Add("[A/D] Direction");
-            if (!string.IsNullOrEmpty(view.HowCounted)) view.Keys.Add("[I] How this was counted");
-            view.Keys.Add("[" + (string.IsNullOrEmpty(state.Hotkey) ? "Esc" : state.Hotkey + "/Esc") + "] Close");
+            // T opens the About page; there, T or Esc goes back to the page and the hotkey still closes the panel
+            var info = string.IsNullOrEmpty(state.InfoKey) ? null : state.InfoKey;
+            if (state.ShowAbout) view.Keys.Add("[" + (info == null ? "Esc" : info + "/Esc") + "] Back");
+            else if (info != null) view.Keys.Add("[" + info + "] About");
+            if (!state.ShowAbout) view.Keys.Add("[" + (string.IsNullOrEmpty(state.Hotkey) ? "Esc" : state.Hotkey + "/Esc") + "] Close");
+            else if (!string.IsNullOrEmpty(state.Hotkey)) view.Keys.Add("[" + state.Hotkey + "] Close");
             ColorPeople(view);
             return view;
         }
 
         static Block Stat(string icon, string value, string title, string text, string note) => new Block { Kind = "stat", Icon = icon, Value = value, Title = title, Text = text, Note = note };
+
+        /// <summary>The source tag a shown source label stands for (null: the label says nothing about the source).</summary>
+        public static string TagOf(string note)
+        {
+            if (note == SourceCharacter) return TagCharacter;
+            if (note == SourceFellows) return TagFellows;
+            if (note == SourceSession || note == SourceTheirLast || note == "measured on your PC" || note == AfterResistance || note == BeforeResistance) return TagMeasured;
+            return null;
+        }
+        public const string AfterResistance = "after resistance", BeforeResistance = "before the target's resistance";
+
+        // every block whose label names a source gets the machine-readable tag; blocks set explicitly keep theirs
+        // and every row inside a block carries its block's tag, so a source mark can sit on any single number
+        static void TagSources(PanelView view)
+        {
+            void Down(Block b, string parent)
+            {
+                if (b.Source == null) b.Source = TagOf(b.Note) ?? parent;
+                foreach (var i in b.Items ?? new List<Block>()) Down(i, b.Source);
+            }
+            foreach (var b in view.Blocks) Down(b, null);
+        }
+
         static Block Section(string title) => new Block { Kind = "section", Title = title };
         static Block Empty(string title, string text = null) => new Block { Kind = "empty", Title = title, Text = text };
 
@@ -501,10 +594,10 @@ namespace Hearthwoven.Panel
             foreach (var l in t.Lines) view.Blocks.Add(Stat("", "", l.Key, null, l.Value));
         }
 
-        static Block Rows(IEnumerable<KeyValuePair<string, double>> items, Func<string, string> label, Func<string, string> icon, string note, int top = RowTop, bool byName = false)
+        static Block Rows(IEnumerable<KeyValuePair<string, double>> items, Func<string, string> label, Func<string, string> icon, string note, int top = RowTop, bool byName = false, bool keepOrder = false)
         {
             var list = items.Where(kv => kv.Value > 0);
-            list = byName ? list.OrderBy(kv => label(kv.Key), StringComparer.OrdinalIgnoreCase) : list.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal);
+            if (!keepOrder) list = byName ? list.OrderBy(kv => label(kv.Key), StringComparer.OrdinalIgnoreCase) : list.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal);
             var rows = list.Take(top).Select(kv => new Block { Icon = icon(kv.Key), Title = label(kv.Key), Value = N(kv.Value) }).ToList();
             return rows.Count == 0 ? null : new Block { Kind = "rows", Items = rows, Note = note };
         }
@@ -517,18 +610,60 @@ namespace Hearthwoven.Panel
         }
 
         static void Add(PanelView view, Block b) { if (b != null) view.Blocks.Add(b); }
+        // a section with its rows, or nothing at all when there are no rows
+        static void Group(PanelView view, string title, Block rows) { if (rows == null) return; view.Blocks.Add(Section(title)); view.Blocks.Add(rows); }
+        public const int GatherTop = 12;
+        public const string AtLeastSince = "at least, since this character was made";
+
+        // One row per kind. Measured this session (exact) is the main number when there is one; the game's own count since
+        // the character was made stays beside it as "at least" (it skips pickups that land on a stack you carry). The
+        // row's tag is its main number's; the game's number rides along as a tagged child for the source marks.
+        static void Gathered(PanelView view, PanelInput input, string kind, string title)
+        {
+            var exact = PickedUpMeasured(input, kind); var floor = PickedUp(input, kind);
+            Func<string, string> named = k => Who(input, k);
+            if (exact.Count == 0) { Group(view, title + ", at least", Rows(floor, named, k => "item:" + k, SourceCharacter, GatherTop)); return; }
+            var rows = exact.Keys.Union(floor.Keys)
+                .Select(k => new { k, e = exact.TryGetValue(k, out var a) ? a : 0, f = floor.TryGetValue(k, out var b) ? b : 0 })
+                .OrderByDescending(x => x.e).ThenByDescending(x => x.f).ThenBy(x => x.k, StringComparer.Ordinal).Take(GatherTop)
+                .Select(x => new Block
+                {
+                    Icon = "item:" + x.k, Title = named(x.k), Value = x.e > 0 ? N(x.e) : "", Source = x.e > 0 ? TagMeasured : TagCharacter,
+                    Text = x.f > 0 ? "at least " + N(x.f) + " since this character was made" : null,
+                    Items = x.f > 0 ? new List<Block> { new Block { Kind = "floor", Value = N(x.f), Note = AtLeastSince, Source = TagCharacter } } : null,
+                }).ToList();
+            Group(view, title + " " + (input.IsSelf ? "this session" : "in their last session"), new Block { Kind = "rows", Items = rows, Note = MeasuredOf(input) + ", exact", Source = TagMeasured });
+        }
         static IEnumerable<KeyValuePair<string, double>> D(IDictionary<string, float> d) => (d ?? new Dictionary<string, float>()).Select(kv => new KeyValuePair<string, double>(kv.Key, kv.Value));
         static IEnumerable<KeyValuePair<string, double>> Counters(PanelInput i, params (string stat, string label)[] stats) =>
             stats.Select(s => new KeyValuePair<string, double>(s.label, C(i, s.stat)));
+
+        // ---------- About (InfoKey): how Hearthwoven works, one page instead of a line on every page ----------
+
+        public const string AboutHeading = "About Hearthwoven";
+        public static readonly (string label, string text)[] AboutRows =
+        {
+            ("The game counts", "Your character keeps these since it was made, also from before Hearthwoven: trees felled, pieces built, crafts, foes defeated, skill levels, items picked up (the game skips a pickup that lands on a stack you already carry, so those are a floor)."),
+            ("Hearthwoven measures", "On this PC while it runs; this book shows the current session, the server keeps every session: damage by biome and foe, deaths and their cause, blocks and parries, repairs, smelting, carts, who enjoyed your food, and exactly what you picked up."),
+            ("Fellow players share", "Players who also run Hearthwoven share what it measured for them. You see theirs only while you share yours (ShareWithGroup in the mod settings)."),
+            ("Titles", "Each title is earned by its own count. There is no combined score and no ranking."),
+            ("Your world", "Hearthwoven never changes your world. It sends your own stats to the server so you and fellow players can see them; remove Hearthwoven.dll to uninstall it."),
+        };
+
+        static void About(PanelInput input, PanelView view)
+        {
+            view.Heading = AboutHeading;
+            view.Scope = "Where the numbers in this book come from";
+            foreach (var r in AboutRows) view.Blocks.Add(Stat("", "", r.label, r.text, null));
+        }
 
         // ---------- Deeds ----------
 
         static void Deeds(PanelInput input, string page, List<TitleRow> titles, PanelView view)
         {
-            var who = Name(input);
+            var who = Name(input); var you = Subject(input);
             view.Scope = who + " · " + SourceCharacter + " and " + SessionScope(input);
-            view.HowCounted = "Since this character was made: the game's own counters. Measured: what Hearthwoven saw on " + (input.IsSelf ? "this PC" : who + "'s PC") +
-                              " since installation, " + SessionScope(input) + ". Measured on their PCs: what fellow players who share recorded. Each title has its own count; there is no combined score.";
+            Func<string, string> named = k => Who(input, k);
             switch (page)
             {
                 case "overview":
@@ -558,60 +693,64 @@ namespace Hearthwoven.Panel
                         var fed = foods.Values.Sum();
                         if (fed > 0 || feasts > 0) view.Scope = who + " · companions' last sessions and " + SourceCharacter;
                         var made = C(input, "CraftFood") + C(input, "CraftGrill");
-                        view.Heading = fed > 0 ? Plural(fed, "meal eaten by companions", "meals eaten by companions") : made > 0 ? Plural(made, "dish cooked or grilled", "dishes cooked or grilled") : "Cooking";
+                        view.Heading = fed > 0 ? Plural(fed, "meal enjoyed by companions", "meals enjoyed by companions") : made > 0 ? Plural(made, "dish cooked or grilled", "dishes cooked or grilled") : "Cooking";
+                        view.HeadingSource = fed > 0 ? TagFellows : made > 0 ? TagCharacter : null;
                         Add(view, Tiles(foods, input, SourceFellows));
                         if (eaters.Count > 0)
                         {
-                            view.Blocks.Add(Section("Who ate " + (input.IsSelf ? "your" : who + "'s") + " food"));
+                            view.Blocks.Add(Section("Who enjoyed " + (input.IsSelf ? "your" : who + "'s") + " food"));
                             Add(view, Rows(eaters, n => n, n => "person:" + n, SourceFellows, byName: true));
                         }
-                        if (feasts > 0) view.Blocks.Add(Stat("", N(feasts), feasts == 1 ? "serving from " + Possessive(input) + " feast" : "servings from " + Possessive(input) + " feasts", null, SourceFellows));
+                        if (feasts > 0) view.Blocks.Add(Stat("", N(feasts), feasts == 1 ? "serving enjoyed from " + Possessive(input) + " feast" : "servings enjoyed from " + Possessive(input) + " feasts", null, SourceFellows));
                         if (fed > 0 && made > 0) view.Blocks.Add(Stat("", N(made), made == 1 ? "dish cooked or grilled" : "dishes cooked or grilled", null, SourceCharacter));
-                        if (fed == 0 && made > 0) view.Blocks.Add(new Block { Kind = "note", Text = "Meals eaten by companions appear once a companion who shares eats food " + Subject(input) + " made." });
+                        var set = Placed(input, "feast").Values.Sum();
+                        if (set > 0) view.Blocks.Add(Stat("", N(set), set == 1 ? "feast set out" : "feasts set out", null, SourceCharacter));
+                        // the food in the game's craft record (cauldron, grill, mead ketill): each craft counts once
+                        Group(view, "Cooked and brewed most", Rows(Crafted(input, "food"), named, k => "item:" + k, SourceCharacter));
+                        if (fed == 0 && made > 0) view.Blocks.Add(new Block { Kind = "note", Text = "Meals enjoyed by companions appear once a companion who shares enjoys food " + you + " made." });
                         return;
                     }
                 case "building":
                     view.Heading = "Building";
                     TitleLines(view, titles, "builder"); TitleLines(view, titles, "mender");
-                    if (input.PiecesPlaced != null && input.PiecesPlaced.Count > 0)
-                    {
-                        view.Blocks.Add(Section("Pieces placed most"));
-                        Add(view, Rows(D(input.PiecesPlaced), k => Who(input, k), k => "", SourceCharacter));
-                    }
-                    if (M(input, e => e.Repairs) > 0) { view.Blocks.Add(Section("Repaired")); Add(view, Rows(D(input.Events.Repairs), k => Who(input, k), k => "piece:" + k, MeasuredOf(input))); }
+                    Group(view, "Pieces built most", Rows(Placed(input, "built"), named, k => "", SourceCharacter));
+                    Group(view, "Groundwork", Rows(Placed(input, "ground"), named, k => "", SourceCharacter));
+                    if (M(input, e => e.Repairs) > 0) Group(view, "Repaired", Rows(D(input.Events.Repairs), named, k => "piece:" + k, MeasuredOf(input)));
                     return;
                 case "crafting":
                     {
                         view.Heading = "Crafting";
                         TitleLines(view, titles, "smith");
+                        Group(view, "Gear made most", Rows(Crafted(input, "gear"), named, k => "item:" + k, SourceCharacter));
                         var smelted = new Dictionary<string, double>();
                         foreach (var kv in input.Events?.SmelterAdded ?? new Dictionary<string, float>()) { var item = Split2(kv.Key)[1]; if (item != "fuel") Bump(smelted, item, kv.Value); }
                         if (smelted.Count > 0) { view.Blocks.Add(Section("Into the smelters")); Add(view, Tiles(smelted, input, MeasuredOf(input))); }
                         var worn = new Dictionary<string, double>();
                         foreach (var f in FellowsOf(input))
                             foreach (var kv in f.Events.EquippedGearMadeBy) { var p = Split2(kv.Key); if (SameName(p[0], input.PlayerName)) Bump(worn, p[1], 1); }
-                        if (worn.Count > 0) { view.Blocks.Add(Section("Gear companions equipped")); Add(view, Tiles(worn, input, SourceFellows, counts: false)); }
-                        if (input.ItemsCrafted != null && input.ItemsCrafted.Count > 0)
-                        {
-                            view.Blocks.Add(Section("Crafted most"));
-                            Add(view, Rows(D(input.ItemsCrafted), k => Who(input, k), k => "item:" + k, SourceCharacter));
-                        }
+                        if (worn.Count > 0) { view.Blocks.Add(Section("Gear companions put to good use")); Add(view, Tiles(worn, input, SourceFellows, counts: false)); }
+                        // arrows, materials, torches, bait, and anything the game data does not know: made, but not gear and not food
+                        // the game books one per craft, not per piece made: a batch of 20 arrows counts once
+                        Group(view, "Also crafted (per craft, a batch counts once)", Rows(Crafted(input, "other"), named, k => "item:" + k, SourceCharacter));
                         return;
                     }
                 case "woodcutting":
                     view.Heading = "Woodcutting";
                     TitleLines(view, titles, "woodcutter");
-                    if (M(input, e => e.ChopHits) > 0) { view.Blocks.Add(Section("Axe hits per tree")); Add(view, Rows(D(input.Events.ChopHits), k => Who(input, k), k => "", MeasuredOf(input))); }
+                    Gathered(view, input, "wood", "Wood picked up");
+                    if (M(input, e => e.ChopHits) > 0) Group(view, "Axe hits per tree", Rows(D(input.Events.ChopHits), named, k => "", MeasuredOf(input)));
                     return;
                 case "mining":
                     view.Heading = "Mining";
                     TitleLines(view, titles, "miner");
-                    if (M(input, e => e.PickaxeHits) > 0) { view.Blocks.Add(Section("Pickaxe hits per rock")); Add(view, Rows(D(input.Events.PickaxeHits), k => Who(input, k), k => "", MeasuredOf(input))); }
+                    Gathered(view, input, "mining", "Stone and ore picked up");
+                    if (M(input, e => e.PickaxeHits) > 0) Group(view, "Pickaxe hits per rock", Rows(D(input.Events.PickaxeHits), named, k => "", MeasuredOf(input)));
                     return;
                 case "farming":
                     view.Heading = "Farming";
                     Add(view, Rows(Counters(input, ("HarvestCrop", "Crops"), ("HarvestBerry", "Berries"), ("HarvestMushroom", "Mushrooms"), ("HarvestVine", "Vines"),
                                                    ("BeesHarvested", "Honey"), ("SapHarvested", "Sap")), k => k, k => "", SourceCharacter));
+                    Group(view, "Planted most", Rows(Placed(input, "planted"), named, k => "", SourceCharacter));
                     return;
                 case "fishing":
                     view.Heading = "Fishing";
@@ -696,9 +835,6 @@ namespace Hearthwoven.Panel
         {
             var all = Companions(input, out var unnamedFeasts);
             var owner = input.IsSelf ? "you" : Name(input);
-            view.HowCounted = "Each link is recorded on the PC of the one who ate, equipped or sailed. " + Cap(Possessive(input)) + " side: " + (input.IsSelf ? "this PC" : Name(input) + "'s PC") +
-                              ", " + SessionScope(input) + ". Their side: their PC, latest session, only for players who share. Grilled food carries the name of whoever owns the grill. " +
-                              "Equipping counts each time gear is put on, so gear is shown by name. Time aboard is checked every 10 seconds.";
             var c = all.FirstOrDefault(x => x.Name == page);
             if (c == null)
             {
@@ -715,24 +851,24 @@ namespace Hearthwoven.Panel
             string theirScope = theirCopy == null ? "no record from " + c.Name + " yet" : theirCopy.IsSelf ? SessionScope(theirCopy) : c.Name + "'s " + SessionScope(theirCopy).Substring("their ".Length);
             view.Scope = Name(input) + " and " + c.Name + " · " + (state.TheyReceived ? theirScope : SessionScope(input));
             var theirSource = viewer ? "measured on your PC" : SourceFellows;
-            view.Toggle.Add(new Choice { Id = "they", Label = Cap(input.IsSelf ? "they" : them) + " ate " + Possessive(input) + " food", Selected = state.TheyReceived });
-            view.Toggle.Add(new Choice { Id = "you", Label = Cap(owner) + " ate " + (input.IsSelf ? "their" : viewer ? "your" : c.Name + "'s") + " food", Selected = !state.TheyReceived });
+            view.Toggle.Add(new Choice { Id = "they", Label = Cap(input.IsSelf ? "they" : them) + " enjoyed " + Possessive(input) + " food", Selected = state.TheyReceived });
+            view.Toggle.Add(new Choice { Id = "you", Label = Cap(owner) + " enjoyed " + (input.IsSelf ? "their" : viewer ? "your" : c.Name + "'s") + " food", Selected = !state.TheyReceived });
             if (state.TheyReceived)
             {
                 if (!c.Shares) { view.Blocks.Add(Empty("No record from " + c.Name + " yet.")); }
                 else
                 {
-                    Thread(view, input, c.OwnersFoods, "Food " + owner + " made", Cap(them) + " ate", viewer ? input.ViewerName : c.Name, theirSource);
-                    if (c.AteOwnersFeast > 0) view.Blocks.Add(Stat("", N(c.AteOwnersFeast), (c.AteOwnersFeast == 1 ? "serving" : "servings") + " from " + Possessive(input) + " feast", null, theirSource));
-                    if (c.OwnersItems.Count > 0) { view.Blocks.Add(Section(Cap(them) + " equipped gear " + owner + " made")); Add(view, Tiles(c.OwnersItems, input, theirSource, counts: false)); }
+                    Thread(view, input, c.OwnersFoods, "Food " + owner + " made", Cap(them) + " enjoyed", viewer ? input.ViewerName : c.Name, theirSource);
+                    if (c.AteOwnersFeast > 0) view.Blocks.Add(Stat("", "", Cap(them) + " enjoyed a feast " + owner + " set out, " + Plural(c.AteOwnersFeast, "serving", "servings"), null, theirSource));
+                    if (c.OwnersItems.Count > 0) { view.Blocks.Add(Section(Cap(them) + " put gear " + owner + " made to good use")); Add(view, Tiles(c.OwnersItems, input, theirSource, counts: false)); }
                     if (c.OwnersFoods.Count == 0 && c.AteOwnersFeast == 0 && c.OwnersItems.Count == 0) view.Blocks.Add(Empty(NotYetRecorded));
                 }
             }
             else
             {
-                Thread(view, input, c.Foods, "Food " + them + " made", Cap(owner) + " ate", Name(input), MeasuredOf(input));
-                if (c.AteTheirFeast > 0) view.Blocks.Add(Stat("", N(c.AteTheirFeast), (c.AteTheirFeast == 1 ? "serving" : "servings") + " from " + (viewer ? "your" : c.Name + "'s") + " feast", null, MeasuredOf(input)));
-                if (c.Items.Count > 0) { view.Blocks.Add(Section(Cap(owner) + " equipped gear " + them + " made")); Add(view, Tiles(c.Items, input, MeasuredOf(input), counts: false)); }
+                Thread(view, input, c.Foods, "Food " + them + " made", Cap(owner) + " enjoyed", Name(input), MeasuredOf(input));
+                if (c.AteTheirFeast > 0) view.Blocks.Add(Stat("", "", Cap(owner) + " enjoyed a feast " + them + " set out, " + Plural(c.AteTheirFeast, "serving", "servings"), null, MeasuredOf(input)));
+                if (c.Items.Count > 0) { view.Blocks.Add(Section(Cap(owner) + " put gear " + them + " made to good use")); Add(view, Tiles(c.Items, input, MeasuredOf(input), counts: false)); }
                 if (c.HelmSeconds > 0) view.Blocks.Add(Stat("", "", Cap(them) + " held the helm for " + About(c.HelmSeconds), null, MeasuredOf(input)));
                 if (c.Foods.Count == 0 && c.AteTheirFeast == 0 && c.Items.Count == 0 && c.HelmSeconds == 0) view.Blocks.Add(Empty(NotYetRecorded));
             }
@@ -758,7 +894,6 @@ namespace Hearthwoven.Panel
         static void Stores(PanelInput input, string page, PanelView view)
         {
             view.Scope = Name(input) + " · " + SessionScope(input);
-            view.HowCounted = "Carts: metres pulled, checked every 10 seconds. Trader: what was bought and the coins paid. Measured on " + (input.IsSelf ? "this PC" : Name(input) + "'s PC") + ".";
             switch (page)
             {
                 case "stocked": view.Heading = "Stocked"; view.Blocks.Add(Empty(ChestsOnServer)); return;
@@ -766,7 +901,7 @@ namespace Hearthwoven.Panel
                 case "carts":
                     {
                         var m = M(input, e => e.CartMeters);
-                        view.Heading = m > 0 ? N(m) + " m pulling a cart" : "Carts";
+                        view.Heading = m > 0 ? N(m) + " m pulling a cart" : "Carts"; view.HeadingSource = m > 0 ? TagMeasured : null;
                         if (m == 0) view.Blocks.Add(Empty(NotYetRecorded));
                         else Add(view, Rows(D(input.Events.CartMeters), k => Who(input, k), k => "piece:" + k, MeasuredOf(input)));
                         return;
@@ -774,7 +909,7 @@ namespace Hearthwoven.Panel
                 default:
                     {
                         var coins = M(input, e => e.Spent);
-                        view.Heading = coins > 0 ? Plural(coins, "coin spent", "coins spent") : "Trader";
+                        view.Heading = coins > 0 ? Plural(coins, "coin spent", "coins spent") : "Trader"; view.HeadingSource = coins > 0 ? TagMeasured : null;
                         var bought = new Dictionary<string, double>();
                         foreach (var kv in input.Events?.Bought ?? new Dictionary<string, float>()) Bump(bought, Split2(kv.Key)[1], kv.Value);
                         Add(view, Tiles(bought, input, MeasuredOf(input)));
@@ -831,9 +966,6 @@ namespace Hearthwoven.Panel
                              (input.IsSelf ? "" : " · " + Name(input) + ", " + SessionScope(input));
             }
             else view.Scope = Name(input) + " · " + SourceCharacter + " and " + SessionScope(input);
-            view.HowCounted = "Damage dealt: before the target's resistances. Damage received: after armour and resistances. The time filter counts in 10-minute steps, so a window can reach " +
-                              "up to 10 minutes further back. A death's cause is the last hit before it; its damage type is what hurt most in its last 10 seconds. " +
-                              "Blocks include parries; a parry follows the game's own rule. Measured on " + (input.IsSelf ? "this PC" : Name(input) + "'s PC") + ", " + SessionScope(input) + ".";
             // a fellow's copy can be older than the window: say when it is from, never "nothing happened"
             var cutoff = Cutoff(state.Window, now);
             if (windowed && !input.IsSelf && cutoff.HasValue && (!input.LastRecordedUtc.HasValue || input.LastRecordedUtc.Value.AddMinutes(EventLog.BucketMinutes) <= cutoff.Value))
@@ -846,34 +978,38 @@ namespace Hearthwoven.Panel
             {
                 case "overview":
                     {
-                        var total = taken.Sum(r => r.Amount);
-                        view.Heading = total > 0 ? N(total) + " damage points received" : "No damage received";
-                        Add(view, Bars(Sum(taken, r => r.Type), TypeName, t => t, TypeIcon, "after resistance"));
+                        var dealt = rows.Where(r => r.Dir == "dealt").Sum(r => r.Amount); var total = taken.Sum(r => r.Amount);
+                        view.Heading = dealt > 0 || total > 0 ? N(dealt) + " damage dealt, " + N(total) + " received" : "No damage recorded";
+                        view.HeadingSource = dealt > 0 || total > 0 ? TagMeasured : null;
+                        // retroactive: the game's own hit counters (owner-limited when fighting together, GAME-METRICS §0.4)
+                        Group(view, "Hits", Rows(Counters(input, ("EnemyHits", "Hits on foes"), ("PlayerHits", "Hits on other players"), ("HitsTakenEnemies", "Hits received from foes"),
+                                                             ("HitsTakenPlayers", "Hits received from players")), k => k, k => "", SourceCharacter, keepOrder: true));
+                        // measured, every biome side by side (the chosen one lit); dealt only before resistances: after is not
+                        // measurable on the attacker's PC (owner trap, FEEDBACK C3)
+                        var all = Damage(input.Log, state.Window, "", now);
+                        Group(view, "Dealt, by biome", Bars(Sum(all.Where(r => r.Dir == "dealt"), r => r.Biome), BiomeName, _ => "ember", _ => "", BeforeResistance, biome));
+                        Group(view, "Received, by biome", Bars(Sum(all.Where(r => r.Dir == "taken"), r => r.Biome), BiomeName, _ => "ember", _ => "", AfterResistance, biome));
                         view.Blocks.Add(new Block { Kind = "divider" });
                         DeathSummary(view, input, deaths);
                         // blocks are counted per session, not per biome or window: they live on Defense only
                         if ((input.Events?.Blocks ?? 0) > 0) view.Blocks.Add(new Block { Kind = "link", Icon = "item:ShieldWood", Title = "Blocks and parries: see Defense", Id = "Battle/defense" });
-                        foreach (var h in Hints(rows, deaths).Take(HintTop)) view.Blocks.Add(new Block { Kind = "note", Tone = "hint", Text = h });
+                        foreach (var h in Hints(rows, deaths).Take(HintTop)) view.Blocks.Add(new Block { Kind = "note", Tone = "hint", Text = h, Source = TagMeasured });
                         return;
                     }
                 case "damage":
                     {
-                        var all = Damage(input.Log, state.Window, "", now);   // biome bars always compare every biome
-                        var dealt = all.Where(r => r.Dir == "dealt").Sum(r => r.Amount);
-                        view.Heading = dealt > 0 ? N(dealt) + " damage dealt" : "Damage";
-                        view.Blocks.Add(Section("Dealt, by biome"));
-                        Add(view, Bars(Sum(all.Where(r => r.Dir == "dealt"), r => r.Biome), BiomeName, _ => "ember", _ => "", "before the target's resistance", biome));
-                        view.Blocks.Add(Section("Foes struck · " + where));
-                        Add(view, Rows(Sum(rows.Where(r => r.Dir == "dealt"), r => r.Other).Select(kv => new KeyValuePair<string, double>(kv.Key, kv.Value)), k => Who(input, k), k => "", MeasuredOf(input)));
-                        view.Blocks.Add(Section("What hurt most · " + where));
-                        Add(view, Rows(Sum(taken, r => r.Other).Select(kv => new KeyValuePair<string, double>(kv.Key, kv.Value)), k => Who(input, k), k => "", "after resistance"));
+                        var dealt = rows.Where(r => r.Dir == "dealt").Sum(r => r.Amount);
+                        view.Heading = dealt > 0 ? N(dealt) + " damage dealt" : "Damage"; view.HeadingSource = dealt > 0 ? TagMeasured : null;
+                        Group(view, "Received, by type · " + where, Bars(Sum(taken, r => r.Type), TypeName, t => t, TypeIcon, AfterResistance));
+                        Group(view, "Foes struck · " + where, Rows(Sum(rows.Where(r => r.Dir == "dealt"), r => r.Other).Select(kv => new KeyValuePair<string, double>(kv.Key, kv.Value)), k => Who(input, k), k => "", MeasuredOf(input)));
+                        Group(view, "What hurt most · " + where, Rows(Sum(taken, r => r.Other).Select(kv => new KeyValuePair<string, double>(kv.Key, kv.Value)), k => Who(input, k), k => "", AfterResistance));
                         if (dealt == 0 && taken.Count == 0) view.Blocks.Add(Empty(NotYetRecorded));
                         return;
                     }
                 case "defense":
                     {
                         var ev = input.Events;
-                        view.Heading = (ev?.Blocks ?? 0) > 0 ? Plural(ev.Blocks, "successful block", "successful blocks") : "Defense";
+                        view.Heading = (ev?.Blocks ?? 0) > 0 ? Plural(ev.Blocks, "successful block", "successful blocks") : "Defense"; view.HeadingSource = (ev?.Blocks ?? 0) > 0 ? TagMeasured : null;
                         if ((ev?.Blocks ?? 0) > 0) view.Blocks.Add(Stat("item:ShieldWood", N(ev.Blocks), ev.Blocks == 1 ? "successful block" : "successful blocks", "including " + Plural(ev.Parries, "parry", "parries"), MeasuredOf(input)));
                         var defences = Rows(Counters(input, ("BuildClusterDefense", "Defences built"), ("TrapArmed", "Traps armed"), ("TurretAmmoAdded", "Turrets loaded")), k => k, k => "", SourceCharacter, byName: false);
                         if (defences != null) { view.Blocks.Add(Section("Base defences")); view.Blocks.Add(defences); }
@@ -881,14 +1017,15 @@ namespace Hearthwoven.Panel
                     }
                 case "deaths":
                     {
-                        view.Heading = deaths.Count == 0 ? NoDeaths : Plural(deaths.Count, "death", "deaths");
+                        view.Heading = deaths.Count == 0 ? NoDeaths : Plural(deaths.Count, "death", "deaths"); view.HeadingSource = deaths.Count > 0 ? TagMeasured : null;
                         foreach (var d in deaths.Take(DeathTop))
                         {
                             var type = DominantType(d);
-                            view.Blocks.Add(Stat(TypeIcon(type), "", type.Length > 0 ? TypeName(type) + " · " + Who(input, d.Killer) : Who(input, d.Killer),
-                                                 BiomeName(d.Biome) + " · " + Local(input, d.Time).ToString("d MMM HH:mm", Inv), null));
+                            var st = Stat(TypeIcon(type), "", type.Length > 0 ? TypeName(type) + " · " + Who(input, d.Killer) : Who(input, d.Killer),
+                                          BiomeName(d.Biome) + " · " + Local(input, d.Time).ToString("d MMM HH:mm", Inv), null);
+                            st.Source = TagMeasured; view.Blocks.Add(st);
                         }
-                        foreach (var h in Hints(rows, deaths).Take(HintTop)) view.Blocks.Add(new Block { Kind = "note", Tone = "hint", Text = h });
+                        foreach (var h in Hints(rows, deaths).Take(HintTop)) view.Blocks.Add(new Block { Kind = "note", Tone = "hint", Text = h, Source = TagMeasured });
                         var lifetime = input.Character?.Where(kv => kv.Key.StartsWith("DeathBy", StringComparison.Ordinal) && kv.Value > 0)
                                             .Select(kv => new KeyValuePair<string, double>(kv.Key.Substring(7), kv.Value)).ToList();
                         if (lifetime != null && lifetime.Count > 0)
@@ -901,7 +1038,7 @@ namespace Hearthwoven.Panel
                 default:   // foes
                     {
                         var kills = C(input, "EnemyKills");
-                        view.Heading = kills > 0 ? Plural(kills, "foe defeated", "foes defeated") : "Foes";
+                        view.Heading = kills > 0 ? Plural(kills, "foe defeated", "foes defeated") : "Foes"; view.HeadingSource = kills > 0 ? TagCharacter : null;
                         if (C(input, "BossKills") > 0) view.Blocks.Add(Stat("", N(C(input, "BossKills")), C(input, "BossKills") == 1 ? "boss fight won" : "boss fights won", null, SourceCharacter));
                         if (input.EnemyKills != null && input.EnemyKills.Count > 0)
                         {
@@ -932,7 +1069,8 @@ namespace Hearthwoven.Panel
             foreach (var g in deaths.GroupBy(d => DominantType(d)).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal))
             {
                 var label = (g.Count() == 1 ? "death" : "deaths") + (g.Key.Length > 0 ? " from " + TypeName(g.Key).ToLowerInvariant() : "");
-                view.Blocks.Add(Stat(TypeIcon(g.Key), N(g.Count()), label, string.Join("  ·  ", g.Take(3).Select(d => Local(input, d.Time).ToString("d MMM HH:mm", Inv)).ToArray()), null));
+                var st = Stat(TypeIcon(g.Key), N(g.Count()), label, string.Join("  ·  ", g.Take(3).Select(d => Local(input, d.Time).ToString("d MMM HH:mm", Inv)).ToArray()), null);
+                st.Source = TagMeasured; view.Blocks.Add(st);
             }
         }
 
@@ -941,12 +1079,11 @@ namespace Hearthwoven.Panel
         static void Voyages(PanelInput input, string page, PanelView view)
         {
             view.Scope = Name(input) + " · " + SourceCharacter + " and " + SessionScope(input);
-            view.HowCounted = "Distances come from the game's own counters since this character was made. Time aboard with others is measured, checked every 10 seconds.";
             switch (page)
             {
                 case "sailing":
                     {
-                        view.Heading = C(input, "DistanceSail") > 0 ? Km(C(input, "DistanceSail")) + " sailed" : "Sailing";
+                        view.Heading = C(input, "DistanceSail") > 0 ? Km(C(input, "DistanceSail")) + " sailed" : "Sailing"; view.HeadingSource = C(input, "DistanceSail") > 0 ? TagCharacter : null;
                         if (C(input, "DistanceSailHelm") > 0) view.Blocks.Add(Stat("", "", Km(C(input, "DistanceSailHelm")) + " at the helm", null, SourceCharacter));
                         var ev = input.Events;
                         if (ev != null && ev.SailedWith.Count > 0)
@@ -964,7 +1101,7 @@ namespace Hearthwoven.Panel
                         return;
                     }
                 case "onfoot":
-                    view.Heading = C(input, "DistanceTraveled") > 0 ? Km(C(input, "DistanceTraveled")) + " travelled" : "On foot";
+                    view.Heading = C(input, "DistanceTraveled") > 0 ? Km(C(input, "DistanceTraveled")) + " travelled" : "On foot"; view.HeadingSource = C(input, "DistanceTraveled") > 0 ? TagCharacter : null;
                     Add(view, new Block
                     {
                         Kind = "rows", Note = SourceCharacter,
@@ -978,7 +1115,7 @@ namespace Hearthwoven.Panel
                 default:   // maps
                     {
                         var m = M(input, e => e.MapShared);
-                        view.Heading = m > 0 ? (m == 1 ? "Map shared once at the table" : "Map shared " + N(m) + " times at the table") : "Maps";
+                        view.Heading = m > 0 ? (m == 1 ? "Map shared once at the table" : "Map shared " + N(m) + " times at the table") : "Maps"; view.HeadingSource = m > 0 ? TagMeasured : null;
                         if (m == 0) view.Blocks.Add(Empty(NotYetRecorded));
                         else view.Blocks.Add(Stat("piece:piece_cartographytable", N(m), m == 1 ? "map shared" : "maps shared", null, MeasuredOf(input)));
                         return;
@@ -991,13 +1128,24 @@ namespace Hearthwoven.Panel
         static void Skills(PanelInput input, string page, PanelView view)
         {
             view.Scope = Name(input) + " · level now and " + SessionScope(input);
-            view.HowCounted = "Level: the skill as it stands now. Practice: the game's own raise amounts added up this session; not a contribution score.";
-            if (string.IsNullOrEmpty(page)) { view.Heading = "Skills"; view.Blocks.Add(Empty(NotYetRecorded)); return; }
+            var levels = (input.SkillLevels ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0).ToDictionary(kv => kv.Key, kv => Math.Floor((double)kv.Value));
+            var practised = (input.Events?.SkillPractice ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0).ToDictionary(kv => kv.Key, kv => (double)kv.Value);
+            if (string.IsNullOrEmpty(page) || page == "overview")
+            {
+                view.Heading = "Skills";
+                if (levels.Count == 0 && practised.Count == 0) { view.Blocks.Add(Empty(NotYetRecorded)); return; }
+                // every skill, highest first (the Deeds overview shows every title the same way): where you stand now
+                Group(view, "Levels now", Rows(levels, k => SkillName(input, k), k => "skill:" + k, SourceCharacter, top: levels.Count));
+                var most = practised.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(RowTop)
+                                    .Select(kv => new Block { Icon = "skill:" + kv.Key, Title = SkillName(input, kv.Key), Value = kv.Value.ToString("0.0", Inv) }).ToList();
+                if (most.Count > 0) Group(view, "Practised most " + (input.IsSelf ? "this session" : "in their last session"), new Block { Kind = "rows", Items = most, Note = MeasuredOf(input) });
+                return;
+            }
             view.Heading = SkillName(input, page);
             double level = 0, practice = 0;
             if (input.SkillLevels != null && input.SkillLevels.TryGetValue(page, out var l)) level = l;
             if (input.Events != null && input.Events.SkillPractice.TryGetValue(page, out var p)) practice = p;
-            if (level > 0) view.Blocks.Add(Stat("skill:" + page, Math.Floor(level).ToString("0", Inv), "level", null, "now"));
+            if (level > 0) view.Blocks.Add(Stat("skill:" + page, Math.Floor(level).ToString("0", Inv), "level", null, SourceCharacter));
             if (practice > 0) view.Blocks.Add(Stat("", practice.ToString("0.0", Inv), "practice", null, MeasuredOf(input)));
         }
 
@@ -1007,6 +1155,15 @@ namespace Hearthwoven.Panel
         {
             var n = Enum.GetValues(typeof(Chapter)).Length;
             s.Chapter = (Chapter)(((int)s.Chapter + d + n) % n);
+        }
+
+        public const float MinOverflow = 12f;
+        /// <summary>How far a list or column can scroll. Under 12 px of overflow it does not scroll at all: a sliver of range
+        /// only made the page jump on the next wheel notch (B9).</summary>
+        public static float ScrollRoom(float contentHeight, float viewHeight)
+        {
+            var over = contentHeight - viewHeight;
+            return over < MinOverflow ? 0f : over;
         }
 
         /// <summary>W/S: move through the left list of the current chapter (wraps).</summary>
@@ -1069,8 +1226,8 @@ namespace Hearthwoven.Panel
 
         public static string ToJson(PanelView v)
         {
-            var j = new Json().Open().Str("title", v.Title).Str("owner", v.Owner).Str("listTitle", v.ListTitle ?? "").Str("scope", v.Scope ?? "").Str("heading", v.Heading ?? "")
-                .Str("howCounted", v.HowCounted ?? "").Num("showHow", v.ShowHow ? 1 : 0).Str("shareNote", v.ShareNote ?? "")
+            var j = new Json().Open().Str("title", v.Title).Str("owner", v.Owner).Str("listTitle", v.ListTitle ?? "").Str("scope", v.Scope ?? "").Str("heading", v.Heading ?? "").Str("headingSource", v.HeadingSource ?? "")
+                .Num("showAbout", v.ShowAbout ? 1 : 0).Str("shareNote", v.ShareNote ?? "")
                 .Str("active", v.Active.ToString()).Str("page", v.Page ?? "").Num("hasFilters", v.HasFilters ? 1 : 0);
             void Choices(string k, List<Choice> cs)
             {
@@ -1085,7 +1242,7 @@ namespace Hearthwoven.Panel
             void B(Block b)
             {
                 j.Open().Str("kind", b.Kind ?? "").Str("id", b.Id ?? "").Str("icon", b.Icon ?? "").Str("title", b.Title ?? "").Str("value", b.Value ?? "").Str("text", b.Text ?? "")
-                 .Str("note", b.Note ?? "").Str("tone", b.Tone ?? "").Num("fraction", b.Fraction).Num("selected", b.Selected ? 1 : 0);
+                 .Str("note", b.Note ?? "").Str("tone", b.Tone ?? "").Str("source", b.Source ?? "").Num("fraction", b.Fraction).Num("selected", b.Selected ? 1 : 0);
                 j.Key("items").OpenArr(); foreach (var i in b.Items ?? new List<Block>()) B(i); j.CloseArr();
                 j.Close();
             }
@@ -1097,7 +1254,7 @@ namespace Hearthwoven.Panel
         public static IEnumerable<string> AllText(PanelView v)
         {
             IEnumerable<string> Of(Block b) => new[] { b.Title, b.Value, b.Text, b.Note }.Concat((b.Items ?? new List<Block>()).SelectMany(Of));
-            return new[] { v.Title, v.Owner, v.Scope, v.Heading, v.HowCounted, v.ShareNote }
+            return new[] { v.Title, v.Owner, v.Scope, v.Heading, v.ShareNote }
                 .Concat(new[] { v.Chapters, v.List, v.Badges, v.Toggle, v.Windows, v.Biomes, v.Players }.SelectMany(cs => cs.Select(c => c.Label)))
                 .Concat(v.Keys).Concat(v.Blocks.SelectMany(Of))
                 .Where(s => !string.IsNullOrEmpty(s));

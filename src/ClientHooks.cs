@@ -255,6 +255,38 @@ namespace Hearthwoven
             cartLast = pos; cartWas = true;
         });
 
+        // What you gathered from the world, exactly, per item (the game's own itemsPickedUp skips a pickup that merges into a
+        // stack you already carry, so it is a floor). Every pickup goes through Humanoid.Pickup: auto-pickup, E on a drop,
+        // drops from trees, rocks, pickables (Pickable.RPC_Pick spawns them in the world), loot, and a fish taken from the
+        // water. Not here: chest transfers, crafting output, trader purchases (no world drop). Counted by how much the
+        // carried amount of that item grew, so a partial pickup with a full inventory counts only what went in.
+        class PickState { public string Item; public bool Held; public int Stack, Before; }
+        [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.Pickup))]
+        static class Pickup
+        {
+            static void Prefix(Humanoid __instance, GameObject go, out PickState __state)
+            {
+                __state = null;
+                try
+                {
+                    if (!Local(__instance) || go == null) return;
+                    var drop = go.GetComponent<ItemDrop>(); var data = drop != null ? drop.m_itemData : null;
+                    var inv = __instance.GetInventory();
+                    if (data?.m_shared == null || string.IsNullOrEmpty(data.m_shared.m_name) || inv == null) return;
+                    __state = new PickState { Item = data.m_shared.m_name, Held = data.m_pickedUp, Stack = data.m_stack,
+                                              Before = inv.CountItems(data.m_shared.m_name, -1, false) };
+                }
+                catch (Exception e) { __state = null; Debug.LogWarning("[Hearthwoven] " + e.Message); }
+            }
+            static void Postfix(Humanoid __instance, PickState __state) => Safe(() =>
+            {
+                if (__state == null || __state.Held) return;
+                var inv = __instance.GetInventory(); if (inv == null) return;
+                var n = SessionEvents.PickedAmount(__state.Held, __state.Stack, __state.Before, inv.CountItems(__state.Item, -1, false));
+                if (n > 0) SessionEvents.Add(Plugin.Events.PickedUp, __state.Item, n);
+            });
+        }
+
         // Skill practice: what you actually trained this session (the profile only keeps level and current progress).
         [HarmonyPatch(typeof(Skills), nameof(Skills.RaiseSkill))]
         static class Practice

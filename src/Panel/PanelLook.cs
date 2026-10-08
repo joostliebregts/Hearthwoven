@@ -175,7 +175,7 @@ namespace Hearthwoven.Panel
         }
 
         // One colour per person in the group (PanelModel.PersonColors hands out distinct indexes, up to eight people).
-        static readonly string[] People = { "#a83a2c", "#3b62a0", "#d8d2c0", "#5f8a3b", "#c08a2e", "#7a52a0", "#2f8a82", "#8a5a3a" };
+        static readonly string[] People = { "#a83a2c", "#3b62a0", "#d8d2c0", "#5f8a3b", "#c08a2e", "#c0508a", "#b07ad8", "#2f8a82" };
         public static Color PersonColor(int index) => Hex(People[((index % People.Length) + People.Length) % People.Length]);
 
         // ---------- Hearthwoven title emblems (embedded) ----------

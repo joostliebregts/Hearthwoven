@@ -51,6 +51,27 @@ namespace Hearthwoven.Panel
             static void Postfix(ref bool __result) { if (!__result && PanelUi.Blocking) __result = true; }
         }
 
+        // The game writes the hover text of whatever is under the crosshair ("Spice Rack", "[E] Open") every frame, on the
+        // HUD canvas that draws above the panel. While the panel is open: no hover text, no piece health or author card, no
+        // crosshair. Nothing to restore by hand: the next frame after closing the game writes them again; only the
+        // crosshair image, which the game never re-enables, is switched back on here.
+        [HarmonyPatch(typeof(Hud), "UpdateCrosshair")]
+        static class NoHoverText
+        {
+            static bool hid;
+            static void Postfix(Hud __instance)
+            {
+                if (PanelUi.Blocking)
+                {
+                    if (__instance.m_hoverName) __instance.m_hoverName.text = "";
+                    if (__instance.m_pieceHealthRoot) __instance.m_pieceHealthRoot.gameObject.SetActive(false);
+                    if (__instance.m_hoveredPieceAuthorWindow) __instance.m_hoveredPieceAuthorWindow.SetActive(false);
+                    if (__instance.m_crosshair && __instance.m_crosshair.enabled) { __instance.m_crosshair.enabled = false; hid = true; }
+                }
+                else if (hid) { if (__instance.m_crosshair) __instance.m_crosshair.enabled = true; hid = false; }
+            }
+        }
+
         // "This session" (one connection) starts at the first spawn after the measurements were reset for a new connection.
         [HarmonyPatch(typeof(Player), "OnSpawned")]
         static class SessionStart
