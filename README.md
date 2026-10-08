@@ -2,11 +2,12 @@
 
 <img src="docs/icon.png" width="128" alt="Hearthwoven icon: a woven flame">
 
-Your own book of deeds in Valheim. Press **H** and see what your viking did: trees felled, ore carried home, food
-cooked, foes fought, seas crossed. If your friends play with it too, you also see how each of you helps the group,
-each in your own way.
+A book of deeds for you and your group. Press **H** and see what your viking did: trees felled, ore carried home,
+food cooked, foes fought, seas crossed. Play with friends, and the book shows how each of you helps the others:
+who builds, who cooks, who keeps the smelters running, who ate whose food. Everyone plays in their own way.
+Hearthwoven makes each way visible.
 
-## For you
+## Your book
 
 Hearthwoven adds a book to the game. It has six chapters:
 
@@ -34,10 +35,7 @@ Hearthwoven uses three sources. The About page in the book (press T) explains th
 | Hearthwoven on your PC | What the game does not keep: damage per biome and foe, the cause of each death, exactly what you picked up, whose food you ate. | Each session you play with it. The book shows the current session; the server keeps them all. |
 | The server | Who put what into which chest or cart, and who took it out. | From the moment the server runs it, for every player, also without the mod. You will see it on the companion page (coming later). |
 
-## For your group
-
-On a server with friends, everyone plays differently. One builds for hours. One keeps the smelters running. One
-cooks for everyone and hardly fights. Hearthwoven makes that visible.
+## Together on a server
 
 - Players who install it share their book with the server. You see your friends' books, and they see yours.
   You see theirs only while you share yours. You can turn sharing off (`ShareWithGroup`). Shared copies leave out
