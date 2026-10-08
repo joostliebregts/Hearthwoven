@@ -12,7 +12,7 @@ Hearthwoven adds a book to the game. It has six chapters:
 
 - **Deeds**: cooking, building, crafting, woodcutting, mining, farming, fishing, taming.
 - **Company**: the friends you play with. Who ate the food you made. Whose gear you wear. Who sailed with you.
-- **Stores**: chests, carts and the trader.
+- **Stores**: what you hauled by cart and what you bought from the trader.
 - **Battle**: damage dealt and taken per biome and per foe, blocks and parries, and what killed you.
 - **Voyages**: sailing, time at the helm, distance on foot, maps you shared.
 - **Skills**: every skill by level, and what you practised this session.
@@ -22,7 +22,7 @@ Hearthwoven adds a book to the game. It has six chapters:
 Each playstyle earns its own title: Woodcutter, Stonebreaker, Hearth Cook, Hallwright and more. There is no total
 score and no ranking. A builder and a fighter both matter.
 
-Keys: **H** open and close, **Q/E** chapter, **W/S** list, **A/D** direction, **T** about, **Esc** back.
+Keys: **H** open and close, **Q/E** chapter, **W/S** list, **A/D** direction, **T** about, **Esc** back or close.
 
 ## Where the numbers come from
 
@@ -31,8 +31,8 @@ Hearthwoven uses three sources. The About page in the book (press T) explains th
 | Source | What | Since |
 |---|---|---|
 | Your character | The game itself keeps many counters: trees felled, pieces built, crafts, kills, skills. | The day you made your character. Full from the first minute. |
-| Hearthwoven on your PC | What the game does not keep: damage per biome and foe, the cause of each death, exactly what you picked up, who ate your food. | The moment you install it. |
-| The server | Who put what into which chest or cart, and who took it out. | The moment the server installs it. Works for every player, also without the mod. |
+| Hearthwoven on your PC | What the game does not keep: damage per biome and foe, the cause of each death, exactly what you picked up, whose food you ate. | Each session you play with it. The book shows the current session; the server keeps them all. |
+| The server | Who put what into which chest or cart, and who took it out. | From the moment the server runs it, for every player, also without the mod. You will see it on the companion page (coming later). |
 
 ## For your group
 
@@ -42,8 +42,8 @@ cooks for everyone and hardly fights. Hearthwoven makes that visible.
 - Players who install it share their book with the server. You see your friends' books, and they see yours.
   You see theirs only while you share yours. You can turn sharing off (`ShareWithGroup`). Shared copies leave out
   where you died and which worlds you played.
-- The server keeps every session, so the history grows with every evening you play.
-- The chest log works for all players, also for friends who do not install the mod.
+- The server keeps every session and a log of every chest and cart, also for friends who do not install the mod.
+  The companion page (coming later) turns that into the story of your evenings.
 
 ## Install
 
@@ -89,8 +89,8 @@ Ideas and hard lessons from other mods shaped this one:
 ## Building
 
 Needs the .NET SDK and the game's own assemblies (from your Valheim install, not in this repo): see
-[lib/README.md](lib/README.md). Then `dotnet build -c Release`, and `dotnet run --project test/KsTest.csproj` for
-the tests.
+[lib/README.md](lib/README.md). Then `dotnet build -c Release -o out`, and
+`dotnet run --project test/KsTest.csproj -p:KsOut=$PWD/out` for the tests.
 
 Made with a lot of help from AI (Claude and Codex), steered and played by me.
 
