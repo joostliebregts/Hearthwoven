@@ -1,5 +1,7 @@
 # Hearthwoven
 
+<img src="docs/icon.png" width="128" alt="Hearthwoven icon: a woven flame">
+
 Your own book of deeds in Valheim. Press **H** and see what your viking did: trees felled, ore carried home, food
 cooked, foes fought, seas crossed. If your friends play with it too, you also see how each of you helps the group,
 each in your own way.
@@ -14,6 +16,8 @@ Hearthwoven adds a book to the game. It has six chapters:
 - **Battle**: damage dealt and taken per biome and per foe, blocks and parries, and what killed you.
 - **Voyages**: sailing, time at the helm, distance on foot, maps you shared.
 - **Skills**: every skill by level, and what you practised this session.
+
+![One title per playstyle](docs/titles.png)
 
 Each playstyle earns its own title: Woodcutter, Stonebreaker, Hearth Cook, Hallwright and more. There is no total
 score and no ranking. A builder and a fighter both matter.
