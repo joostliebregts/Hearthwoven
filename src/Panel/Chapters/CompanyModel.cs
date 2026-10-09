@@ -133,8 +133,8 @@ namespace Hearthwoven.Panel
                         view.Heading = TogetherHeading;
                         var tb = Together(input, people, state, page); Add(view, tb);
                         view.Windowed = tb?.Tone == WindowedTone;   // a chosen window of the damage dealt: nothing "since install" about it
-                        var wn = tb == null ? null : TogetherWindowNote(input, people, tb);
-                        if (wn != null && tb.Tone != WindowedTone) view.Blocks.Insert(view.Blocks.IndexOf(tb), wn);   // the history line alone: at the top, where the other pages say it
+                        var wn = tb == null ? null : TogetherWindowNote(input, people, tb, state);
+                        if (wn != null && tb.Tone != WindowedTone) view.Blocks.Insert(view.Blocks.IndexOf(tb), wn);   // the wait line alone (a pressed greyed day chip): at the top, where the other pages say it
                         else if (wn != null) view.Blocks.Add(wn);
                     }
                     if (people.Count == 1 && view.Blocks.Count > 0 && !input.Solo) view.Blocks.Add(new Block { Kind = "note", Text = TogetherAlone });   // your own total, the others still to come (singleplayer: AddPlayers' one line)
@@ -250,6 +250,11 @@ namespace Hearthwoven.Panel
             // a day window your own day history does not reach yet is greyed as everywhere else (HISTORY-06.md), and shows All
             var own = people.FirstOrDefault(p => p.Input.IsSelf)?.Input;
             bool Greyed(TimeWindow w) => IsDayWindow(w) && (own == null || !DayOpen(own, w));
+            if (state != null)   // B17 review: a greyed chip pressed holds on this page only (PanelModel.SettleWait); an open one is the one to return to
+            {
+                if (!Greyed(win)) state.LastWorkingView[wkey] = win.ToString();
+                else if (own != null && DayOpensOn(own, win).HasValue) state.WaitView = wkey;
+            }
             if (Greyed(win)) win = TimeWindow.SinceInstall;
             var windowed = pickId == "dealt" && win != TimeWindow.SinceInstall;   // the chosen window, on the damage dealt only
             var cats = new List<Block>();
@@ -285,7 +290,7 @@ namespace Hearthwoven.Panel
                 items.Add(new Block
                 {
                     Kind = "switch", Id = wkey, Title = !windowed && people.Count > 1 ? (people.Where(p => !p.Input.IsSelf).All(p => p.Input.SharedSinceInstall) ? AllScopeSince : AllScope) : TogetherWindowCaption,
-                    Items = TogetherWindows.Select(x => new Block { Kind = "view", Id = x.ToString(), Title = WindowShort(x), Selected = x == win, Tone = Greyed(x) ? OffTone : null }).ToList(),
+                    Items = TogetherWindows.Select(x => new Block { Kind = "view", Id = x.ToString(), Title = WindowShort(x), Selected = x == win, Tone = Greyed(x) ? OffTone : null, Waits = Greyed(x) && DayOpensOn(own, x).HasValue }).ToList(),
                 });
             // the keys that act here (fix4-rest, review: the chips showed no key): the view key flips the category, the filter key the window
             if (items.Any(i => i.Kind == "switch") && !string.IsNullOrEmpty(state?.FilterKey)) items.First(i => i.Kind == "switch").KeyCap = state.FilterKey;
@@ -324,13 +329,14 @@ namespace Hearthwoven.Panel
         /// <summary>One quiet line under a windowed Together, only when it tells something the bar cannot: a fellow player's latest
         /// shared record is older than the window (their copy may simply be out of date, so "nothing" would be a guess); nobody
         /// dealt anything in the window; or, in This session, whose session a fellow player's number is. Null otherwise.</summary>
-        static Block TogetherWindowNote(PanelInput input, List<Fellow> people, Block together)
+        static Block TogetherWindowNote(PanelInput input, List<Fellow> people, Block together, PanelState state)
         {
-            // greyed day chips: the same one line as on every other page ("Day history since 1 Oct: 30 days opens on 30 Oct.")
-            var greyed = together.Items.FirstOrDefault(i => i.Kind == "switch")?.Items.Where(v => v.Tone == OffTone).Select(v => (TimeWindow)Enum.Parse(typeof(TimeWindow), v.Id)).ToList();
+            // a greyed day chip that was pressed (B17): All shows, and the one line says from when the chosen window works, as on every other page
+            var sw0 = together.Items.FirstOrDefault(i => i.Kind == "switch");
+            var asked = sw0 != null && state != null && state.View.TryGetValue(sw0.Id, out var askedId) ? sw0.Items.FirstOrDefault(v => v.Id == askedId && v.Waits) : null;
             var own = people.FirstOrDefault(p => p.Input.IsSelf)?.Input;
-            var historyLine = greyed != null && greyed.Count > 0 ? (own != null ? HistoryLine(own, greyed) : null) : null;   // as on every page: no line without a day history (totals not loaded)
-            if (together.Tone != WindowedTone) return historyLine == null ? null : new Block { Kind = "note", Text = historyLine };
+            if (asked != null && own != null) return new Block { Kind = "note", Text = WaitLine(own, (TimeWindow)Enum.Parse(typeof(TimeWindow), asked.Id)) };
+            if (together.Tone != WindowedTone) return null;
             var sw = together.Items.First(i => i.Kind == "switch"); var w = (TimeWindow)Enum.Parse(typeof(TimeWindow), sw.Items.First(y => y.Selected).Id);
             var dealt = together.Items.First(i => i.Kind == "category" && i.Id == "dealt");
             var others = people.Where(p => !p.Input.IsSelf).ToList();
@@ -345,7 +351,6 @@ namespace Hearthwoven.Panel
                 var noDays = others.Where(p => p.Input.DealtByDay == null).Select(p => p.Name).ToList();
                 if (noDays.Count > 0) text = JoinNames(noDays) + (noDays.Count == 1 ? " shares" : " share") + " no days yet: their Hearthwoven is older.";
             }
-            if (historyLine != null) text = text == null ? historyLine : historyLine + " " + text;
             if (text != null) { }
             else if (stale.Count > 0) text = "Nothing in this window from " + JoinNames(stale) + ": their latest shared record is older.";
             else if (dealt.Items.All(p => p.Fraction <= 0)) text = w == TimeWindow.Session ? "Nothing dealt this session." : "Nothing dealt in the " + WindowLabel(w).ToLowerInvariant() + ".";

@@ -27,14 +27,14 @@ namespace Hearthwoven.Panel
         /// the character has crafted something of them; "Other" when something has no material.</summary>
         public static readonly string[] BaseMaterials = { "Wood", "Leather", "Bronze", "Iron", "Silver", "Black metal" };
 
-        // each material's own colour in the linked bar (the kinds' bar has none of these: no blue means two things)
+        // each material's own colour in the linked bar, kept where it stays apart from the larger parts (FacetModel.BarColours);
+        // a mod's bar takes the bars' palette (no one shared fallback colour)
         static readonly Dictionary<string, string> GearMaterialColours = new Dictionary<string, string>
         {
-            ["Wood"] = "#8a5a34", ["Leather"] = "#c2a072", ["Bronze"] = "#b87a3a", ["Iron"] = "#7d8793", ["Silver"] = "#d6dde4", ["Black metal"] = "#2e3136",
-            ["Carapace"] = "#5f8a74", ["Flametal"] = "#c2552a", [MaterialOther] = "#6f6a60",
+            ["Wood"] = "#8a5a34", ["Leather"] = "#e4cc9c", ["Bronze"] = "#cc8a2a", ["Iron"] = "#647488", ["Silver"] = "#d6dde4", ["Black metal"] = "#2e3136",
+            ["Carapace"] = "#5f8a74", ["Flametal"] = "#c2552a",
         };
-        const string ModMaterialColour = "#9a8f7a";
-        static string GearMaterialColour(string m) => GearMaterialColours.TryGetValue(m ?? "", out var c) ? c : ModMaterialColour;
+        static string GearMaterialColour(string m) => GearMaterialColours.TryGetValue(m ?? "", out var c) ? c : null;
 
         // the rank a material has in the tier order (higher marks the item); a mod's own bar ranks above every vanilla one
         static readonly string[] MaterialTiers = { "Wood", "Leather", "Bronze", "Iron", "Silver", "Black metal", "Carapace", "Flametal" };

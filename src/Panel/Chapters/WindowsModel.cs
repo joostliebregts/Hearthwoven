@@ -9,7 +9,7 @@ namespace Hearthwoven.Panel
     /// history's day windows (Today, 7 days, 30 days) and All (the since-install totals with your character's own counters). One chosen
     /// window (PanelState.Window) for every page; each page offers only the windows its data has (WindowsOf), and a page that does not
     /// offer the chosen one shows All while the choice stays for the pages that do. A day window that begins before the history did is
-    /// greyed, and one line on the plate says from when the history runs and when the window opens.
+    /// greyed; pressing it chooses it, the page shows All and one line says from when it works (WaitLine).
     /// A day window's numbers come from a copy of the input (InWindow) whose tallies are the window's rows: the page code reads it the
     /// way it reads the since-install totals, so a page needs no second implementation; what has no days (a "most at once" counter,
     /// the faded "before install" layer, a record, the server's book) is left out by the page in a day window.
@@ -56,15 +56,50 @@ namespace Hearthwoven.Panel
         /// <summary>Whether a window can be chosen on this book: the log's windows and All as before (WindowShared), a day window when DayOpen.</summary>
         public static bool WindowOpen(PanelInput input, TimeWindow w) => IsDayWindow(w) ? DayOpen(input, w) : WindowShared(input, w);
 
-        /// <summary>"Day history since 3 Oct: 30 days opens on 1 Nov." The one line under greyed day chips on your own book; null when none is greyed.</summary>
-        public static string HistoryLine(PanelInput input, IEnumerable<TimeWindow> offered)
+        /// <summary>The first day a day window works on your own book (its first day is the day history's first); null when it already works,
+        /// or when there is no day history to wait for (a fellow's copy).</summary>
+        public static DateTime? DayOpensOn(PanelInput input, TimeWindow w)
         {
-            if (input == null || !input.IsSelf || input.History == null) return null;
-            var greyed = offered.Where(w => IsDayWindow(w) && !DayOpen(input, w)).ToList();
-            if (greyed.Count == 0) return null;
-            var today = LocalToday(input); var first = input.History.FirstDay(today);
-            var opens = string.Join(", ", greyed.Select(w => WindowShort(w) + " opens on " + ZoneDate(first.AddDays(DaysOf(w) - 1), today)).ToArray());
-            return "Day history since " + ZoneDate(first, today) + ": " + opens + ".";
+            if (!IsDayWindow(w) || input == null || !input.IsSelf || input.History == null || DayOpen(input, w)) return null;
+            return input.History.FirstDay(LocalToday(input)).AddDays(DaysOf(w) - 1);
+        }
+
+        /// <summary>
+        /// "7 days works from 15 Oct: Hearthwoven started counting days on 9 Oct." The one line a greyed day chip of your own book says when
+        /// it is pressed (the page then shows All); null when the window works or does not wait for the day history. B17 (Joost 2026-10-09):
+        /// a standing "Day history since 9 Oct: 7 days opens on 15 Oct" on every windowed page explained the mechanism and was not understood;
+        /// a date on the chip itself did not fit the nine chips of the heading row (it cut the page heading).
+        /// </summary>
+        public static string WaitLine(PanelInput input, TimeWindow w)
+        {
+            var opens = DayOpensOn(input, w);
+            if (!opens.HasValue) return null;
+            var today = LocalToday(input);
+            return WindowShort(w) + " works from " + ZoneDate(opens.Value, today) + ": Hearthwoven started counting days on " + ZoneDate(input.History.FirstDay(today), today) + ".";
+        }
+
+        /// <summary>
+        /// B17 review: a pressed greyed day window held for the whole session (every windowed page showed All with its line, Battle lost its
+        /// Session). Now it holds on the page where it was pressed: the first build there notes the page (WaitAt); a build of any other page,
+        /// or the book opening again (ForgetHistory), returns Window to the last chosen window that was open, and Together's switch to its own.
+        /// </summary>
+        public static void SettleWait(PanelState s, PanelPlace place, PanelInput input)
+        {
+            if (s.WaitAt != null && !s.WaitAt.Same(place)) EndWait(s);
+            if (input == null || !input.IsSelf) return;
+            if (WindowOpen(input, s.Window)) s.LastWorking = s.Window;
+            else if (s.WaitAt == null && DayOpensOn(input, s.Window).HasValue) s.WaitAt = place;
+        }
+
+        /// <summary>Back to the last windows that worked (Window, Together's switch) and no line waiting.</summary>
+        public static void EndWait(PanelState s)
+        {
+            if (s.WaitAt != null || s.WaitView != null)
+            {
+                if (s.WaitAt != null && IsDayWindow(s.Window) && s.Window != s.LastWorking) s.Window = s.LastWorking;
+                if (s.WaitView != null) { if (s.LastWorkingView.TryGetValue(s.WaitView, out var lw)) s.View[s.WaitView] = lw; else s.View.Remove(s.WaitView); }
+            }
+            s.WaitAt = null; s.WaitView = null;
         }
 
         /// <summary>
@@ -75,7 +110,7 @@ namespace Hearthwoven.Panel
         {
             var shown = offered.Contains(state.Window) && WindowOpen(input, state.Window) ? state.Window : TimeWindow.SinceInstall;
             view.HasFilters = true; view.ShownWindow = shown;
-            foreach (var w in offered) view.Windows.Add(new Choice { Id = w.ToString(), Label = WindowShort(w), Selected = w == shown, Disabled = !WindowOpen(input, w) });
+            foreach (var w in offered) view.Windows.Add(new Choice { Id = w.ToString(), Label = WindowShort(w), Selected = w == shown, Disabled = !WindowOpen(input, w), Waits = DayOpensOn(input, w).HasValue });
             return shown;
         }
 
@@ -125,11 +160,12 @@ namespace Hearthwoven.Panel
 
         /// <summary>A window with nothing in it on a page that counts days (Voyages, Deeds): says the window and where more is.</summary>
         static Block DayEmpty(PanelInput input, TimeWindow w) =>
-            Empty("Nothing " + (w == TimeWindow.Today ? "today" : "in the " + WindowLabel(w).ToLowerInvariant()), "Choose a longer window, or All for everything.");
+            Empty("Nothing " + (w == TimeWindow.Today ? "today" : "in the " + WindowLabel(w).ToLowerInvariant()), DayEmptyLine);
+        public const string DayEmptyLine = "Choose a longer window, or All for everything.";
 
         /// <summary>The line of a page that leaves something out in a day window, because that thing has no days.</summary>
         public const string NoDaysServerBook = "The server's cargo book has no days: choose All to see it.",
-                            NoDaysBlocks = "Blocks and parries are counted per session and per day: choose Session or longer.",
+                            NoDaysBlocks = "Blocks and parries show in Session and longer windows.",
                             ClippedLine = "A very full day kept only its largest kinds: a few small ones may be missing here.";
     }
 }

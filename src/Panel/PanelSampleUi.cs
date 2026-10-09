@@ -52,7 +52,7 @@ namespace Hearthwoven.Panel
             i.ToLocal = null;   // the PC's own time zone, as for real data
             i.ItemKind = GameData.ItemKind; i.GatherKind = GameData.GatherKind; i.PieceKind = GameData.PieceKind; i.ItemColour = PanelLook.IconColour;
             i.Foe = BattleGame.Foe; i.Arrows = BattleGame.Arrows;
-            i.CropOf = GameData.CropOf; i.ItemType = GameData.ItemType; i.StationDish = GameData.StationDish; i.MainMaterial = GameData.MainMaterial; var tab = i.PieceTab; var material = i.PieceMaterial; i.PieceTab = t => GameData.PieceTab(t) ?? tab?.Invoke(t); i.PieceMaterial = t => GameData.PieceMaterial(t) ?? material?.Invoke(t);   // the game does not know the sample's pieces: the sample's own tabs and materials stand in
+            i.CropOf = GameData.CropOf; i.ItemType = GameData.ItemType; i.StationDish = GameData.StationDish; var dishType = i.DishType; var dishBoost = i.DishBoost; i.DishType = t => GameData.DishType(t) ?? dishType?.Invoke(t); i.DishBoost = t => GameData.DishBoost(t) ?? dishBoost?.Invoke(t); i.MainMaterial = GameData.MainMaterial; var tab = i.PieceTab; var material = i.PieceMaterial; i.PieceTab = t => GameData.PieceTab(t) ?? tab?.Invoke(t); i.PieceMaterial = t => GameData.PieceMaterial(t) ?? material?.Invoke(t);   // the game does not know the sample's pieces: the sample's own tabs and materials stand in
         }
 
         static PanelInput SampleFellow(string name, PanelInput self) => Sample().Fellow(name, self);

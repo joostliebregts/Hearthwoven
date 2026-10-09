@@ -60,7 +60,7 @@ static partial class Program
         foreach (Chapter ch in Enum.GetValues(typeof(Chapter)))
             foreach (var l in Show(ch).List)
                 if (All(Show(ch, l.Id).Blocks).Any(b => b.Kind == "segment" && b.Id == "helm") || PanelModel.AllText(Show(ch, l.Id)).Any(t => t.Contains("at the helm") && t.Any(char.IsDigit) && !t.StartsWith("item-"))) helmPages.Add(ch + "/" + l.Id);
-        Check(Seq(helmPages.Distinct()) == "Voyages/overview,Voyages/sailing", "VH owner: the helm distance shows on Voyages > Overview (the journey) and Sailing only: " + Seq(helmPages.Distinct()));
+        Check(Seq(helmPages.Distinct()) == "Voyages/overview,Voyages/sailing,Feats/titles", "VH owner: the helm distance shows on Voyages > Overview (the journey) and Sailing only, and as Helmskeeper's reason on Feats > Titles (B18): " + Seq(helmPages.Distinct()));
 
         // ---------- Voyages > On foot ----------
         var foot = Show(Chapter.Voyages, "onfoot");

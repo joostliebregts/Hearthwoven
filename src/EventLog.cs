@@ -6,7 +6,7 @@ namespace Hearthwoven
 {
     /// <summary>
     /// Measured since install, per session, with WHEN and WHERE: damage in 10-minute buckets per biome, enemy, cause and
-    /// damage type (dealt and taken), and every death with its biome, killer and the damage of its last 10 seconds.
+    /// damage type (dealt and taken), and every death with its biome, killer and the damage of its last 30 seconds (TimelineSeconds).
     /// Absolute per session like everything measured: a resend replaces, never adds. Pure C#, unit-tested.
     /// </summary>
     public class EventLog
@@ -78,6 +78,7 @@ namespace Hearthwoven
 
         public void AddDamage(DateTime utc, string biome, bool dealt, string other, string cause, HitData.DamageTypes d)
         {
+            if (!dealt && DamageTally.TotalOf(d) <= 0f) return;   // a hit fully absorbed (a ward) is no hit received, as in DamageTally (review 0.6.5: the windows still counted it)
             Fold(utc);
             var head = Bucket(utc) + "|" + (biome ?? "None") + "|" + (dealt ? "dealt" : "taken") + "|" + (other ?? "?") + "|" + (cause ?? "?");
             if (!Hits.ContainsKey(head) && Hits.Count >= MaxBuckets) head = Bucket(utc) + "|" + (biome ?? "None") + "|" + (dealt ? "dealt" : "taken") + "|other|other";

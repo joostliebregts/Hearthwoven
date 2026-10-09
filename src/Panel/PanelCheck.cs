@@ -14,7 +14,7 @@ namespace Hearthwoven.Panel
     /// The panel's half of the in-game self-check (DevCheck.cs, Dev.SelfCheck) and the filter-key clash check.
     /// - KeyClashCheck (always, once, when the panel's config binds): reads every other mod's .cfg in BepInEx/config and logs
     ///   "filter key: &lt;key&gt;, conflicts: none" or a warning naming each setting bound to the same key.
-    /// - FilterKeyHeld: while the panel is open, the press of the filter key does not also open the inventory (Tab is the game's
+    /// - FilterKeyHeld: while the panel is open, a press of Tab or of the filter key does not also open the inventory (Tab is the game's
     ///   inventory key; PanelHooks.FilterKeyNotInventory asks here). Only then.
     /// - CheckTick (Dev.SelfCheck only): the report key, and the watch on the filter key (did the inventory or a radial open too?).
     /// - The page walk after the report: every chapter, page and view of the real panel drawn as the snapshot run plans them (no
@@ -114,10 +114,10 @@ namespace Hearthwoven.Panel
             public KeyCode Get() { try { return entry != null ? entry.Value : KeyCode.None; } catch { return KeyCode.None; } }
         }
 
-        /// <summary>True while the panel is open and the filter key is down: the inventory must not open on that press (PanelHooks).</summary>
+        /// <summary>True while the panel is open and Tab or the filter key is down: the inventory must not open on that press (PanelHooks).</summary>
         internal static bool FilterKeyHeld()
         {
-            try { return Blocking && FilterKey != null && FilterKey.Value != KeyCode.None && ZInput.GetKey(FilterKey.Value, false); }
+            try { return Blocking && ((FilterKey != null && FilterKey.Value != KeyCode.None && ZInput.GetKey(FilterKey.Value, false)) || ZInput.GetKey(KeyCode.Tab, false)); }
             catch { return false; }
         }
 

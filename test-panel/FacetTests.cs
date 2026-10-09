@@ -48,7 +48,7 @@ static class FacetTests
         // ---------- no filter: the rows, the counts, the bars ----------
         var all = Show(rich);
         var bar = Bar(all);
-        Check(bar != null && bar.Src == "character" && bar.KeyCap == "Tab" && bar.Items.Count(b => b.Kind == "facet") == 2 && bar.Items.Count(b => b.Kind == "facetbar") == 2,
+        Check(bar != null && bar.Src == "character" && bar.KeyCap == "K" && bar.Items.Count(b => b.Kind == "facet") == 2 && bar.Items.Count(b => b.Kind == "facetbar") == 2,
               "filter: a filter bar with a Kind row and a Main material row, a bar for each, the filter key as its keycap");
         Check(Chips(all, "kind") == "Weapons=9,Armour=6,Tools=4,Trinkets=1", "filter: the Kind chips count what was crafted: " + Chips(all, "kind"));
         Check(Chips(all, "material") == "Wood=9,Leather=2,Bronze=7,Iron=2,Silver=0(0),Black metal=0(0)", "filter: the Main material chips, zero chips stay in place, dimmed: " + Chips(all, "material"));
@@ -58,7 +58,7 @@ static class FacetTests
         Check(Grid(all) == "Bronze Axe=6,Wood Shield=4,Hammer=2,Leather Helmet=2,Iron Sword=2,Crude Bow=1,Cultivator=1,Hoe=1,Bronze Health Trinket=1", "filter: with nothing chosen the grid shows every item, most first: " + Grid(all));
         Check(Math.Abs(Parts(all, "kind").Items.Sum(p => p.Fraction) - 1) < 1e-5 && Math.Abs(Parts(all, "material").Items.Sum(p => p.Fraction) - 1) < 1e-5, "filter: each bar adds up to its whole");
         var kindColours = Parts(all, "kind").Items.Select(p => p.Colour).ToList(); var matColours = Parts(all, "material").Items.Select(p => p.Colour).ToList();
-        Check(kindColours.Intersect(matColours).Count() == 0 && Parts(all, "material").Items.First(p => p.Id == "Wood").Colour == "#8a5a34" && Parts(all, "material").Items.First(p => p.Id == "Iron").Colour == "#7d8793",
+        Check(kindColours.Intersect(matColours).Count() == 0 && Parts(all, "material").Items.First(p => p.Id == "Wood").Colour == "#8a5a34" && Parts(all, "material").Items.First(p => p.Id == "Iron").Colour == "#647488",
               "filter: the kinds' bar and the materials' bar share no colour (blue never means two things); each material has its own");
 
         // ---------- OR within a row, AND across rows, live counts, the crossfilter bars ----------
@@ -110,7 +110,7 @@ static class FacetTests
         var z = Zoned.ZoneOf(all, Bar(all));
         Check(z != null && z.Id == "character" && !Zoned.Says(all, Bar(all)) && !Bar(all).SinceInstall, "filter: the bar sits in your character's zone with the gear it filters, no \"since install\" on it");
         Check(PanelModel.ToJson(all).Contains("filterbar") && PanelModel.ToJson(all).Contains("keyCap"), "filter: the preview bridge gets the bar and its keycap");
-        Check(all.Keys.Any(k => k == "[Tab] Filter") && !PanelModel.Build(rich, new PanelState { Chapter = Chapter.Skills }).Keys.Any(k => k.Contains("Filter")), "filter: the footer says [Tab] Filter on this page only");
+        Check(all.Keys.Any(k => k == "[K] Filter") && !PanelModel.Build(rich, new PanelState { Chapter = Chapter.Skills }).Keys.Any(k => k.Contains("Filter")), "filter: the footer says [K] Filter on this page only");
         var noKey = new PanelState { FilterKey = "" };
         Check(Bar(Show(rich, noKey)).KeyCap == null && !Show(rich, new PanelState { FilterKey = "" }).Keys.Any(k => k.Contains("Filter")), "filter: with the key unbound there is no keycap and no footer hint");
 
@@ -119,7 +119,7 @@ static class FacetTests
         var v = Show(rich, f);
         Check(PanelModel.FilterKeyPressed(f, v) && f.FilterRow == 0 && f.FilterCursor == 0, "focus: the filter key enters on the first row, first chip");
         v = Show(rich, f);
-        Check(Row(v, "kind").Tone == "focus" && Row(v, "kind").Items[0].Tone == "cursor" && Row(v, "material").Tone == null && v.Keys.SequenceEqual(new[] { "[A/D] Move", "[W/S] Row", "[Enter] Choose", "[Delete] Clear all", "[Tab/Esc] Leave" }),
+        Check(Row(v, "kind").Tone == "focus" && Row(v, "kind").Items[0].Tone == "cursor" && Row(v, "material").Tone == null && v.Keys.SequenceEqual(new[] { "[A/D] Move", "[W/S] Row", "[Enter] Choose", "[Delete] Clear all", "[K/Esc] Leave" }),
               "focus: the row and the chip under the cursor are marked, the footer lists the focus keys");
         PanelModel.FilterMove(f, v, 1); PanelModel.FilterMove(f, v, 1);
         Check(f.FilterCursor == 2, "focus: D moves along the row");
@@ -175,7 +175,7 @@ static class FacetTests
         Check(PanelModel.FollowFacet(cs, PanelModel.FacetOpenLink(PanelModel.CraftFilter)) && Bar(Show(rich, cs)).Open && cs.FilterRow == -1 && cs.OpenFilters.Contains(PanelModel.CraftFilter),
               "collapse: a click on the header opens the rows without entering the key focus");
         cv = Show(rich, cs);
-        Check(Row(cv, "kind").Tone == null && PanelModel.FilterAnyOpen(cs, cv) && cv.Keys.Any(k => k == "[Tab] Filter"), "collapse: opened by a click there is no cursor and the footer still says [Tab] Filter");
+        Check(Row(cv, "kind").Tone == null && PanelModel.FilterAnyOpen(cs, cv) && cv.Keys.Any(k => k == "[K] Filter"), "collapse: opened by a click there is no cursor and the footer still says [K] Filter");
         Check(PanelModel.FilterKeyPressed(cs, cv) && !Bar(Show(rich, cs)).Open && cs.FilterRow == -1 && cs.OpenFilters.Count == 0, "collapse: the filter key closes rows that a click opened");
         Check(PanelModel.FilterKeyPressed(cs, cv) && cs.FilterRow == 0 && Bar(Show(rich, cs)).Open, "collapse: the filter key from the collapsed line opens the rows and enters the focus");
         Check(PanelModel.FilterKeyPressed(cs, cv) && !Bar(Show(rich, cs)).Open && cs.FilterRow == -1, "collapse: the filter key in the focus collapses it again");

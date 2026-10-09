@@ -31,7 +31,7 @@ static class FeatsTests
         return (full, books);
     }
 
-    static bool FeatsPage(string page) => page == PanelModel.FeatsPageId || page == PanelModel.FeatsUnsungId || page == PanelModel.FeatsTogetherId;
+    static bool FeatsPage(string page) => page == PanelModel.FeatsPageId || page == PanelModel.FeatsUnsungId || page == PanelModel.FeatsTogetherId || page == PanelModel.TitlesPageId;
     /// <summary>A page: the Feats chapter's own (earned, unsung, together) or, for any other page id, Deeds unless a chapter is given.</summary>
     static PanelView Page(PanelInput i, string page = "earned", Action<PanelState> more = null, Chapter? chapter = null)
     {
@@ -57,6 +57,9 @@ static class FeatsTests
             var s = new PanelState { Chapter = Chapter.Deeds, Player = player }; if (page != null) s.Page[Chapter.Deeds] = page;
             return s;
         }
+        PanelState Defence(TimeWindow w) => new PanelState { Chapter = Chapter.Battle, Window = w, Page = { [Chapter.Battle] = "defense" } };
+        // Joost's own book as in his screenshot (B18): a few defences built, so Wallwarden is held, and no feat on Defence
+        PanelInput JoostWall() { var jw = Joost(); if (jw != null) jw.Character["BuildClusterDefense"] = 3; return jw; }
         PanelState Feats(string page, string sel = null, string player = "") =>
             new PanelState { Chapter = Chapter.Feats, Player = player, FeatSel = sel ?? "", Page = { [Chapter.Feats] = page } };
         (string name, PanelInput inp, PanelState st)[] shots = new (string name, PanelInput inp, PanelState st)[]
@@ -74,7 +77,9 @@ static class FeatsTests
             ("feats-defense", tor, new PanelState { Chapter = Chapter.Battle, Player = "Tor", Page = { [Chapter.Battle] = "defense" } }),
             ("feats-tor", tor, Feats("earned", player: "Tor")),
             ("feats-tor-unsung", tor, Feats("unsung", "keptfires", "Tor")),
-        }.Concat(Joost() is PanelInput j ? new[] { ("feats-joost-unsung", j, Feats("unsung", "keptfires")), ("feats-joost-earned", j, Feats("earned")), ("feats-joost-together", j, Feats("together")) } : new (string, PanelInput, PanelState)[0]).ToArray();
+            ("feats-titles", full, Feats("titles")),   // B18: every title, the held ones with why, the rest with what earns them
+            ("feats-titles-tor", tor, Feats("titles", player: "Tor")),
+        }.Concat(Joost() is PanelInput j ? new[] { ("feats-joost-unsung", j, Feats("unsung", "keptfires")), ("feats-joost-earned", j, Feats("earned")), ("feats-joost-together", j, Feats("together")), ("feats-joost-defense-30min", JoostWall(), Defence(TimeWindow.LastThirtyMinutes)), ("feats-joost-defense-all", JoostWall(), Defence(TimeWindow.SinceInstall)) } : new (string, PanelInput, PanelState)[0]).ToArray();
         return string.Join(",\n", shots.Select(s =>
         {
             var v = PanelModel.Build(s.inp, s.st);
@@ -181,8 +186,8 @@ static class FeatsTests
         var feats = Page(full);
         Check(feats.Chapters.Select(c => c.Id).Take(3).SequenceEqual(new[] { "Deeds", "Feats", "Company" }) && feats.Chapters.Single(c => c.Id == "Feats").Selected && feats.Chapters.Single(c => c.Id == "Feats").Icon == PanelModel.FeatsIcon,
               "chapter: Feats is a chapter of its own, its tab right after Deeds, with the feats medallion");
-        Check(feats.List.Select(l => l.Id + ":" + l.Label).SequenceEqual(new[] { "earned:Earned", "unsung:Unsung", "together:Together" }) && feats.ListTitle == "Feats" && !PanelModel.ListOf(full, Chapter.Deeds).Any(l => l.Id == "feats"),
-              "chapter: its own left list (Earned, Unsung, Together); Deeds no longer has a Feats entry");
+        Check(feats.List.Select(l => l.Id + ":" + l.Label).SequenceEqual(new[] { "earned:Earned", "unsung:Unsung", "together:Together", "titles:Titles" }) && feats.ListTitle == "Feats" && !PanelModel.ListOf(full, Chapter.Deeds).Any(l => l.Id == "feats"),
+              "chapter: its own left list (Earned, Unsung, Together, Titles); Deeds no longer has a Feats entry");
         var qe = new PanelState(); PanelModel.StepChapter(qe, 1); var qe2 = new PanelState { Chapter = Chapter.Feats }; PanelModel.StepChapter(qe2, 1); var qe3 = new PanelState { Chapter = Chapter.Skills }; PanelModel.StepChapter(qe3, 1);
         Check(qe.Chapter == Chapter.Feats && qe2.Chapter == Chapter.Company && qe3.Chapter == Chapter.Deeds, "chapter: Q/E follow the tab row: Deeds, Feats, Company ... Skills, then Deeds again");
         Check(feats.Page == "earned" && feats.Heading == "Earned feats" && PanelModel.PlateOf(feats)?.Title == "Earned feats" && PanelModel.PlateOf(feats).Tone == PanelModel.PlateFull && Find(feats, "switch") == null,
@@ -282,16 +287,35 @@ static class FeatsTests
         Check(Find(Page(full, "overview", s => s.View["Deeds/overview/view"] = "unsung"), "knownfor") == null, "known for: not on the Unsung view");
         var none = Full(); none.Feats = new FeatsLedger(); none.Events = new SessionEvents(); none.Character = new Dictionary<string, float>(); none.Fellows = null;
         Check(Find(Page(none, "overview"), "knownfor") == null && Find(Page(none), "note")?.Text == PanelModel.FeatsNone, "known for: nobody earned anything: no line, and the Feats page says so");
-        var band = Find(Page(full, "defense", chapter: Chapter.Battle), "featband");
+        var bandBlock = Find(Page(full, "defense", chapter: Chapter.Battle), "featband"); var band = bandBlock == null ? null : new Block { Items = PanelModel.BandFeats(bandBlock) };   // the strip's feats (its titles apart, B18)
         Check(band != null && band.Items.Select(i => i.Title).SequenceEqual(new[] { "Shield Wall", "Unbroken" }) && band.Items[0].Value == "I" && band.Items[0].Text == "4 Oct · Black Forest",
               "band: Battle > Defence shows its feats under the heading, tier and moment: " + (band == null ? "none" : string.Join(", ", band.Items.Select(i => i.Title))));
         Check(band.Items.Count > 0 && band.Items.All(i => i.Note == PanelModel.FeatLabel), "band: every feat chip on an owner page carries the small \"Feat\" tag");
         Check(PanelModel.PlateOf(Page(full, "defense", chapter: Chapter.Battle)).Items[0].Kind == "featband" && PanelModel.PlateOf(Page(full, "defense", chapter: Chapter.Battle)).Items.Skip(1).Any(b => b.Kind == "zone"),
               "band: on the plate above the zones, not inside one");
-        Check(Find(Page(full, "cooking"), "featband") == null && Find(Page(full, "sailing", chapter: Chapter.Voyages), "featband").Items.Single().Title == "Ferryman" && Find(Page(full, "smelters", chapter: Chapter.Stores), "featband").Items.Single().Title == "Kept the Fires" &&
-              Find(Page(full, "deaths", chapter: Chapter.Battle), "featband").Items.Single().Title == "Waymate",
+        Check(PanelModel.BandFeats(Find(Page(full, "cooking"), "featband")).Count == 0 && PanelModel.BandFeats(Find(Page(full, "sailing", chapter: Chapter.Voyages), "featband")).Single().Title == "Ferryman" && PanelModel.BandFeats(Find(Page(full, "smelters", chapter: Chapter.Stores), "featband")).Single().Title == "Kept the Fires" &&
+              PanelModel.BandFeats(Find(Page(full, "deaths", chapter: Chapter.Battle), "featband")).Single().Title == "Waymate",
               "band: each page shows only its own feats (Voyages > Sailing the Ferryman, Hall > Smelters the fires, Battle > Deaths the Waymate)");
-        Check(Find(Page(tor, "defense", chapter: Chapter.Battle), "featband").Items.Select(i => i.Title).SequenceEqual(new[] { "Shield Wall", "Stood Fast", "Unbroken", "Turned Blades" }), "band: a fellow's owner page shows their feats too");
+        Check(PanelModel.BandFeats(Find(Page(tor, "defense", chapter: Chapter.Battle), "featband")).Select(i => i.Title).SequenceEqual(new[] { "Shield Wall", "Stood Fast", "Unbroken", "Turned Blades" }), "band: a fellow's owner page shows their feats too");
+        // B18 (Joost in game: "Wallwarden" twice on Defence, and not in Feats, read as a feat he lacked): a title shows once on its page, says why and
+        // opens Feats > Titles; it is all-time, so a short window leaves it out; the Titles page lists every title, held ones with their reasons
+        {
+            var all = Page(full, "defense", s => s.Window = TimeWindow.SinceInstall, Chapter.Battle);
+            var half = Page(full, "defense", s => s.Window = TimeWindow.LastThirtyMinutes, Chapter.Battle);
+            var wall = PanelModel.BandTitles(Find(all, "featband")).FirstOrDefault(t => t.Title == "Wallwarden");
+            var go = new PanelState(); PanelModel.Follow(go, wall?.Id);
+            var titles = PanelModel.Build(full, go);
+            var cards = PanelModel.VisibleFeats(titles);
+            var chosen = Find(titles, "featdetail");
+            var torTitles = Page(tor, PanelModel.TitlesPageId);
+            var torHeld = PanelModel.Titles(tor).Select(t => t.Title).ToList();
+            IEnumerable<string> Words(IEnumerable<Block> bs) => bs.SelectMany(b => new[] { b.Title, b.Value, b.Text, b.Note, b.Pill }.Concat(Words(b.Items ?? new List<Block>()))).Where(t => t != null);   // what the page draws (its blocks)
+            Check(Words(all.Blocks).Count(t => t.Contains("Wallwarden")) == 1 && wall.Text == "42 defences built, armed or loaded" && !Words(half.Blocks).Any(t => t.Contains("Wallwarden")) &&
+                  titles.Active == Chapter.Feats && titles.Page == PanelModel.TitlesPageId && chosen.Title == "Wallwarden" && chosen.Items.Any(r => r.Kind == "rule" && r.Title == wall.Text) &&
+                  cards.Count == PanelModel.SagaTitles.Length && cards.SkipWhile(c => c.Tone == PanelModel.FeatTone).All(c => c.Tone == PanelModel.FeatUnsung) && PanelModel.PlateOf(titles).Text.StartsWith(PanelModel.TitlesDefinition) &&
+                  PanelModel.VisibleFeats(torTitles).Where(c => c.Tone == PanelModel.FeatTone).Select(c => c.Title).SequenceEqual(torHeld) && torHeld.Count > 0,
+                  "titles (B18): Wallwarden shows once on Defence (All) with why, opens Feats > Titles chosen, not in a 30 min window; the Titles page lists all " + cards.Count + ", held first; Tor's book lists Tor's " + torHeld.Count);
+        }
         var dotted = Page(full, "overview");
         Check(dotted.Chapters.Single(c => c.Id == "Feats").Dot && !dotted.Chapters.Single(c => c.Id == "Deeds").Dot && !dotted.Chapters.Single(c => c.Id == "Battle").Dot && Page(full, "unsung").List.Single(l => l.Id == "earned").Dot,
               "dots: a gold dot on the Feats tab (and, inside it, on Earned) while earned feats are not seen");

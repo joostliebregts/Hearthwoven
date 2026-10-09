@@ -1,4 +1,4 @@
-// The in-game self-check's bookkeeping (src/CheckBook.cs, Dev.SelfCheck) and the filter key: Tab by default, the keycap and
+// The in-game self-check's bookkeeping (src/CheckBook.cs, Dev.SelfCheck) and the filter key: K by default (Tab closes the book), the keycap and
 // footer follow it, and the config scan that names another mod's setting bound to the same key.
 using System;
 using System.Collections.Generic;
@@ -30,8 +30,8 @@ static class SelfCheckTests
         Check(book.Totals() == "fail=0 warn=1 pass=1 info=0 wait=0", "self-check: totals count this report's lines: " + book.Totals());
         Check(CheckBook.Expected.Select(e => e.Key).Distinct().Count() == CheckBook.Expected.Length, "self-check: every expected area once");
 
-        // ---------- the filter key: Tab, and a clash in another mod's config ----------
-        Check(new PanelState().FilterKey == "Tab", "filter key: Tab by default (G is ZenDragon's radial menu)");
+        // ---------- the filter key: K, and a clash in another mod's config ----------
+        Check(new PanelState().FilterKey == "K", "filter key: K by default (G is ZenDragon's radial menu)");
         var cfg = new[] { "## Settings file", "[General]", "", "## Opens the radial", "# Setting type: KeyCode", "# Default value: G", "Keyboard Radial Menu = G",
                           "[Other]", "Toggle = LeftShift + G", "Name = Gandalf", "Inventory = Tab", "# Tab = G" };
         var g = CheckBook.KeyClashes("ZenDragon.Zen.ModLib.cfg", cfg, "G");

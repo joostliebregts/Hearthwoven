@@ -53,6 +53,7 @@ namespace Hearthwoven.Panel
             if (cards.Count == 0) return;
             var per = Mathf.Clamp(Mathf.FloorToInt((Column + FeatGap) / (180 + FeatGap)), 1, 4);
             if (plateFull && cards.Count <= 9) per = Mathf.Min(per, 3);   // a full plate with few cards: three across, so the rows fill the room
+            if (b.Tone == PanelModel.TitlesPageId) per = Mathf.Min(per, 3);   // the Titles page: three across, so a title's reason fits its card (B18)
             var w = Mathf.Floor((Column - FeatGap * (per - 1)) / per);
             // the grid sits in an area of its own, at most FeatsGridRoom high: more rows scroll inside it (wheel, soft fade at the edge that has more),
             // so the detail area under it never moves and is never cut at the plate's fold
@@ -289,13 +290,14 @@ namespace Hearthwoven.Panel
 
         // fix4: the page's feat and its titles in ONE compact strip at the top of the plate (it was a feat tile and, apart from it, a title pill
         // in the heading row: two things, both shaped like buttons). Flat: a dark ground with a gold edge at its left, no raised border; the feat
-        // part opens the Feats page like the tile did. One line; the titles drop to a second line only when the first is full.
-        const float EarnedLine = 34, EarnedPad = 12, EarnedGap = 18;
+        // part opens the Feats page like the tile did, each title (B18: with its reason, quiet after the name) the Titles page with it chosen.
+        // One line; the titles drop to a second line only when the first is full.
+        const float EarnedLine = 34, EarnedPad = 12, EarnedGap = 18, TitleReasonGap = 8;
         static void FeatBandBlock(RectTransform col, Block b, Func<string, Action> link)
         {
-            var feats = b.Items ?? new List<Block>();
-            var titles = b.Note ?? "";
-            if (feats.Count == 0 && titles.Length == 0) return;
+            var feats = PanelModel.BandFeats(b);
+            var titles = PanelModel.BandTitles(b);
+            if (feats.Count == 0 && titles.Count == 0) return;
             // what goes on the line, measured first (the same label settings as drawn): (marker icon, text, colour, style, tag)
             float Measure(Rich text, float size, FontStyles style, float spacing = 0)
             {
@@ -308,8 +310,9 @@ namespace Hearthwoven.Panel
                 + featParts.Sum(p => 22 + 6 + Measure(p.name, 15, FontStyles.Normal) + EarnedGap) - EarnedGap;
             var moment = !many && feats.Count == 1 ? feats[0].Text ?? "" : "";
             if (moment.Length > 0) featW += 10 + Measure(Rich.Plain(moment), PanelLook.MinText, FontStyles.Italic);
-            var icon = b.Icon;
-            float titleW = titles.Length == 0 ? 0 : Measure(Rich.Plain(b.Text ?? PanelModel.TitlesWord), PanelLook.MinText, FontStyles.UpperCase, 10) + 8 + (string.IsNullOrEmpty(icon) ? 0 : 22 + 6) + Measure(Rich.Plain(titles), 15, FontStyles.Normal);
+            var titleParts = titles.Select(t => (t, nameW: Measure(Rich.Plain(t.Title), 15, FontStyles.Normal), reasonW: string.IsNullOrEmpty(t.Text) ? 0f : Measure(Rich.Plain(t.Text), PanelLook.MinText, FontStyles.Italic))).ToList();
+            float titleW = titleParts.Count == 0 ? 0 : Measure(Rich.Plain(b.Text ?? PanelModel.TitlesWord), PanelLook.MinText, FontStyles.UpperCase, 10) + 8
+                + titleParts.Sum(p => 22 + 6 + p.nameW + (p.reasonW > 0 ? TitleReasonGap + p.reasonW : 0) + EarnedGap) - EarnedGap;
             var inner = Column - EarnedPad * 2;
             var second = featW > 0 && titleW > 0 && featW + EarnedGap * 2 + 1 + titleW > inner;   // the titles do not fit beside the feat: a second line
             var box = Node("Earned", col); Size(box, -1, second ? EarnedLine * 2 : EarnedLine);
@@ -317,6 +320,13 @@ namespace Hearthwoven.Panel
             BtRect(box, "Edge", PanelLook.Gold, 0, 0, 3, second ? EarnedLine * 2 : EarnedLine);
             float x = EarnedPad, top = 0;
             void Tag(string text, Color c) { var w = Measure(Rich.Plain(text), PanelLook.MinText, FontStyles.UpperCase, 10); var t = BtText(box, text, x, top, w + 2, EarnedLine, PanelLook.MinText, c, style: FontStyles.UpperCase); t.characterSpacing = 10; x += w + 8; }
+            void Hit(string target, float from, float to)
+            {
+                var click = string.IsNullOrEmpty(target) ? null : link?.Invoke(target);
+                if (click == null) return;
+                var hit = Img(box, "Hit", null, new Color(0, 0, 0, 0), raycast: true); hit.rectTransform.Box(from, top, to - from, EarnedLine);
+                var bt = hit.gameObject.AddComponent<UnityEngine.UI.Button>(); bt.targetGraphic = hit; bt.transition = Selectable.Transition.None; bt.onClick.AddListener(() => click());
+            }
             if (featParts.Count > 0)
             {
                 var from = x;
@@ -328,16 +338,38 @@ namespace Hearthwoven.Panel
                 }
                 x -= EarnedGap;
                 if (moment.Length > 0) { x += 10; var w = Measure(Rich.Plain(moment), PanelLook.MinText, FontStyles.Italic); BtText(box, moment, x, top, w + 2, EarnedLine, PanelLook.MinText, PanelLook.Muted, style: FontStyles.Italic); x += w; }
-                var click = string.IsNullOrEmpty(b.Id) ? null : link?.Invoke(b.Id);
-                if (click != null) { var hit = Img(box, "Hit", null, new Color(0, 0, 0, 0), raycast: true); hit.rectTransform.Box(from, 0, x - from, EarnedLine); var bt = hit.gameObject.AddComponent<UnityEngine.UI.Button>(); bt.targetGraphic = hit; bt.transition = Selectable.Transition.None; bt.onClick.AddListener(() => click()); }
+                Hit(b.Id, from, x);
             }
-            if (titles.Length > 0)
+            if (titleParts.Count > 0)
             {
                 if (featParts.Count > 0 && !second) { x += EarnedGap; BtRect(box, "Rule", PanelLook.Rule, x, 7, 1, EarnedLine - 14); x += 1 + EarnedGap; }
                 if (second) { x = EarnedPad; top = EarnedLine; }
                 Tag(b.Text ?? PanelModel.TitlesWord, PanelLook.Muted);
-                if (!string.IsNullOrEmpty(icon)) { BtMarker(box, icon, x, top + (EarnedLine - 22) / 2, 22); x += 22 + 6; }
-                BtText(box, titles, x, top, Mathf.Max(40, Column - x - EarnedPad), EarnedLine, 15, PanelLook.Text);
+                var end = Column - EarnedPad;
+                for (int k = 0; k < titleParts.Count; k++)
+                {
+                    var (t, nameW, reasonW) = titleParts[k];
+                    // room is kept for "+N more" while titles follow (review 0.6.5: the ones past the edge were dropped without a word)
+                    var after = titleParts.Count - k - 1;
+                    var keep = after > 0 ? EarnedGap + Measure(Rich.Plain(PanelModel.MoreTitles(after)), PanelLook.MinText, FontStyles.Italic) : 0f;
+                    if (x + 22 + 6 + 40 + keep > end)   // no room left for one more name: say how many more, linked to the Titles page as a title is
+                    {
+                        var more = PanelModel.MoreTitles(titleParts.Count - k); var moreW = Measure(Rich.Plain(more), PanelLook.MinText, FontStyles.Italic);
+                        BtText(box, more, x, top, Mathf.Min(moreW + 2, end - x), EarnedLine, PanelLook.MinText, PanelLook.Muted, style: FontStyles.Italic);
+                        Hit(t.Id, x, Mathf.Min(x + moreW, end));
+                        break;
+                    }
+                    var stop = end - keep;
+                    var from = x;
+                    BtMarker(box, t.Icon, x, top + (EarnedLine - 22) / 2, 22); x += 22 + 6;
+                    BtText(box, t.Title, x, top, Mathf.Min(nameW + 2, stop - x), EarnedLine, 15, PanelLook.Text); x += Mathf.Min(nameW, stop - x);
+                    if (reasonW > 0 && x + TitleReasonGap + 40 <= stop)
+                    {
+                        x += TitleReasonGap; BtText(box, t.Text, x, top, Mathf.Min(reasonW + 2, stop - x), EarnedLine, PanelLook.MinText, PanelLook.Muted, style: FontStyles.Italic); x += Mathf.Min(reasonW, stop - x);
+                    }
+                    Hit(t.Id, from, Mathf.Min(x, stop));
+                    x += EarnedGap;
+                }
             }
         }
 

@@ -83,6 +83,7 @@ namespace Hearthwoven.Panel
             ["IronScrap"] = "Iron Scrap", ["$item_ironscrap"] = "Iron Scrap", ["$item_coal"] = "Coal", ["Coal"] = "Coal",
             ["ShieldWood"] = "Wood Shield", ["Bow"] = "Crude Bow", ["HelmetLeather"] = "Leather Helmet", ["ArmorLeatherChest"] = "Leather Tunic",
             ["CookedMeat"] = "Cooked Boar Meat", ["CarrotSoup"] = "Carrot Soup", ["SwordIron"] = "Iron Sword", ["ArmorIronChest"] = "Iron Scale Mail", ["AxeBronze"] = "Bronze Axe", ["$item_cookedmeat"] = "Cooked Boar Meat", ["$item_boarjerky"] = "Boar Jerky",
+            ["$item_queensjam"] = "Queen's Jam", ["$item_sausages"] = "Sausages", ["$item_turnipstew"] = "Turnip Stew", ["$item_mod_spicedcider"] = "Spiced Cider",
             ["FeastMeadows"] = "Whole Roasted Meadow Boar", ["FeastBlackforest"] = "Black Forest Buffet Platter",
             ["$piece_feast_meadows"] = "Whole Roasted Meadow Boar", ["$piece_feast_blackforest"] = "Black Forest Buffet Platter",
             ["$item_chest_iron"] = "Iron Scale Mail", ["$item_helmet_iron"] = "Iron Helmet", ["$item_shield_banded"] = "Banded Shield",
@@ -103,6 +104,7 @@ namespace Hearthwoven.Panel
         static readonly Dictionary<string, string> Kinds = new Dictionary<string, string>
         {
             ["$item_bread"] = "food", ["$item_fishwraps"] = "food", ["$item_carrotsoup"] = "food", ["$item_cookedmeat"] = "food", ["$item_boarjerky"] = "food",
+            ["$item_queensjam"] = "food", ["$item_sausages"] = "food", ["$item_turnipstew"] = "food", ["$item_mod_spicedcider"] = "food",
             ["$item_sword_iron"] = "gear", ["$item_shield_wood"] = "gear", ["$item_axe_bronze"] = "gear", ["$item_bow"] = "gear", ["$item_helmet_leather"] = "gear",
             ["$item_hammer"] = "gear", ["$item_hoe"] = "gear", ["$item_cultivator"] = "gear", ["$item_trinketbronzehealth"] = "gear", ["$item_chest_iron"] = "gear",
             ["$item_helmet_iron"] = "gear", ["$item_shield_banded"] = "gear", ["$item_pickaxe_antler"] = "gear", ["$item_chest_leather"] = "gear",
@@ -120,6 +122,15 @@ namespace Hearthwoven.Panel
             ["$item_hammer"] = "Wood", ["$item_hoe"] = "Wood", ["$item_cultivator"] = "Wood", ["$item_pickaxe_antler"] = "Wood", ["$item_trinketbronzehealth"] = "Bronze",
         };
 
+        // Cooking's filter: each dish's type and biggest food value, as GameData reads them (the game's own food values: carrot soup 15 health
+        // 45 stamina, boar jerky 23 and 23). The spiced cider is a mod's brew: no food value, made at no station the game data knows, so
+        // the page puts it under Other on both rows
+        static readonly Dictionary<string, (string type, string boost)> Dishes = new Dictionary<string, (string, string)>
+        {
+            ["$item_carrotsoup"] = ("meal", "stamina"), ["$item_fishwraps"] = ("meal", "health"), ["$item_queensjam"] = ("meal", "stamina"), ["$item_sausages"] = ("meal", "health"),
+            ["$item_turnipstew"] = ("meal", "stamina"), ["$item_boarjerky"] = ("meal", "balanced"), ["$item_bread"] = ("baked", "stamina"), ["$item_cookedmeat"] = ("grilled", "health"),
+        };
+
         /// <summary>The game's lookups, set on every book (a fellow's copy gets them from PanelUi in game, the same ones).</summary>
         static void Lookups(PanelInput p, bool self)
         {
@@ -127,9 +138,14 @@ namespace Hearthwoven.Panel
             p.ItemKind = t => t != null && Kinds.TryGetValue(t, out var k) ? k : (t != null && t.StartsWith("$item_arrow") ? "other" : null);
             p.StationDish = t => t == "$item_bread" || t == "$item_cookedmeat";   // the oven and the grill hand these out; the cauldron and prep table make the rest
             p.PieceKind = PanelModel.PieceKindByName;
+            // what the game data says of the pickaxe drops that are neither stone nor ore (GameData: muddy scrap piles, the Leviathan);
+            // Leather Scraps, which boars drop too, it leaves out (PanelModel.GatheredItemKind)
+            p.GatherKind = t => t == "$item_witheredbone" || t == "$item_chitin" ? PanelModel.PickaxeFinds : null;
             p.CropOf = t => t == "$piece_sapling_carrot" ? "Carrot" : t == "$piece_sapling_barley" ? "Barley" : t == "$piece_sapling_turnip" ? "Turnip" : null;
             p.ItemType = t => t != null && Types.TryGetValue(t, out var k) ? k : null;
             p.MainMaterial = t => t != null && Materials.TryGetValue(t, out var k) ? k : null;
+            p.DishType = t => t != null && Dishes.TryGetValue(t, out var d) ? d.type : null;
+            p.DishBoost = t => t != null && Dishes.TryGetValue(t, out var d) ? d.boost : null;
             p.Foe = PanelSample.SampleFoe; p.Arrows = PanelSample.SampleArrows;
             p.RecipeKnown = self ? (Func<string, bool>)(t => PanelSample.SampleRecipes.Contains(t)) : null;
             p.ToLocal = t => t.AddHours(2);
@@ -454,7 +470,9 @@ namespace Hearthwoven.Panel
             // ---- what he made, built, picked up ----
             foreach (var kv in new Dictionary<string, float>
             {
-                ["$item_bread"] = 20, ["$item_fishwraps"] = 28, ["$item_carrotsoup"] = 118,
+                // the kitchen: 146 from the cauldron and prep table (CraftFood), 20 off the oven and the grill (CraftGrill)
+                ["$item_carrotsoup"] = 60, ["$item_fishwraps"] = 28, ["$item_queensjam"] = 20, ["$item_sausages"] = 18, ["$item_turnipstew"] = 12, ["$item_mod_spicedcider"] = 8,
+                ["$item_bread"] = 12, ["$item_cookedmeat"] = 8,
                 ["$item_sword_iron"] = 2, ["$item_shield_wood"] = 4, ["$item_axe_bronze"] = 6, ["$item_bow"] = 1, ["$item_helmet_leather"] = 2,
                 ["$item_hammer"] = 2, ["$item_hoe"] = 1, ["$item_cultivator"] = 1, ["$item_trinketbronzehealth"] = 1,
                 ["$item_arrow_wood"] = 12, ["$item_arrow_fire"] = 4, ["$item_arrow_frost"] = 3, ["$item_arrow_needle"] = 2,
@@ -471,6 +489,7 @@ namespace Hearthwoven.Panel
             {
                 ["$item_wood"] = 2040, ["$item_finewood"] = 272, ["$item_roundlog"] = 510, ["$item_elderbark"] = 60,
                 ["$item_stone"] = 1720, ["$item_copperore"] = 218, ["$item_tinore"] = 99, ["$item_raspberries"] = 40, ["$item_arrow_poison"] = 20,
+                ["$item_witheredbone"] = 6, ["$item_chitin"] = 3, ["$item_leatherscraps"] = 64,   // 0.6.5: scrap piles, a Leviathan, boars
             }) p.ItemsPickedUp[kv.Key] = kv.Value;
             foreach (var kv in new Dictionary<string, float>
             {
@@ -489,11 +508,13 @@ namespace Hearthwoven.Panel
             ev.Blocks = 312; ev.Parries = 58;
             Add(ev.PickedUp, "$item_wood", 140); Add(ev.PickedUp, "$item_finewood", 12); Add(ev.PickedUp, "$item_roundlog", 30);
             Add(ev.PickedUp, "$item_stone", 220); Add(ev.PickedUp, "$item_copperore", 18); Add(ev.PickedUp, "$item_tinore", 9);
+            Add(ev.PickedUp, "$item_witheredbone", 2); Add(ev.PickedUp, "$item_leatherscraps", 10);
             Add(ev.Felled, "Beech1", 17); Add(ev.Felled, "FirTree", 9); Add(ev.Felled, "Birch2", 4);
             Add(ev.ChopHits, "Beech1", 64); Add(ev.ChopHits, "Beech1_log", 20); Add(ev.ChopHits, "beech_log_half", 9); Add(ev.ChopHits, "FirTree", 41);
             Add(ev.PickaxeHits, "rock4_copper", 120);
             Add(ev.Planted, "$piece_sapling_barley", 171); Add(ev.Planted, "$piece_sapling_turnip", 20);
-            Add(ev.Made, "$item_carrotsoup", 30); Add(ev.Made, "$item_fishwraps", 14); Add(ev.Made, "$item_bread", 8);   // 52 dishes since install on top of the 114 before
+            Add(ev.Made, "$item_carrotsoup", 16); Add(ev.Made, "$item_fishwraps", 14); Add(ev.Made, "$item_sausages", 6); Add(ev.Made, "$item_turnipstew", 4);
+            Add(ev.Made, "$item_bread", 6); Add(ev.Made, "$item_cookedmeat", 6);   // 52 dishes since install on top of the 114 before
             Add(ev.Repairs, "woodwall", 9); Add(ev.MapShared, "piece_cartographytable", 2); Add(ev.CartMeters, "Cart", 2700);
             // the trader and the smelters (Hall)
             Add(ev.Spent, "Haldor", 350); Add(ev.Spent, "Hildir", 300);
@@ -535,16 +556,18 @@ namespace Hearthwoven.Panel
                     ["$piece_woodwall"] = 440, ["$piece_woodfloor2x2"] = 270, ["$piece_sharpstakes"] = 30, ["$piece_levelground"] = 780, ["$piece_raise"] = 120, ["$piece_pavedroad"] = 40,
                     ["$piece_sapling_barley"] = 40, ["$piece_sapling_carrot"] = 60, ["$piece_sapling_turnip"] = 50, ["$piece_sapling_beech"] = 12,
                 },
-                // the dishes before install: 114 of the 166 (the soup 88, the wraps 14, the bread 12); the gear as it stood
+                // the dishes before install: 114 of the 166 (44 + 14 + 20 + 12 + 8 + 8 from the crafting window, 6 + 2 off the stations); the gear as it stood
                 [LocalTotals.CraftedKind] = new Dictionary<string, float>
                 {
-                    ["$item_carrotsoup"] = 88, ["$item_fishwraps"] = 14, ["$item_bread"] = 12,
+                    ["$item_carrotsoup"] = 44, ["$item_fishwraps"] = 14, ["$item_queensjam"] = 20, ["$item_sausages"] = 12, ["$item_turnipstew"] = 8, ["$item_mod_spicedcider"] = 8,
+                    ["$item_bread"] = 6, ["$item_cookedmeat"] = 2,
                     ["$item_sword_iron"] = 1, ["$item_shield_wood"] = 3, ["$item_axe_bronze"] = 5, ["$item_bow"] = 1, ["$item_helmet_leather"] = 1,
                     ["$item_hammer"] = 2, ["$item_hoe"] = 1, ["$item_arrow_wood"] = 12,
                 },
                 ["pickedUp"] = new Dictionary<string, float>
                 {
                     ["$item_wood"] = 1900, ["$item_finewood"] = 260, ["$item_roundlog"] = 480, ["$item_elderbark"] = 60, ["$item_stone"] = 1500, ["$item_copperore"] = 200, ["$item_tinore"] = 90,
+                    ["$item_witheredbone"] = 4, ["$item_chitin"] = 3, ["$item_leatherscraps"] = 54,
                 },
                 [PanelModel.TreesBaseline] = new Dictionary<string, float> { ["Tree"] = 380 },   // 380 before + 30 felled since = the 410
                 ["battle"] = new Dictionary<string, float> { ["EnemyHits"] = 2600, ["Deaths"] = 11 },

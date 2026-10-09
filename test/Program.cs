@@ -24,6 +24,17 @@ var tally = new DamageTally();
 var d = new HitData.DamageTypes { m_slash = 30f, m_fire = 12.5f };
 tally.AddDealt("Troll", "Axes", d); tally.AddDealt("Troll", "Axes", d);
 tally.AddTaken("Troll", "EnemyHit", new HitData.DamageTypes { m_blunt = 40f });
+// 0.6.5: a hit the Staff of Protection ward took all of did no damage, so it is not a hit received
+var absorbed = new DamageTally();
+absorbed.AddTaken("Troll", "EnemyHit", new HitData.DamageTypes());
+absorbed.AddTaken("Troll", "EnemyHit", new HitData.DamageTypes { m_blunt = 0.4f });
+Check(absorbed.HitsTaken == 1, "a zero-damage hit (fully absorbed) does not count as a hit received");
+var absorbedLog = new EventLog(); var ta = new System.DateTime(2026, 10, 9, 20, 0, 0, System.DateTimeKind.Utc);
+absorbedLog.AddDamage(ta, "Meadows", false, "Troll", "EnemyHit", new HitData.DamageTypes());
+absorbedLog.AddDamage(ta, "Meadows", false, "Troll", "EnemyHit", new HitData.DamageTypes { m_blunt = 0.4f });
+absorbedLog.AddDamage(ta, "Meadows", true, "Troll", "Axes", new HitData.DamageTypes());
+Check(absorbedLog.Hits.Where(kv => kv.Key.Contains("|taken|")).Sum(kv => kv.Value) == 1 && absorbedLog.Hits.Where(kv => kv.Key.Contains("|dealt|")).Sum(kv => kv.Value) == 1,
+      "event log: a fully absorbed hit is no hit received in the windows either (a dealt hit is counted as before)");
 
 var json = Snapshot.Build("0.1.0", 1001L, "Rowan", stats,
     new[] { new Snapshot.SkillInfo { Name = "Blocking", Level = 42.5f, Accumulator = 3.2f } }, "My Server", tally);
@@ -571,12 +582,12 @@ Check(twinKinds.Contains("CraftTrinket") && twinKinds.Contains("FishCaughtTier6"
         var h = new HitData.DamageTypes { m_blunt = R(), m_slash = R(), m_pierce = R(), m_chop = R(), m_pickaxe = R(), m_fire = R(), m_frost = R(), m_lightning = R(), m_poison = R(), m_spirit = R(), m_damage = R() };
         var w3 = who[rnd.Next(who.Length)]; var c3 = how[rnd.Next(how.Length)];
         if (rnd.Next(2) == 0) { tl.AddDealt(w3, c3, h); dealtHits++; RefEach(h, (t, v) => RefAdd(refDealt, w3 + "|" + c3 + "|" + t, v)); }
-        else { tl.AddTaken(w3, c3, h); takenHits++; RefEach(h, (t, v) => RefAdd(refTaken, w3 + "|" + c3 + "|" + t, v)); }
+        else { tl.AddTaken(w3, c3, h); float all = 0f; RefEach(h, (t, v) => all += v); if (all > 0f) takenHits++; RefEach(h, (t, v) => RefAdd(refTaken, w3 + "|" + c3 + "|" + t, v)); }   // 0.6.5: a taken hit with no damage is no hit
     }
     bool Same(System.Collections.Generic.Dictionary<string, float> a, System.Collections.Generic.Dictionary<string, float> b) => a.Count == b.Count && a.All(kv => b.TryGetValue(kv.Key, out var v) && v == kv.Value);
     var zero = new DamageTally(); zero.AddDealt("Troll", "Axes", new HitData.DamageTypes());
     Check(Same(tl.Dealt, refDealt) && Same(tl.Taken, refTaken) && tl.HitsDealt == dealtHits && tl.HitsTaken == takenHits && tl.Dealt.Count > 50 && zero.HitsDealt == 1 && zero.Dealt.Count == 0,
-          "O3 DamageTally sums are exactly the earlier code's over 20000 random hits (every type, zeros, a null name); an all-zero hit still counts as a hit and adds no key");
+          "O3 DamageTally sums are exactly the earlier code's over 20000 random hits (every type, zeros, a null name); an all-zero dealt hit still counts as a hit and adds no key; a taken hit with no damage counts as none");
 }
 
 // O5: the per-biome tally is folded as hits come in (EventLog.Biome); it equals the pass over the whole log (BiomeTally.FromLog, the earlier code)

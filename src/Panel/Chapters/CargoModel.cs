@@ -75,7 +75,8 @@ namespace Hearthwoven.Panel
             var b = Composition(null, items.ToDictionary(kv => kv.Key, kv => kv.Value), k => Who(input, k), Look(new Dictionary<string, (string colour, string pattern)>()), SrcPc, tint: ItemTint(input));
             if (b == null) return null;
             b.Value = CargoNumber(total, total);
-            foreach (var part in b.Items) { part.Value = CargoNumber(items.First(kv => kv.Key == part.Id).Value, total); part.Colour = Legible(part.Colour); }
+            double Of(string id) => items.First(kv => kv.Key == id).Value;
+            foreach (var part in b.Items) { part.Value = CargoNumber(part.Id == FoldId ? part.Items.Sum(x => Of(x.Id)) : Of(part.Id), total); part.Colour = Legible(part.Colour); }
             return b;
         }
 
@@ -153,7 +154,12 @@ namespace Hearthwoven.Panel
             var b = Composition(title, parts, k => Who(input, k), Look(new Dictionary<string, (string colour, string pattern)>()), SrcServer, tint: ItemTint(input));
             if (b == null) return null;
             b.Value = CargoNumber(parts.Values.Sum(), scale); b.Tone = Thin;
-            foreach (var part in b.Items) { if (parts.TryGetValue(part.Id, out var v)) part.Value = CargoNumber(v, scale); part.Colour = Legible(part.Colour); }
+            foreach (var part in b.Items)
+            {
+                var v = part.Id == FoldId ? part.Items.Sum(x => parts.TryGetValue(x.Id, out var f) ? f : 0) : parts.TryGetValue(part.Id, out var one) ? one : -1;   // the folded part: its kinds together
+                if (v >= 0) part.Value = CargoNumber(v, scale);
+                part.Colour = Legible(part.Colour);
+            }
             return b;
         }
 
@@ -195,9 +201,16 @@ namespace Hearthwoven.Panel
             var day = IsDayWindow(w);
             CargoGroup(view, input, day);   // carried at the helm or pulling a cart (this PC), Heavy Keel's heaviest load as a tile beside the average loads: first in the since-install zone, above the fold
             if (!day) ServerCargoGroup(view, input);  // loaded and unloaded, the server's book: its own zone, outside the others
-            if (view.Blocks.Count == 0) view.Blocks.Add(day ? DayEmpty(input, w) : SinceInstallEmpty(input, "cargo", "what you carry in ships and carts shows up"));
-            // a day window leaves out what has no days, and says so once: the server's book (and Heavy Keel, a record, not a count)
-            if (day && serverBook) view.Blocks.Add(new Block { Kind = "note", Text = NoDaysServerBook });
+            // a day window leaves out what has no days, and says so once: the server's book (and Heavy Keel, a record, not a count); on an
+            // empty window that line is the empty state's own (B19: one calm empty state, not two lines of advice under each other)
+            var noDaysLine = day && serverBook;
+            if (view.Blocks.Count == 0)
+            {
+                var none = day ? DayEmpty(input, w) : SinceInstallEmpty(input, "cargo", "what you carry in ships and carts shows up");
+                if (noDaysLine) { none.Text = NoDaysServerBook; noDaysLine = false; }
+                view.Blocks.Add(none);
+            }
+            if (noDaysLine) view.Blocks.Add(new Block { Kind = "note", Text = NoDaysServerBook });
             Plate(view, "vocab:cargo-mark", FellowScope(input));
         }
 

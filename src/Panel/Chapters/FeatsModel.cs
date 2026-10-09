@@ -68,7 +68,13 @@ namespace Hearthwoven.Panel
         public const string FeatsTogetherWord = "Together", FeatsTogetherHeading = "Feats of the group";
         /// <summary>The Feats chapter's left list (its own chapter, Joost 2026-10-09): your feats earned, the ones not earned yet, the group's.</summary>
         static readonly (string id, string label, string icon)[] FeatsList =
-            { (FeatsPageId, "Earned", FeatsIcon), (FeatsUnsungId, "Unsung", FeatsUnsungIcon), (FeatsTogetherId, FeatsTogetherWord, "vocab:list-together") };
+            { (FeatsPageId, "Earned", FeatsIcon), (FeatsUnsungId, "Unsung", FeatsUnsungIcon), (FeatsTogetherId, FeatsTogetherWord, "vocab:list-together"), (TitlesPageId, TitlesHeading, TitlesIcon) };
+        /// <summary>The Titles page (B18, Joost 2026-10-09: titles and feats stay two systems, explained): every title, the ones held first with why, then the
+        /// ones not held yet with what earns them. A title in a page's strip opens it here ("Feats/titles/wallwarden"). The list icon: the laurel ring (no line icon
+        /// for titles exists yet).</summary>
+        public const string TitlesPageId = "titles", TitlesLink = "Feats/titles", TitlesIcon = "vocab:boss-ring", TitlesHeading = "Titles", TitleKind = "title";
+        public const string TitlesDefinition = "A title names a kind of work you do, earned the first time you do it. A feat is a moment you reach.";
+        public const string TitleHeld = "Held", TitleNotHeld = "Not held yet", TitlePageWord = "Its page: ";
         /// <summary>The tiers' colours, Valheim metals (Joost: colour-code I, II, III): bronze, silver, gold. A one-off feat is earned in full: gold. Never a player's
         /// or a damage colour; always with its numeral or notches, never colour alone.</summary>
         public static readonly string[] TierColours = { "", "#c27a4a", "#c9d2da", "#f0c862" };
@@ -83,6 +89,9 @@ namespace Hearthwoven.Panel
         /// <summary>One line on the Feats page (in the switch's caption row) saying what a feat is and what Unsung means: plain, no ranking.</summary>
         public const string FeatsDefinition = "A feat is a moment worth telling, earned by doing it.", UnsungDefinition = "Not earned yet. Each one says what earns it.",
                             TogetherDefinition = "Earned by the whole group. Everyone who shares adds to them.";
+        /// <summary>The strip's title part may say each title's reason when the line stays about this wide (px, an estimate on the safe side: 15 px names,
+        /// 14 px italic reasons); wider, the names stand alone and still open the Titles page.</summary>
+        public const float StripTitleRoom = 780;
         /// <summary>A feat whose data Hearthwoven does not keep yet: its card and detail carry this tone (neither earned nor earnable), its card the short line, its detail "Counted by: not yet".</summary>
         public const string FeatWaitingTone = "waiting", NotCountedShort = "not counted yet", CountedNotYet = "no one yet", FeatLabel = "Feat", TitleWord = "Title", TitlesWord = "Titles";   // the titles part of the strip at a page's top
         public static readonly string[] Numerals = { "", "I", "II", "III" };
@@ -92,7 +101,7 @@ namespace Hearthwoven.Panel
         /// of four across show with no row cut); a narrower plate or more feats scroll, with the fade and <see cref="FeatsMore"/> at the foot.</summary>
         public const float FeatsGridRoom = 226;   // the least room the grid gets; on the Feats chapter it takes all the plate leaves above the detail area (FeatsUi)
         /// <summary>The cue at the foot of a feats grid that has rows below (fix4): that there is more, and how to reach it.</summary>
-        public const string FeatsMore = "More feats below · wheel or A/D";
+        public const string FeatsMore = "More below · wheel or A/D";   // the Titles page uses the same grid (B18)
 
         // a fellow player's cooking, gear and voyages are the only things a feat is worked out from besides your own counts
         static double Hours(double seconds) => seconds / 3600.0;
@@ -485,6 +494,7 @@ namespace Hearthwoven.Panel
         /// </summary>
         static void FeatsChapter(PanelInput input, string page, PanelView view, PanelState state)
         {
+            if (page == TitlesPageId) { TitlesPage(input, view, state); return; }
             var together = page == FeatsTogetherId; var earnedPage = page == FeatsPageId;
             view.Heading = together ? FeatsTogetherHeading : earnedPage ? "Earned feats" : "Unsung feats";
             var cards = FeatCards(input, page, state.FeatSel);
@@ -562,13 +572,16 @@ namespace Hearthwoven.Panel
             {
                 var band = FeatBand(input, view.Active, view.Page);
                 var plate = PlateOf(view);
-                // fix4: the page's feat and its titles are ONE compact strip at the top of the plate (the feat tile and the heading's title pill were
-                // two things in two places, both button-shaped); a Battle page with titles but no feat gets the strip too, so no page shows a title pill
-                if (plate != null && view.Badges.Count > 0 && (band != null || view.Active == Chapter.Battle))
+                // fix4: the page's feat and its titles are ONE compact strip at the top of the plate. B18: every page's titles ride in it (no title pill in the
+                // heading row any more, where window chips hid it), each with its reason, each opening the Titles page. A title is all-time: in a time window
+                // (10 min .. 30 days, Session) the strip leaves the titles out, so nothing suggests one was earned in that window; All shows them.
+                var windowed = view.HasFilters && view.ShownWindow.HasValue && view.ShownWindow != TimeWindow.SinceInstall;
+                var titles = plate == null || windowed ? new List<Block>() : StripTitles(input, view);
+                if (titles.Count > 0)
                 {
                     band = band ?? new Block { Kind = "featband", Id = FeatsLink, Title = FeatsHeading, Items = new List<Block>() };
-                    band.Text = view.Badges.Count == 1 ? TitleWord : TitlesWord; band.Note = string.Join(" · ", view.Badges.Select(b => b.Label).ToArray()); band.Icon = view.Badges[0].Icon;
-                    plate.Pill = plate.PillIcon = null;
+                    band.Text = titles.Count == 1 ? TitleWord : TitlesWord;
+                    band.Items.AddRange(titles);
                 }
                 if (band != null) { if (plate != null) plate.Items.Insert(0, band); else view.Blocks.Insert(0, band); }
             }
@@ -585,9 +598,95 @@ namespace Hearthwoven.Panel
                 var at = view.Keys.IndexOf("[Q/E·A/D] Chapter");
                 if (at >= 0) view.Keys[at] = "[Q/E] Chapter";
                 var page = view.Keys.IndexOf("[W/S] Page");
-                view.Keys.Insert(page >= 0 ? page + 1 : view.Keys.Count, "[A/D] Feat");
+                view.Keys.Insert(page >= 0 ? page + 1 : view.Keys.Count, view.Page == TitlesPageId ? "[A/D] Title" : "[A/D] Feat");
                 FeatsLabelPc(view.Blocks);
             }
+        }
+
+        // ---------- titles: the Titles page and the strip on a title's own page (B18) ----------
+
+        /// <summary>The feat items of a strip (its titles left out).</summary>
+        public static List<Block> BandFeats(Block band) => (band?.Items ?? new List<Block>()).Where(i => i.Kind != TitleKind).ToList();
+        /// <summary>The title items of a strip: Title = the name, Text = its reason ("3 defences built, armed or loaded") or null when the line has no room,
+        /// Id = the Titles page with that title chosen.</summary>
+        public static List<Block> BandTitles(Block band) => (band?.Items ?? new List<Block>()).Where(i => i.Kind == TitleKind).ToList();
+
+        // a title's reasons, your character's count first (as on its page and its card)
+        static List<KeyValuePair<string, string>> Reasons(TitleRow t) => t.Lines.Select((l, k) => (l, k)).OrderBy(x => x.l.Value == SourceCharacter ? 0 : 1).ThenBy(x => x.k).Select(x => x.l).ToList();
+
+        /// <summary>"+2 more": the end of a strip whose titles do not all fit; it opens the Titles page as a title does (review 0.6.5: they were dropped silently).</summary>
+        public static string MoreTitles(int n) => "+" + N(n) + " more";
+
+        /// <summary>The page's titles for its strip: the badges' titles, each with its first reason while the line has room (else names only).</summary>
+        static List<Block> StripTitles(PanelInput input, PanelView view)
+        {
+            var rows = Titles(input).Where(t => view.Badges.Any(b => b.Id == t.Id)).ToList();
+            var items = rows.Select(t =>
+            {
+                var first = Reasons(t).FirstOrDefault();
+                var tag = first.Key == null ? null : TagOf(first.Value);
+                return new Block { Kind = TitleKind, Id = TitlesLink + "/" + t.Id, Icon = "title:" + t.Id, Title = t.Title, Text = first.Key, Source = tag, Src = SrcOf(tag) };
+            }).ToList();
+            // the width on the safe side: the tag, then per title its emblem, name, reason and the gap
+            var wide = 70 + items.Sum(i => 28 + i.Title.Length * 8.5f + (i.Text == null ? 0 : 10 + i.Text.Length * 7.2f) + 18);
+            if (wide > StripTitleRoom) foreach (var i in items) { i.Text = null; i.Source = i.Src = null; }
+            return items;
+        }
+
+        // how a title's line is counted, in the feats' words ("Your character", "Since install · this PC"; "Tor's character" on Tor's book)
+        static string TitleCounted(PanelInput i, string source)
+        {
+            var d = source == Profile ? CountedCharacter : source == Fellows ? CountedFellows : CountedPc;
+            return i == null || i.IsSelf || d == CountedFellows ? d : d == CountedCharacter ? Name(i) + "'s character" : "Since install · " + Name(i) + "'s PC";
+        }
+
+        /// <summary>
+        /// Feats > Titles: every title on cards like the feats' (the same grid and detail area), the ones held first in the table's order with their reason,
+        /// then the ones not held yet, greyed, with what earns them (as Unsung does for feats and Deeds > Unsung for these names). The plate's line says
+        /// what a title is next to a feat. A fellow's book: their titles, the same way.
+        /// </summary>
+        static void TitlesPage(PanelInput input, PanelView view, PanelState state)
+        {
+            view.Heading = TitlesHeading;
+            var held = Titles(input);
+            var order = held.Select(r => SagaTitles.First(t => t.Id == r.Id)).Concat(SagaTitles.Where(t => held.All(r => r.Id != t.Id))).ToList();
+            var pick = order.Any(t => t.Id == state.FeatSel) ? state.FeatSel : order[0].Id;   // a strip's title opens with that card chosen
+            var cards = order.Select(t => TitleCard(input, t, held.FirstOrDefault(r => r.Id == t.Id), pick)).ToList();
+            view.Blocks.Add(new Block { Kind = "feats", Items = cards, Tone = TitlesPageId });
+            view.Blocks.Add(cards.First(c => c.Selected).Items[0]);
+            Plate(view, TitlesIcon, FellowScope(input) ?? TitlesDefinition + " " + N(held.Count) + " of " + N(SagaTitles.Length) + " held.");
+            PlateOf(view).Tone = PlateFull;
+        }
+
+        static Block TitleCard(PanelInput input, SagaTitle t, TitleRow row, string selected)
+        {
+            var first = row == null ? default : Reasons(row).FirstOrDefault();
+            var tag = first.Key == null ? null : TagOf(first.Value);
+            return new Block
+            {
+                Kind = "feat", Id = t.Id, Icon = "title:" + t.Id, Title = t.Title, Level = row != null ? 1 : 0, Count = 1, Colour = row != null ? TierColour(1, 1) : null,
+                Tone = row != null ? FeatTone : FeatUnsung, Source = tag,
+                // held: why (its first reason; the descriptor when only an earn-only count holds it); not held: the first step that earns it
+                Text = row != null ? first.Key ?? row.Descriptor : Voice(input, FirstStep(t)),
+                Selected = t.Id == selected, Items = new List<Block> { TitleDetail(input, t, row) },
+            };
+        }
+
+        static Block TitleDetail(PanelInput input, SagaTitle t, TitleRow row)
+        {
+            var held = row != null;
+            var detail = new Block
+            {
+                Kind = "featdetail", Id = t.Id, Icon = "title:" + t.Id, Title = t.Title, Text = row?.Descriptor ?? (input.IsSelf || !t.Descriptor.StartsWith("Your ") ? t.Descriptor : Name(input) + "'s " + t.Descriptor.Substring(5)), Tone = held ? FeatTone : FeatUnsung,
+                Colour = held ? TierColour(1, 1) : null, Value = held ? TitleHeld : TitleNotHeld, Level = held ? 1 : 0, Count = 1, Items = new List<Block>(),
+            };
+            if (held) foreach (var l in Reasons(row)) detail.Items.Add(new Block { Kind = "rule", Title = l.Key, Value = "", Selected = true, Source = TagOf(l.Value), Colour = TierColour(1, 1) });
+            else detail.Items.Add(new Block { Kind = "rule", Title = Voice(input, FirstStep(t)), Value = "" });
+            detail.Items.Add(new Block { Kind = "counted", Text = string.Join(" · ", t.Lines.Select(l => TitleCounted(input, l.Source)).Distinct().ToArray()) });
+            var chapter = ChapterRow.First(c => c.id == t.Chapter).label;
+            var page = ListOf(input, t.Chapter).FirstOrDefault(c => c.Id == t.Page)?.Label;
+            detail.Items.Add(new Block { Kind = "moment", Text = TitlePageWord + chapter + (page == null ? "" : " · " + page) });
+            return detail;
         }
 
         // a number counted on this PC is labelled as such (the data flag the page rules read; the detail also says "Counted by ... this PC" in words)

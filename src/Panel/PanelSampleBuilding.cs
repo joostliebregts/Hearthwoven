@@ -46,5 +46,36 @@ namespace Hearthwoven.Panel
             full.PieceTab = t => t != null && Tabs.TryGetValue(t, out var tab) ? tab : null;
             full.PieceMaterial = t => t != null && Materials.TryGetValue(t, out var m) ? m : null;
         }
+
+        // a modded hammer, after Joost's own book in game (0.6.2, 9 Oct: ingame-0.6rc/deeds-building.json): blacks7ar's Clay, Core
+        // Wood, Fine Wood and Refined Stone pieces, OdinArchitect, a mod's food on plates, a tab labelled "Misc." beside the game's
+        // Misc; token, name, tab, main material, placed (no baseline: the scenario is about the bar, not the twin)
+        static readonly (string token, string name, string tab, string material, float n)[] ModPieces =
+        {
+            ("$rae_brickstone_wall_4x2", "Brick Stone Wall 4x2", "Heavy Build", "Stone", 165), ("$bcw_corewood_palisadefence", "Palisade Fence", "Core Wood Fence", "Core wood", 126),
+            ("$stonemarble_out_1", "Marble creep out", "Collector Series", "Stone", 410), ("$IG_Big_Chevron_Floor", "Chevron Floor", "Big", "Wood", 380),
+            ("$copper_roof", "Copper roof 26°", "Big", "Bronze", 130), ("$bcp_claywall_cross45", "Clay Roof Cross 45°", "Clay Build Pieces", "Clay", 67),
+            ("$brp_stonewall4x2", "Refined Stone Wall 4x2", "Refined Stone Pieces", "Refined Stone", 113), ("$bfp_finewood_table1", "FineWood Table 1", "Fine Wood Furnitures", "Fine wood", 39),
+            ("$bcw_corewoodwall", "CoreWood Wall (Vertical)", "Core Wood Pieces", "Core wood", 88), ("$rae_bigcrystal_w", "Crystal window", "Decors", "Crystal", 12),
+            ("$bfp_lox_bed", "Lox Bed", "Fine Wood Furnitures", "Bear Paw", 3), ("$IG_Skull_2", "Skull alt.", "Decors", "Linen Thread", 12),
+            ("$dvergrprops_wood_stair_custom", "Dvergr stairs", "Dvergr", "Yggdrasil wood", 4), ("$bcp_clayrounddoor", "Clay Round Door", "Doors", "Clay", 10),
+            ("$item_carrot", "Carrot", "Food", "Red Jute", 21), ("$item_loxpie", "Lox Meat Pie", "Food", "Refined Eitr", 10), ("$surtling_lantern_1", "Surtling Torch", "Pieces", "Black marble", 13),
+            ("$piece_portal", "Portal", "Misc.", "Fine wood", 7), ("$tool_cart", "Cart", "Misc.", "Wood", 7), ("$ship_longship", "Longship", "Misc.", "Ancient bark", 3),
+            ("$smx_feeder_name", "Stoker's Chest", "Misc.", "Iron", 9), ("$rae_iron_storage_big", "Big iron storage", "Feasts", "Silver", 9), ("$IG_Candle_Tray", "Candle Tray", "Pieces", null, 95),
+        };
+
+        /// <summary>The sample hall with a modded hammer on top (Joost's book in game, 0.6.2): nineteen tabs, "Misc" and "Misc.", twenty
+        /// materials, what the 0.6.5 bars fold and colour apart (BuildingFacetTests, preview deeds-building-modded).</summary>
+        public static PanelInput Modded(PanelInput full)
+        {
+            Hall(full);
+            foreach (var p in ModPieces)
+            {
+                if (!PanelSample.Names.ContainsKey(p.token)) PanelSample.Names[p.token] = p.name;
+                Tabs[p.token] = p.tab; if (p.material != null) Materials[p.token] = p.material;
+                full.PiecesPlaced[p.token] = p.n;
+            }
+            return full;
+        }
     }
 }

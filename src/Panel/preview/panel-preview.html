@@ -1139,8 +1139,8 @@ function btDeaths(b) {
 // ---------- feats (Chapters/FeatsUi.cs): card grid, the one fixed detail area, Known for, the owner-page band ----------
 const TIERS = ["", "#c27a4a", "#c9d2da", "#f0c862"], tierColour = (l, c) => l <= 0 ? "" : c <= 1 || l >= 3 ? TIERS[3] : TIERS[l];   // PanelModel.TierColour
 function feats(b) {
-  const per = Math.max(1, Math.min(4, Math.floor((COLUMN + 8) / 188)));
-  return `<div class="fgrid"><div class="feats" style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(c => {
+  const per = Math.max(1, Math.min(b.tone === "titles" ? 3 : 4, Math.floor((COLUMN + 8) / 188)));   // the Titles page: three across (FeatsUi.FeatsBlock, B18)
+  return `<div class="fgrid"><div class="feats"${b.tone === "titles" ? ' data-per="3"' : ""} style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(c => {
     const earned = c.tone === "earned";
     // FeatsUi.FeatNotches: 12 x 5 strokes 15 apart at (9, 44) inside the card, each reached tier in its own colour (placed one by one: a flex row drifted below the card)
     // revealed one step at a time (Joost 2026-10-09): the tiers reached in their colours and only the next one as an outline; an Unsung card shows none
@@ -1172,10 +1172,10 @@ function featdetail(b) {
   return `<div class="fdet k-track${earned ? " earned" : ""}${b.tone === "waiting" ? " waiting" : ""}"${b.colour ? ` style="--tier:${b.colour}"` : ""}>${marker(b.icon, 56)}<div class="dn">${esc(b.title)}</div>${b.value ? `<div class="dt">${esc(b.value)}</div>` : ""}<div class="dh">${esc(b.text)}</div>${h}</div>`;
 }
 const knownfor = b => `<div class="kfor"><span class="kfh">${esc(b.title)}</span>${b.items.map(i => `<span class="kfc k-track"${i.colour ? ` style="--tier:${i.colour}"` : ""}>${marker(i.icon, 26)}${esc(i.title)}${i.value ? ` <b>${esc(i.value)}</b>` : ""}</span>`).join("")}</div>`;
-function featband(b) {   // fix4: the feat and the titles, one flat strip (FeatsUi.FeatBandBlock)
-  const feats = b.items || [], many = feats.length > 1;
+function featband(b) {   // fix4: the feat and the titles, one flat strip (FeatsUi.FeatBandBlock); B18: each title with its reason, quiet after the name
+  const feats = (b.items || []).filter(i => i.kind !== "title"), titles = (b.items || []).filter(i => i.kind === "title"), many = feats.length > 1;
   const fpart = feats.length ? `<span class="ea-f"><span class="ea-tag gold">${many ? "Feats" : "Feat"}</span>${feats.map(f => `<span class="ea-i">${marker(f.icon, 22)}<span class="ea-n">${rich("featband", esc(f.title) + (f.value ? ` <b style="color:${f.colour || "var(--gold)"}">${esc(f.value)}</b>` : ""), T.plain(f.title) + (f.value ? " " + T.b(T.ink(T.plain(f.value), f.colour || INK.gold)) : ""))}</span></span>`).join("")}${!many && feats[0].text ? `<span class="ea-m">${esc(feats[0].text)}</span>` : ""}</span>` : "";
-  const tpart = b.note ? `<span class="ea-t"><span class="ea-tag">${esc(b.text || "Titles")}</span>${b.icon ? marker(b.icon, 22) : ""}<span class="ea-tn">${esc(b.note)}</span></span>` : "";
+  const tpart = titles.length ? `<span class="ea-t"><span class="ea-tag">${esc(b.text || "Titles")}</span>${titles.map(t => `<span class="ea-i" data-link="${esc(t.id || "")}">${marker(t.icon, 22)}<span class="ea-tn">${esc(t.title)}</span>${t.text ? `<span class="ea-m">${esc(t.text)}</span>` : ""}</span>`).join("")}</span>` : "";
   return `<div class="earned">${fpart}${fpart && tpart ? `<span class="ea-rule"></span>` : ""}${tpart}</div>`;
 }
 function block(b) {
@@ -1266,7 +1266,7 @@ if (plate) {
                              : headSkills(plate.items).map(skillChip).join("") + (plate.pill ? chip(plate.pill, plate.pillIcon, false) : "");
   COLUMN = 840;
   pageHtml = `<div class="hrow">${plate.icon ? hdIcon(plate.icon) : ""}${bookChip()}<span class="ht">${esc(v.heading + (v.headingWindow ? ", " + v.headingWindow : ""))}</span>${since(v.headingSince)}<span class="hr">${right}</span></div>
-    <div class="platebg"></div><div class="plate${plate.tone === "full" ? " full" : ""}">${plate.text ? `<div class="plateline">${esc(plate.text)}</div>` : ""}${plate.items.map(block).join("")}</div>`;
+    <div class="platebg"></div><div class="plate${plate.tone === "full" ? " full" : ""}">${plate.text ? `<div class="plateline">${esc(plate.text)}</div>` : ""}${v.hasFilters && headSkills(plate.items).length ? `<div style="display:flex;gap:4px;margin-bottom:10px">${headSkills(plate.items).map(skillChip).join("")}</div>` : ""}${plate.items.map(block).join("")}</div>`;
   COLUMN = 889;
 }
 if (v.badges.length) inner +=`<div class="badges">${v.badges.map(b => `<div class="row" style="gap:8px">${marker(b.icon, 34)}<span>${esc(b.label)}</span></div>`).join("")}</div>`;
@@ -1310,7 +1310,7 @@ function fitFeatGrids() {
   // FeatsUi.FeatsBlock on a full plate: few cards three across, the cards as tall as the room allows (52 to 76 px), the emblem centred, the notches under it
   for (const g of document.querySelectorAll(".plate.full .fgrid")) {
     const f = g.querySelector(".feats"), cards = [...f.children], n = cards.length; if (!n) continue;
-    const per = n <= 9 ? 3 : 4, rows = Math.ceil(n / per);
+    const per = f.dataset.per ? +f.dataset.per : n <= 9 ? 3 : 4, rows = Math.ceil(n / per);   // the Titles page: three across (B18)
     f.style.gridTemplateColumns = `repeat(${per}, 1fr)`;
     const h = Math.max(52, Math.min(76, Math.floor((g.clientHeight - (rows - 1) * 6) / rows)));
     for (const c of cards) { const notched = !!c.querySelector(".nt"); c.style.setProperty("--fh", h + "px"); c.style.setProperty("--mt", (h <= 52 ? 5 : Math.floor((h - 36) / 2) - (notched ? 4 : 0)) + "px"); }
@@ -1326,13 +1326,27 @@ function fitFeatGrids() {
     if (g.scrollTop + g.clientHeight < g.scrollHeight - 1) {
       edge(false);
       // FeatsUi's MoreCue: rows lie below, and how to reach them (PanelModel.FeatsMore)
-      const c = document.createElement("div"); c.className = "plfade fcue"; c.innerHTML = `<span>More feats below · wheel or A/D</span>`;
+      const c = document.createElement("div"); c.className = "plfade fcue"; c.innerHTML = `<span>More below · wheel or A/D</span>`;
       c.style.cssText = `left:${g.offsetLeft}px;width:${g.offsetWidth}px;top:${g.offsetTop + g.offsetHeight - 25}px`;
       g.parentElement.appendChild(c);
     }
   }
 }
-function fitEarned() { document.querySelectorAll(".earned").forEach(e => { const f = e.querySelector(".ea-f"), t = e.querySelector(".ea-t"), r = e.querySelector(".ea-rule"); if (r) r.style.display = f && t && t.offsetTop > f.offsetTop + 4 ? "none" : ""; }); }
+function fitEarned() { document.querySelectorAll(".earned").forEach(e => { const f = e.querySelector(".ea-f"), t = e.querySelector(".ea-t"), r = e.querySelector(".ea-rule"); if (r) r.style.display = f && t && t.offsetTop > f.offsetTop + 4 ? "none" : ""; fitTitles(e, t); }); }
+// FeatsUi.FeatBandBlock: titles past the strip's edge end in "+N more" (PanelModel.MoreTitles), linked to the Titles page like a title (review 0.6.5)
+function fitTitles(e, t) {
+  if (!t) return;
+  t.querySelectorAll(".ea-more").forEach(m => m.remove());
+  const items = [...t.querySelectorAll(".ea-i")]; items.forEach(i => i.style.display = "");
+  const edge = () => e.getBoundingClientRect().right - 12;
+  if (!items.length || items[items.length - 1].getBoundingClientRect().right <= edge()) return;
+  const more = document.createElement("span"); more.className = "ea-m ea-more"; t.appendChild(more);
+  let shown = items.length;
+  const fits = () => (more.textContent = "+" + (items.length - shown) + " more", more.getBoundingClientRect().right <= edge());
+  while (shown > 0 && items[shown - 1].getBoundingClientRect().right > edge()) { items[--shown].style.display = "none"; }
+  while (shown > 0 && !fits()) items[--shown].style.display = "none";
+  more.dataset.link = items[shown].dataset.link;
+}
 // FacetUi.SegmentLabel: a linked bar's segment wide enough says its name and count, else its name, else nothing
 function fitSegLabels() {
   for (const s of document.querySelectorAll(".fb-seg[data-t]")) {

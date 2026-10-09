@@ -203,10 +203,16 @@ static partial class CoherenceTests
                 Is(b.DamageSinceInstall == null || Math.Abs(R(r => DayHistory.DealtOf(r.Damage)) - DayHistory.DealtOf(b.DamageSinceInstall)) < 0.5, n + ": the day rows' damage dealt is not the since-install damage");
                 Is(b.BiomeSinceInstall == null || Math.Abs(R(r => r.Biome.Deaths.Values.Sum()) - b.BiomeSinceInstall.Deaths.Values.Sum()) < 0.5, n + ": the day rows' falls are not the since-install falls");
                 Is(Math.Abs(R(r => r.Game.TryGetValue("DistanceSail", out var ds) ? ds : 0) / 1000 - SampleWorld.SailedSince(n)) < 0.05, n + ": the day rows' km sailed are not the voyages since install");
-                // 30 days reaches before the history: greyed, the page shows All and one line says when it opens
+                // 30 days reaches before the history: greyed but pressable; chosen, the page shows All and one line says from when it works.
+                // B17 (Joost 2026-10-09): never a standing "Day history since ..." line on a page whose chosen window works
                 var thirty = In(b, Chapter.Voyages, "sailing", TimeWindow.ThirtyDays);
-                Is(thirty.ShownWindow == TimeWindow.SinceInstall && thirty.Windows.Single(c => c.Id == "ThirtyDays").Disabled && !thirty.Windows.Single(c => c.Id == "SevenDays").Disabled &&
-                   (PanelModel.PlateOf(thirty)?.Text ?? "").StartsWith("Day history since "), n + ": 30 days before the history is not greyed with its line");
+                var seven = In(b, Chapter.Voyages, "sailing", TimeWindow.SevenDays);
+                var opens = PanelModel.ZoneDate(b.History.FirstDay(PanelModel.LocalToday(b)).AddDays(29), PanelModel.LocalToday(b));
+                Is(thirty.ShownWindow == TimeWindow.SinceInstall && thirty.Windows.Single(c => c.Id == "ThirtyDays").Disabled && thirty.Windows.Single(c => c.Id == "ThirtyDays").Waits &&
+                   !thirty.Windows.Single(c => c.Id == "SevenDays").Disabled && !thirty.Windows.Single(c => c.Id == "SevenDays").Waits &&
+                   (PanelModel.PlateOf(thirty)?.Text ?? "").StartsWith("30 days works from " + opens + ": ") &&
+                   !PanelModel.AllText(seven).Any(t => t.Contains("works from") || t.Contains("Day history")),
+                   n + ": 30 days before the history is not greyed and pressable with its one line, or a line stands on a page whose window works (" + PanelModel.PlateOf(thirty)?.Text + ")");
             }
             // Together's window chips: a day window before the history is greyed the same way, with the same line, and shows All
             foreach (var n in names)
@@ -214,7 +220,7 @@ static partial class CoherenceTests
                 var tv = Show(owns[n], Chapter.Company, "together", st => { st.View["Company/together/category"] = "dealt"; st.View["Company/together/window"] = "ThirtyDays"; });
                 var tsw = All(tv).FirstOrDefault(x => x.Kind == "switch" && x.Id == "Company/together/window");
                 Is(tsw != null && tsw.Items.Single(x => x.Id == "ThirtyDays").Tone == PanelModel.OffTone && tsw.Items.Single(x => x.Id == "SevenDays").Tone == null && tsw.Items.Single(x => x.Selected).Id == "SinceInstall" &&
-                   All(tv).Any(x => x.Kind == "note" && (x.Text ?? "").StartsWith("Day history since ")), n + ": Together's 30 days is not greyed with its line, or still chosen");
+                   tsw.Items.Single(x => x.Id == "ThirtyDays").Waits && All(tv).Any(x => x.Kind == "note" && (x.Text ?? "").StartsWith("30 days works from ")), n + ": Together's 30 days is not greyed and pressable with its one line, or still chosen");
                 var st2 = new PanelState { Chapter = Chapter.Company, Window = TimeWindow.SinceInstall }; st2.Page[Chapter.Company] = "together"; st2.View["Company/together/category"] = "dealt"; st2.View["Company/together/window"] = "SevenDays";
                 PanelModel.FilterKeyPressed(st2, PanelModel.Build(owns[n], st2));
                 Is(st2.View["Company/together/window"] == "SinceInstall", n + ": the window key stops on Together's greyed 30 days (" + st2.View["Company/together/window"] + ")");
@@ -322,7 +328,7 @@ static partial class CoherenceTests
                 {
                     var band = First(Show(own, ch, page), x => x.Kind == "featband");
                     var want = PanelModel.FeatDefs.Where(d => d.Chapter == ch && d.Page == page && earnedIds.Contains(d.Id)).Select(d => d.Id).ToList();
-                    Is((band?.Items.Select(i => i.Id).ToList() ?? new List<string>()).SequenceEqual(want), n + ": the band on " + ch + "/" + page + " holds " + string.Join(",", band?.Items.Select(i => i.Id) ?? new string[0]) + ", the earned feats of the page are " + string.Join(",", want));
+                    Is((band == null ? new List<string>() : PanelModel.BandFeats(band).Select(i => i.Id).ToList()).SequenceEqual(want), n + ": the band on " + ch + "/" + page + " holds " + string.Join(",", band == null ? new string[0] : PanelModel.BandFeats(band).Select(i => i.Id)) + ", the earned feats of the page are " + string.Join(",", want));
                 }
             }
         });

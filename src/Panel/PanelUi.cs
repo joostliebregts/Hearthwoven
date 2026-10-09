@@ -20,12 +20,26 @@ namespace Hearthwoven.Panel
         internal static PanelUi Instance;
         internal static ConfigEntry<bool> Enabled;
         internal static ConfigEntry<KeyCode> Hotkey, InfoKey, ViewKey, FilterKey;
+        internal static ConfigEntry<int> KeyLayout;
         internal static ConfigEntry<float> Scale;
         internal static DateTime? SessionStart;
         static int hiddenFrames = 99;
         // Like the game's own windows: still "visible" for a frame after closing, so the Escape that closed it does not
         // also open the main menu.
         internal static bool Blocking => Instance != null && (Instance.open || hiddenFrames <= 1);
+        // Tab closes the book, as the hotkey and Esc do, unless Tab is the filter key itself (a player who set FilterKey to Tab keeps that)
+        internal static bool TabCloses => FilterKey == null || FilterKey.Value != KeyCode.Tab;
+
+        /// <summary>
+        /// The one-time move to key layout 1 (Tab closes the book, the filter key is K). A config at layout 0 whose filter key is
+        /// Tab was Tab by our default, not by a choice: it moves to K. Layout 1 or later is left alone, so a player who sets
+        /// FilterKey back to Tab keeps it. Returns the layout and the filter key to store.
+        /// </summary>
+        public static (int layout, KeyCode filterKey) MigrateFilterKey(int layout, KeyCode filterKey)
+        {
+            if (layout >= 1) return (layout, filterKey);
+            return (1, filterKey == KeyCode.Tab ? KeyCode.K : filterKey);
+        }
 
         internal static void BindConfig(ConfigFile config)
         {
@@ -35,7 +49,10 @@ namespace Hearthwoven.Panel
             Scale = config.Bind("Panel", "Scale", 1f, new ConfigDescription("Size of the whole panel: 1.0 fits 1920 x 1080; smaller for small screens, larger for big ones (0.8 to 1.3).", new AcceptableValueRange<float>(0.8f, 1.3f)));
             InfoKey = config.Bind("Panel", "InfoKey", KeyCode.T, "Key that opens and closes the About Hearthwoven page while the panel is open. T: I opens the AdventureBackpacks backpack.");
             ViewKey = config.Bind("Panel", "ViewKey", KeyCode.F, "Key that flips to the next view on pages with a view switch (the chips top right) while the panel is open. F: no mod in the group binds it.");
-            FilterKey = config.Bind("Panel", "FilterKey", KeyCode.Tab, "Key that enters and leaves the filter focus on pages with a filter bar (Deeds > Crafting and Building; Battle: Overview, Damage, Foes) while the panel is open; inside it A/D move along a row, W/S between rows, Enter or Space chooses, Delete clears all. Tab: the familiar 'move to the controls' key; while the panel is open it does not also open the inventory (only then: with the panel shut Tab opens the inventory as always). Not G: ZenDragon Zen.ModLib binds G to its radial menu.");
+            FilterKey = config.Bind("Panel", "FilterKey", KeyCode.K, "Key that enters and leaves the filter focus on pages with a filter bar (Deeds > Crafting and Building; Battle: Overview, Damage, Foes) while the panel is open; inside it A/D move along a row, W/S between rows, Enter or Space chooses, Delete clears all. K: Valheim and the other mods on our server do not use it. Tab closes the book while it is open, and then does not open the inventory (with the book shut Tab opens the inventory as always). Set this to Tab to keep Tab for the filters; then Tab does not close the book. Not G: ZenDragon Zen.ModLib binds G to its radial menu.");
+            KeyLayout = config.Bind("Panel", "KeyLayout", 0, "Internal: which key layout this config was migrated to (1: Tab closes the book, filter key K). Do not edit.");
+            var migrated = MigrateFilterKey(KeyLayout.Value, FilterKey.Value);   // once per config; before KeyClashCheck reads the key
+            if (migrated.layout != KeyLayout.Value || migrated.filterKey != FilterKey.Value) { FilterKey.Value = migrated.filterKey; KeyLayout.Value = migrated.layout; }
             BindSnapshotConfig(config);   // Dev: panel snapshots (PanelSnapshot.cs)
             WatchConfig(config);          // live settings: a change in Gale applies while the game runs (ConfigWatch.cs)
             BindSampleConfig(config);     // Dev: the fictional sample for screenshots (PanelSampleUi.cs)
@@ -145,9 +162,9 @@ namespace Hearthwoven.Panel
                 PointerWatch();   // focus-visible: the mouse hides the focus ring, a key shows it (Key, Button)
                 // on the About page, Esc (or B) goes back to the page it was opened from; the hotkey still closes the panel
                 if (state.ShowAbout && !Pressed() && (Key(KeyCode.Escape) || Button("JoyButtonB"))) { state.ShowAbout = false; Render(true); return; }
-                // in the filter focus Esc leaves it (the page stays), as on the About page
-                if (PanelModel.FilterAnyOpen(state, view) && !state.ShowAbout && !Pressed() && (Key(KeyCode.Escape) || Button("JoyButtonB"))) { PanelModel.FilterLeave(state, view); Render(true); return; }
-                if (Pressed() || Key(KeyCode.Escape) || Button("JoyButtonB") || !Player.m_localPlayer ||
+                // in the filter focus Esc leaves it (the page stays), as on the About page; Tab does the same first (unless Tab is the filter key)
+                if (PanelModel.FilterAnyOpen(state, view) && !state.ShowAbout && !Pressed() && (Key(KeyCode.Escape) || Button("JoyButtonB") || (TabCloses && Key(KeyCode.Tab)))) { PanelModel.FilterLeave(state, view); Render(true); return; }
+                if (Pressed() || Key(KeyCode.Escape) || (TabCloses && Key(KeyCode.Tab)) || Button("JoyButtonB") || !Player.m_localPlayer ||
                     InventoryGui.IsVisible() || Minimap.IsOpen() || Menu.IsVisible() || Player.m_localPlayer.IsDead())
                 { Close(); return; }
                 if (state.FilterRow >= 0 && !state.ShowAbout && FilterKeys()) { }   // the filter focus: A/D, W/S, Enter, Delete and the filter key are its own (FacetModel.cs)
@@ -400,7 +417,7 @@ namespace Hearthwoven.Panel
             if (other == null) return null;
             other.PlayerName = name;   // the label: chips, colours and pages follow this person, not whoever else has the name
             other.NowUtc = self.NowUtc; other.DisplayName = Localized; other.PlayerNames = self.PlayerNames; other.ViewerName = self.PlayerName;
-            other.ItemKind = GameData.ItemKind; other.GatherKind = GameData.GatherKind; other.PieceKind = GameData.PieceKind; other.ItemToken = GameData.ItemToken; other.StationDish = GameData.StationDish;
+            other.ItemKind = GameData.ItemKind; other.GatherKind = GameData.GatherKind; other.PieceKind = GameData.PieceKind; other.ItemToken = GameData.ItemToken; other.StationDish = GameData.StationDish; other.DishType = GameData.DishType; other.DishBoost = GameData.DishBoost;
             other.Foe = BattleGame.Foe; other.Arrows = BattleGame.Arrows;
             other.CropOf = GameData.CropOf; other.ItemType = GameData.ItemType; other.MainMaterial = GameData.MainMaterial; other.PieceTab = GameData.PieceTab; other.PieceMaterial = GameData.PieceMaterial;
             other.Book = GroupShare.BookOf(key, GroupShare.Fellows.NameOf(key));   // 0.6: their part of the server's book, which came with the group list
@@ -417,7 +434,7 @@ namespace Hearthwoven.Panel
                 SessionOnly = Plugin.Events, History = Plugin.History, Pending = Plugin.PendingDay(),   // the day windows (HISTORY-06.md): the saved days plus what this session counted since the last save
                 ItemKind = GameData.ItemKind, GatherKind = GameData.GatherKind, PieceKind = GameData.PieceKind, ItemColour = PanelLook.IconColour,
                 Foe = BattleGame.Foe, Arrows = BattleGame.Arrows,
-                CropOf = GameData.CropOf, ItemType = GameData.ItemType, MainMaterial = GameData.MainMaterial, PieceTab = GameData.PieceTab, PieceMaterial = GameData.PieceMaterial, ItemToken = GameData.ItemToken, StationDish = GameData.StationDish,
+                CropOf = GameData.CropOf, ItemType = GameData.ItemType, MainMaterial = GameData.MainMaterial, PieceTab = GameData.PieceTab, PieceMaterial = GameData.PieceMaterial, ItemToken = GameData.ItemToken, StationDish = GameData.StationDish, DishType = GameData.DishType, DishBoost = GameData.DishBoost,
                 PlayerNames = new Dictionary<long, string>(),
                 Book = GroupShare.Sharing() ? GroupShare.OwnBook : null,   // 0.6: your part of the server's book (cargo loaded and unloaded, born near), while you share
                 Solo = ZNet.IsSinglePlayer,   // singleplayer: one line where fellow players would be (PanelModel.SoloNote)
@@ -823,6 +840,8 @@ namespace Hearthwoven.Panel
             {
                 // the page on its plate: the plate's own line first, then its blocks at the plate's width
                 if (!string.IsNullOrEmpty(plate.Text)) Label(content, plate.Text, 15, PanelLook.Muted, style: FontStyles.Italic);
+                // the page's own skill: its chip in the heading row, but that row holds the window chips here, so one line at the top of the plate
+                if (PanelModel.HeadSkillsOnPlate(v)) { var skills = Line(content, 4); foreach (var s in HeadSkills(plate)) SkillChip(skills, s); }
                 foreach (var b in plate.Items ?? new List<Block>()) Draw(content, b);
                 plated = false; Column = Wide;
             }
@@ -951,23 +970,24 @@ namespace Hearthwoven.Panel
                 foreach (var c in v.Windows)
                 {
                     var id = (TimeWindow)Enum.Parse(typeof(TimeWindow), c.Id);
-                    // a window a fellow's copy cannot show stays in the row, greyed and inert (the plate says why)
-                    w += Chip(headRight, c.Label, null, c.Selected, c.Disabled ? null : Safe(() => { state.Window = id; Render(true); }), off: c.Disabled, pad: WindowPad) + 4;
+                    // a window a fellow's copy cannot show stays in the row, greyed and inert (the plate says why); a day window your own day history
+                    // does not reach yet is greyed too, but pressing it chooses it: All shows and one line says from when it works (B17, PanelModel.WaitLine)
+                    w += Chip(headRight, c.Label, null, c.Selected, c.Disabled && !c.Waits ? null : Safe(() => { state.Window = id; Render(true); }), off: c.Disabled, pad: WindowPad) + 4;
                 }
             }
             else
             {
                 // zones-wording: the page's own skill (Woodcutting's Wood Cutting) as a small chip left of the pill, not a band across the plate
-                foreach (var s in HeadSkills(plate)) w += Chip(headRight, s.Title + "  " + PanelModel.LevelWord + " " + s.Value, s.Icon, false, null) + 4;
+                foreach (var s in HeadSkills(plate)) w += SkillChip(headRight, s) + 4;
                 if (!string.IsNullOrEmpty(plate.Pill)) w += Chip(headRight, plate.Pill, plate.PillIcon, false, null);
             }
             return w;
         }
 
-        /// <summary>The skills a page shows in its heading row: a skill strip without a scope line (Battle's weapon skills keep theirs on the plate).</summary>
-        internal static IEnumerable<Block> HeadSkills(Block plate) =>
-            (plate?.Items ?? new List<Block>()).Where(IsHeadStrip).SelectMany(b => b.Items.SelectMany(g => g.Items ?? new List<Block>()));
-        static bool IsHeadStrip(Block b) => b.Kind == "ladders" && b.Tone == PanelModel.SkillStripTone && (b.Items ?? new List<Block>()).All(g => string.IsNullOrEmpty(g.Text));
+        /// <summary>The skills a page shows as chips: a skill strip without a scope line (Battle's weapon skills keep theirs on the plate).</summary>
+        static IEnumerable<Block> HeadSkills(Block plate) => PanelModel.HeadSkills(plate);
+        static bool IsHeadStrip(Block b) => PanelModel.IsHeadStrip(b);
+        static float SkillChip(RectTransform row, Block s) => Chip(row, s.Title + "  " + PanelModel.LevelWord + " " + s.Value, s.Icon, false, null);
 
         // a click's target: a page ("Battle/defense") or a view of a switch ("view:Skills/overview/view=practised")
         Action LinkTo(string target) => Safe(() =>
@@ -981,7 +1001,7 @@ namespace Hearthwoven.Panel
         void Draw(RectTransform col, Block b)
         {
             // composition and hero write their note in their own line; the layout boxes hold blocks, not a note
-            if (DrawVocab(col, b, LinkTo, Draw)) { if (b.Kind != "composition" && b.Kind != "hero" && b.Kind != "cropgrid" && !PanelModel.IsBox(b)) Note(col, b.Note); return; }
+            if (DrawVocab(col, b, LinkTo, Draw)) { if (b.Kind != "composition" && b.Kind != "hero" && b.Kind != "cropgrid" && b.Kind != "featband" && !PanelModel.IsBox(b)) Note(col, b.Note); return; }   // the strip says its own words (B18: its titles were drawn twice)
             switch (b.Kind)
             {
                 case "section":
@@ -1370,14 +1390,14 @@ namespace Hearthwoven.Panel
             // legend (round 3): swatch = a small copy of its segment, number, label; entries wrap at the column's edge. The item
             // picture only when every part has one and no part has a pattern (a grain swatch already is the picture), so one
             // legend never mixes parts with and without
-            var pictures = parts.All(p => p.Pattern == null && PanelLook.Icon(p.Icon) != null);
+            var pictures = parts.Where(p => p.Id != PanelModel.FoldId).All(p => p.Pattern == null && PanelLook.Icon(p.Icon) != null);   // the folded "Other (n kinds)" has no picture of its own
             var lines = VStack(col, 6); lines.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
             RectTransform line = null; float used = 0;
             foreach (var p in parts)
             {
                 var entry = Line(lines, 7);
                 var w = Swatch(entry, p);
-                if (pictures) { Marker(entry, p.Icon, 22); w += 7 + 22; }
+                if (pictures && p.Id != PanelModel.FoldId) { Marker(entry, p.Icon, 22); w += 7 + 22; }
                 else if (p.Icon != null && p.Icon.StartsWith("vocab:")) { Size(VocabImg(entry, "Mark", VocabName(p.Icon), PanelLook.Muted), 20, 20); w += 7 + 20; }   // a part the game has no picture for
                 var n = Label(entry, p.Value, 22, PanelLook.Text, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap;
                 var t = Label(entry, p.Title, 15, PanelLook.Muted); t.textWrappingMode = TextWrappingModes.NoWrap;
@@ -1852,8 +1872,9 @@ namespace Hearthwoven.Panel
             Block Step(int d) { for (int k = 1; k <= views.Count; k++) { var x = views[((chosen + d * k) % views.Count + views.Count) % views.Count]; if (x.Tone != PanelModel.OffTone) return x; } return views[chosen]; }   // a greyed view is skipped
             foreach (var v in views)
             {
-                var off = v.Tone == PanelModel.OffTone;   // greyed and inert (Together's day window before the history), as the heading row's window chips
-                Chip(chips, v.Title, null, v.Selected, off ? null : link?.Invoke(PanelModel.ViewLink(b, v.Selected ? Step(1) : v)), back: off ? null : link?.Invoke(PanelModel.ViewLink(b, Step(-1))), off: off);
+                var off = v.Tone == PanelModel.OffTone;   // greyed (Together's day window before the history), as the heading row's window chips:
+                // inert, or, when it works later (Waits), pressing it chooses it and one line says from when (B17)
+                Chip(chips, v.Title, null, v.Selected, off ? (v.Waits ? link?.Invoke(PanelModel.ViewLink(b, v)) : null) : link?.Invoke(PanelModel.ViewLink(b, v.Selected ? Step(1) : v)), back: off ? null : link?.Invoke(PanelModel.ViewLink(b, Step(-1))), off: off);
             }
             foreach (var v in views.Where(v => v.Selected)) foreach (var x in v.Items ?? new List<Block>()) child(col, x);
         }

@@ -116,7 +116,10 @@ static class DeedsTests
         var many = Rich(input); var lots = new Dictionary<string, float>(); var kinds2 = new Dictionary<string, string>();
         for (int k = 0; k < 30; k++) { lots["$item_dish" + k] = 100 - k; kinds2["$item_dish" + k] = "food"; }
         many.ItemsCrafted = lots; many.ItemKind = t => kinds2.TryGetValue(t, out var kk) ? kk : null;
-        Check(Find(Show(many, "cooking"), "composition").Items.Count == 30 && After(Show(many, "cooking"), "Where it was cooked").Items.Single().Items.Count == 30, "deeds cooking: every dish kind in the bar and the ledger, not a top few (the page scrolls)");
+        var manyBar = Find(Show(many, "cooking"), "composition");
+        Check(manyBar.Items.Count == PanelModel.BarMaxParts && manyBar.Items.Last().Id == PanelModel.FoldId && manyBar.Items.Last().Title == "Other (23 kinds)" && manyBar.Items.Last().Items.Count == 23 &&
+              After(Show(many, "cooking"), "Where it was cooked").Items.Single().Items.Count == 30,
+              "deeds cooking: the ledger keeps every dish kind (the page scrolls); the bar shows the seven largest and folds the rest into \"Other (23 kinds)\" (0.6.5: at most eight parts the eye can tell apart)");
         var manyHero = Find(Show(many, "cooking"), "hero");
         Check(hero.Note == null && manyHero.Note != null && manyHero.Note.StartsWith("the dishes add up to ") && manyHero.Note.EndsWith("the headline is your character's own count"),
               "deeds cooking: the sample's dishes (118 + 28 + 20) add up to the headline (146 + 20 grill = 166) and carry no note; when the game's counters and the per-dish counts differ, the headline says so and names its source (polish-06, on the bar)");
@@ -285,7 +288,8 @@ static class DeedsTests
         var three = Find(taming, "counts");
         Check(three.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Tamed=6", "Petted=41", "Commands given=19" }) && three.Items.Select(i => i.Icon).SequenceEqual(new[] { "vocab:tame-tamed", "vocab:tame-petted", "vocab:tame-command" }) && three.Src == "character",
               "deeds taming: the game's three counters as tiles (no per-creature count exists), Codex's care pictures");
-        Check(Find(taming, "band") == null && !PanelModel.AllText(taming).Any(t => t.Contains("Cared for a creature")), "deeds taming: no title band (it repeated Petted and Commands given; the pill shows the title)");
+        Check(Find(taming, "band") == null && PanelModel.AllText(taming).Count(t => t.Contains("Cared for a creature")) == 1 && PanelModel.BandTitles(Find(taming, "featband")).Single().Text.StartsWith("Cared for a creature"),
+              "deeds taming: no title band (it repeated Petted and Commands given); the strip says Beastkeeper's reason once (B18)");
 
         var big = After(Show(Big(input), "farming"), "Crops");
         Check(big.Items.Where(i => i.Id != PanelModel.OtherPlantsId).Select(i => i.Value + "/" + i.Value2).SequenceEqual(new[] { "3\u00A0960/3\u00A0120", "1\u00A0290/1\u00A0406", "1\u00A0041/2\u00A0210" }),

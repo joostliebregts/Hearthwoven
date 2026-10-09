@@ -3,6 +3,23 @@
 Every tweak that reaches a PC or the server gets its own patch version (Joost, 2026-10-08), so the version in the
 log line and in Gale always says which build runs.
 
+## 0.6.5 (2026-10-09, client release)
+From the first evening with the Thunderstore install. Client only: the server stays on 0.6.0.
+- **Your skill is back** on Woodcutting and Mining. Pages with time windows had stopped drawing it (the heading row held the windows); it now sits at the top of the page ("Wood Cutting · level 34").
+- **Titles explained.** Feats has a Titles page: what a title is (a kind of work you do) and what a feat is (a moment you reach), every title you hold with its reason, the others greyed with what earns them. On a page a title says why ("Wallwarden · 3 defences built, armed or loaded") and opens its entry; it shows once (it was drawn twice in game) and not inside a short time window.
+- **Calmer time windows.** No standing "Day history since…" line on every page: press a greyed 7 days or 30 days and one line says from when it works. An empty window says one thing, not three.
+- **Keys.** Tab closes the book, as it closes your inventory; the filter key moves to K. An existing config that still has the old default Tab is switched to K once; if you choose Tab again, it stays.
+- **Cooking has filters**: Type (meals, grilled, baked; feasts and mead bases when made) and Main boost (health, stamina, eitr).
+- **Bars you can read.** A filter or composition bar shows at most eight parts in clearly different colours, the rest as "Other (n kinds)"; "Misc" and "Misc." are one category; the cultivator's pieces from PlantEverything count as plantings, not as buildings with "Beech Seeds" as material.
+- **Mining** counts stone and ore: Leather Scraps are out (boars drop them too), Withered Bone and Chitin show apart as "Other pickaxe finds".
+- **Smaller:** an amount between 0 and 1 says "under 1" instead of 0; a hit your ward took completely is no hit received; deaths keep up to the last 30 seconds of damage (the docs said 10).
+- **A greyed window stays where you pressed it.** The "7 days works from…" line shows on that page only; another page, another chapter or reopening the book goes back to the last window that worked (Battle keeps its Session). The same on Company > Together.
+- **One block count on Defence.** Shieldbearer's reason splits blocks and parries as the numbers below it do ("254 blocks · 58 parries").
+- **Cooking's Other** sits last in its bars, in the quiet colour, as on Crafting and Building.
+- **A hit your ward took completely** is no hit received in the short windows either (10 min to Session).
+- **Modded tools:** a tool that holds buildings with a seed and a hoe among them no longer counts every building as planted.
+- **Titles that do not fit** the strip at a page's top end in "+2 more", which opens the Titles page.
+
 ## 0.6.2 (2026-10-09, client release)
 - Feats cards and details no longer show raw text formatting codes. All formatted text now goes through one helper, and a self-check catches any slip.
 - The Feat tag above a page is no longer cut off.

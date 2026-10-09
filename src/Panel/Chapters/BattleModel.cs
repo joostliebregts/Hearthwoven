@@ -210,11 +210,11 @@ namespace Hearthwoven.Panel
                     var fell = BiomeDeaths(input.BiomeSinceInstall);
                     var strip = BiomeStrip(input, byBiome, fell, chosen);
                     var bar = BiomeFilterBar(state, BattleOverviewFilter, strip, byBiome, fell);
-                    if (strip != null) { strip.Value = dealt > 0 ? N(dealt) : null; strip.Value2 = total > 0 ? N(total) : null; strip.Text = AfterOf(input); strip.Title = ScopeOfSet(chosen); }
+                    if (strip != null) { strip.Value = dealt > 0 ? NAtLeast(dealt) : null; strip.Value2 = total > 0 ? NAtLeast(total) : null; strip.Text = AfterOf(input); strip.Title = ScopeOfSet(chosen); }
                     Add(view, strip);
                     Add(view, bar);
                 }
-                else Add(view, Hero((N(dealt), DealtLabel, SrcPc, DealtQualifier)));   // what hurt you carries its own total just below
+                else Add(view, Hero((NAtLeast(dealt), DealtLabel, SrcPc, DealtQualifier)));   // what hurt you carries its own total just below
                 Columns(view, Stretch(v =>
                 {
                     Add(v, Composition(WhatHurt(input) + (ScopeOfSet(chosen) == null ? "" : " " + ScopeOfSet(chosen)), ReceivedByType(taken), TypeName, Look(DamageLook), SrcPc, t => "damage:" + t, AfterOf(input)));
@@ -240,7 +240,7 @@ namespace Hearthwoven.Panel
                 new Block
                 {
                     Kind = "weapons", Title = TotalHead,
-                    Items = weapons.Select(w => { var sum = BattleTypes.Sum(t => Get(cell, t + "|" + w)); return new Block { Kind = "weapon", Id = w, Title = WeaponName(w), Icon = "vocab:weapon-" + w, Value = N(sum), Tone = sum > 0 ? null : "idle", Src = SrcPc, Source = TagMeasured }; }).ToList(),
+                    Items = weapons.Select(w => { var sum = BattleTypes.Sum(t => Get(cell, t + "|" + w)); return new Block { Kind = "weapon", Id = w, Title = WeaponName(w), Icon = "vocab:weapon-" + w, Value = NAtLeast(sum), Tone = sum > 0 ? null : "idle", Src = SrcPc, Source = TagMeasured }; }).ToList(),
                 },
             };
             foreach (var t in BattleTypes)
@@ -249,11 +249,11 @@ namespace Hearthwoven.Panel
                 if (total <= 0) continue;
                 items.Add(new Block
                 {
-                    Kind = "dmgtype", Id = t, Title = TypeName(t), Icon = DamageIcon(t), Colour = DamageColour(t), Value = N(total), Src = SrcPc, Source = TagMeasured,
-                    Items = weapons.Select(w => { var v = Get(cell, t + "|" + w); return new Block { Kind = "cell", Id = w, Value = v > 0 ? N(v) : "", Fraction = (float)(v / max), Colour = DamageColour(t) }; }).ToList(),
+                    Kind = "dmgtype", Id = t, Title = TypeName(t), Icon = DamageIcon(t), Colour = DamageColour(t), Value = NAtLeast(total), Src = SrcPc, Source = TagMeasured,
+                    Items = weapons.Select(w => { var v = Get(cell, t + "|" + w); return new Block { Kind = "cell", Id = w, Value = v > 0 ? NAtLeast(v) : "", Fraction = (float)(v / max), Colour = DamageColour(t) }; }).ToList(),
                 });
             }
-            return new Block { Kind = "damagegrid", Title = AllTypes, Value = N(cell.Values.Sum()), Src = SrcPc, Source = TagMeasured, Items = items };
+            return new Block { Kind = "damagegrid", Title = AllTypes, Value = NAtLeast(cell.Values.Sum()), Src = SrcPc, Source = TagMeasured, Items = items };
         }
 
         /// <summary>"By weapon": one proportional bar per weapon kind, split into the damage types it dealt.</summary>
@@ -269,10 +269,10 @@ namespace Hearthwoven.Panel
                 if (total <= 0) continue;
                 mixes.Add(new Block
                 {
-                    Kind = "dmgmix", Id = w, Icon = "vocab:weapon-" + w, Title = WeaponName(w), Value = N(total), Fraction = (float)(total / largest), Src = SrcPc, Source = TagMeasured,
+                    Kind = "dmgmix", Id = w, Icon = "vocab:weapon-" + w, Title = WeaponName(w), Value = NAtLeast(total), Fraction = (float)(total / largest), Src = SrcPc, Source = TagMeasured,
                     Items = BattleTypes.Where(t => Get(byType, t) > 0).Select(t => new Block
                     {
-                        Kind = "part", Id = t, Icon = DamageIcon(t), Title = TypeName(t), Value = N(Get(byType, t)), Fraction = (float)(Get(byType, t) / total), Colour = DamageColour(t),
+                        Kind = "part", Id = t, Icon = DamageIcon(t), Title = TypeName(t), Value = NAtLeast(Get(byType, t)), Fraction = (float)(Get(byType, t) / total), Colour = DamageColour(t),
                     }).ToList(),
                 });
             }
@@ -369,7 +369,7 @@ namespace Hearthwoven.Panel
                 if (foe != null)
                     foreach (var t in BattleTypes)
                         cells.Add(new Block { Kind = "mod", Id = t, Icon = DamageIcon(t), Colour = DamageColour(t), Title = TypeName(t), Tone = Relation(foe.Modifiers.TryGetValue(t, out var m) ? m : null) ?? "" });
-                rows.Add(new Block { Kind = "foe", Id = key, Icon = TrophyOf(input, key), Title = Who(input, key), Value = N(v), Fraction = (float)(v / max), Src = SrcPc, Source = TagMeasured, Items = cells });
+                rows.Add(new Block { Kind = "foe", Id = key, Icon = TrophyOf(input, key), Title = Who(input, key), Value = NAtLeast(v), Fraction = (float)(v / max), Src = SrcPc, Source = TagMeasured, Items = cells });
             }
             return new Block { Kind = "foetable", Src = SrcPc, Source = TagMeasured, Items = rows };
         }
@@ -393,7 +393,7 @@ namespace Hearthwoven.Panel
                         chips.Add(new Block { Kind = "foe", Id = f.key, Title = Who(input, f.key), Tone = tone });
                 var total = Get(byType, t);
                 if (total <= 0 && chips.Count == 0) continue;
-                rows.Add(new Block { Kind = "dmgtype", Id = t, Title = TypeName(t), Icon = DamageIcon(t), Colour = DamageColour(t), Value = total > 0 ? N(total) : "", Src = SrcPc, Source = TagMeasured, Items = chips });
+                rows.Add(new Block { Kind = "dmgtype", Id = t, Title = TypeName(t), Icon = DamageIcon(t), Colour = DamageColour(t), Value = total > 0 ? NAtLeast(total) : "", Src = SrcPc, Source = TagMeasured, Items = chips });
             }
             if (rows.Count == 0) return null;
             // one real row said as a sentence, the first weakness (else resistance, else immunity) in the table's order
@@ -505,7 +505,7 @@ namespace Hearthwoven.Panel
                 Kind = "sources", Title = ReceivedBySource, Text = AfterOf(input), Src = SrcPc, Source = TagMeasured,
                 Items = bySource.Select(s => new Block
                 {
-                    Kind = "source", Id = s.key, Icon = TrophyOf(input, s.key), Title = Who(input, s.key), Value = N(s.total), Fraction = (float)(s.total / max), Src = SrcPc, Source = TagMeasured,
+                    Kind = "source", Id = s.key, Icon = TrophyOf(input, s.key), Title = Who(input, s.key), Value = NAtLeast(s.total), Fraction = (float)(s.total / max), Src = SrcPc, Source = TagMeasured,
                     Items = Parts(s.types, s.total),
                 }).ToList(),
             };
@@ -515,7 +515,7 @@ namespace Hearthwoven.Panel
         static List<Block> Parts(Dictionary<string, double> byType, double total) =>
             ReceivedTypes.Where(t => Get(byType, t) > 0).Select(t => new Block
             {
-                Kind = "part", Id = t, Icon = DamageIcon(t), Title = TypeName(t), Value = N(Get(byType, t)), Fraction = (float)(Get(byType, t) / total), Colour = DamageColour(t),
+                Kind = "part", Id = t, Icon = DamageIcon(t), Title = TypeName(t), Value = NAtLeast(Get(byType, t)), Fraction = (float)(Get(byType, t) / total), Colour = DamageColour(t),
             }).ToList();
 
         /// <summary>
@@ -537,9 +537,12 @@ namespace Hearthwoven.Panel
                     Kind = "guard", Value = N(Math.Max(0, ev.Blocks - ev.Parries)), Title = Math.Max(0, ev.Blocks - ev.Parries) == 1 ? "block" : "blocks",
                     Value2 = N(ev.Parries), Text = ev.Parries == 1 ? "parry" : "parries", Src = SrcPc, Source = TagMeasured,
                 });
-            else if (ev == null && w != TimeWindow.SinceInstall) view.Blocks.Add(new Block { Kind = "note", Text = NoDaysBlocks });
+            // 10 min .. 3 h keep no blocks: said once, as the empty state's one line when the window holds nothing else (B19: never stacked under it)
+            var noBlocksHere = ev == null && w != TimeWindow.SinceInstall;
+            var empty = received.Count == 0 && (ev?.Blocks ?? 0) == 0 && w != TimeWindow.SinceInstall;
+            if ((ev?.Blocks ?? 0) == 0 && noBlocksHere && !empty) view.Blocks.Add(new Block { Kind = "note", Text = NoDaysBlocks });
             Add(view, ReceivedSources(input, received));
-            if (received.Count == 0 && (ev?.Blocks ?? 0) == 0 && w != TimeWindow.SinceInstall) view.Blocks.Add(WindowEmpty(input, w));
+            if (empty) { var none = WindowEmpty(input, w); if (noBlocksHere && input.IsSelf) none.Text = NoDaysBlocks; view.Blocks.Add(none); }
             // hits received: the game counts them on your own character (Character.ApplyDamage), complete, so its counter stands alone
             // (no layer); in a day window its growth those days
             if (w == TimeWindow.SinceInstall || day)
@@ -606,10 +609,10 @@ namespace Hearthwoven.Panel
                     items.Add(new Block
                     {
                         Kind = "death", Tone = "timeline", Id = d.Killer, Icon = TrophyOf(input, d.Killer), Title = Who(input, d.Killer), Text = DeathTime(input, d.Time) + " · " + BiomeName(d.Biome),
-                        Value = sum > 0 ? N(sum) : "", Note = LastThirtyShort, Src = SrcPc, Source = TagMeasured,
+                        Value = sum > 0 ? NAtLeast(sum) : "", Note = LastThirtyShort, Src = SrcPc, Source = TagMeasured,
                         Items = hits.Select(h => new Block
                         {
-                            Kind = "hit", Id = h.Type, Icon = DamageIcon(h.Type), Title = TypeName(h.Type), Text = Who(input, h.Source), Value = N(h.Amount), Colour = DamageColour(h.Type),
+                            Kind = "hit", Id = h.Type, Icon = DamageIcon(h.Type), Title = TypeName(h.Type), Text = Who(input, h.Source), Value = NAtLeast(h.Amount), Colour = DamageColour(h.Type),
                             Fraction = Math.Max(0f, Math.Min(1f, 1f - h.Ago / EventLog.TimelineSeconds)), Fraction2 = largest > 0 ? (float)(h.Amount / largest) : 0,
                         }).ToList(),
                     });
@@ -621,7 +624,7 @@ namespace Hearthwoven.Panel
                 items.Add(new Block
                 {
                     Kind = "death", Id = d.Killer, Icon = TrophyOf(input, d.Killer), Title = Who(input, d.Killer), Text = DeathTime(input, d.Time) + " · " + BiomeName(d.Biome),
-                    Value = total > 0 ? N(total) : "", Note = LastTenShort, Src = SrcPc, Source = TagMeasured, Items = total > 0 ? Parts(byType, total) : new List<Block>(),
+                    Value = total > 0 ? NAtLeast(total) : "", Note = LastTenShort, Src = SrcPc, Source = TagMeasured, Items = total > 0 ? Parts(byType, total) : new List<Block>(),
                 });
             }
             var timelines = items.Count(i => i.Tone == "timeline");

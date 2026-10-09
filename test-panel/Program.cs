@@ -101,8 +101,8 @@ foreach (Chapter ch in Enum.GetValues(typeof(Chapter)))
         foreach (var they in new[] { true, false })
             pages.Add((ch + "/" + l.Id, PanelModel.Build(input, new PanelState { Chapter = ch, Page = { [ch] = l.Id }, TheyReceived = they, Window = TimeWindow.SinceInstall })));   // All: every number since install (Defence's blocks have no session tally in this sample)
 IEnumerable<string> WhereShown(Func<string, bool> has) => pages.Where(p => PanelModel.AllText(p.v).Any(has)).Select(p => p.where).Distinct();
-Check(pages.Where(p => PanelModel.Content(p.v).Any(b => b.Kind == "guard")).Select(p => p.where).Distinct().SequenceEqual(new[] { "Battle/defense" }) && !WhereShown(t => t.Contains("27 parr") || t.Contains("successful block")).Any(),
-      "owner: blocks and parries show on Battle > Defense only (not Battle > Overview, not Deeds > Overview)");
+Check(pages.Where(p => PanelModel.Content(p.v).Any(b => b.Kind == "guard")).Select(p => p.where).Distinct().SequenceEqual(new[] { "Battle/defense" }) && WhereShown(t => t.Contains("27 parr") || t.Contains("successful block")).All(w => w == PanelModel.TitlesLink || w == "Battle/defense"),
+      "owner: blocks and parries show on Battle > Defense only (not Battle > Overview, not Deeds > Overview); Feats > Titles and Defence's title strip say them as Shieldbearer's reason (B18)");
 // helm distance: Voyages > Overview (the journey) and Sailing only, in test-panel/VoyagesHallTests.cs
 Check(Find(deeds, "strip").Items.All(t => !(t.Value + t.Text).Any(char.IsDigit) && string.IsNullOrEmpty(t.Note)), "owner: Deeds > Overview: the other chapters' names earned are shortcuts without numbers (the deed cards may repeat their own page's numbers: Joost 2026-10-08)");
 var battleOverview = Show(input, Chapter.Battle);
@@ -308,7 +308,7 @@ Check(Line(titles, "Trailfinder", 0) == "184 km travelled" && Src(titles, "Trail
 Check(Line(titles, "Woodcutter", 0) == "64 axe hits" && Src(titles, "Woodcutter", 0) == PanelModel.SourceSession &&
       Line(titles, "Woodcutter", 1) == "410 trees felled" && Src(titles, "Woodcutter", 1) == PanelModel.SourceCharacter, "titles: several lines, each with its own source");
 Check(Line(titles, "Mapmaker", 0) == "Map shared 2 times at the table" && Line(titles, "Mender", 0) == "9 repairs with the hammer" &&
-      Line(titles, "Wallwarden", 0) == "42 defences built, traps armed or turrets loaded" && Line(titles, "Bossbane", 0) == "3 boss fights won",
+      Line(titles, "Wallwarden", 0) == "42 defences built, armed or loaded" && Line(titles, "Bossbane", 0) == "3 boss fights won",
       "titles: the five new titles read the new measures and profile counters");
 Check(!titles.Any(t => t.Title == "Tidecatcher" || t.Title == "Beastkeeper" || t.Title == "Waymate"), "titles: zero counters earn no title, and no Waymate");
 Check(PanelModel.SagaTitles.Single(t => t.Title == "Hallwright").Descriptor == "Pieces raised with the hammer" && PanelModel.SagaTitles.Single(t => t.Title == "Tidecatcher").Descriptor == "Fish caught on the line" &&
@@ -379,12 +379,12 @@ Check(withYou["Rowan"] == 0 && withYou["Asa"] == 1 && withYou["Edda"] == 2 && wi
 CompanyChecks(input, now, Check);
 FiresideChecks(now, Check);   // Fireside's threads never cross or run together where they need not; the counts on them touch nothing (test-panel/FiresideTests.cs)
 var company = Show(input, Chapter.Company);
-Check(!company.Keys.Contains("[A/D] Direction") && !deeds.Keys.Contains("[A/D] Direction") && deeds.Keys.Contains("[W/S] Page") && deeds.Keys.Last() == "[H/Esc] Close",
+Check(!company.Keys.Contains("[A/D] Direction") && !deeds.Keys.Contains("[A/D] Direction") && deeds.Keys.Contains("[W/S] Page") && deeds.Keys.Last() == "[H/Tab/Esc] Close",
       "keys: the footer lists only bindings that work on this screen");
 Check(deeds.Keys.Contains("[T] About") && !deeds.Keys.Any(k => k.StartsWith("[I]")), "ISC-1 keys: the info key is T (I opens the AdventureBackpacks backpack)");
 // Joost 2026-10-08: where a number comes from is not interesting to most players; T opens one About page instead of a line per page
 var about = Show(input, Chapter.Battle, "damage", s => s.ShowAbout = true);
-Check(deeds.Keys.SequenceEqual(new[] { "[Q/E\u00b7A/D] Chapter", "[W/S] Page", "[F] View", "[Backspace] Back", "[T] About", "[H/Esc] Close" }) || deeds.Keys.SequenceEqual(new[] { "[Q/E\u00b7A/D] Chapter", "[W/S] Page", "[Backspace] Back", "[T] About", "[H/Esc] Close" }),
+Check(deeds.Keys.SequenceEqual(new[] { "[Q/E\u00b7A/D] Chapter", "[W/S] Page", "[F] View", "[Backspace] Back", "[T] About", "[H/Tab/Esc] Close" }) || deeds.Keys.SequenceEqual(new[] { "[Q/E\u00b7A/D] Chapter", "[W/S] Page", "[Backspace] Back", "[T] About", "[H/Tab/Esc] Close" }),
       "keys: the footer names every key that works on the page, short: " + string.Join("  ", deeds.Keys));
 // diff-05: About as designed (proto/vocab-about.png): its own list, no chapter tab lit; How it counts = the three source
 // cards, the Since when timeline and the four promises on the plate; What it reads and Sharing carry the honest words
@@ -400,7 +400,13 @@ Check(aboutPlate.Items[0].Items.Select(c => c.Icon + " " + c.Title + " | " + c.V
       "About: three source cards with icon, a short since line and examples; the timeline made -> install -> now, no dates the mod does not know");
 Check(aboutPlate.Items[2].Items.Select(p => p.Title).SequenceEqual(new[] { "Only reads", "Your world stays untouched", "Optional for every player", PanelModel.OtherModsTitle }) && aboutPlate.Items[2].Items[3].Text == PanelModel.OtherModsLine &&
       aboutPlate.Items[2].Items.All(p => p.Icon.StartsWith("vocab:promise-")), "About: the four promises in one row; other mods' items show too, with its one true line (no 'works with any mod')");
-Check(about.Keys.SequenceEqual(new[] { "[Q/E\u00b7A/D] Chapter", "[W/S] Page", "[T/Esc] Back", "[H] Close" }), "ISC-6 About: T or Esc goes back, H closes: " + string.Join("  ", about.Keys));
+Check(about.Keys.SequenceEqual(new[] { "[Q/E\u00b7A/D] Chapter", "[W/S] Page", "[T/Esc] Back", "[H/Tab] Close" }), "ISC-6 About: T or Esc goes back, H or Tab closes: " + string.Join("  ", about.Keys));
+// Tab as the filter key (a player who set Panel.FilterKey to Tab): Tab keeps the filters, so the footer does not say Tab closes
+var tabFilter = Show(input, Chapter.Battle, "damage", s => s.FilterKey = "Tab");
+Check(tabFilter.Keys.Contains("[Tab] Filter") && tabFilter.Keys.Contains("[H/Esc] Close"), "filter key Tab: the footer says [Tab] Filter and [H/Esc] Close: " + string.Join("  ", tabFilter.Keys));
+// one-time key layout migration (PanelUi.MigrateFilterKey): an old Tab default moves to K once; a choice made after that is kept
+Check(PanelUi.MigrateFilterKey(0, UnityEngine.KeyCode.Tab) == (1, UnityEngine.KeyCode.K) && PanelUi.MigrateFilterKey(0, UnityEngine.KeyCode.G) == (1, UnityEngine.KeyCode.G) &&
+      PanelUi.MigrateFilterKey(1, UnityEngine.KeyCode.Tab) == (1, UnityEngine.KeyCode.Tab), "key layout: (0, Tab) -> (1, K); (0, G) -> (1, G); (1, Tab) stays Tab");
 var aboutState = new PanelState { ShowAbout = true }; PanelModel.StepList(aboutState, about, 1);
 var aboutReads = PanelModel.Build(input, aboutState); PanelModel.StepList(aboutState, aboutReads, 1);
 var aboutSharing = PanelModel.Build(input, aboutState);
@@ -604,9 +610,16 @@ Check(PanelModel.Build(new PanelInput { Log = new EventLog() }, new PanelState {
 var quiet = PanelModel.Build(explorer, new PanelState { Chapter = Chapter.Battle });
 var quietEmpty = Find(quiet, "empty");
 Check(quietEmpty != null &&
-      quietEmpty.Text == "Fight something and it fills up. Choose All for everything since install." && quietEmpty.Title == "Nothing yet this session" &&   // the session window says so, not "from install"
+      quietEmpty.Text == "Fight something and it fills up." && quietEmpty.Title == "Nothing yet this session" &&   // the session window says so, not "from install"
       !PanelModel.AllText(quiet).Contains(PanelModel.NoDeaths),
       "empty: Battle without data says Nothing yet and the next step, once (no No damage / No deaths lines under it)");
+// B19 (Joost 2026-10-09): an empty short window on Defence stacked three explanations (the blocks line, "Nothing in the last 30 minutes",
+// "Choose a longer window, or All for everything since install"): one calm empty state, its heading and one line, nothing above or under it
+var quietDef = PanelModel.Build(explorer, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastThirtyMinutes, Page = { [Chapter.Battle] = "defense" } });
+var quietDefText = PanelModel.Content(quietDef).Where(b => b.Kind == "empty" || b.Kind == "note").ToList();
+Check(quietDefText.Count == 1 && quietDefText[0].Kind == "empty" && quietDefText[0].Title == "Nothing in the last 30 minutes" && quietDefText[0].Text == PanelModel.NoDaysBlocks &&
+      !PanelModel.AllText(quietDef).Any(t => t.Contains("since install")),
+      "B19: an empty 30 minutes on Defence is one empty state with one line: " + string.Join(" | ", quietDefText.Select(b => b.Title + " / " + b.Text)));
 // carts left the panel (Hall = Overview, Trader, Smelters; integrate-05): the same pattern on the Trader
 var quietTrader = PanelModel.Build(new PanelInput(), new PanelState { Chapter = Chapter.Stores, Page = { [Chapter.Stores] = "trader" } });
 Check(Find(quietTrader, "empty")?.Title == "Nothing yet" && Zoned.Zones(quietTrader).Single().Note == PanelModel.ZoneLine(null) && Find(quietTrader, "empty").Text == null,   // the dimmed ember zone's line says the next step (ZonesTests.cs)
@@ -698,9 +711,20 @@ Check(plated.All(p => PanelModel.PlateOf(p) != null && p.Blocks.Count == 1 && Pa
       plated.Select(p => PanelModel.PlateOf(p).Icon).SequenceEqual(new[] { "title:woodcutter", "title:miner", "ui:chapter-skills", "ui:chapter-battle" }),
       "L plate: Woodcutting, Mining, Skills overview and Battle sit on the plate; its heading row is the page heading with its icon; your own pages carry no line on it");
 var woodPlate = PanelModel.PlateOf(plated[0]);
-Check(woodPlate.Pill == "Woodcutter" && woodPlate.PillIcon == "title:woodcutter" && PanelModel.PlateOf(plated[2]).Pill == null && PanelModel.PlateOf(Show(input, Chapter.Battle, "defense")).Pill == null && Find(Show(input, Chapter.Battle, "defense"), "featband") is Block defBand && defBand.Note == "Wallwarden · Shieldbearer" && defBand.Text == "Titles" && defBand.Icon == "title:wallwarden",
-      "L plate: the page's title badge rides in the heading row's pill; on Battle > Defense (fix4) both its titles are the one strip with its feat, no pill; pages without a title have none");
-Check(PanelModel.Content(plated[0]).Where(b => b.Kind != "plate" && b.Kind != "zone").Select(b => b.Kind).SequenceEqual(new[] { "hero", "composition", "note", "hero", "section", "ranking", "ladders" }) &&
+// Joost in game 0.6.2 (2026-10-09): Woodcutting and Mining showed their skill nowhere. Their heading row holds the window chips, so the page's own
+// skill goes on the plate (PanelUi and the preview draw it there when HeadSkillsOnPlate); a page without windows keeps it in the heading row
+var woodWeek = Show(input, Chapter.Deeds, "woodcutting", st => st.Window = TimeWindow.SevenDays);
+var cookingPage = Show(input, Chapter.Deeds, "cooking");
+Check(plated[0].HasFilters && PanelModel.HeadSkillsOnPlate(plated[0]) && PanelModel.HeadSkillsOnPlate(woodWeek) && PanelModel.HeadSkillsOnPlate(plated[1]) &&
+      PanelModel.HeadSkills(PanelModel.PlateOf(woodWeek)).Any(s => s.Title == "Wood Cutting") &&
+      !cookingPage.HasFilters && PanelModel.HeadSkills(PanelModel.PlateOf(cookingPage)).Any() && !PanelModel.HeadSkillsOnPlate(cookingPage),
+      "skill: a page whose heading row holds the window chips (Woodcutting, Mining, All and 7 days) draws its skill on the plate; Cooking keeps it in the heading row");
+Check(woodPlate.Pill == null && PanelModel.BandTitles(Find(plated[0], "featband")).Select(t => t.Title).SequenceEqual(new[] { "Woodcutter" }) && PanelModel.PlateOf(plated[2]).Pill == null && Find(plated[2], "featband") == null &&
+      PanelModel.PlateOf(Show(input, Chapter.Battle, "defense")).Pill == null && Find(Show(input, Chapter.Battle, "defense", s => s.Window = TimeWindow.SinceInstall), "featband") is Block defBand && defBand.Note == null && defBand.Text == "Titles" &&
+      PanelModel.BandTitles(defBand).Select(t => t.Title + ": " + t.Text).SequenceEqual(new[] { "Wallwarden: 42 defences built, armed or loaded", "Shieldbearer: 28 blocks · 27 parries" }),
+      "L plate (B18): a page's titles ride in the strip at the top of its plate with their reason, never in a pill; on Battle > Defense (All) one strip with its feat; pages without a title have none: " +
+      string.Join(", ", PanelModel.BandTitles(Find(Show(input, Chapter.Battle, "defense", s => s.Window = TimeWindow.SinceInstall), "featband")).Select(t => t.Title + ": " + t.Text)));
+Check(PanelModel.Content(plated[0]).Where(b => b.Kind != "plate" && b.Kind != "zone" && b.Kind != "featband").Select(b => b.Kind).SequenceEqual(new[] { "hero", "composition", "note", "hero", "section", "ranking", "ladders" }) &&
       Find(plated[0], "section").Title == "Axe hits per tree" && Find(Show(input, Chapter.Deeds, "mining"), "section").Title == "Pickaxe hits per rock",   // zones: the axe hits lead the ember zone
       "L under the composition: the hits per tree or rock (the exact counts live in the bar now, K1)");
 Check(Find(Show(edda, Chapter.Deeds, "woodcutting"), "plate")?.Text == "Edda, last shared, 8 Oct 00:05", "L plate: a fellow player's copy says whose it is and when, on the plate");
@@ -812,7 +836,10 @@ fails += DeedsTwinTests.Run(input, edda);   // the Deeds twins: both zones on ev
 fails += FacetTests.Run(input);   // the filter bar and Crafting's filter (test-panel/FacetTests.cs)
 fails += BattleFilterTests.Run();   // Battle's filters: the biome tiles, Damage's Biome and Foe, Foes' Weapon, Damage type and Kin (test-panel/BattleFilterTests.cs)
 fails += BuildingFacetTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // the same bar on Deeds > Building (test-panel/BuildingFacetTests.cs)
+fails += CookingFacetTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // the same bar on Deeds > Cooking (test-panel/CookingFacetTests.cs)
 fails += GatherTests.Run();   // B12: what counts as wood and mining (test-panel/GatherTests.cs)
+fails += UnderOneTests.Run();   // 0.6.5: an amount between 0 and 1 says "under 1", never "0" (test-panel/UnderOneTests.cs)
+fails += ReviewFixTests.Run();   // 0.6.5 review fixes, one test each (test-panel/ReviewFixTests.cs)
 fails += NavTests.Run(input);   // Backspace: back to the page you came from (test-panel/NavTests.cs)
 fails += FeatsTests.Run();   // Feats: the table, noticing, the ledger, the page with its detail area, Known for, the band (test-panel/FeatsTests.cs)
 var textGroup = Sample(); textGroup.PlayerId = 11; textGroup.Fellows = CompanyFellows(now);   // Company with three sharing
@@ -865,11 +892,17 @@ if (dump >= 0 && dump + 1 < args.Length)
     { var dn = fishHeld.DisplayName; fishHeld.DisplayName = k => k == "$animal_fish5" ? "Trollfish" : k == "$animal_fish7" ? "Grouper" : dn?.Invoke(k); }
     if (fishHeld.BaselineAt != null) { fishHeld.BaselineAt.Remove(LocalTotals.StatsKind); fishHeld.BaselineAt.Remove(LocalTotals.PickablesKind); }
     var fishHeldS = Scenario("deeds-fishing-picked", "case: Joost's fishing book in game, 20 hooked, 8 got away, none reeled in, 6 fish picked up another way", fishHeld);
+    // new-history (B17/B19, Joost's first evening with 0.6.2, 9 Oct): the day history began today, so 7 days and 30 days do not work yet, and the
+    // last half hour holds no fight: the greyed chips say their day, the empty Defence says one thing
+    var newHistory = PanelSample.Full(now); newHistory.History.From = PanelModel.LocalToday(newHistory); newHistory.Log = new EventLog();
+    var newHistoryS = Scenario("battle-defense-30min-new", "case: Joost's first evening, the day history began today (7 days and 30 days not yet), no fight in the last half hour", newHistory);
+    scenarios["battle-defense-7days-new"] = scenarios["battle-defense-30min-new"];
     var emptyS = Scenario("battle-empty", "empty: a first evening with Hearthwoven, nothing measured yet", fresh);
     var youngS = Scenario("deeds-young", "young: a character with a few names earned and the rest unsung", young);
     var laterS = Scenario("deeds-farming-later", "install-later: the picked counters were first read two days after the install", installLater);
     var bigS = Scenario("deeds-farming-big", "stress: a long-played character, thousands of crops", DeedsTests.Big(Sample()));
     var layeredS = Scenario("deeds-farming-layered", "case: the live Flax case, the game's planted counter beside every plant counted", DeedsTests.Layered(Sample()));
+    var moddedHallS = Scenario("deeds-building-modded", "case: Joost's modded hammer in game (0.6.2): nineteen tabs with \"Misc\" and \"Misc.\", twenty materials; the bars fold past eight parts", BuildingSample.Modded(PanelSample.Full(now)));
     var cookedS = Scenario("deeds-cooking-layered", "case: dishes taken off a fellow's grill, the game books them to the station's owner", DeedsTests.Cooked(Sample(), edda));
     scenarios["deeds-unsung"] = "young: the unsung names of a young character"; scenarios["company-together-alone"] = "alone: nobody else shares yet";
     scenarios["company-food-alone"] = "alone: nobody else shares yet"; scenarios["sharing-off"] = "sharing off: no fellow players";
@@ -897,6 +930,8 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-deaths-all", world, Battle(TimeWindow.SinceInstall, "deaths"), true),
         ("deeds", world, Page(Chapter.Deeds, null), true),
         ("deeds-cooking", world, Page(Chapter.Deeds, "cooking"), true),
+        ("deeds-cooking-open", world, Page(Chapter.Deeds, "cooking", s => s.OpenFilters.Add(PanelModel.CookFilter)), true),
+        ("deeds-cooking-stamina", world, Page(Chapter.Deeds, "cooking", s => s.Facets[PanelModel.CookFilter + "|boost"] = new List<string> { "stamina" }), true),
         ("deeds-young", youngS, Page(Chapter.Deeds, null), true),
         ("deeds-unsung", youngS, Page(Chapter.Deeds, null, s => s.View["Deeds/overview/view"] = "unsung"), true),
         ("company", world, Page(Chapter.Company, null), true),
@@ -927,6 +962,11 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-defense-7days", world, Battle(TimeWindow.SevenDays, "defense"), true),
         ("battle-defense-today", world, Battle(TimeWindow.Today, "defense"), true),
         ("battle-defense-1h", world, Battle(TimeWindow.LastHour, "defense"), true),
+        ("battle-defense-30min", world, Battle(TimeWindow.LastThirtyMinutes, "defense"), true),
+        ("battle-defense-30min-new", newHistoryS, Battle(TimeWindow.LastThirtyMinutes, "defense"), true),
+        ("battle-defense-7days-new", newHistoryS, Battle(TimeWindow.SevenDays, "defense"), true),   // the greyed 7 days pressed: All, and the one line
+        ("deeds-woodcutting-today", world, Page(Chapter.Deeds, "woodcutting", s => s.Window = TimeWindow.Today), true),
+        ("battle-defense-all", world, Battle(TimeWindow.SinceInstall, "defense"), true),
         ("battle-deaths-7days", world, Battle(TimeWindow.SevenDays, "deaths"), true),
         ("battle-foes-7days", world, Battle(TimeWindow.SevenDays, "foes"), true),
         ("battle-foes-1h", world, Battle(TimeWindow.LastHour, "foes"), true),
@@ -957,6 +997,7 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("deeds-building", world, Page(Chapter.Deeds, "building"), true),
         ("deeds-building-furniture-finewood", world, Page(Chapter.Deeds, "building", s => { s.Facets["Deeds/building/pieces|tab"] = new List<string> { "Furniture" }; s.Facets["Deeds/building/pieces|material"] = new List<string> { "Fine wood" }; }), true),
         ("deeds-building-open", world, Page(Chapter.Deeds, "building", s => s.OpenFilters.Add(PanelModel.BuildFilter)), true),
+        ("deeds-building-modded", moddedHallS, Page(Chapter.Deeds, "building", s => s.OpenFilters.Add(PanelModel.BuildFilter)), true),
         ("deeds-building-focus", world, Page(Chapter.Deeds, "building", s => { s.FilterRow = 1; s.FilterCursor = 2; s.Facets["Deeds/building/pieces|tab"] = new List<string> { "Building", "Stonecutter" }; }), true),
         ("deeds-groundwork", world, Page(Chapter.Deeds, "groundwork"), true),
         ("deeds-crafting", world, Page(Chapter.Deeds, "crafting"), true),

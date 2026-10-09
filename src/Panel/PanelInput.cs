@@ -40,7 +40,7 @@ namespace Hearthwoven.Panel
         // null (or a null answer) = unknown; PanelModel then falls back to the vanilla names it knows or keeps it apart.
         public Func<string, string> ItemKind;               // item token -> "gear" | "food" | "other"
         public Func<string, bool> StationDish;              // item token -> true = a dish a cooking station hands out (grill, iron cooking station, oven, a mod's); false or unknown = made in the crafting window (cauldron, prep table)
-        public Func<string, string> GatherKind;             // item token -> "wood" (dropped by trees and logs) | "mining" (by rocks)
+        public Func<string, string> GatherKind;             // item token -> "wood" (dropped by trees and logs) | "mining" (stone and ore) | PanelModel.PickaxeFinds (other pickaxe drops)
         public Func<string, string> PieceKind;              // piece token -> "built" | "ground" | "planted" | "feast"
         public Func<string, string> ItemColour;             // item token -> "#rrggbb", its icon's own colour (PanelLook.IconColour); null = unknown
 
@@ -87,6 +87,8 @@ namespace Hearthwoven.Panel
         public Func<string, string> ItemType;               // item token -> the game's item type ("OneHandedWeapon"); null = not known
         public Func<string, string> PieceTab;               // piece token -> the hammer tab it sits on ("Furniture"), from Piece.m_category and the piece table's own labels; null = not known (Building's filter)
         public Func<string, string> PieceMaterial;          // piece token -> its main material ("Fine wood"), from the build resources in the game's data (PanelModel.PieceMainMaterial); null = not known
+        public Func<string, string> DishType;               // food token -> "meal" | "grilled" | "baked" | "feast" | "uncooked" | "meadbase", from the game's data (PanelModel.DishTypeOf); null = not known (Cooking's filter: Other)
+        public Func<string, string> DishBoost;              // food token -> "health" | "stamina" | "eitr" | "balanced", its biggest food value (PanelModel.DishBoostOf); null = no food value or not known
         public Func<string, string> ItemToken;              // item prefab ("CookedMeat") -> its token ("$item_cookedmeat"), as fellows record food they ate; null = not known
 
         /// <summary>

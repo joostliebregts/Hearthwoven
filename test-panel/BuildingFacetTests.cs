@@ -56,7 +56,7 @@ static class BuildingFacetTests
         var full = PanelSample.Full(now);
         var all = Show(full);
         var bar = Bar(all);
-        Check(bar != null && bar.Id == PanelModel.BuildFilter && bar.Src == "character" && bar.KeyCap == "Tab" && bar.Items.Count(b => b.Kind == "facet") == 2 && bar.Items.Count(b => b.Kind == "facetbar") == 2,
+        Check(bar != null && bar.Id == PanelModel.BuildFilter && bar.Src == "character" && bar.KeyCap == "K" && bar.Items.Count(b => b.Kind == "facet") == 2 && bar.Items.Count(b => b.Kind == "facetbar") == 2,
               "building filter: a filter bar with a Category row and a Main material row, a bar for each, the filter key as its keycap");
         // fix4 (rubric 4): no part of a linked bar is told by colour alone: each part has a pattern of its own (the first solid), the same on every state of the bar
         foreach (var id in new[] { "tab", "material" })
@@ -102,7 +102,7 @@ static class BuildingFacetTests
         Check(s.Facets.Count == 0, "building click: Clear all takes every chip off");
         var f = new PanelState(); var v = Show(full, f);
         Check(PanelModel.FilterKeyPressed(f, v) && f.FilterRow == 0 && Show(full, f).Keys.Contains("[A/D] Move") && Row(Show(full, f), "tab").Items[f.FilterCursor].Title == "Misc", "building focus: the filter key enters on the first row, the cursor on its first chip");
-        Check(Show(full).Keys.Any(k => k == "[Tab] Filter"), "building focus: the footer says [Tab] Filter on this page");
+        Check(Show(full).Keys.Any(k => k == "[K] Filter"), "building focus: the footer says [K] Filter on this page");
 
         // ---------- where it sits ----------
         var z = Zoned.ZoneOf(all, Bar(all));
@@ -180,6 +180,29 @@ static class BuildingFacetTests
               "crafting: the tiles say \"since install\" themselves, so no key above the grid");
         Check(Chips(Show(onlyTabs), "material") == "Wood=0(0),Stone=0(0),Core wood=0(0),Fine wood=0(0),Bronze=0(0),Iron=0(0),Other=1 576" && Grid(Show(onlyTabs)).StartsWith("Wood Wall=520"),
               "building filter: tabs without materials: every piece is Other for the material, the grid still lists it all");
+
+        // ---------- 0.6.5 (Joost in game: nineteen tabs in near-identical lilac, "Misc" and "Misc." twice, twenty materials in grey-taupe) ----------
+        // CLASS: every linked bar shows at most eight parts, largest first, the rest folded into "Other (n kinds)"; every two parts of a
+        // bar are told apart (CIEDE2000 >= BarApart); near-duplicate options are one chip; the chips still list every option
+        var hall065 = Show(BuildingSample.Modded(PanelSample.Full(now)));
+        var craftBars = PanelModel.FilterOf(PanelModel.Build(PanelSample.Full(now), new PanelState { Chapter = Chapter.Deeds, Page = { [Chapter.Deeds] = "crafting" } })).Items.Where(b => b.Kind == "facetbar").ToList();
+        foreach (var fb in Bar(hall065).Items.Where(b => b.Kind == "facetbar").Concat(craftBars))
+        {
+            var ps = fb.Items; var worst = double.MaxValue; var pair = "";
+            for (int a = 0; a < ps.Count; a++) for (int c = a + 1; c < ps.Count; c++) { var d = PanelModel.ColourDistance(ps[a].Colour, ps[c].Colour); if (d < worst) { worst = d; pair = ps[a].Title + "/" + ps[c].Title; } }
+            Check(ps.Count <= PanelModel.BarMaxParts && worst >= PanelModel.BarApart,
+                  "0.6.5 bars: \"" + fb.Title + "\" shows " + ps.Count + " parts (at most " + PanelModel.BarMaxParts + "), every two apart (closest " + pair + " " + worst.ToString("0.0") + "): " + string.Join(", ", ps.Select(p => p.Title + " " + p.Colour)));
+        }
+        var tabBar = Parts(hall065, "tab"); var tabs065 = Row(hall065, "tab").Items;
+        Check(tabBar.Items.Last().Id == PanelModel.FoldId && tabBar.Items.Last().Title == "Other (" + (tabs065.Count(c => c.Tone != "zero") - (PanelModel.BarMaxParts - 1)) + " kinds)" &&
+              tabs065.Count(c => c.Title.StartsWith("Misc")) == 1 && tabs065.Single(c => c.Title.StartsWith("Misc")).Title == "Misc" && tabs065.Single(c => c.Title == "Misc").Value == "64" && tabs065.Count == 19 &&
+              Parts(hall065, "tab").Items.Select(p => p.Colour).Intersect(Parts(hall065, "material").Items.Where(p => p.Colour != PanelModel.BarOtherColour).Select(p => p.Colour)).Count() == 0,
+              "0.6.5 bars: the tabs fold into \"Other (n kinds)\", \"Misc.\" counts under the game's Misc (38 + 26), the chips still list every tab, and the two bars share no colour but the rest's: " + Chips(hall065, "tab"));
+        // plantings never leak into building: the cultivator's table (it plants and works the ground) makes a pickable without a Plant component (PlantEverything's dandelion) planted too
+        var cultivator = PanelModel.PieceKindsOfTable(new[] { (true, false, false, false), (false, true, false, false), (false, false, false, true) });
+        var hammer = PanelModel.PieceKindsOfTable(new[] { (false, false, false, false), (false, true, false, false), (false, false, true, false) });
+        Check(string.Join(",", cultivator) == "ground,planted,planted" && string.Join(",", hammer) == "built,planted,feast",
+              "0.6.5 building: what the cultivator places is planted (a dandelion or berry bush without a Plant component too), so its seeds are no building material; the hammer's pieces stay built");
         return fails;
     }
 }

@@ -86,8 +86,9 @@ namespace Hearthwoven.Panel
             static void Postfix(EnemyHud __instance) { try { if (PanelUi.Blocking && __instance && __instance.m_hudRoot) __instance.m_hudRoot.SetActive(false); } catch (Exception e) { HookGuard.Fail(e, "PanelHooks.NoCreatureHud.Postfix"); } }
         }
 
-        // Tab is the filter key (Panel.FilterKey) and also the game's inventory key: while the panel is open, the press of the filter key
-        // does not also open the inventory (which would close the panel: PanelUi.Update). Only then: with the panel shut, or on any other
+        // Tab is the game's inventory key and closes the open book (PanelUi.Update); the filter key (K by default) is a second key for the
+        // filters. While the panel is open, a press of either does not also open the inventory (the book would close and the inventory
+        // would open on one press). Only then: with the panel shut, or on any other
         // key or button, InventoryGui.Show runs as always; a chest (Show with a container) is never touched.
         [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Show))]
         static class FilterKeyNotInventory

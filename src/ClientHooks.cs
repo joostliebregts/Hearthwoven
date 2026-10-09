@@ -174,7 +174,8 @@ namespace Hearthwoven
             {
                 if (__instance == null || __state < 0 || Player.m_localPlayer == null || Game.instance == null) return;
                 var you = Game.instance.GetPlayerProfile()?.GetPlayerID() ?? 0L;
-                SessionEvents.CountPlanting(Plugin.Events.Planted, __instance.m_name, __instance.GetComponent<Plant>() != null, __state, __instance.GetCreator(), you);
+                // a plant, or anything the cultivator places (PlantEverything's bushes and pickables have no Plant component; GameData knows them as planted)
+                SessionEvents.CountPlanting(Plugin.Events.Planted, __instance.m_name, __instance.GetComponent<Plant>() != null || Panel.GameData.PieceKind(__instance.m_name) == "planted", __state, __instance.GetCreator(), you);
             });
         }
 

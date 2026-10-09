@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
@@ -12,7 +13,9 @@ namespace Hearthwoven.Panel
     /// - items: the item type (the same switch the game uses for CraftWeapon/CraftFood..., PanelModel.ItemKindOf);
     /// - gathering: what felled logs split into is wood, what a pickaxe-only rock, ore vein or pile drops is mining
     ///   (PanelModel.GatherKindOf); what any smelter, kiln or refinery makes (Coal, Iron, ...) is never gathered, even when
-    ///   some drop table also holds it (B12). The standing tree's own drops are left out: they are resin, cones and seeds,
+    ///   some drop table also holds it (B12). A pickaxe drop a creature drops too (Leather Scraps: boars and piles) is not
+    ///   mining, and one no smelter takes in (Withered Bone, Chitin) is a find of its own (0.6.5, PanelModel.GatheredItemKind).
+    ///   The standing tree's own drops are left out: they are resin, cones and seeds,
     ///   not wood. PanelModel checks the vanilla names first;
     /// - pieces: TerrainOp/TerrainModifier = groundwork, Plant = planted, Feast = feast, the rest built;
     /// - piece categories (B16): the hammer tab's label from the piece tables, else the enum's name, else, for a mod's category
@@ -29,6 +32,8 @@ namespace Hearthwoven.Panel
         static readonly Dictionary<string, string> crops = new Dictionary<string, string>(), types = new Dictionary<string, string>();   // Deeds: Farming, Crafting
         static readonly Dictionary<string, string> tokens = new Dictionary<string, string>();   // Deeds: Cooking (item prefab -> token)
         static readonly HashSet<string> stationDishes = new HashSet<string>();   // Deeds: Cooking (what cooking stations hand out, by item token)
+        static readonly HashSet<string> grillDishes = new HashSet<string>(), ovenDishes = new HashSet<string>(), stationInputs = new HashSet<string>(), fermenterInputs = new HashSet<string>(), feastItems = new HashSet<string>();   // Deeds: Cooking's filter (Type)
+        static readonly Dictionary<string, string> boosts = new Dictionary<string, string>();   // Deeds: Cooking's filter (Main boost: item token -> its biggest food value)
         static readonly Dictionary<string, string> materials = new Dictionary<string, string>();   // Deeds: Crafting (item token -> main material)
         static readonly Dictionary<string, string> pieceMats = new Dictionary<string, string>();   // Deeds: Building (piece token -> main material)
         static readonly Dictionary<string, int> pieceCats = new Dictionary<string, int>();   // Deeds: Building (piece token -> Piece.m_category as its number)
@@ -48,6 +53,16 @@ namespace Hearthwoven.Panel
         public static string ItemType(string token) { Ensure(); return token != null && types.TryGetValue(token, out var k) ? k : null; }
         /// <summary>True when a cooking station (grill, iron cooking station, oven, any mod's CookingStation) hands this dish out: the game books it as CraftGrill, to whoever takes it off. False = made in the crafting window, or not known.</summary>
         public static bool StationDish(string token) { Ensure(); return token != null && stationDishes.Contains(token); }
+        /// <summary>A food's type for Cooking's filter (PanelModel.DishTypeOf): set out as a feast, handed out by a grill or an oven (a
+        /// cooking station that burns fuel), put onto a cooking station, taken by a fermenter, or a meal with food value; null = not known.</summary>
+        public static string DishType(string token)
+        {
+            Ensure();
+            if (token == null || !items.ContainsKey(token)) return null;
+            return PanelModel.DishTypeOf(feastItems.Contains(token), grillDishes.Contains(token), ovenDishes.Contains(token), stationInputs.Contains(token), fermenterInputs.Contains(token), boosts.ContainsKey(token));
+        }
+        /// <summary>A food's biggest food value ("health", "stamina", "eitr", "balanced": PanelModel.DishBoostOf); null = no food value or not known.</summary>
+        public static string DishBoost(string token) { Ensure(); return token != null && boosts.TryGetValue(token, out var k) ? k : null; }
         /// <summary>An item's main material from its recipe ("Bronze"): the ingredient that best marks the tier (PanelModel.MainMaterial); null = no recipe or no ingredient that marks a tier.</summary>
         public static string MainMaterial(string token) { Ensure(); return token != null && materials.TryGetValue(token, out var k) ? k : null; }
         /// <summary>The hammer tab a piece sits on ("Furniture"): the label its piece table gives that category, else the category's own name, else the name a mod gave it (B16); null = not known (Piece.m_category), counted as "Other".</summary>
@@ -166,13 +181,15 @@ namespace Hearthwoven.Panel
             try
             {
                 var pieceObjs = new Dictionary<string, Piece>();   // the first Piece of each name, for its build resources (judged once the smelters are known)
-                void Piece(GameObject go)
+                void Piece(GameObject go, string tableKind = null)
                 {
                     var p = go ? go.GetComponent<Piece>() : null;
                     if (!p || string.IsNullOrEmpty(p.m_name)) return;
                     if (!pieceCats.ContainsKey(p.m_name)) pieceCats[p.m_name] = (int)p.m_category;   // the number: a mod's category has no enum name (B16, CategoryName)
                     if (!pieceObjs.ContainsKey(p.m_name)) pieceObjs[p.m_name] = p;
-                    var kind = PanelModel.PieceKindOf(go.GetComponent<TerrainOp>() || go.GetComponent<TerrainModifier>(), go.GetComponent<Plant>(), go.GetComponent<Feast>());
+                    if (go.GetComponent<Feast>() && p.m_resources != null)   // a feast is set out from its feast item (Cooking's filter: Feasts)
+                        foreach (var req in p.m_resources) { var food = req != null && req.m_resItem ? req.m_resItem.m_itemData?.m_shared?.m_name : null; if (!string.IsNullOrEmpty(food)) feastItems.Add(food); }
+                    var kind = tableKind ?? PanelModel.PieceKindOf(go.GetComponent<TerrainOp>() || go.GetComponent<TerrainModifier>(), go.GetComponent<Plant>(), go.GetComponent<Feast>());
                     if (!pieces.ContainsKey(p.m_name) || pieces[p.m_name] == "built") pieces[p.m_name] = kind;
                     if (p.m_icon && !pieceIcons.ContainsKey(p.m_name)) pieceIcons[p.m_name] = p.m_icon;
                     var plant = go.GetComponent<Plant>();
@@ -190,11 +207,20 @@ namespace Hearthwoven.Panel
                     if (!items.ContainsKey(shared.m_name)) items[shared.m_name] = PanelModel.ItemKindOf(shared.m_itemType.ToString(), shared.m_name);
                     if (!types.ContainsKey(shared.m_name)) types[shared.m_name] = shared.m_itemType.ToString();
                     if (!tokens.ContainsKey(go.name)) tokens[go.name] = shared.m_name;
+                    if (!boosts.ContainsKey(shared.m_name)) { var boost = PanelModel.DishBoostOf(shared.m_food, shared.m_foodStamina, shared.m_foodEitr); if (boost != null) boosts[shared.m_name] = boost; }
                     LearnTabs(shared.m_buildPieces);
-                    if (shared.m_buildPieces?.m_pieces != null) foreach (var p in shared.m_buildPieces.m_pieces) Piece(p);   // hammer, hoe, cultivator, feast tray, mods' tools
+                    var table = shared.m_buildPieces?.m_pieces;   // hammer, hoe, cultivator, feast tray, mods' tools
+                    if (table != null)
+                    {
+                        // the cultivator's pieces are plantings, a pickable without a Plant component too (PanelModel.PieceKindsOfTable, 0.6.5)
+                        var kinds = PanelModel.PieceKindsOfTable(table.Select(g => (g != null && (g.GetComponent<TerrainOp>() != null || g.GetComponent<TerrainModifier>() != null), g != null && g.GetComponent<Plant>() != null, g != null && g.GetComponent<Feast>() != null, g != null && g.GetComponent<Pickable>() != null)).ToList());
+                        for (int k = 0; k < table.Count; k++) Piece(table[k], kinds[k]);
+                    }
                 }
                 var drops = new List<KeyValuePair<DropTable, string>>();
                 var refined = new HashSet<string>();   // what smelters, kilns and refineries make
+                var smelted = new HashSet<string>();   // what they take in: ore (0.6.5)
+                var creature = new HashSet<string>();   // what any creature drops (CharacterDrop): a pickup of it can be a kill's loot (0.6.5)
                 void Gather(DropTable table, string component, HitData.DamageModifiers mods)
                 {
                     var kind = PanelModel.GatherKindOf(component, mods.m_chop.ToString(), mods.m_pickaxe.ToString());
@@ -211,17 +237,32 @@ namespace Hearthwoven.Panel
                     if (destructible && dropper) Gather(dropper.m_dropWhenDestroyed, "Destructible", destructible.m_damages);
                     var cooker = go.GetComponent<CookingStation>();
                     if (cooker && cooker.m_conversion != null)
-                        foreach (var c in cooker.m_conversion) { var dish = c?.m_to?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(dish)) stationDishes.Add(dish); }
+                        foreach (var c in cooker.m_conversion)
+                        {
+                            var dish = c?.m_to?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(dish)) { stationDishes.Add(dish); (cooker.m_useFuel ? ovenDishes : grillDishes).Add(dish); }
+                            var raw = c?.m_from?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(raw)) stationInputs.Add(raw);
+                        }
+                    var fermenter = go.GetComponent<Fermenter>();
+                    if (fermenter && fermenter.m_conversion != null)
+                        foreach (var c in fermenter.m_conversion) { var basis = c?.m_from?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(basis)) fermenterInputs.Add(basis); }
                     var smelter = go.GetComponent<Smelter>();
                     if (smelter && smelter.m_conversion != null)
-                        foreach (var c in smelter.m_conversion) { var made = c?.m_to?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(made)) refined.Add(made); }
+                        foreach (var c in smelter.m_conversion)
+                        {
+                            var made = c?.m_to?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(made)) refined.Add(made);
+                            var taken = c?.m_from?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(taken)) smelted.Add(taken);
+                        }
+                    var loot = go.GetComponent<CharacterDrop>();
+                    if (loot && loot.m_drops != null)
+                        foreach (var dr in loot.m_drops) { var n = dr?.m_prefab ? dr.m_prefab.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_name : null; if (!string.IsNullOrEmpty(n)) creature.Add(n); }
                 }
                 foreach (var d in drops)
                     foreach (var dd in d.Key?.m_drops ?? new List<DropTable.DropData>())
                     {
                         var shared = dd.m_item ? dd.m_item.GetComponent<ItemDrop>()?.m_itemData?.m_shared : null;
-                        if (shared == null || string.IsNullOrEmpty(shared.m_name) || gather.ContainsKey(shared.m_name) || refined.Contains(shared.m_name)) continue;
-                        gather[shared.m_name] = d.Value;
+                        if (shared == null || string.IsNullOrEmpty(shared.m_name) || gather.ContainsKey(shared.m_name)) continue;
+                        var kind = PanelModel.GatheredItemKind(d.Value, refined.Contains(shared.m_name), creature.Contains(shared.m_name), smelted.Contains(shared.m_name));
+                        if (kind != null) gather[shared.m_name] = kind;
                     }
                 // main material: every recipe's ingredients (ObjectDB.m_recipes), judged by PanelModel.MainMaterial; a bar is an ingredient some smelter makes
                 if (ObjectDB.instance.m_recipes != null)

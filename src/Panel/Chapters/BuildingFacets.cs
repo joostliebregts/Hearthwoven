@@ -42,21 +42,17 @@ namespace Hearthwoven.Panel
         // resources that never mark a tier: fasteners, fuel, glue, trim, and what monsters drop (a Wood Gate with iron nails is still wood)
         static readonly string[] PieceMarkless = { "nails", "bolt", "coal", "resin", "flint", "feather", "leatherscraps", "hide", "pelt", "chain", "core", "eye", "bone", "thistle", "honey", "entrails", "ymirremains" };
 
-        static readonly Dictionary<string, string> PieceTabColours = new Dictionary<string, string>
-        {
-            ["Misc"] = "#6fa39b", ["Crafting"] = "#a8707a", ["Building"] = "#8c6e9a", ["Stonecutter"] = "#7d9a6a", ["Furniture"] = "#5f8fbf", ["Other"] = "#6f6a60",
-        };
-        const string ModTabColour = "#a89fb8";
-        static string PieceTabColour(string t) => PieceTabColours.TryGetValue(t ?? "", out var c) ? c : ModTabColour;
+        // the tabs' bar has no colours of its own: its parts take the bars' palette by size (FacetModel.BarColours), so nineteen tabs
+        // of a modded hammer never share one fallback colour (0.6.5, Joost in game); the eighth and smaller fold into "Other (n kinds)"
 
-        // each material's own colour in the linked bar; the tabs' bar shares none of these (no colour means two things on the page)
+        // each material's own colour in the linked bar, kept where it stays apart from the larger parts (FacetModel.BarColours);
+        // wood brown, dark core wood, stone grey, bronze and iron are tuned to be told apart from each other (CIEDE2000 above 20)
         static readonly Dictionary<string, string> PieceMaterialColours = new Dictionary<string, string>
         {
-            ["Wood"] = "#8a5a34", ["Stone"] = "#a39d8e", ["Core wood"] = "#5e3c22", ["Fine wood"] = "#c9a15f", ["Ancient bark"] = "#7a6a3a", ["Bronze"] = "#b87a3a", ["Iron"] = "#7d8793",
+            ["Wood"] = "#8a5a34", ["Stone"] = "#b3ad9f", ["Core wood"] = "#3f2414", ["Fine wood"] = "#c9a15f", ["Ancient bark"] = "#7a6a3a", ["Bronze"] = "#cc8a2a", ["Iron"] = "#647488",
             ["Silver"] = "#d6dde4", ["Black metal"] = "#2e3136", ["Black marble"] = "#4a4f5c", ["Yggdrasil wood"] = "#b08f5a", ["Grausten"] = "#8a8f8c", ["Ashwood"] = "#4a403a", ["Flametal"] = "#c2552a",
-            [MaterialOther] = "#6f6a60",
         };
-        static string PieceMaterialColour(string m) => PieceMaterialColours.TryGetValue(m ?? "", out var c) ? c : ModMaterialColour;
+        static string PieceMaterialColour(string m) => PieceMaterialColours.TryGetValue(m ?? "", out var c) ? c : null;   // a mod's material: the bars' palette
 
         /// <summary>The game's name for a piece category when its piece table gives no label (GameData): the Building tab is two categories in the game's enum.</summary>
         public static string TabNameOf(string category)
@@ -207,7 +203,7 @@ namespace Hearthwoven.Panel
             if (items.Any(i => i.Values["material"] == MaterialOther)) materials.Add(MaterialOther);
             var defs = new List<FacetDef>
             {
-                new FacetDef { Id = "tab", Title = "Category", Sub = "the hammer's tab", BarTitle = "By category", Options = tabs.Select(t => new FacetOption { Id = t, Label = t, Colour = PieceTabColour(t) }).ToList() },
+                new FacetDef { Id = "tab", Title = "Category", Sub = "the hammer's tab", BarTitle = "By category", Options = tabs.Select(t => new FacetOption { Id = t, Label = t }).ToList() },
                 new FacetDef { Id = "material", Title = "Main material", Sub = "by main material", BarTitle = "By main material",
                                Options = materials.Select(m => new FacetOption { Id = m, Label = m, Colour = PieceMaterialColour(m) }).ToList() },
             };

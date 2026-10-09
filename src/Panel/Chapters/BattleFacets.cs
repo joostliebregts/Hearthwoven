@@ -70,7 +70,7 @@ namespace Hearthwoven.Panel
             return new RowFilter { Bar = res.Bar, Rows = rows, Total = total, Narrowed = defs.Any(d => Chosen(state, filter, d.Id).Count > 0) };
         }
 
-        static string DamageSaid(double passed, double total) => (passed < total ? N(passed) + " of " + N(total) : N(total)) + " damage dealt";
+        static string DamageSaid(double passed, double total) => (passed < total ? NAtLeast(passed) + " of " + NAtLeast(total) : NAtLeast(total)) + " damage dealt";
 
         // ---------- Overview: the biome tiles are the filter ----------
 

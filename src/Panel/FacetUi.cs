@@ -130,7 +130,7 @@ namespace Hearthwoven.Panel
             if (click != null) cb.gameObject.AddComponent<Press>().Act = click;
         }
 
-        // the header, the same line collapsed or open: "Filter [Tab]", the tokens (or "all"), the result line, Clear all, Show/Hide filters.
+        // the header, the same line collapsed or open: "Filter [K]", the tokens (or "all"), the result line, Clear all, Show/Hide filters.
         // The name, the cap and the button open and close the rows with a click; the tokens unchoose their chip.
         static void FilterHeader(RectTransform box, Block filter, Block applied, Func<string, Action> link)
         {
@@ -222,7 +222,7 @@ namespace Hearthwoven.Panel
             h.padding = new RectOffset(1, 1, 1, 1); h.spacing = 0; h.childControlWidth = h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = true;
             foreach (var p in parts.Where(x => x.Fraction > 0))
             {
-                var click = link?.Invoke(PanelModel.FacetLink(filter.Id, bar.Id, p.Id));
+                var click = p.Id == PanelModel.FoldId ? null : link?.Invoke(PanelModel.FacetLink(filter.Id, bar.Id, p.Id));   // the folded part: its kinds are chosen by their chips
                 var seg = Img(inner, "Part", null, Hex(p.Colour, PanelLook.Accent), raycast: click != null);
                 var le = seg.gameObject.AddComponent<LayoutElement>(); le.flexibleWidth = p.Fraction; le.minWidth = 3; le.preferredWidth = 0;
                 PartPattern(seg.rectTransform, p);   // a mark of its own on the colour, so the part is told apart without the hue
@@ -230,7 +230,7 @@ namespace Hearthwoven.Panel
                 if (p.Selected) { Edge(seg.rectTransform, PanelLook.Gold); Ring(seg.rectTransform, PanelLook.Gold); }
                 if (click != null) seg.gameObject.AddComponent<Press>().Act = click;
             }
-            // the legend: every part, a swatch and its name; a part without any stays, quiet
+            // the legend: every part of the bar (at most PanelModel.BarMaxParts, the rest as "Other (n kinds)"), a swatch and its name; a part with nothing under the other rows' choice stays, quiet
             var lines = VStack(box, 1); lines.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
             RectTransform cur = null; float used = 0;
             foreach (var p in parts)

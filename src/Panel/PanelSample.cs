@@ -34,6 +34,7 @@ namespace Hearthwoven.Panel
         {
             ["$item_wood"] = "Wood", ["$item_finewood"] = "Finewood", ["$item_roundlog"] = "Corewood", ["$item_elderbark"] = "Ancient Bark",
             ["$item_stone"] = "Stone", ["$item_copperore"] = "Copper Ore", ["$item_tinore"] = "Tin Ore", ["$item_silverore"] = "Silver Ore",
+            ["$item_witheredbone"] = "Withered Bone", ["$item_chitin"] = "Chitin", ["$item_leatherscraps"] = "Leather Scraps",
             ["$item_raspberries"] = "Raspberries", ["$item_resin"] = "Resin", ["$item_bread"] = "Bread", ["$item_fishwraps"] = "Fish Wraps",
             ["$item_carrotsoup"] = "Carrot Soup", ["$item_sword_iron"] = "Iron Sword", ["$item_shield_wood"] = "Wood Shield", ["$item_axe_bronze"] = "Bronze Axe",
             ["$item_bow"] = "Crude Bow", ["$item_helmet_leather"] = "Leather Helmet", ["$item_hammer"] = "Hammer", ["$item_hoe"] = "Hoe", ["$item_cultivator"] = "Cultivator",

@@ -42,6 +42,6 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>A fresh history when the panel opens: Backspace never leads into an earlier opening.</summary>
-        public static void ForgetHistory(PanelState s) { s.History.Clear(); s.Here = null; s.GoingBack = false; }
+        public static void ForgetHistory(PanelState s) { s.History.Clear(); s.Here = null; s.GoingBack = false; EndWait(s); }   // and a greyed window pressed last time is let go (B17)
     }
 }

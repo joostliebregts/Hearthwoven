@@ -16,6 +16,13 @@ namespace Hearthwoven.Panel
         public Chapter Chapter = Chapter.Deeds;
         public readonly Dictionary<Chapter, string> Page = new Dictionary<Chapter, string>();   // chosen left-list entry per chapter
         public TimeWindow Window = TimeWindow.Session;      // the chosen time window of every page that has window chips (WindowsOf, HISTORY-06.md)
+        /// <summary>A greyed day window that was pressed (B17) holds only on the page where it was pressed: WaitAt is that page, LastWorking the
+        /// last chosen window that was open, and leaving the page (or closing the book) returns Window to it (PanelModel.SettleWait). The same
+        /// for Together's window switch: WaitView is its id, LastWorkingView its last open choice per switch.</summary>
+        public TimeWindow LastWorking = TimeWindow.Session;
+        public PanelPlace WaitAt;
+        public string WaitView;
+        public readonly Dictionary<string, string> LastWorkingView = new Dictionary<string, string>();
         public string Player = "";                          // "" = yourself; otherwise a fellow player's name
         public bool TheyReceived = true;                    // Company: true = "They enjoyed your food", false = "You enjoyed their food"
         public bool ShowAbout;                              // the one "About Hearthwoven" page is open (InfoKey)
@@ -25,7 +32,7 @@ namespace Hearthwoven.Panel
         /// <summary>The chosen view of each view switch, by the switch's Id ("Skills/overview/view"), so every page keeps its
         /// own choice while the panel lives (chapter and page choices are kept the same way).</summary>
         public readonly Dictionary<string, string> View = new Dictionary<string, string>();
-        public string FilterKey = "Tab";                    // enters and leaves the filter focus on a page with a filter bar (FacetModel.cs); Tab: Panel.FilterKey (G clashed with ZenDragon's radial menu)
+        public string FilterKey = "K";                      // enters and leaves the filter focus on a page with a filter bar (FacetModel.cs); K: Panel.FilterKey (G clashed with ZenDragon's radial menu; Tab closes the book)
         /// <summary>The chips chosen in each facet row of a filter bar, by "filter id|facet id", in the order they were chosen
         /// (FacetModel.cs). Every page keeps its own while the panel lives.</summary>
         public readonly Dictionary<string, List<string>> Facets = new Dictionary<string, List<string>>();
@@ -89,6 +96,9 @@ namespace Hearthwoven.Panel
         public float Level;
         /// <summary>ladder, ladders: progress to the next level, 0..1; -1 = not known (draw no progress then).</summary>
         public float Progress = -1;
+        /// <summary>view (Together's window chips): greyed (Tone OffTone), but a day window of your own book that works later, so pressing it
+        /// chooses it and one line says when (B17, WaitLine); the keys still skip it.</summary>
+        public bool Waits;
         /// <summary>ladder, ladders: practised since install on this PC (the soft glow at the climber).</summary>
         public bool Practised;
         /// <summary>Draw the small "since install" label here (Joost 2026-10-08: no icons beside numbers; your character's and
@@ -112,7 +122,7 @@ namespace Hearthwoven.Panel
         public bool FadedTag;
     }
 
-    public class Choice { public string Id, Label, Icon; public bool Selected, Disabled; public bool Dot; /* a gold dot: something new to see (earned feats not opened yet) */ }   // Disabled: drawn dim, does nothing (the biome chip where a page has no biomes)
+    public class Choice { public string Id, Label, Icon; public bool Selected, Disabled; public bool Dot; /* a gold dot: something new to see (earned feats not opened yet) */ public bool Waits; /* a greyed day window of your own book that works later: pressable, its WaitLine says when (B17) */ }   // Disabled: drawn dim, does nothing (the biome chip where a page has no biomes)
 
     public class PanelView
     {
@@ -255,6 +265,24 @@ namespace Hearthwoven.Panel
         public static string PieceKindOf(bool terrainOp, bool plant, bool feast) => terrainOp ? "ground" : plant ? "planted" : feast ? "feast" : "built";
 
         /// <summary>
+        /// The kinds of one tool's pieces (its piece table, in order). A table that both plants (a seed or sapling with a Plant
+        /// component) and works the ground (a TerrainOp) is the cultivator, or a mod's tool like it: everything on it is planted or
+        /// groundwork, also what has no Plant component. 0.6.5, Joost's book: PlantEverything puts berry bushes, dandelions,
+        /// mushrooms, small trees and debris on the cultivator as pickables without one, so they stood under pieces built and
+        /// their seeds and flowers ("Beech Seeds", "Dandelion") as building materials. Any other table: PieceKindOf per piece.
+        /// Review 0.6.5: one Plant and one TerrainOp alone made a mod's all-in-one tool "the cultivator" and every building on it
+        /// planted; the table now also needs most of its other pieces (not groundwork, not a feast) to be plantings or pickables.
+        /// </summary>
+        public static string[] PieceKindsOfTable(IList<(bool terrainOp, bool plant, bool feast, bool pickable)> pieces)
+        {
+            var list = pieces ?? new List<(bool terrainOp, bool plant, bool feast, bool pickable)>();
+            var rest = list.Where(p => !p.terrainOp && !p.feast).ToList();
+            var growing = rest.Count(p => p.plant || p.pickable);
+            var planting = list.Any(p => p.plant) && list.Any(p => p.terrainOp) && growing > rest.Count - growing;
+            return list.Select(p => PieceKindOf(p.terrainOp, p.plant || (planting && !p.feast), p.feast)).ToArray();
+        }
+
+        /// <summary>
         /// What a prefab's drops count as (B12, Joost's 0.5 test: Coal and Iron showed up as mined). "wood": what a felled log
         /// (TreeLog) splits into. "mining": what a rock, ore vein or pile drops (MineRock, MineRock5, or a Destructible with
         /// drops) that a pickaxe works on (its damage modifiers leave the pickaxe effective; for a Destructible the axe must have
@@ -268,6 +296,27 @@ namespace Hearthwoven.Panel
             if ((component == "MineRock" || component == "MineRock5") && !none(pickaxe)) return "mining";   // rocks and veins: the pickaxe works on them
             if (component == "Destructible" && !none(pickaxe) && none(chop)) return "mining";   // a pile only a pickaxe breaks (a crate breaks to anything)
             return null;
+        }
+
+        /// <summary>What a pickaxe digs up that is neither stone nor ore (Withered Bone from muddy scrap piles, Chitin from the
+        /// Leviathan): its own legend under the Mining bar, never in the stone and ore total (0.6.5, seen on a real character).</summary>
+        public const string PickaxeFinds = "pickaxe-finds";
+        /// <summary>The heading of that legend.</summary>
+        public const string PickaxeFindsTitle = "Other pickaxe finds";
+
+        /// <summary>
+        /// An item's gathered kind from the game data (GameData): <paramref name="tableKind"/> is GatherKindOf of the first table
+        /// that drops it. A smelter's output is never gathered (B12). A pickaxe drop that a creature drops too is left out
+        /// (0.6.5: a real Mining bar held 123 Leather Scraps beside 5 Scrap Iron; boars drop the scraps, and the pickup count
+        /// says only the item, never where it lay, so no share of it can be called mining). What a smelter takes in is ore
+        /// ("mining"); any other pickaxe drop is a find of its own (PickaxeFinds). The vanilla lists in GatherKind come first.
+        /// </summary>
+        public static string GatheredItemKind(string tableKind, bool refined, bool creatureDrops, bool smelted)
+        {
+            if (refined || tableKind == null) return null;
+            if (tableKind != "mining") return tableKind;
+            if (creatureDrops) return null;
+            return smelted ? "mining" : PickaxeFinds;
         }
 
         // vanilla tokens, used only when the game data gives no answer (PanelUi derives these from drop tables and components)
@@ -358,10 +407,29 @@ namespace Hearthwoven.Panel
             var faded = parts.Values.Any(v => v.before > 0);
             var b = Composition(title, parts.ToDictionary(kv => kv.Key, kv => kv.Value.before + kv.Value.exact), label, look, faded ? SrcCharacter : SrcPc, tint: ItemTint(input));
             if (b == null) return null;
-            foreach (var part in b.Items) { var v = parts[part.Id]; part.Fraction2 = (float)(v.before / (v.before + v.exact)); }
+            foreach (var part in b.Items)
+            {
+                var ids = part.Id == FoldId ? part.Items.Select(x => x.Id).ToList() : new List<string> { part.Id };   // the folded part: its kinds together
+                double before = ids.Sum(id => parts[id].before), all = ids.Sum(id => parts[id].before + parts[id].exact);
+                part.Fraction2 = (float)(before / all);
+            }
             if (faded) b.Note = FadedKey;   // the chip at the end of the legend
             if (faded) b.Text = PickupNote(input, kind);   // the pickup gap (SOURCES.md), beside the total
             if (!input.IsSelf && b.Items.Count == 1) b.Tone = "single";   // one kind at 100 % is no bar: the legend alone (a fellow's copy)
+            return b;
+        }
+
+        /// <summary>
+        /// What the pickaxe dug up besides stone and ore (PickaxeFinds: Withered Bone from muddy scrap piles, Chitin from the
+        /// Leviathan), under the Mining bar as a legend of its own with its own total: the stone and ore total above stays
+        /// what its label says, and the finds are still there to see (0.6.5). No bar: two or three small counts on a bar of
+        /// their own would read as the same scale as the stone. Null when there is nothing.
+        /// </summary>
+        static Block PickaxeFindsKey(PanelInput input, Func<string, string> named)
+        {
+            var b = BroughtInBar(PickaxeFindsTitle, input, PickaxeFinds, named, k => (null, null));
+            if (b == null) return null;
+            b.Tone = "single"; b.Note = null; b.Text = null;   // the legend alone; the bar above carries the faded key and the pickup line
             return b;
         }
 
@@ -618,6 +686,8 @@ namespace Hearthwoven.Panel
         }
         static readonly NumberFormatInfo Grouped = new NumberFormatInfo { NumberGroupSeparator = ThousandsGap, NumberDecimalSeparator = ".", NumberGroupSizes = new[] { 3 } };
         static string N(double v) => Number(v);
+        // a real amount between 0 and 1 (0.4 damage) rounds to "0", which reads as nothing happened: say so instead
+        public static string NAtLeast(double v) => v > 0 && v < 1 ? "under 1" : N(v);
         static string Km(double meters) { var km = meters / 1000.0; return (km < 100 ? km.ToString("0.0", Inv) : Number(km)) + " km"; }
         static string Plural(double n, string one, string many) => N(n) + " " + (Math.Round(n) == 1 ? one : many);
         static string About(double seconds) => seconds < 90 ? "about " + N(seconds) + " seconds" : "about " + N(seconds / 60) + " minutes";
@@ -719,10 +789,11 @@ namespace Hearthwoven.Panel
             new SagaTitle("mender", "Mender", "Repairs that keep the hall standing", Chapter.Deeds, "building",
                 new SagaLine(Measured, i => M(i, e => e.Repairs), v => Plural(v, "repair with the hammer", "repairs with the hammer"))),
             new SagaTitle("wallwarden", "Wallwarden", "Defences built, armed and loaded", Chapter.Battle, "defense",
-                new SagaLine(Profile, i => C(i, "BuildClusterDefense") + C(i, "TrapArmed") + C(i, "TurretAmmoAdded"), v => N(v) + " defences built, traps armed or turrets loaded")),
+                new SagaLine(Profile, i => C(i, "BuildClusterDefense") + C(i, "TrapArmed") + C(i, "TurretAmmoAdded"), v => N(v) + " defences built, armed or loaded")),   // short: it is also the title's reason in the strip on its page (B18)
             new SagaTitle("defender", "Shieldbearer", "Blocks and well-timed parries", Chapter.Battle, "defense",
-                new SagaLine(Measured, i => i.Events?.Blocks ?? 0, v => Plural(v, "block", "blocks")),
-                new SagaLine(Measured, i => i.Events?.Parries ?? 0, v => Plural(v, "parry", "parries"))),
+                // one reason with the Defence tile's split (review 0.6.5: the reason said the game's blocks, which include the parries, beside a
+                // tile that says them apart): "196 blocks · 58 parries", a zero part left out
+                new SagaLine(Measured, i => i.Events?.Blocks ?? 0, (v, i) => GuardSplit(i.Events.Blocks, i.Events.Parries))),
             new SagaTitle("fighter", "Battlehand", "Foes fought and felled", Chapter.Battle, "foes",
                 new SagaLine(Profile, i => C(i, "EnemyKills"), v => Plural(v, "foe defeated", "foes defeated"))),
             new SagaTitle("bossbane", "Bossbane", "Forsaken faced and felled", Chapter.Battle, "foes",
@@ -748,6 +819,17 @@ namespace Hearthwoven.Panel
         {
             var built = Placed(i, "built").Values.Sum();
             return built > 0 ? built : C(i, "BuiltPiecesNoDebt") > 0 ? C(i, "BuiltPiecesNoDebt") : C(i, "BuiltPieces");
+        }
+
+        /// <summary>Blocks and parries as Defence's tile says them: the game's held blocks include the parries, so "blocks" are the ones that
+        /// were not parries ("196 blocks · 58 parries"); a zero part is left out.</summary>
+        public static string GuardSplit(double blocks, double parries)
+        {
+            var plain = Math.Max(0, blocks - parries);
+            var parts = new List<string>();
+            if (plain > 0) parts.Add(Plural(plain, "block", "blocks"));
+            if (parries > 0) parts.Add(Plural(parries, "parry", "parries"));
+            return string.Join(" · ", parts.ToArray());
         }
 
         /// <summary>Titles with evidence, in table order (no ranking). A zero line is left out, never shown as "0".</summary>
@@ -850,11 +932,6 @@ namespace Hearthwoven.Panel
             // fix4: a fellow's Battle book holds their last shared session (and, when they share it, since install): the other windows
             // (10 min .. 3 h) measure against your clock, not theirs, so they are not offered and the book reads the window it can show
             var asked = state;
-            if (state.Chapter == Chapter.Battle && !state.ShowAbout && !input.IsSelf)
-            {
-                var wanted = state.Window == TimeWindow.SinceInstall && input.SharedSinceInstall ? TimeWindow.SinceInstall : TimeWindow.Session;
-                if (wanted != state.Window) { state = (PanelState)CopyOf.Invoke(state, null); state.Window = wanted; }
-            }
             var view = new PanelView { Active = state.Chapter, Owner = string.IsNullOrEmpty(input.PlayerName) ? "You" : input.PlayerName, ShowAbout = state.ShowAbout };
             foreach (var c in ChapterRow) view.Chapters.Add(new Choice { Id = c.id.ToString(), Label = c.label, Icon = c.icon, Selected = c.id == state.Chapter && !state.ShowAbout });
             view.ListTitle = state.ShowAbout ? "About" : state.Chapter == Chapter.Company ? "Company" : ChapterRow.First(c => c.id == state.Chapter).label;
@@ -863,6 +940,13 @@ namespace Hearthwoven.Panel
             var page = state.ShowAbout ? state.AboutPage : state.PageOf(state.Chapter);
             if (view.List.Count > 0 && !view.List.Any(l => l.Id == page)) page = view.List[0].Id;
             view.Page = page;
+            var place = new PanelPlace { Chapter = state.Chapter, Page = page, Player = state.Player ?? "", About = state.ShowAbout };
+            SettleWait(state, place, input);   // a greyed day window pressed on another page: back to the last window that worked (B17)
+            if (state.Chapter == Chapter.Battle && !state.ShowAbout && !input.IsSelf)
+            {
+                var wanted = state.Window == TimeWindow.SinceInstall && input.SharedSinceInstall ? TimeWindow.SinceInstall : TimeWindow.Session;
+                if (wanted != state.Window) { state = (PanelState)CopyOf.Invoke(state, null); state.Window = wanted; }
+            }
             foreach (var l in view.List) l.Selected = l.Id == page;
             var titles = Titles(input);
             foreach (var t in titles.Where(t => !state.ShowAbout && t.Chapter == state.Chapter && t.Page == page))
@@ -887,15 +971,12 @@ namespace Hearthwoven.Panel
             if (view.HasFilters && view.ShownWindow.HasValue && (state.Chapter == Chapter.Battle || view.ShownWindow != TimeWindow.SinceInstall) && (input.IsSelf || view.ShownWindow != TimeWindow.Session))
                 view.HeadingWindow = WindowLabelFor(input, view.ShownWindow.Value).ToLowerInvariant();
             if (view.HasFilters && view.ShownWindow.HasValue && view.ShownWindow != TimeWindow.SinceInstall && state.Chapter != Chapter.Battle) view.Windowed = true;   // a window, not since install: no "since install" label
-            // the one line under greyed day chips: from when the day history runs and when a window opens
-            var historyLine = view.HasFilters ? HistoryLine(input, view.Windows.Select(w => (TimeWindow)Enum.Parse(typeof(TimeWindow), w.Id))) : null;
-            if (historyLine != null && PlateOf(view) is Block hp) hp.Text = string.IsNullOrEmpty(hp.Text) ? historyLine : hp.Text + "\n" + historyLine;
-            // on a plate the page's title badges ride in the heading row's pill (the prototypes' .h-r), not in a row of their own
+            // a plate's title badges go in the strip at its top with their reason (FeatsFinish, B18), no longer in the heading row's pill
             var plate = PlateOf(view);
-            if (plate != null && view.Badges.Count > 0)
-            {
-                plate.Pill = string.Join(" · ", view.Badges.Select(b => b.Label).ToArray()); plate.PillIcon = view.Badges[0].Icon;
-            }
+            // a greyed day window that was pressed (B17): the page shows All, one line on the plate says from when the chosen window works
+            var waitLine = view.HasFilters && view.Windows.Any(c => c.Waits && c.Id == state.Window.ToString()) ? WaitLine(input, state.Window) : null;
+            if (asked.WaitView != null && asked.WaitAt == null) asked.WaitAt = place;   // Together's greyed day chip: its line holds on this page only
+            if (waitLine != null && plate != null) plate.Text = string.IsNullOrEmpty(plate.Text) ? waitLine : plate.Text + "\n" + waitLine;
             TagSources(view);
             PlaceSinceInstall(view, state.Chapter);
 
@@ -919,8 +1000,12 @@ namespace Hearthwoven.Panel
             var info = string.IsNullOrEmpty(state.InfoKey) ? null : state.InfoKey;
             if (state.ShowAbout) view.Keys.Add("[" + (info == null ? "Esc" : info + "/Esc") + "] Back");
             else if (info != null) view.Keys.Add("[" + info + "] About");
-            if (!state.ShowAbout) view.Keys.Add("[" + (string.IsNullOrEmpty(state.Hotkey) ? "Esc" : state.Hotkey + "/Esc") + "] Close");
-            else if (!string.IsNullOrEmpty(state.Hotkey)) view.Keys.Add("[" + state.Hotkey + "] Close");
+            // the close keys: the hotkey, Tab (unless Tab is the filter key: PanelUi.TabCloses), and Esc on the pages (About goes back with Esc)
+            var closeKeys = new List<string>();
+            if (!string.IsNullOrEmpty(state.Hotkey)) closeKeys.Add(state.Hotkey);
+            if (state.FilterKey != "Tab") closeKeys.Add("Tab");
+            if (!state.ShowAbout) closeKeys.Add("Esc");
+            if (closeKeys.Count > 0) view.Keys.Add("[" + string.Join("/", closeKeys) + "] Close");
             Zones(input, state, view);   // design B: your character's counts and this PC's each in their own zone (ZonesModel.cs)
             FeatsFinish(input, state, view);   // the feat band on an owner page, the gold dots, the Feats page's keys (Chapters/FeatsModel.cs)
             ColorPeople(view);
@@ -1038,13 +1123,13 @@ namespace Hearthwoven.Panel
         public static string ScopeOf(string biome) => string.IsNullOrEmpty(biome) ? null : "in the " + BiomeName(biome);
         public const string BlocksLink = "Blocks and parries";   // Defence has the window set now (HISTORY-06): the link no longer names a scope
 
-        /// <summary>A Battle window with nothing in it yet: says the window (the page heading's own), not "from install", and where more is.</summary>
+        /// <summary>A Battle window with nothing in it yet: says the window (the page heading's own) and, in one line, where more is (B19: one calm empty state, no "since install").</summary>
         static Block WindowEmpty(PanelInput input, TimeWindow window)
         {
             var session = window == TimeWindow.Session;
             var b = Empty(session ? NothingYet + " this session" : window == TimeWindow.Today ? "Nothing today" : "Nothing in the " + WindowLabel(window).ToLowerInvariant(),
-                          input.IsSelf ? (session ? "Fight something and it fills up. Choose All for everything since install." : "Choose a longer window, or All for everything since install.")
-                                       : "Choose This session to see " + Name(input) + "'s last session.");
+                          input.IsSelf ? (session ? "Fight something and it fills up." : DayEmptyLine)
+                                       : "Choose Session to see " + Name(input) + "'s last session.");
             b.Tone = SinceInstallTone; return b;
         }
         static Block Empty(string title, string text = null) => new Block { Kind = "empty", Title = title, Text = text };
@@ -1197,6 +1282,7 @@ namespace Hearthwoven.Panel
                         if (!string.IsNullOrEmpty(pickupGap)) view.Blocks.Add(new Block { Kind = "note", Text = pickupGap });
                         Add(view, brought);
                     }
+                    Add(view, PickaxeFindsKey(input, named));
                     TitleHero(view, titles, "miner");
                     if (M(input, e => e.PickaxeHits) > 0) Group(view, "Pickaxe hits per rock", Ranking(D(input.Events.PickaxeHits), named, RockIcon, SrcPc, top: GatherTop, columns: 2));
                     SkillStrip(input, view, SkillHeading, new[] { "Pickaxes" });
@@ -1229,6 +1315,7 @@ namespace Hearthwoven.Panel
             var brought = BroughtInBar("Stone and ore brought in", src, "mining", named, k => (null, null));
             double rockHits = M(src, e => e.PickaxeHits);
             if (brought != null) { Add(view, Hero((brought.Value, "stone and ore brought in", SrcPc, null))); brought.Title = null; brought.Value = null; brought.Text = null; Add(view, brought); }
+            Add(view, PickaxeFindsKey(src, named));
             if (rockHits > 0) Group(view, "Pickaxe hits per rock", Ranking(D(src.Events.PickaxeHits), named, RockIcon, SrcPc, top: GatherTop, columns: 2));
             if (view.Blocks.Count == 0) view.Blocks.Add(DayEmpty(src, w));
             SkillStrip(src, view, SkillHeading, new[] { "Pickaxes" });
@@ -1493,23 +1580,32 @@ namespace Hearthwoven.Panel
         /// <summary>
         /// "What is it made of?": one proportional bar, a part per kind, largest first; Value = the total, each part's
         /// Fraction = its share (the shares sum to 1). A part's colour: the block's own look (damage palette, groundwork,
-        /// wood grain) first, then tint (an item's own icon colour), then the neutral palette. null when there is nothing to show.
+        /// wood grain), then tint (an item's own icon colour), then the bars' palette (FacetModel.BarColours, 0.6.5: the parts
+        /// without a colour of their own stay apart from all the others, never one shared neutral). Past BarMaxParts the smallest kinds
+        /// fold into one "Other (n kinds)" part (Id FoldId, no picture) whose Items are the folded parts, so a caller that
+        /// rewrites the parts' numbers can sum them. null when there is nothing to show.
         /// </summary>
         public static Block Composition(string title, IDictionary<string, double> parts, Func<string, string> label, Func<string, (string colour, string pattern)> look,
                                         string src, Func<string, string> icon = null, string note = null, Func<string, string> tint = null)
         {
             var list = (parts ?? new Dictionary<string, double>()).Where(kv => kv.Value > 0).OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).ToList();
             if (list.Count == 0) return null;
-            var total = list.Sum(kv => kv.Value); var tag = TagOfSrc(src); int spare = 0;
-            var items = new List<Block>();
-            foreach (var kv in list)
+            var total = list.Sum(kv => kv.Value); var tag = TagOfSrc(src);
+            var fold = list.Count > BarMaxParts;
+            var shown = fold ? list.Take(BarMaxParts - 1).ToList() : list;
+            // an approved look and an item's own colour stay (C1, diff-05: the legend shows the item's picture beside it); a part with
+            // neither takes the bars' palette, apart from the others, never one shared neutral (0.6.5)
+            var colours = BarColours(shown.Select(kv => { var own = look(kv.Key).colour ?? tint?.Invoke(kv.Key); return (kv.Key, own, own != null); }).ToList(), fold);
+            Block Part(KeyValuePair<string, double> kv) => new Block
             {
-                var l = look(kv.Key);
-                items.Add(new Block
-                {
-                    Id = kv.Key, Icon = icon != null ? icon(kv.Key) : "item:" + kv.Key, Title = label(kv.Key), Value = N(kv.Value), Fraction = (float)(kv.Value / total),
-                    Colour = l.colour ?? tint?.Invoke(kv.Key) ?? Neutral[spare++ % Neutral.Length], Pattern = l.pattern, Src = src, Source = tag,
-                });
+                Id = kv.Key, Icon = icon != null ? icon(kv.Key) : "item:" + kv.Key, Title = label(kv.Key), Value = N(kv.Value), Fraction = (float)(kv.Value / total),
+                Colour = colours.TryGetValue(kv.Key, out var c) ? c : null, Pattern = look(kv.Key).pattern, Src = src, Source = tag,
+            };
+            var items = shown.Select(Part).ToList();
+            if (fold)
+            {
+                var rest = list.Skip(BarMaxParts - 1).ToList(); var n = rest.Sum(kv => kv.Value);
+                items.Add(new Block { Id = FoldId, Title = FoldLabel(rest.Count), Value = N(n), Fraction = (float)(n / total), Colour = BarOtherColour, Src = src, Source = tag, Items = rest.Select(Part).ToList() });
             }
             return new Block { Kind = "composition", Title = title, Value = N(total), Note = note, Src = src, Source = tag, Items = items };
         }
@@ -1622,7 +1718,12 @@ namespace Hearthwoven.Panel
         /// <summary>Practice since install as a share (Skills > Practised, the skill page). The game's raise factors have no unit a player
         /// knows (SOURCES: "14.5" meant nothing), so the raw sum is never shown: each skill's part of ALL the practice the game credited
         /// since install, in per cent, and its rank. The shares of the skills shown add up to 100.</summary>
-        public static string Share(double part, double whole) => whole <= 0 ? "0 %" : Math.Round(100 * part / whole).ToString("0", Inv) + " %";
+        public static string Share(double part, double whole)
+        {
+            if (whole <= 0) return "0 %";
+            var pct = Math.Round(100 * part / whole);
+            return part > 0 && pct == 0 ? "under 1 %" : pct.ToString("0", Inv) + " %";   // a real share below 0.5 % would read as nothing
+        }
 
         static double TotalPractice(PanelInput input) => (input.Events?.SkillPractice ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0).Sum(kv => (double)kv.Value);
 
@@ -1667,6 +1768,18 @@ namespace Hearthwoven.Panel
             if (items.Count == 0) return;
             view.Blocks.Add(Tagged(new Block { Kind = "ladders", Tone = SkillStripTone, Items = new List<Block> { new Block { Kind = "group", Title = heading, Text = scope, Items = items } } }, SrcCharacter));   // scope: what the levels are, said beside the heading (Battle)
         }
+
+        /// <summary>A page's own skill strip (no scope line: Woodcutting's Wood Cutting, not Battle's weapon skills): drawn as a small chip, never as a band.</summary>
+        public static bool IsHeadStrip(Block b) => b.Kind == "ladders" && b.Tone == SkillStripTone && (b.Items ?? new List<Block>()).All(g => string.IsNullOrEmpty(g.Text));
+        /// <summary>The skills a page shows as chips: its head strips' skills (the plate's blocks).</summary>
+        public static IEnumerable<Block> HeadSkills(Block plate) =>
+            (plate?.Items ?? new List<Block>()).Where(IsHeadStrip).SelectMany(b => b.Items.SelectMany(g => g.Items ?? new List<Block>()));
+        /// <summary>
+        /// Where the page's own skill chips go: in the heading row (right, before the pill), or, when that row holds the window chips, on one
+        /// line at the top of the plate. Joost in game 0.6.2 (2026-10-09): Woodcutting and Mining have window chips, and their skill was drawn
+        /// nowhere (the heading row drew only the windows, the plate skipped the head strip).
+        /// </summary>
+        public static bool HeadSkillsOnPlate(PanelView v) => v != null && v.HasFilters && HeadSkills(PlateOf(v)).Any();
 
         static Block LadderOf(PanelInput input, string skill, string kind)
         {
@@ -1993,7 +2106,8 @@ namespace Hearthwoven.Panel
         public static void Jump(PanelState s, string target)
         {
             var p = (target ?? "").Split('/');
-            if (p.Length == 2 && Enum.TryParse(p[0], out Chapter c)) { s.Chapter = c; s.Page[c] = p[1]; }
+            if ((p.Length == 2 || p.Length == 3) && Enum.TryParse(p[0], out Chapter c)) { s.Chapter = c; s.Page[c] = p[1]; }
+            if (p.Length == 3 && p[0] == Chapter.Feats.ToString()) s.FeatSel = p[2];   // "Feats/titles/wallwarden": that card chosen (a title in a page's strip)
         }
 
         public const int Palette = 8;

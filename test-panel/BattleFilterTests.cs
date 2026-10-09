@@ -55,7 +55,7 @@ static partial class BattleFilterTests
         var dmBar = Bar(dm);
         var all = PanelModel.DealtRows(PanelModel.Damage(ev.Log, TimeWindow.Session, "", ev.NowUtc)).Sum(r => (double)r.Amount);
         Check(dm.Biomes.Count == 0 && dmBar != null && dmBar.Id == Dm && dmBar.Title == "Biome" && dmBar.Tone == "compact" && Row(dm, "biome") != null && Row(dm, "biome").Title == "Biome" &&
-              dmBar.Items.First(b => b.Kind == "applied").Value == "All biomes" && Of(dm, "damagegrid").Value == PanelModel.Number(all) && dm.Keys.Contains("[Tab] Filter") && dmBar.Text == Gap(PanelModel.Number(all)) + " damage dealt",
+              dmBar.Items.First(b => b.Kind == "applied").Value == "All biomes" && Of(dm, "damagegrid").Value == PanelModel.Number(all) && dm.Keys.Contains("[K] Filter") && dmBar.Text == Gap(PanelModel.Number(all)) + " damage dealt",
               "damage: a Biome row in the page, collapsed to one line (Biome, G, All biomes, the damage), no heading chip: " + Chips(dm, "biome"));
         var swamp = Page(ev, "damage", s => { Pick(Dm, "biome", "Swamp")(s); s.View["Battle/damage/view"] = "type"; });
         var swampDealt = Chips(swamp, "biome");
@@ -67,7 +67,7 @@ static partial class BattleFilterTests
         Check(Row(dmTen, "biome").Items.Select(c => c.Title + (c.Tone == "zero" ? "(0)" : "")).SequenceEqual(new[] { "Meadows(0)", "Black Forest(0)", "Swamp" }), "damage 10 min: only the Swamp has hits, the other chips are dimmed and cannot be chosen: " + Chips(dmTen, "biome"));
         var dmAll = Page(ev, "damage", Window(TimeWindow.SinceInstall));
         var line = Bar(dmAll);
-        Check(dmAll.Biomes.Count == 0 && line != null && line.Tone == "inline" && line.Title == "Biome" && line.KeyCap == null && line.Items.Count == 1 && line.Items[0].Title == PanelModel.DamageAllBiomeNote && !dmAll.Keys.Contains("[Tab] Filter"),
+        Check(dmAll.Biomes.Count == 0 && line != null && line.Tone == "inline" && line.Title == "Biome" && line.KeyCap == null && line.Items.Count == 1 && line.Items[0].Title == PanelModel.DamageAllBiomeNote && !dmAll.Keys.Contains("[K] Filter"),
               "damage since install: no dimmed chip: one line where the Biome row would be says why there is no choice (and no key)");
         var dmNone = Page(ev, "damage", All(Window(TimeWindow.LastTenMinutes), Pick(Dm, "biome", "Meadows")));
         Check(PanelModel.Content(dmNone).Any(b => b.Kind == "empty" && b.Title == PanelModel.NothingForChoice) && Bar(dmNone) != null && Bar(dmNone).Items.First(b => b.Kind == "applied").Items.Count == 1,

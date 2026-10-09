@@ -12,7 +12,7 @@ namespace Hearthwoven
         static void Add(Dictionary<string, float> d, string key, float v) { if (v == 0f || !Json.IsFinite(v)) return; d.TryGetValue(key, out var o); d[key] = o + v; }
 
         public void AddDealt(string target, string skill, HitData.DamageTypes dt) { HitsDealt++; AddTypes(Dealt, target, skill, dt); }
-        public void AddTaken(string source, string cause, HitData.DamageTypes dt) { HitsTaken++; AddTypes(Taken, source, cause, dt); }
+        public void AddTaken(string source, string cause, HitData.DamageTypes dt) { if (TotalOf(dt) > 0f) HitsTaken++; AddTypes(Taken, source, cause, dt); }   // a hit fully absorbed (a ward) is no hit received
 
         // A hit usually carries one or two of the eleven damage types: the key "who|how|type" is only built for a type with damage,
         // and nothing is allocated for the others (no closure either). The sums are the same as adding every type.
@@ -24,6 +24,10 @@ namespace Hearthwoven
         }
 
         static void One(Dictionary<string, float> d, string who, string how, string type, float v) { if (v != 0f) Add(d, who + "|" + how + "|" + type, v); }
+
+        // all the damage of one hit, over the same eleven types AddTypes adds
+        public static float TotalOf(HitData.DamageTypes t) =>
+            t.m_blunt + t.m_slash + t.m_pierce + t.m_chop + t.m_pickaxe + t.m_fire + t.m_frost + t.m_lightning + t.m_poison + t.m_spirit + t.m_damage;
 
         public void WriteTo(Json j, string key = "damageThisSession")
         {

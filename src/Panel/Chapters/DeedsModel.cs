@@ -26,7 +26,7 @@ namespace Hearthwoven.Panel
             switch (page)
             {
                 case "overview": DeedsOverview(input, view, state); return true;
-                case "cooking": Cooking(input, view); return true;
+                case "cooking": Cooking(input, state, view); return true;
                 case "building": Building(input, state, view); return true;
                 case "groundwork": Groundwork(input, view); return true;
                 case "crafting": Crafting(input, state, view); return true;
@@ -281,7 +281,7 @@ namespace Hearthwoven.Panel
             return new Block { Kind = "ledger", Src = src, Source = tag, Items = rows, Note = rows.Any(r => r.Id == "grill") ? StationsNote : null };
         }
 
-        static void Cooking(PanelInput input, PanelView view)
+        static void Cooking(PanelInput input, PanelState state, PanelView view)
         {
             view.Heading = "Cooking";
             var layers = CookedLayers(input);
@@ -305,26 +305,34 @@ namespace Hearthwoven.Panel
             Add(view, hero);
             // dishes by kind (cook-A): one bar, the food's own colours from its icons; with a baseline each kind in its two layers,
             // faded = the game's count before install, solid = made since (as Woodcutting's wood bar)
-            var dishes = layers == null ? Crafted(input, "food") : layers.ToDictionary(kv => kv.Key, kv => kv.Value.faded + kv.Value.solid);
+            var allDishes = layers == null ? Crafted(input, "food") : layers.ToDictionary(kv => kv.Key, kv => kv.Value.faded + kv.Value.solid);
+            // the dishes as a filter bar (Type, Main boost: CookingFacets.cs), then the bar and the ledger of the dishes that pass it (0.6.5)
+            var filter = DishFilter(input, state, allDishes, src);
+            var on = filter != null && FilterOn(state, CookFilter);
+            var dishes = filter == null ? allDishes : filter.Shown.ToDictionary(i => i.Key, i => i.Weight);
+            if (filter != null) view.Blocks.Add(filter.Bar);
             var bar = Composition(DishesByKind, dishes, k => Who(input, k), k => (null, null), src, tint: ItemTint(input));
             if (bar != null) bar.Tone = Thin;
             if (bar != null && layers != null)
             {
                 foreach (var part in bar.Items)
                 {
-                    if (!layers.TryGetValue(part.Id, out var l) || l.faded + l.solid <= 0) continue;
+                    var l = part.Id == FoldId ? part.Items.Aggregate((faded: 0.0, solid: 0.0), (a, x) => layers.TryGetValue(x.Id, out var y) ? (a.faded + y.faded, a.solid + y.solid) : a)   // "Other (n kinds)": its dishes together
+                          : layers.TryGetValue(part.Id, out var one) ? one : (0, 0);
+                    if (l.faded + l.solid <= 0) continue;
                     part.Fraction2 = (float)(l.faded / (l.faded + l.solid));
                     if (l.faded <= 0 && src != SrcPc) { part.Src = SrcPc; part.Source = TagOfSrc(SrcPc); }   // made since install, in a bar of older counts
                 }
-                if (fadedAll > 0) bar.Note = FadedKey;
+                if (bar.Items.Any(p => p.Fraction2 > 0)) bar.Note = FadedKey;
             }
             Add(view, bar);
+            if (on && bar == null) view.Blocks.Add(new Block { Kind = "empty", Title = "Nothing for this choice" });
             // without the two layers the headline is the game's own counters and the bar is its per-dish craft counts: the game books
             // them differently (a mod's food it cannot name, brews among the dishes), so they can differ. Say so under the headline
-            // instead of hiding it (polish-06's honest headline, on cooking-06's bar).
+            // instead of hiding it (polish-06's honest headline, on cooking-06's bar). Against every dish, whatever the filter shows
             if (hero != null && bar != null && layers == null)
             {
-                var kinds = Math.Round(dishes.Values.Sum());
+                var kinds = Math.Round(allDishes.Values.Sum());
                 if (made > 0 && kinds != Math.Round(made)) hero.Note = "the dishes add up to " + N(kinds) + "; the headline is " + (input.IsSelf ? "your" : Name(input) + "'s") + " character's own count";
             }
             // the kitchen ledger (cook-B): where it was cooked, dishes as chips, and the one line on what is not counted apart
@@ -340,6 +348,8 @@ namespace Hearthwoven.Panel
                 var fans = FoodRows(input).Select(r => new KeyValuePair<string, double>(r.fellow.PlayerName, r.total)).ToList();   // the numbers, not the shown text
                 var whoHead = Section("Who enjoyed " + whose + " food", fans.Sum(f => f.Value), SrcFellows); whoHead.Text = input.IsSelf ? TheirScope(FellowsOf(input).Where(f => !f.IsSelf).All(f => f.SharedSinceInstall)) : null;   // whose record: their last session
                 Under(view.Blocks, whoHead, Ranking(fans, k => k, k => "person:" + k, SrcFellows, top: int.MaxValue, keepOrder: true));
+                // the servings are counted on the fellows' PCs, by dish: they stay whole under a filter, and say so (as Crafting's upgrades)
+                if (on) view.Blocks.Add(new Block { Kind = "note", Text = EnjoyedWhole(whose), Src = SrcFellows, Source = TagFellows });
             }
             else if (made > 0) view.Blocks.Add(new Block { Kind = "note", Text = "When a fellow player enjoys " + whose + " food, they show up here." });
             SkillStrip(input, view, SkillHeading, new[] { "Cooking" });
@@ -592,10 +602,10 @@ namespace Hearthwoven.Panel
         // the game's craft counters per kind (InventoryGui.DoCrafting) with the item types they count: the filter's Kind row (CraftingFacets.cs)
         static readonly (string stat, string title, string colour, string[] types, string fallback)[] GearKinds =
         {
-            ("CraftWeapon", "Weapons", "#8c6e9a", new[] { "OneHandedWeapon", "TwoHandedWeapon", "TwoHandedWeaponLeft", "Bow", "Hands" }, "vocab:weapon-melee"),
-            ("CraftArmor", "Armour", "#7d9a6a", new[] { "Chest", "Helmet", "Legs", "Shoulder", "Shield" }, null),
-            ("CraftTool", "Tools", "#b59a5a", new[] { "Tool" }, null),
-            ("CraftTrinket", "Trinkets", "#a8707a", new[] { "Trinket" }, null),
+            ("CraftWeapon", "Weapons", "#a5484f", new[] { "OneHandedWeapon", "TwoHandedWeapon", "TwoHandedWeaponLeft", "Bow", "Hands" }, "vocab:weapon-melee"),
+            ("CraftArmor", "Armour", "#5f8fbf", new[] { "Chest", "Helmet", "Legs", "Shoulder", "Shield" }, null),
+            ("CraftTool", "Tools", "#8fae5e", new[] { "Tool" }, null),
+            ("CraftTrinket", "Trinkets", "#9a78b8", new[] { "Trinket" }, null),
         };
 
         /// <summary>The tile's picture: the item of that kind this player crafted most (the game's own sprite), else a stand-in.</summary>
