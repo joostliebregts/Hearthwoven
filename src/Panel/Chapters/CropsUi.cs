@@ -45,8 +45,8 @@ namespace Hearthwoven.Panel
                     if (full > 0 && fade > 0) Img(tile, "Faded", null, new Color(colour.r, colour.g, colour.b, FadedAlpha)).rectTransform.Box(x, top + 5, Mathf.Max(1, full * fade), PairH);
                     if (full > 0 && fade < 1) Img(tile, "Fill", null, colour).rectTransform.Box(x + full * fade, top + 5, Mathf.Max(2, full * (1 - fade)), PairH);
                     // the number and its word beside the bar ("72 planted"); formatted numbers and fixed words only, so rich text is safe
-                    var t = Label(tile, "<b>" + pair.Value + "</b> <color=" + faint + ">" + pair.Title + "</color>", 12, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
-                    t.richText = true; t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Box(x + bw + 6, top, PairLabelW, 16);
+                    var t = RichLabel(tile, "cropgrid", Rich.Plain(pair.Value).Bold() + " " + Rich.Plain(pair.Title).Ink(faint), 12, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+                    t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Box(x + bw + 6, top, PairLabelW, 16);
                 }
             }
             // the slim rows: the crop list's last entries, picture, name and the picked bar's colour with its number (one 40 px row, not a 76 px tile row)
@@ -60,8 +60,8 @@ namespace Hearthwoven.Panel
                 foreach (var pair in i.Items ?? new List<Block>())
                 {
                     Img(r, "Swatch", null, Hex(pair.Colour, PanelLook.Accent)).rectTransform.Box(x, 17, 18, PairH);
-                    var t = Label(r, "<b>" + pair.Value + "</b> <color=" + faint + ">" + pair.Title + "</color>", 12, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
-                    t.richText = true; t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Box(x + 24, 11, PairLabelW, 18);
+                    var t = RichLabel(r, "cropgrid", Rich.Plain(pair.Value).Bold() + " " + Rich.Plain(pair.Title).Ink(faint), 12, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+                    t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Box(x + 24, 11, PairLabelW, 18);
                     x += 24 + PairLabelW + 8;
                 }
             }

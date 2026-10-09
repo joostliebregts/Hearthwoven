@@ -91,8 +91,8 @@ namespace Hearthwoven.Panel
             if (on) Edge(img.rectTransform, PanelLook.Gold);
             if (cursor) FocusRing(img.rectTransform);   // live-polish: the soft rounded focus ring, shown after a key press
             var count = ColorUtility.ToHtmlStringRGB(on ? PanelLook.Gold : PanelLook.Muted);
-            var text = Label(img.transform, "<noparse>" + (chip.Title ?? "").Replace("</noparse>", "") + "</noparse>  <b><color=#" + count + ">" + chip.Value + "</color></b>", FacetText, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
-            text.richText = true; text.textWrappingMode = TextWrappingModes.NoWrap; text.rectTransform.Stretch();
+            var text = RichLabel(img.transform, "filterbar", Rich.Plain(chip.Title) + "  " + Rich.Plain(chip.Value).Ink("#" + count).Bold(), FacetText, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+            text.textWrappingMode = TextWrappingModes.NoWrap; text.rectTransform.Stretch();
             text.rectTransform.offsetMin = new Vector2(8, 0); text.rectTransform.offsetMax = new Vector2(-8, 0);
             width = Mathf.Ceil(text.preferredWidth) + 16;
             Size(img, width, FacetChipH);
@@ -115,8 +115,8 @@ namespace Hearthwoven.Panel
             var click = p.Length == 2 ? link?.Invoke(PanelModel.FacetLink(filter.Id, p[0], p[1])) : null;
             var img = Img(line, "Token", null, FacetOn, raycast: click != null);
             Edge(img.rectTransform, PanelLook.Gold);
-            var t = Label(img.transform, "<noparse>" + (tok.Title ?? "").Replace("</noparse>", "") + "</noparse> ×", FacetText, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
-            t.richText = true; t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Stretch(); t.rectTransform.offsetMin = new Vector2(7, 0); t.rectTransform.offsetMax = new Vector2(-7, 0);
+            var t = RichLabel(img.transform, "filterbar", Rich.Plain(tok.Title) + " ×", FacetText, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+            t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Stretch(); t.rectTransform.offsetMin = new Vector2(7, 0); t.rectTransform.offsetMax = new Vector2(-7, 0);
             Size(img, Mathf.Ceil(t.preferredWidth) + 14, 20);
             if (click != null) img.gameObject.AddComponent<Press>().Act = click;
         }

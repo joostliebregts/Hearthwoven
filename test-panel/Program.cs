@@ -828,6 +828,7 @@ fails += LedTests.Run(now);   // 0.6: Heavy Keel best load and the animals led, 
 fails += SelfCheckTests.Run();   // Dev.SelfCheck bookkeeping, the filter key Tab and the clash scan (test-panel/SelfCheckTests.cs)
 fails += PerfTests.Run();   // Dev.SelfCheck: the frame-cost meter and its one-minute line (test-panel/PerfTests.cs)
 fails += FellowPanelTests.Run();   // same-name fellows each with a chip and a colour; the singleplayer line (test-panel/FellowPanelTests.cs)
+fails += RichTextTests.Run(textSamples);   // richtext-fix: no model string holds a tag; tags only via Rich, rich text only via the kind map (test-panel/RichTextTests.cs)
 
 var dump = Array.IndexOf(args, "--dump");
 if (dump >= 0 && dump + 1 < args.Length)
@@ -1002,6 +1003,7 @@ if (dump >= 0 && dump + 1 < args.Length)
              })) + ",\n" + FeatsTests.DumpShots(group, now) + "\n};\n" +
              "window.PANEL_SCENARIOS = {\n" + string.Join(",\n", scenarios.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => "  \"" + kv.Key + "\": \"" + kv.Value.Replace("\"", "'") + "\"")) + "\n};\n";   // FeatsTests: the Feats views (test-panel/FeatsTests.cs)
     js += "window.FIRE_PLANS = {" + string.Join(",", firePlans) + "};\n";
+    js += "window.PANEL_RICH = [" + string.Join(", ", PanelRich.Kinds.Select(k => "\"" + k + "\"")) + "];   // richtext-fix: the block kinds whose labels have rich text on (PanelRich.Kinds)\n";
     System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "preview-data.js"), js);
     System.Console.WriteLine("wrote " + System.IO.Path.Combine(dir, "preview-data.js"));
 }

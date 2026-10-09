@@ -1309,11 +1309,11 @@ namespace Hearthwoven.Panel
         internal static bool Layered(Block n) => n != null && !string.IsNullOrEmpty(n.Faded) && !string.IsNullOrEmpty(n.Solid);
         // zones-wording (Joost 2026-10-09: "114 + 52" did not say which part is which): with a size, each part says it at the number, small and
         // quiet: "114 before install + 52 since install", the words at a third of the number (never under the floor)
-        internal static string LayeredText(Block n, Color faded, Color? solid = null, float size = 0)
+        internal static Rich LayeredText(Block n, Color faded, Color? solid = null, float size = 0)
         {
-            string Word(string w) => size > 0 ? "<size=" + Mathf.Max(PanelLook.MinText, Mathf.Round(size * 0.32f)).ToString(System.Globalization.CultureInfo.InvariantCulture) + "><b></b><i> " + w + "</i></size>" : "";
-            return "<color=#" + ColorUtility.ToHtmlStringRGB(faded) + ">" + n.Faded + Word(PanelModel.BeforeWord) + " +</color> " +
-                   (solid.HasValue ? "<color=#" + ColorUtility.ToHtmlStringRGB(solid.Value) + ">" + n.Solid + Word(PanelModel.SinceWord) + "</color>" : n.Solid + Word(PanelModel.SinceWord));
+            Rich Word(string w) => size > 0 ? (Rich.Empty.Bold() + Rich.Plain(" " + w).Italic()).Sized(Mathf.Max(PanelLook.MinText, Mathf.Round(size * 0.32f))) : Rich.Empty;
+            var since = Rich.Plain(n.Solid) + Word(PanelModel.SinceWord);
+            return (Rich.Plain(n.Faded) + Word(PanelModel.BeforeWord) + " +").Ink(Hex(faded)) + " " + (solid.HasValue ? since.Ink(Hex(solid.Value)) : since);
         }
 
         // "since install" after a number Hearthwoven counted on this PC (Block.SinceInstall): small, italic, faint. No icons
@@ -1806,8 +1806,7 @@ namespace Hearthwoven.Panel
         static void HeroNumber(RectTransform row, Block n, float size, float labelSize)
         {
             var group = Line(row, 14, TextAnchor.LowerLeft);
-            var num = Label(group, Layered(n) ? LayeredText(n, PanelLook.Faint, null, size) : n.Value, size, PanelLook.Gold, style: FontStyles.Bold); num.textWrappingMode = TextWrappingModes.NoWrap;
-            num.richText = Layered(n);
+            var num = RichLabel(group, "hero", Layered(n) ? LayeredText(n, PanelLook.Faint, null, size) : Rich.Plain(n.Value), size, PanelLook.Gold, style: FontStyles.Bold); num.textWrappingMode = TextWrappingModes.NoWrap;
             var words = Line(group, 8, TextAnchor.LowerLeft);
             words.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, 0, 0, Mathf.RoundToInt((size - labelSize) * 0.22f));
             Label(words, n.Title, labelSize, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
@@ -2054,6 +2053,20 @@ namespace Hearthwoven.Panel
             t.textWrappingMode = TextWrappingModes.Normal; t.raycastTarget = false; t.richText = false;
             return t;
         }
+
+        /// <summary>A label of TMP rich text (richtext-fix): the tags made only by <see cref="Rich"/> from the model's parts, model text kept literal,
+        /// and rich text on for the block kinds <see cref="PanelRich.Kinds"/> lists. A kind left off that list draws its tags as letters, here and
+        /// in the HTML bridge alike, and the self-check's "markup" line fails on it: the list is the one switch.</summary>
+        static TextMeshProUGUI RichLabel(Transform parent, string kind, Rich text, float size, Color color, bool title = false,
+                                         TextAlignmentOptions align = TextAlignmentOptions.TopLeft, FontStyles style = FontStyles.Normal, TMP_FontAsset face = null)
+        {
+            var t = Label(parent, text.Markup, size, color, title, align, style, face);
+            t.richText = PanelRich.On(kind);
+            return t;
+        }
+
+        /// <summary>Gives a label that exists already rich text made by <see cref="Rich"/> (the switch as in <see cref="RichLabel"/>).</summary>
+        static void SetRich(TextMeshProUGUI t, string kind, Rich text) { t.text = text.Markup; t.richText = PanelRich.On(kind); }
 
         // the game's sprite for an icon reference; a person gets the kit's shield in their colour; a missing game sprite
         // leaves the place empty (the kit asks not to stand in letters or new art for game objects)

@@ -21,6 +21,9 @@ namespace Hearthwoven.Panel
     ///   pictures), one line each: drawn without a warning, the smallest text against the 14 px floor, the focus marks, the kinds of
     ///   block that are new in 0.6; on a page with a filter bar the focus is entered once and the ring looked for. Afterwards the
     ///   panel returns to what the player had open.
+    /// - richtext-fix: on every page each visible text is read as TMP shows it (GetParsedText); a text that shows a tag as letters
+    ///   ("&lt;b&gt;", "&lt;color=…&gt;": rich text off on a marked-up label, the 0.6.1 Feats bug) fails the page and gets an
+    ///   "HW-CHECK FAIL markup" line naming it; after the walk one "markup" line says PASS or how many pages failed.
     /// </summary>
     public partial class PanelUi
     {
@@ -152,7 +155,7 @@ namespace Hearthwoven.Panel
         IEnumerator CheckRun()
         {
             string failure = null;
-            int pages = 0, bad = 0, small = 0;
+            int pages = 0, bad = 0, small = 0, rawPages = 0;
             var warnings = new List<string>();
             Application.LogCallback grab = (msg, stack, type) =>
             {
@@ -204,6 +207,7 @@ namespace Hearthwoven.Panel
                         pages++;
                         var objects = root.GetComponentsInChildren<RectTransform>(false).Length;
                         float scale = frame.lossyScale.y, least = 999f; string leastText = null; int below = 0, hidden = 0; string hiddenText = null;
+                        int raw = 0; var rawTexts = new List<string>();
                         foreach (var t in root.GetComponentsInChildren<TMP_Text>(false))
                         {
                             if (!t.enabled || string.IsNullOrEmpty(t.text) || t.color.a < 0.05f || scale <= 0f) continue;
@@ -215,6 +219,10 @@ namespace Hearthwoven.Panel
                                 for (int c = 0; info != null && c < info.characterCount && !drawn; c++) drawn = info.characterInfo[c].isVisible && info.characterInfo[c].character != '…';
                                 if (!drawn) { hidden++; if (hiddenText == null) hiddenText = "'" + (t.text.Length > 24 ? t.text.Substring(0, 24) : t.text) + "' in " + (t.transform.parent ? t.transform.parent.name : t.name); }
                             }
+                            // richtext-fix: what the label shows, tags parsed or not: a tag name after '<' means the player reads markup
+                            t.ForceMeshUpdate();
+                            var shown = t.GetParsedText();
+                            if (PanelRich.HasMarkup(shown)) { raw++; if (rawTexts.Count < 3) rawTexts.Add("'" + (shown.Length > 60 ? shown.Substring(0, 60) : shown) + "' in " + (t.transform.parent ? t.transform.parent.name : t.name)); }
                             var px = t.fontSize * t.transform.lossyScale.y / scale;
                             if (px < PanelLook.MinText - 0.05f) below++;
                             if (px < least) { least = px; leastText = "'" + (t.text.Length > 24 ? t.text.Substring(0, 24) : t.text) + "' in " + (t.transform.parent ? t.transform.parent.name : t.name); }
@@ -223,13 +231,15 @@ namespace Hearthwoven.Panel
                         hasFilter = view != null && PanelModel.FilterOf(view) != null;
                         List<string> seen; lock (warnings) seen = warnings.ToList();
                         var shows = Shows(shot);
-                        var status = error != null || seen.Count > 0 || !shows ? "FAIL" : below > 0 || hidden > 0 ? "WARN" : "PASS";
+                        var status = error != null || seen.Count > 0 || !shows || raw > 0 ? "FAIL" : below > 0 || hidden > 0 ? "WARN" : "PASS";
                         if (status == "FAIL") bad++; if (below > 0) small++;
                         var text = label + ": " + (error != null ? "threw " + error : seen.Count > 0 ? "warned: " + seen[0] + (seen.Count > 1 ? " (+" + (seen.Count - 1) + " more)" : "") : shows ? "drawn" : "another page showed") +
                                    ", " + objects + " objects, smallest text " + (least < 999f ? least.ToString("0.0") + " px" + (below > 0 ? " (" + below + " under " + PanelLook.MinText + ": " + leastText + ")" : "") : "none") +
                                    (hidden > 0 ? ", " + hidden + " text(s) hidden by a too-low box (" + hiddenText + ")" : "") +
+                                   (raw > 0 ? ", " + raw + " text(s) show raw markup" : "") +
                                    ", focus marks " + Marks() + (kinds.Count > 0 ? "; " + string.Join(", ", kinds.ToArray()) : "");
                         DevCheck.Book.Say(status, "page", text);
+                        if (raw > 0) { rawPages++; DevCheck.Book.Say("FAIL", "markup", label + ": " + raw + " text(s) show raw markup: " + string.Join("; ", rawTexts.ToArray()) + (raw > rawTexts.Count ? " (+" + (raw - rawTexts.Count) + " more)" : "")); }
                     }
                     catch (Exception e) { DevCheck.Book.Say("FAIL", "page", label + ": measuring failed: " + e.Message); bad++; }
                     if (!hasFilter || error != null) continue;
@@ -261,8 +271,9 @@ namespace Hearthwoven.Panel
                     missing.Count + " icon references found nothing (a fallback or no picture was drawn): " + string.Join(", ", missing.Take(25).ToArray()));
             }
             catch (Exception e) { DevCheck.Book.Say("FAIL", "icons", e.Message); }
+            DevCheck.Book.Say(rawPages == 0 ? "PASS" : "FAIL", "markup", rawPages == 0 ? pages + " pages walked, no visible text shows a tag as letters" : rawPages + " of " + pages + " pages show raw markup (each named in a markup line above)");
             if (failure != null) DevCheck.Book.Say("FAIL", "pages", "walk stopped: " + failure);
-            DevCheck.Done(pages + " pages walked, " + bad + " failed, " + small + " with text under " + PanelLook.MinText + " px");
+            DevCheck.Done(pages + " pages walked, " + bad + " failed, " + small + " with text under " + PanelLook.MinText + " px, " + rawPages + " with raw markup");
         }
     }
 }

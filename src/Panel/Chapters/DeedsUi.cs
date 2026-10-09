@@ -214,8 +214,7 @@ namespace Hearthwoven.Panel
                 Edge(tile, i.Colour);   // its trader's or its part's colour, a thin edge on the left (fix2 7)
                 if (!string.IsNullOrEmpty(i.Value2))
                 {
-                    var more = OneLine(Label(box, (Layered(i) ? LayeredText(i, PanelLook.Faint, PanelLook.Text) : i.Value2) + " " + i.Text, 11, PanelLook.Faint));
-                    more.richText = Layered(i);
+                    OneLine(RichLabel(box, "itemgrid", (Layered(i) ? LayeredText(i, PanelLook.Faint, PanelLook.Text) : Rich.Plain(i.Value2)) + " " + i.Text, 11, PanelLook.Faint));
                 }
                 if (i.SinceInstall) Since(box, 10);
             }
@@ -235,8 +234,7 @@ namespace Hearthwoven.Panel
         // the name of a fuel item, then "fuel" small and faint after it (the name kept literal)
         static void FuelMark(TextMeshProUGUI name, string title)
         {
-            name.richText = true;
-            name.text = "<noparse>" + (title ?? "").Replace("</noparse>", "") + "</noparse> <size=" + PanelLook.MinText.ToString(System.Globalization.CultureInfo.InvariantCulture) + "><i><color=#" + ColorUtility.ToHtmlStringRGB(PanelLook.Faint) + ">" + PanelModel.FuelTone + "</color></i></size>";
+            SetRich(name, "itemgrid", Rich.Plain(title) + " " + Rich.Plain(PanelModel.FuelTone).Ink(Hex(PanelLook.Faint)).Italic().Sized(PanelLook.MinText));
         }
 
         // ----- strip: one line of picture, number, name; wraps at the column's edge. An entry with an Id is a shortcut
@@ -251,7 +249,7 @@ namespace Hearthwoven.Panel
             {
                 var entry = Line(lines, 7); float w = 0;
                 if (!string.IsNullOrEmpty(i.Icon)) { Pic(entry, i.Icon, 28); w += 28 + 7; }
-                if (!string.IsNullOrEmpty(i.Value)) { var n = Label(entry, Layered(i) ? LayeredText(i, PanelLook.Faint, null, 19) : i.Value, 19, PanelLook.Text, style: FontStyles.Bold); n.richText = Layered(i); n.textWrappingMode = TextWrappingModes.NoWrap; w += n.preferredWidth + 7; }
+                if (!string.IsNullOrEmpty(i.Value)) { var n = RichLabel(entry, "strip", Layered(i) ? LayeredText(i, PanelLook.Faint, null, 19) : Rich.Plain(i.Value), 19, PanelLook.Text, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap; w += n.preferredWidth + 7; }
                 var named = string.IsNullOrEmpty(i.Value);   // a name without a number (a title earned): the name speaks, its place (Text) quiet after it
                 var t = Label(entry, i.Title, named ? 18 : 15, named ? PanelLook.Text : PanelLook.Muted); t.textWrappingMode = TextWrappingModes.NoWrap;
                 w += t.preferredWidth;

@@ -3,6 +3,9 @@
 Every tweak that reaches a PC or the server gets its own patch version (Joost, 2026-10-08), so the version in the
 log line and in Gale always says which build runs.
 
+## 0.6.2 (2026-10-09, client release)
+- Feats cards and details no longer show raw text formatting codes. All formatted text now goes through one helper, and a self-check catches any slip.
+
 ## 0.6.1 (2026-10-09, client release)
 The client build of the 0.6 line. It needs a server on **0.6.0 or newer** to show what only the server counts (cargo loaded and unloaded, born near you); without one, everything else works and those two are left out.
 - **Time windows everywhere.** Defence, Deaths, Foes, Sailing, Cargo, Woodcutting, Mining and Company > Together carry the same nine window chips as Battle, backed by a daily history this PC keeps (`dealtByDay` goes with the shared copy, so fellow players' windows work too). A day that has no history yet is greyed, never guessed. Foes and Defence open on this session.

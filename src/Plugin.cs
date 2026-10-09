@@ -21,7 +21,7 @@ namespace Hearthwoven
     [BepInPlugin(Guid, "Hearthwoven", Version)]
     public class Plugin : BaseUnityPlugin
     {
-        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.6.1", RpcName = "Hearthwoven_Profile";
+        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.6.2", RpcName = "Hearthwoven_Profile";
         static ConfigEntry<bool> sendStats, logRouted, shareWithGroup;
         static ConfigEntry<float> intervalMinutes;
         static ConfigEntry<int> compressAfterDays;

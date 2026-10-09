@@ -114,8 +114,9 @@ namespace Hearthwoven.Panel
             var v = stack.gameObject.AddComponent<VerticalLayoutGroup>(); v.childAlignment = TextAnchor.MiddleLeft; v.spacing = 0;
             v.childControlWidth = v.childControlHeight = true; v.childForceExpandWidth = true; v.childForceExpandHeight = false;
             // the tier reached is said in words too (fix4: the notches alone were small): "Drover II" on a feat with tiers
-            var tierWord = earned && c.Count > 1 && c.Level > 0 ? " <b><color=" + Hex(tier) + ">" + PanelModel.Numeral((int)c.Level) + "</color></b>" : "";
-            var name = Label(stack, c.Title + tierWord, 15, earned ? PanelLook.Text : PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
+            // richtext-fix: the numeral styled here from the model's parts, on a label with rich text on, so TMP's ellipsis cuts letters, never a tag
+            var tierWord = earned && c.Count > 1 && c.Level > 0 ? " " + Rich.Plain(PanelModel.Numeral((int)c.Level)).Ink(Hex(tier)).Bold() : Rich.Empty;
+            var name = RichLabel(stack, "feats", Rich.Plain(c.Title) + tierWord, 15, earned ? PanelLook.Text : PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
             var noted = !string.IsNullOrEmpty(c.Note);
             name.overflowMode = TextOverflowModes.Ellipsis; name.maxVisibleLines = noted && featH < 60 ? 1 : 2;
             if (!string.IsNullOrEmpty(c.Text))
@@ -252,8 +253,8 @@ namespace Hearthwoven.Panel
             if (moment != null)
             {
                 // short (Joost 2026-10-09): "Earned 7 Oct", and a quiet "(or earlier)" only when the day is the day it was first seen
-                var said = moment.Text + (string.IsNullOrEmpty(moment.Note) ? "" : " <i><color=" + Hex(PanelLook.Muted) + ">" + moment.Note + "</color></i>");
-                var m = Label(area, said, 15, PanelLook.Text, align: TextAlignmentOptions.TopLeft); m.rectTransform.Box(16, 119, FeatDetailLeft - 32, 41); m.overflowMode = TextOverflowModes.Ellipsis;   // left column, under what the feat honours
+                var said = Rich.Plain(moment.Text) + (string.IsNullOrEmpty(moment.Note) ? Rich.Empty : " " + Rich.Plain(moment.Note).Ink(Hex(PanelLook.Muted)).Italic());
+                var m = RichLabel(area, "featdetail", said, 15, PanelLook.Text, align: TextAlignmentOptions.TopLeft); m.rectTransform.Box(16, 119, FeatDetailLeft - 32, 41); m.overflowMode = TextOverflowModes.Ellipsis;   // left column, under what the feat honours
             }
         }
 
@@ -296,26 +297,26 @@ namespace Hearthwoven.Panel
             var titles = b.Note ?? "";
             if (feats.Count == 0 && titles.Length == 0) return;
             // what goes on the line, measured first (the same label settings as drawn): (marker icon, text, colour, style, tag)
-            float Measure(string text, float size, FontStyles style, float spacing = 0)
+            float Measure(Rich text, float size, FontStyles style, float spacing = 0)
             {
-                var m = Label(col, text, size, Color.white, style: style); m.textWrappingMode = TextWrappingModes.NoWrap; m.characterSpacing = spacing;
+                var m = RichLabel(col, "featband", text, size, Color.white, style: style);   // measured as drawn: rich text on, so tags take no width m.textWrappingMode = TextWrappingModes.NoWrap; m.characterSpacing = spacing;
                 var w = Mathf.Ceil(m.preferredWidth); m.gameObject.SetActive(false); Destroy(m.gameObject); return w;
             }
             var many = feats.Count > 1;
-            var featParts = feats.Select(f => (f, name: f.Title + (string.IsNullOrEmpty(f.Value) ? "" : " <b><color=" + Hex(TierInk(f.Colour, PanelLook.Gold)) + ">" + f.Value + "</color></b>"))).ToList();
-            float featW = featParts.Count == 0 ? 0 : Measure(many ? PanelModel.FeatsHeading : PanelModel.FeatLabel, PanelLook.MinText, FontStyles.UpperCase, 10) + 8
+            var featParts = feats.Select(f => (f, name: Rich.Plain(f.Title) + (string.IsNullOrEmpty(f.Value) ? Rich.Empty : " " + Rich.Plain(f.Value).Ink(Hex(TierInk(f.Colour, PanelLook.Gold))).Bold()))).ToList();
+            float featW = featParts.Count == 0 ? 0 : Measure(Rich.Plain(many ? PanelModel.FeatsHeading : PanelModel.FeatLabel), PanelLook.MinText, FontStyles.UpperCase, 10) + 8
                 + featParts.Sum(p => 22 + 6 + Measure(p.name, 15, FontStyles.Normal) + EarnedGap) - EarnedGap;
             var moment = !many && feats.Count == 1 ? feats[0].Text ?? "" : "";
-            if (moment.Length > 0) featW += 10 + Measure(moment, PanelLook.MinText, FontStyles.Italic);
+            if (moment.Length > 0) featW += 10 + Measure(Rich.Plain(moment), PanelLook.MinText, FontStyles.Italic);
             var icon = b.Icon;
-            float titleW = titles.Length == 0 ? 0 : Measure(b.Text ?? PanelModel.TitlesWord, PanelLook.MinText, FontStyles.UpperCase, 10) + 8 + (string.IsNullOrEmpty(icon) ? 0 : 22 + 6) + Measure(titles, 15, FontStyles.Normal);
+            float titleW = titles.Length == 0 ? 0 : Measure(Rich.Plain(b.Text ?? PanelModel.TitlesWord), PanelLook.MinText, FontStyles.UpperCase, 10) + 8 + (string.IsNullOrEmpty(icon) ? 0 : 22 + 6) + Measure(Rich.Plain(titles), 15, FontStyles.Normal);
             var inner = Column - EarnedPad * 2;
             var second = featW > 0 && titleW > 0 && featW + EarnedGap * 2 + 1 + titleW > inner;   // the titles do not fit beside the feat: a second line
             var box = Node("Earned", col); Size(box, -1, second ? EarnedLine * 2 : EarnedLine);
             BtRect(box, "Ground", new Color(0f, 0f, 0f, 0.30f), 0, 0, Column, second ? EarnedLine * 2 : EarnedLine);
             BtRect(box, "Edge", PanelLook.Gold, 0, 0, 3, second ? EarnedLine * 2 : EarnedLine);
             float x = EarnedPad, top = 0;
-            void Tag(string text, Color c) { var w = Measure(text, PanelLook.MinText, FontStyles.UpperCase, 10); var t = BtText(box, text, x, top, w + 2, EarnedLine, PanelLook.MinText, c, style: FontStyles.UpperCase); t.characterSpacing = 10; x += w + 8; }
+            void Tag(string text, Color c) { var w = Measure(Rich.Plain(text), PanelLook.MinText, FontStyles.UpperCase, 10); var t = BtText(box, text, x, top, w + 2, EarnedLine, PanelLook.MinText, c, style: FontStyles.UpperCase); t.characterSpacing = 10; x += w + 8; }
             if (featParts.Count > 0)
             {
                 var from = x;
@@ -323,10 +324,10 @@ namespace Hearthwoven.Panel
                 foreach (var (f, name) in featParts)
                 {
                     BtMarker(box, f.Icon, x, top + (EarnedLine - 22) / 2, 22); x += 22 + 6;
-                    var w = Measure(name, 15, FontStyles.Normal); BtText(box, name, x, top, w + 2, EarnedLine, 15, PanelLook.Text); x += w + EarnedGap;
+                    var w = Measure(name, 15, FontStyles.Normal); BtRich(box, "featband", name, x, top, w + 2, EarnedLine, 15, PanelLook.Text); x += w + EarnedGap;
                 }
                 x -= EarnedGap;
-                if (moment.Length > 0) { x += 10; var w = Measure(moment, PanelLook.MinText, FontStyles.Italic); BtText(box, moment, x, top, w + 2, EarnedLine, PanelLook.MinText, PanelLook.Muted, style: FontStyles.Italic); x += w; }
+                if (moment.Length > 0) { x += 10; var w = Measure(Rich.Plain(moment), PanelLook.MinText, FontStyles.Italic); BtText(box, moment, x, top, w + 2, EarnedLine, PanelLook.MinText, PanelLook.Muted, style: FontStyles.Italic); x += w; }
                 var click = string.IsNullOrEmpty(b.Id) ? null : link?.Invoke(b.Id);
                 if (click != null) { var hit = Img(box, "Hit", null, new Color(0, 0, 0, 0), raycast: true); hit.rectTransform.Box(from, 0, x - from, EarnedLine); var bt = hit.gameObject.AddComponent<UnityEngine.UI.Button>(); bt.targetGraphic = hit; bt.transition = Selectable.Transition.None; bt.onClick.AddListener(() => click()); }
             }

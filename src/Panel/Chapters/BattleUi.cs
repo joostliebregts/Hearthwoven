@@ -54,6 +54,15 @@ namespace Hearthwoven.Panel
             return t;
         }
 
+        /// <summary>BtText for <see cref="Rich"/> text: rich text on for the block kinds PanelRich lists (richtext-fix; see RichLabel).</summary>
+        static TextMeshProUGUI BtRich(RectTransform parent, string kind, Rich text, float x, float top, float w, float h, float size, Color colour,
+                                      TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft, FontStyles style = FontStyles.Normal)
+        {
+            var t = BtText(parent, text.Markup, x, top, w, h, size, colour, align, style);
+            t.richText = PanelRich.On(kind);
+            return t;
+        }
+
         static Image BtRect(RectTransform parent, string name, Color colour, float x, float top, float w, float h)
         {
             var i = Img(parent, name, null, colour); i.rectTransform.Box(x, top, w, h); return i;

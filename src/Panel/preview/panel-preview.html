@@ -361,6 +361,16 @@ const TONE = { poison:"#6fae3a", fire:"#e0582a", frost:"#8ec9e8", lightning:"#8d
   slash:"#a8a49b", pierce:"#c4bfb4", blunt:"#8a867e", chop:"#736f68", pickaxe:"#5f5b55", damage:"#9b8f80", ember:"#e8a948" };
 const PEOPLE = ["#d6ccb3", "#9b4a50", "#5f86a0", "#94a56c", "#c4923f", "#8f7599", "#4d7a69", "#80807c"];   // fallback only: the dump carries PanelModel.PlayerPalette
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" })[c]);
+// richtext-fix: a label the UI writes in TMP rich text (src/Panel/RichText.cs, Rich) shows its tags as letters unless rich text is on for
+// the block's kind. window.PANEL_RICH (preview-data.js, from PanelRich.Kinds: the map PanelUi.RichLabel reads) says which kinds; for any
+// other kind the bridge draws what the game would draw: the raw tags, escaped. The preview no longer forgives what the game does not.
+const RICH = new Set(window.PANEL_RICH || []);
+const INK = { text: "#E9DCC4", muted: "#B9A688", faint: "#B0A086", gold: "#E8C27A" };   // PanelLook, as ColorUtility.ToHtmlStringRGB writes them
+const T = {   // Rich's tags, the same strings the UI writes
+  plain: s => { s = String(s ?? ""); return s.includes("<") ? `<noparse>${s.replace(/<\/noparse>/g, "")}</noparse>` : s; },
+  b: s => `<b>${s}</b>`, i: s => `<i>${s}</i>`, ink: (s, hex) => `<color=${String(hex).toUpperCase()}>${s}</color>`, size: (s, px) => `<size=${px}>${s}</size>`,
+};
+const rich = (kind, html, markup) => RICH.has(kind) ? html : esc(markup);
 // the player palette comes with the dump (PanelModel.PlayerPalette): one table for the game and the preview
 function personColor(name) { const pal = (window.CURRENT.palette || []).map(p => p.c); const P = pal.length ? pal : PEOPLE; const map = window.CURRENT.personColors || {}; const k = Object.keys(map).find(n => n.toLowerCase() === String(name).toLowerCase()); return P[k ? map[k] - 1 : 0]; }
 const NEW_TITLES = ["woodcutter", "mapmaker", "mender", "wallwarden", "bossbane"];
@@ -559,14 +569,14 @@ function itemgrid(b) {
   const textW = Math.floor((COLUMN - 8 * (per - 1)) / per) - 54, wraps = b.items.some(i => (i.title || "").length * 6.7 > textW);
   const h = 46 + (wraps ? 14 : 0) + (second ? 14 : 0) + (lab ? 14 : 0);
   return `<div class="ig" style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(i => `<div class="ig-t k-track" style="height:${h}px">
-    ${i.colour ? `<span class="edge" style="background:${i.colour}"></span>` : ""}<span class="ig-p">${pic(i.icon, 32)}</span><span class="ig-x"><span class="ig-n">${esc(i.value)}</span><span class="ig-l">${esc(i.title)}${i.tone === "fuel" ? `<span class="fuel">fuel</span>` : ""}</span>${i.value2 ? `<span class="ig-s">${layered(i, "var(--text)") || esc(i.value2)} ${esc(i.text)}</span>` : ""}${i.since ? `<span class="since" style="margin:0;font-size:var(--mintext)">since install</span>` : ""}</span></div>`).join("")}</div>` + sinceUnder(b.since) + note(b.note);
+    ${i.colour ? `<span class="edge" style="background:${i.colour}"></span>` : ""}<span class="ig-p">${pic(i.icon, 32)}</span><span class="ig-x"><span class="ig-n">${esc(i.value)}</span><span class="ig-l">${i.tone === "fuel" ? rich("itemgrid", `${esc(i.title)}<span class="fuel">fuel</span>`, T.plain(i.title) + " " + T.size(T.i(T.ink("fuel", INK.faint)), 14)) : esc(i.title)}</span>${i.value2 ? `<span class="ig-s">${layered(i, INK.text, false, "itemgrid") || esc(i.value2)} ${esc(i.text)}</span>` : ""}${i.since ? `<span class="since" style="margin:0;font-size:var(--mintext)">since install</span>` : ""}</span></div>`).join("")}</div>` + sinceUnder(b.since) + note(b.note);
 }
 // a linked bar's part: its colour and its pattern sprite over it (FacetUi.PartPattern; the solid part has none)
 const patFill = p => `background-color:${p.colour};` + (p.pattern ? `background-image:url(${vocab(p.pattern)});` : "");
 // the filter bar (FacetUi.cs): chip rows with live counts, the chosen chips as tokens + result line + Clear all, linked bars with legends
 function filterbar(b) {
   const its = b.items || [], rows = its.filter(x => x.kind === "facet"), applied = its.find(x => x.kind === "applied"), bars = its.filter(x => x.kind === "facetbar");
-  const chip = c => `<span class="fb-chip k-track${c.selected ? " on" : ""}${c.tone === "cursor" ? " cur" : ""}${c.tone === "zero" ? " zero" : ""}">${esc(c.title)}<b>${esc(c.value)}</b></span>`;
+  const chip = c => `<span class="fb-chip k-track${c.selected ? " on" : ""}${c.tone === "cursor" ? " cur" : ""}${c.tone === "zero" ? " zero" : ""}">${rich("filterbar", `${esc(c.title)}<b>${esc(c.value)}</b>`, T.plain(c.title) + "  " + T.b(T.ink(T.plain(c.value), c.selected ? INK.gold : INK.muted)))}</span>`;
   // PanelUi.LabelWidth: the longest name (14 px) or honest line (13 px); the filter key's cap sits on the header, not on a row
   const labW = b.tone === "compact" ? Math.min(128, Math.ceil(Math.max(...rows.map(r => Math.max((r.title || "").length * 7.6, (r.note || "").length * 6.8)))) + 6) : 128;
   const row = r => `<div class="fb-row"><div class="fb-lab${r.tone === "focus" ? " focus" : ""}" style="width:${labW}px"><div class="hd"><span>${esc(r.title)}</span></div>${r.tone === "focus" ? `<div class="fl"></div>` : ""}${r.note ? `<small>${esc(r.note)}</small>` : ""}</div>
@@ -574,7 +584,7 @@ function filterbar(b) {
   const toks = applied ? applied.items || [] : [];
   const inline = b.tone === "inline", open = !!b.open;
   const kc = b.keyCap ? `<div class="kc">${esc(b.keyCap)}</div>` : "";
-  const tok = t => `<span class="fb-tok">${esc(t.title)} ×</span>`;
+  const tok = t => `<span class="fb-tok">${rich("filterbar", `${esc(t.title)} ×`, T.plain(t.title) + " ×")}</span>`;
   // inline (Battle Overview): the row's name and the key lead the one line; else the header: Filter, the key, the tokens or "all", the result, Clear all, Show/Hide filters
   const lead = inline && (rows[0] || b.title) ? `<span style="font-size:14px;${rows[0] && rows[0].tone === "focus" ? "color:var(--gold);font-weight:700" : ""}">${esc(rows[0] ? rows[0].title : b.title)}</span>${kc}` : "";
   const app = !applied ? "" : inline
@@ -588,7 +598,7 @@ function filterbar(b) {
 // the kitchen ledger (Cooking) adds a source line under the name (text) and the row's total at the right (value, note), as VoyagesHallUi.Ledger
 const ledger = b => { const lined = b.items.some(r => r.text), totals = b.items.some(r => r.value); return `<div class="lg${lined ? " lg-wide" : ""}">${b.items.map(r => `<div class="lg-r"><span class="lg-h">${lined ? `<span class="lg-nm"><b>${esc(r.title)}</b><span>${esc(r.text)}</span></span>` : `${r.colour ? `<i style="background:${r.colour}"></i>` : ""}${esc(r.title)}`}</span><span class="lg-f">${(r.items || []).map(c =>
     `<span class="lg-c k-track">${c.colour ? `<span class="edge" style="background:${c.colour}"></span>` : ""}${c.icon ? pic(c.icon, lined ? 22 : 28) : ""}<span class="n">${esc(c.value)}</span><span class="t">${esc(c.title)}</span>${c.tone === "fuel" ? `<span class="fuel">fuel</span>` : ""}${since(c.since)}</span>`).join("")}</span>${totals ? `<span class="lg-t"><b>${esc(r.value)}</b><span>${esc(r.note)}</span></span>` : ""}</div>`).join("")}</div>` + sinceUnder(b.since); };
-const strip = b => `<div class="st">${b.items.map(i => `<span class="st-i">${pic(i.icon, 28)}${i.value ? `<span class="st-n">${layered(i, null, true) || esc(i.value)}</span><span class="st-l">${esc(i.title)}</span>` : `<span style="font-size:18px">${esc(i.title)}</span>`}${i.text ? `<span style="font-size:var(--mintext);color:var(--muted)">${esc(i.text)}</span>` : ""}${since(i.since)}</span>`).join("")}</div>`;
+const strip = b => `<div class="st">${b.items.map(i => `<span class="st-i">${pic(i.icon, 28)}${i.value ? `<span class="st-n">${layered(i, null, true, "strip") || esc(i.value)}</span><span class="st-l">${esc(i.title)}</span>` : `<span style="font-size:18px">${esc(i.title)}</span>`}${i.text ? `<span style="font-size:var(--mintext);color:var(--muted)">${esc(i.text)}</span>` : ""}${since(i.since)}</span>`).join("")}</div>`;
 const grades = b => `<div class="gr">${b.items.map((i, k) => `<div class="gr-c"><span class="gr-n">${esc(i.value)}</span>${pic(i.icon, 22 + k * 6)}<span class="gr-l">${esc(i.title)}</span></div>`).join("")}</div>`;
 const band = b => `<div class="bd k-track">${marker(b.icon, 34)}<span class="bd-t">${esc(b.title)}</span><span class="bd-r"></span><span class="bd-v">${esc(b.value)}</span>${since(b.since)}</div>`;
 const people = b => b.items.map(p => `<div class="pp-row">${marker(p.icon, 38)}<span class="pp-nm">${esc(p.title)}</span>${(p.items || []).map(i => `<span class="pp-it">${pic(i.icon, 34)}${esc(i.title)}${since(i.since)}</span>`).join("")}</div>`).join("");
@@ -600,8 +610,11 @@ const chip = (label, icon, on, off) => `<span class="chip${on ? " on" : ""}${off
 // a layered number (Block.Faded/Solid, PanelUi.LayeredText): the game's count before Hearthwoven faint, then the count since
 // zones-wording: with words (heroes, strips) each part says it at the number, "114 before install + 52 since install" (PanelUi.LayeredText size)
 const lw = (w, words) => words ? `<i class="lw">${w}</i>` : "";
-const layered = (n, solid, words) => n.faded && n.solid ? `<span style="color:var(--faint)">${esc(n.faded)}${lw("before install", words)} +</span> ${solid ? `<span style="color:${solid}">${esc(n.solid)}${lw("since install", words)}</span>` : esc(n.solid) + lw("since install", words)}` : null;
-const heroNum = (n, second) => `<div class="hn${second ? " second" : ""}"><span class="num">${layered(n, null, true) || esc(n.value)}</span><span class="what">${esc(n.title)}${n.note ? `<span class="q">${esc(n.note)}</span>` : ""}${since(n.since)}</span></div>`;
+const lt = (w, words) => words ? T.size(T.b("") + T.i(T.plain(" " + w)), 14) : "";   // PanelUi.LayeredText's words, as tags
+const layered = (n, solid, words, kind) => n.faded && n.solid ? rich(kind,
+  `<span style="color:var(--faint)">${esc(n.faded)}${lw("before install", words)} +</span> ${solid ? `<span style="color:${solid}">${esc(n.solid)}${lw("since install", words)}</span>` : esc(n.solid) + lw("since install", words)}`,
+  T.ink(T.plain(n.faded) + lt("before install", words) + " +", INK.faint) + " " + (solid ? T.ink(T.plain(n.solid) + lt("since install", words), solid) : T.plain(n.solid) + lt("since install", words))) : null;
+const heroNum = (n, second) => `<div class="hn${second ? " second" : ""}"><span class="num">${layered(n, null, true, "hero") || esc(n.value)}</span><span class="what">${esc(n.title)}${n.note ? `<span class="q">${esc(n.note)}</span>` : ""}${since(n.since)}</span></div>`;
 const hero = b => `<div class="hero${b.tone === "compact" ? " compact" : ""}">${heroNum(b, false)}${(b.items || []).map(n => `<span class="rule"></span>${heroNum(n, true)}`).join("")}</div>`;
 function columns(b) {
   const cols = b.items.filter(c => c.items.length), outer = COLUMN; COLUMN = (outer - 34 * (cols.length - 1)) / cols.length;
@@ -619,15 +632,16 @@ function cards(b) {
 }
 // ---------- Farming's crop grid (PanelUi Chapters/CropsUi.cs): compact tiles with two thin paired bars and their numbers ----------
 function cropgrid(b) {
+  const pairText = p => rich("cropgrid", `<b>${esc(p.value)}</b> <span style="color:var(--faint)">${esc(p.title)}</span>`, T.b(T.plain(p.value)) + " " + T.ink(T.plain(p.title), INK.faint));   // CropsUi: "72 planted"
   const per = Math.max(1, Math.min(6, Math.floor((COLUMN + 10) / 230))), w = Math.floor((COLUMN - 10 * (per - 1)) / per), x = 48, bw = w - x - 8 - 96 - 6;
   const pair = (p, k) => { const top = 27 + k * 17, full = Math.min(1, p.fraction) * bw, fd = Math.min(1, Math.max(0, p.fraction2 || 0));
     return `<i style="position:absolute;left:${x}px;top:${top + 5}px;width:${bw}px;height:6px;background:#2b2117"></i>`
       + (fd > 0 ? `<i style="position:absolute;left:${x}px;top:${top + 5}px;width:${Math.max(1, full * fd)}px;height:6px;background:${p.colour};opacity:.55"></i>` : "")
       + (fd < 1 && full > 0 ? `<i style="position:absolute;left:${x + full * fd}px;top:${top + 5}px;width:${Math.max(2, full * (1 - fd))}px;height:6px;background:${p.colour}"></i>` : "")
-      + `<span style="position:absolute;left:${x + bw + 6}px;top:${top}px;height:16px;line-height:16px;font-size:var(--mintext);white-space:nowrap;color:var(--text)"><b>${esc(p.value)}</b> <span style="color:var(--faint)">${esc(p.title)}</span></span>`; };
+      + `<span style="position:absolute;left:${x + bw + 6}px;top:${top}px;height:16px;line-height:16px;font-size:var(--mintext);white-space:nowrap;color:var(--text)">${pairText(p)}</span>`; };
   const sw = (c, t) => `<span style="display:inline-flex;align-items:center;gap:8px;margin-right:14px"><i style="width:18px;height:6px;background:${c}"></i>${t}</span>`;
   // CropsUi: a slim entry (Other plants: picked alone) is one 40 px row under the tiles, picture, name, the picked colour and its number
-  const slimRow = i => `<div class="k-track" style="position:relative;height:40px;margin-top:10px"><span style="position:absolute;left:8px;top:7px">${pic(i.icon, 26)}</span><span style="position:absolute;left:44px;top:11px;height:18px;line-height:18px;font-size:var(--mintext);color:var(--muted);white-space:nowrap">${esc(i.title)}</span>${(i.items || []).map((p, k) => `<i style="position:absolute;left:${206 + k * 138}px;top:17px;width:18px;height:6px;background:${p.colour}"></i><span style="position:absolute;left:${230 + k * 138}px;top:11px;height:18px;line-height:18px;font-size:var(--mintext);white-space:nowrap;color:var(--text)"><b>${esc(p.value)}</b> <span style="color:var(--faint)">${esc(p.title)}</span></span>`).join("")}</div>`;
+  const slimRow = i => `<div class="k-track" style="position:relative;height:40px;margin-top:10px"><span style="position:absolute;left:8px;top:7px">${pic(i.icon, 26)}</span><span style="position:absolute;left:44px;top:11px;height:18px;line-height:18px;font-size:var(--mintext);color:var(--muted);white-space:nowrap">${esc(i.title)}</span>${(i.items || []).map((p, k) => `<i style="position:absolute;left:${206 + k * 138}px;top:17px;width:18px;height:6px;background:${p.colour}"></i><span style="position:absolute;left:${230 + k * 138}px;top:11px;height:18px;line-height:18px;font-size:var(--mintext);white-space:nowrap;color:var(--text)">${pairText(p)}</span>`).join("")}</div>`;
   return `<div style="display:grid;gap:10px;grid-template-columns:repeat(${per}, ${w}px)">${b.items.filter(i => i.tone !== "slim").map(i => `<div class="k-track" style="position:relative;height:66px">
       <span style="position:absolute;left:8px;top:17px">${pic(i.icon, 32)}</span>
       <span style="position:absolute;left:${x}px;right:6px;top:5px;font-size:var(--mintext);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(i.title)}</span>
@@ -1133,7 +1147,8 @@ function feats(b) {
     const notches = earned && c.count > 1 ? Array.from({ length: Math.min(c.level + 1, c.count) }, (_, k) => `<i class="nt${k < c.level ? "" : " nx"}" style="left:${9 + k * 15}px${k < c.level ? ";background:" + tierColour(k + 1, c.count) : ""}"></i>`).join("") : "";
     const waiting = c.tone === "waiting";
     const tierWord = earned && c.count > 1 && c.level > 0 ? ` <span class="tierw" style="color:${c.colour}">${["", "I", "II", "III"][c.level]}</span>` : "";   // FeatsUi.FeatCard: "Drover II", the numeral in its tier's colour
-    return `<div class="fcard k-track${earned ? " earned" : ""}${waiting ? " waiting" : ""}${c.selected ? " sel" : ""}${c.count > 1 ? " n" + c.count : ""}"${c.colour ? ` style="--tier:${c.colour}"` : ""}>${marker(c.icon, 36)}<div class="ft"><div class="fn${c.note ? " one" : ""}">${esc(c.title)}${tierWord}</div>${c.text ? `<div class="fm">${esc(c.text)}</div>` : ""}${c.note ? `<div class="fw">${esc(c.note)}</div>` : ""}</div>${waiting ? "" : notches}</div>`;
+    const tierTags = tierWord ? " " + T.b(T.ink(T.plain(["", "I", "II", "III"][c.level]), c.colour || INK.gold)) : "";
+    return `<div class="fcard k-track${earned ? " earned" : ""}${waiting ? " waiting" : ""}${c.selected ? " sel" : ""}${c.count > 1 ? " n" + c.count : ""}"${c.colour ? ` style="--tier:${c.colour}"` : ""}>${marker(c.icon, 36)}<div class="ft"><div class="fn${c.note ? " one" : ""}">${rich("feats", esc(c.title) + tierWord, T.plain(c.title) + tierTags)}</div>${c.text ? `<div class="fm">${esc(c.text)}</div>` : ""}${c.note ? `<div class="fw">${esc(c.note)}</div>` : ""}</div>${waiting ? "" : notches}</div>`;
   }).join("")}</div></div>`;
 }
 function featdetail(b) {
@@ -1153,13 +1168,13 @@ function featdetail(b) {
   const cr = it("crew")[0];   // a group feat: who carried, shields by name (FeatsUi.FeatDetailFill)
   if (cr && y + 22 <= 160) h += `<div class="fcrew" style="top:${y}px"><span>${esc(cr.title)}</span>${cr.items.map(p => `${marker(p.icon, 20)}<span class="cn">${esc(p.title)}</span>`).join("")}</div>`;
   const mo = it("moment")[0];
-  if (mo) h += `<div class="mo">${esc(mo.text)}${mo.note ? ` <i>${esc(mo.note)}</i>` : ""}</div>`;   // left column, under what the feat honours (FeatsUi.FeatDetailFill)
+  if (mo) h += `<div class="mo">${rich("featdetail", esc(mo.text) + (mo.note ? ` <i>${esc(mo.note)}</i>` : ""), T.plain(mo.text) + (mo.note ? " " + T.i(T.ink(T.plain(mo.note), INK.muted)) : ""))}</div>`;   // left column, under what the feat honours (FeatsUi.FeatDetailFill)
   return `<div class="fdet k-track${earned ? " earned" : ""}${b.tone === "waiting" ? " waiting" : ""}"${b.colour ? ` style="--tier:${b.colour}"` : ""}>${marker(b.icon, 56)}<div class="dn">${esc(b.title)}</div>${b.value ? `<div class="dt">${esc(b.value)}</div>` : ""}<div class="dh">${esc(b.text)}</div>${h}</div>`;
 }
 const knownfor = b => `<div class="kfor"><span class="kfh">${esc(b.title)}</span>${b.items.map(i => `<span class="kfc k-track"${i.colour ? ` style="--tier:${i.colour}"` : ""}>${marker(i.icon, 26)}${esc(i.title)}${i.value ? ` <b>${esc(i.value)}</b>` : ""}</span>`).join("")}</div>`;
 function featband(b) {   // fix4: the feat and the titles, one flat strip (FeatsUi.FeatBandBlock)
   const feats = b.items || [], many = feats.length > 1;
-  const fpart = feats.length ? `<span class="ea-f"><span class="ea-tag gold">${many ? "Feats" : "Feat"}</span>${feats.map(f => `<span class="ea-i">${marker(f.icon, 22)}<span class="ea-n">${esc(f.title)}${f.value ? ` <b style="color:${f.colour || "var(--gold)"}">${esc(f.value)}</b>` : ""}</span></span>`).join("")}${!many && feats[0].text ? `<span class="ea-m">${esc(feats[0].text)}</span>` : ""}</span>` : "";
+  const fpart = feats.length ? `<span class="ea-f"><span class="ea-tag gold">${many ? "Feats" : "Feat"}</span>${feats.map(f => `<span class="ea-i">${marker(f.icon, 22)}<span class="ea-n">${rich("featband", esc(f.title) + (f.value ? ` <b style="color:${f.colour || "var(--gold)"}">${esc(f.value)}</b>` : ""), T.plain(f.title) + (f.value ? " " + T.b(T.ink(T.plain(f.value), f.colour || INK.gold)) : ""))}</span></span>`).join("")}${!many && feats[0].text ? `<span class="ea-m">${esc(feats[0].text)}</span>` : ""}</span>` : "";
   const tpart = b.note ? `<span class="ea-t"><span class="ea-tag">${esc(b.text || "Titles")}</span>${b.icon ? marker(b.icon, 22) : ""}<span class="ea-tn">${esc(b.note)}</span></span>` : "";
   return `<div class="earned">${fpart}${fpart && tpart ? `<span class="ea-rule"></span>` : ""}${tpart}</div>`;
 }
