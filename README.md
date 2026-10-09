@@ -34,6 +34,16 @@ Your own deeds sit under titles such as Hearth Cook, Hallwright and Woodcutter. 
 [![Deeds: titles for different playstyles](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)
 *Deeds overview.*
 
+## Filter what you made
+
+On the Crafting and Building pages, filter by kind, by the hammer's tab and by material. Combine filters to answer a question, such as how much of the hall is core wood, and the bars and counts follow.
+
+[![Filters on the Crafting page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)
+*Crafting: filter by kind and material.*
+
+[![Filters on the Building page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)
+*Building: filter by the hammer's tab and material.*
+
 ## Look closer
 
 - **Cooking:** the dishes you cooked, where you cooked them and who enjoyed your food.
@@ -73,18 +83,12 @@ Some feats have several levels, marked bronze, silver and gold. Each level has i
 </details>
 
 <details>
-<summary>A deed, up close: woodcutting and filters</summary>
+<summary>A deed, up close: woodcutting</summary>
 
-See how many trees you felled, how many axe hits each tree took and which types of wood you brought in. On the Crafting and Building pages, you can filter by type and material.
+See how many trees you felled, how many axe hits each tree took and which types of wood you brought in.
 
 [![Woodcutting: trees felled and wood brought in](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s3-woodcutting.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s3-woodcutting.png)
 *Woodcutting.*
-
-[![Filters on the Crafting page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)
-*Crafting: filter by kind and material.*
-
-[![Filters on the Building page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)
-*Building: filter by the hammer's tab and material.*
 
 </details>
 
