@@ -7,5 +7,12 @@
     <Reference Include="assembly_utils"><HintPath>../lib/assembly_utils.dll</HintPath></Reference>
     <Reference Include="UnityEngine"><HintPath>../lib/UnityEngine.dll</HintPath></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>../lib/UnityEngine.CoreModule.dll</HintPath></Reference>
+    <!-- HookGuardTests reflects over every patch class: Harmony and the panel's UI assemblies must load -->
+    <Reference Include="0Harmony"><HintPath>../lib/0Harmony.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>../lib/UnityEngine.UI.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>../lib/UnityEngine.UIModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>../lib/UnityEngine.TextRenderingModule.dll</HintPath></Reference>
+    <Reference Include="Unity.TextMeshPro"><HintPath>../lib/Unity.TextMeshPro.dll</HintPath></Reference>
+    <Reference Include="assembly_guiutils"><HintPath>../lib/assembly_guiutils.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

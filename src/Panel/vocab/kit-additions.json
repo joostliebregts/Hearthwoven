@@ -1,0 +1,1652 @@
+{
+  "tree-beech.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "tree-birch.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "tree-oak.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "tree-pine.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "tree-fir.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "tree-ancient.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "tree-yggdrasil.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-meadows.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-blackforest.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-swamp.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-mountains.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-plains.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-mistlands.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-ashlands.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-deepnorth.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-ocean.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "biome-fog.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; repeat in both axes over unvisited biome tiles."
+  },
+  "death.png": {
+    "size": [
+      48,
+      48
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "boss-ring.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; defeated-boss frame. Native trophy fits within central 36 px circle."
+  },
+  "src-stone.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; ivory tally cuts on a wooden board. Character-owned count carried across worlds; legacy filename retained."
+  },
+  "src-hearth.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "src-fellows.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "grain-wood.png": {
+    "size": [
+      128,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White. Repeat horizontally at native height; do not stretch the grain. White numbers may overlay."
+  },
+  "grain-finewood.png": {
+    "size": [
+      128,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White. Repeat horizontally at native height; do not stretch the grain. White numbers may overlay."
+  },
+  "grain-corewood.png": {
+    "size": [
+      128,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White. Repeat horizontally at native height; do not stretch the grain. White numbers may overlay."
+  },
+  "grain-ancientbark.png": {
+    "size": [
+      128,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White. Repeat horizontally at native height; do not stretch the grain. White numbers may overlay."
+  },
+  "thread-arc-shallow.png": {
+    "size": [
+      256,
+      96
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Neutral grayscale. Multiply by gear-grey or food-amber; preserve aspect. Baked cord geometry, never a runtime curve."
+  },
+  "thread-arc-medium.png": {
+    "size": [
+      256,
+      96
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Neutral grayscale. Multiply by gear-grey or food-amber; preserve aspect. Baked cord geometry, never a runtime curve."
+  },
+  "thread-arc-deep.png": {
+    "size": [
+      256,
+      96
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Neutral grayscale. Multiply by gear-grey or food-amber; preserve aspect. Baked cord geometry, never a runtime curve."
+  },
+  "thread-arrow.png": {
+    "size": [
+      24,
+      24
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White base; tint with its thread. Tip points right; apex (22,12)."
+  },
+  "thread-bead.png": {
+    "size": [
+      48,
+      48
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Neutral; tint with thread. Native gifted item fits inside central 30 px circle."
+  },
+  "ladder-rung.png": {
+    "size": [
+      64,
+      16
+    ],
+    "border": [
+      12,
+      0,
+      12,
+      0
+    ],
+    "ppu": 100,
+    "type": "sliced",
+    "tint": "Neutral; tint amber for completed, muted for remaining. Stretch horizontally only.",
+    "fixedHeight": 16,
+    "minimumSize": [
+      25,
+      16
+    ],
+    "stretchAxes": "x"
+  },
+  "ladder-rail.png": {
+    "size": [
+      16,
+      64
+    ],
+    "border": [
+      0,
+      8,
+      0,
+      8
+    ],
+    "ppu": 100,
+    "type": "sliced",
+    "tint": "Neutral; tint muted gold. Stretch vertically only.",
+    "minimumSize": [
+      16,
+      17
+    ],
+    "stretchAxes": "y"
+  },
+  "ladder-mark.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored amber. Points right at the current level."
+  },
+  "rock-stone.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "rock-copper.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "rock-tin.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "rock-scrap.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "rock-silver.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Preserve aspect ratio."
+  },
+  "glow-soft.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; baked amber radial glow. Place behind ladder-mark. Uniform scale only."
+  },
+  "list-fade-bottom.png": {
+    "size": [
+      32,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Multiply white RGB by exact plate colour. Transparent top, opaque bottom. Stretch horizontally; choose height deliberately for fade length. Overlay bottom of scrolling content; disable raycast."
+  },
+  "home-mark.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Ivory; white default. Time in base, not a native build-piece icon."
+  },
+  "hearth-fire.png": {
+    "size": [
+      96,
+      96
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; amber fire and soft glow already baked in. Centre on the Company circle. Static, preserve aspect."
+  },
+  "dmg-blunt.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "dmg-slash.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "dmg-pierce.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "dmg-fire.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "dmg-frost.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "dmg-lightning.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "dmg-poison.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "dmg-spirit.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "weapon-melee.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "weapon-bow.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "weapon-magic.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "block-mark.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "parry-spark.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask. Multiply by the panel colour; preserve aspect. Generic category symbol, never a native item or skill substitute."
+  },
+  "immunity-stamp.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; amber diagonal with narrow dark separation stroke. Overlay the existing damage icon. No filled disk; centre is open except for the crossing stroke."
+  },
+  "compass-rose.png": {
+    "size": [
+      160,
+      160
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; arm-free decorative ring. Cardinal ticks are fixed orientation marks, never amounts. Interior is transparent within radius 60 at (80,80). Data arms must be separate panel bars, placed once."
+  },
+  "compass-home.png": {
+    "size": [
+      24,
+      24
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; centre home mark at the compass origin. Preserve aspect."
+  },
+  "grain-ground-level.png": {
+    "size": [
+      120,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Groundwork fill (Deeds > Building), drawn by Claude after the r2-deeds-building strokes as a stand-in for Codex. Repeat horizontally at native height; do not stretch."
+  },
+  "grain-ground-lower.png": {
+    "size": [
+      120,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Groundwork fill for lowered ground: the raise chevrons mirrored (vvv), so raise and lower read as opposites. Repeat horizontally at native height; do not stretch."
+  },
+  "grain-ground-raise.png": {
+    "size": [
+      120,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Groundwork fill (Deeds > Building), drawn by Claude after the r2-deeds-building strokes as a stand-in for Codex. Repeat horizontally at native height; do not stretch."
+  },
+  "grain-ground-path.png": {
+    "size": [
+      120,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Groundwork fill (Deeds > Building), drawn by Claude after the r2-deeds-building strokes as a stand-in for Codex. Repeat horizontally at native height; do not stretch."
+  },
+  "grain-ground-paved.png": {
+    "size": [
+      120,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Groundwork fill (Deeds > Building), drawn by Claude after the r2-deeds-building strokes as a stand-in for Codex. Repeat horizontally at native height; do not stretch."
+  },
+  "grain-ground-cultivate.png": {
+    "size": [
+      120,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Groundwork fill (Deeds > Building), drawn by Claude after the r2-deeds-building strokes as a stand-in for Codex. Repeat horizontally at native height; do not stretch."
+  },
+  "grain-ground-replant.png": {
+    "size": [
+      120,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White; authored colour. Groundwork fill (Deeds > Building), drawn by Claude after the r2-deeds-building strokes as a stand-in for Codex. Repeat horizontally at native height; do not stretch."
+  },
+  "tame-tamed.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White tint; authored gold and ivory. Generic care action, not a creature portrait. Preserve aspect."
+  },
+  "tame-petted.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White tint; authored gold and ivory. Generic care action, not a creature portrait. Preserve aspect."
+  },
+  "tame-command.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White tint; authored gold and ivory. Generic care action, not a creature portrait. Preserve aspect."
+  },
+  "move-air.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by the panel legend colour. Preserve aspect. Generic action symbol; never a native item, skill or piece substitute."
+  },
+  "find-buried.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by the panel legend colour. Preserve aspect. Generic action symbol; never a native item, skill or piece substitute."
+  },
+  "find-dungeon.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by the panel legend colour. Preserve aspect. Generic action symbol; never a native item, skill or piece substitute."
+  },
+  "find-location.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by the panel legend colour. Preserve aspect. Generic action symbol; never a native item, skill or piece substitute."
+  },
+  "portal-mark.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by the panel legend colour. Preserve aspect. Generic action symbol; never a native item, skill or piece substitute."
+  },
+  "ground-lower.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by the panel legend colour. Preserve aspect. Generic action symbol; never a native item, skill or piece substitute."
+  },
+  "boss-mark.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by the panel legend colour. Preserve aspect. Generic action symbol; never a native item, skill or piece substitute."
+  },
+  "grain-wood-n.png": {
+    "size": [
+      128,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Neutral RGB-equal grain, base #d9d9d9 (~0.85). Multiply by native item-icon sampled colour. Repeat horizontally; keep height 32 before uniform scaling. White count on tinted fill; on untinted light preview use a dark text halo."
+  },
+  "grain-finewood-n.png": {
+    "size": [
+      128,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Neutral RGB-equal grain, base #d9d9d9 (~0.85). Multiply by native item-icon sampled colour. Repeat horizontally; keep height 32 before uniform scaling. White count on tinted fill; on untinted light preview use a dark text halo."
+  },
+  "grain-corewood-n.png": {
+    "size": [
+      128,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Neutral RGB-equal grain, base #d9d9d9 (~0.85). Multiply by native item-icon sampled colour. Repeat horizontally; keep height 32 before uniform scaling. White count on tinted fill; on untinted light preview use a dark text halo."
+  },
+  "grain-ancientbark-n.png": {
+    "size": [
+      128,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Neutral RGB-equal grain, base #d9d9d9 (~0.85). Multiply by native item-icon sampled colour. Repeat horizontally; keep height 32 before uniform scaling. White count on tinted fill; on untinted light preview use a dark text halo."
+  },
+  "grain-generic-n.png": {
+    "size": [
+      128,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Neutral RGB-equal grain, base #d9d9d9 (~0.85). Multiply by native item-icon sampled colour. Repeat horizontally; keep height 32 before uniform scaling. White count on tinted fill; on untinted light preview use a dark text halo."
+  },
+  "about-info.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line art; tinted muted parchment by the About page. Preserve aspect ratio."
+  },
+  "promise-reads.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line art; tinted muted parchment by the About page. Preserve aspect ratio."
+  },
+  "promise-world.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line art; tinted muted parchment by the About page. Preserve aspect ratio."
+  },
+  "promise-optional.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line art; tinted muted parchment by the About page. Preserve aspect ratio."
+  },
+  "promise-anymod.png": {
+    "size": [
+      64,
+      64
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line art; tinted muted parchment by the About page. Preserve aspect ratio."
+  },
+  "defence-built.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "list-damage.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "list-foes.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "list-food-shared.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "list-gear-shared.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "list-overview.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "list-sailing.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "list-smelters.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "list-together.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "maps-shared.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line icon; multiply by list text/selection colour. Display at 22 px, preserve aspect. Generic navigation/action symbol only; not native item, skill, trophy or title art."
+  },
+  "cargo-mark.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line mask; multiply by list/feat gold. Preserve aspect; designed for 22 px. Generic action or remembered deed, not an item, trophy, skill or title emblem."
+  },
+  "list-feats.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line mask; multiply by list/feat gold. Preserve aspect; designed for 22 px. Generic action or remembered deed, not an item, trophy, skill or title emblem."
+  },
+  "feat-waymate.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line mask; multiply by list/feat gold. Preserve aspect; designed for 22 px. Generic action or remembered deed, not an item, trophy, skill or title emblem."
+  },
+  "young-creature.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line mask; multiply by list/feat gold. Preserve aspect; designed for 22 px. Generic action or remembered deed, not an item, trophy, skill or title emblem."
+  },
+  "lead-rope.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line mask; multiply by list/feat gold. Preserve aspect; designed for 22 px. Generic action or remembered deed, not an item, trophy, skill or title emblem."
+  },
+  "grain-hatch-diag.png": {
+    "size": [
+      48,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Overlay pattern, transparent with dark and light marks (alpha); tiled over a bar segment in its colour so no part is told by colour alone. Diagonal stripes, period 8."
+  },
+  "grain-hatch-vert.png": {
+    "size": [
+      48,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Overlay pattern, transparent with dark and light marks (alpha); tiled over a bar segment in its colour so no part is told by colour alone. Vertical stripes, period 6."
+  },
+  "grain-hatch-horiz.png": {
+    "size": [
+      48,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Overlay pattern, transparent with dark and light marks (alpha); tiled over a bar segment in its colour so no part is told by colour alone. Horizontal stripes, period 8."
+  },
+  "grain-hatch-dots.png": {
+    "size": [
+      48,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Overlay pattern, transparent with dark and light marks (alpha); tiled over a bar segment in its colour so no part is told by colour alone. Dots on an 8 px grid."
+  },
+  "grain-hatch-check.png": {
+    "size": [
+      48,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Overlay pattern, transparent with dark and light marks (alpha); tiled over a bar segment in its colour so no part is told by colour alone. Checker, 4 px squares."
+  },
+  "grain-hatch-cross.png": {
+    "size": [
+      48,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Overlay pattern, transparent with dark and light marks (alpha); tiled over a bar segment in its colour so no part is told by colour alone. Crossed diagonals, period 8."
+  },
+  "list-unsung.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white line mask; the Feats medallion left empty (a feat not earned yet). Multiply by list text/selection colour. Display at 22 px, preserve aspect."
+  },
+  "focus-ring.png": {
+    "size": [
+      40,
+      40
+    ],
+    "border": [
+      14,
+      14,
+      14,
+      14
+    ],
+    "ppu": 100,
+    "type": "sliced",
+    "tint": "White, authored alpha; tint the panel gold. The keyboard focus ring (live-polish): a 2 px rounded line 8 px in, a soft glow round it. Place 8 px + gap outside the box.",
+    "minimumSize": [
+      29,
+      29
+    ]
+  }
+}

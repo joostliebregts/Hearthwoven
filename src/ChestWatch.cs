@@ -26,25 +26,35 @@ namespace Hearthwoven
         static readonly System.Reflection.FieldInfo deadField = AccessTools.Field(typeof(ZDOMan), "m_deadZDOs");
 
         /// <summary>Markers in the chest log: a world save, and a server start. Events after the last save that are followed
-        /// by a start without a save in between were rolled back with the world (INTEGRITY C12); the companion drops them.</summary>
+        /// by a start without a save in between were rolled back with the world (INTEGRITY C12); the companion drops them.
+        /// 0.6.1: each marker names the world, so a rebuild of one world's book reads only that world's events (RESILIENCE-06 I8).</summary>
         internal static void Marker(string what)
         {
             try
             {
                 var dir = Path.Combine(BepInEx.Paths.BepInExRootPath, "Hearthwoven");
                 Directory.CreateDirectory(dir);
-                File.AppendAllText(Path.Combine(dir, "chests-" + DateTime.UtcNow.ToString("yyyyMMdd") + ".jsonl"),
-                    new Json().Open().Str("t", DateTime.UtcNow.ToString("o")).Str("marker", what).Close() + "\n");
+                File.AppendAllText(Path.Combine(dir, "chests-" + DailyLogs.Day(DateTime.UtcNow) + ".jsonl"),
+                    new Json().Open().Str("t", DateTime.UtcNow.ToString("o")).Str("marker", what).Str("world", ZNet.instance?.GetWorldName() ?? "").Close() + "\n");
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] marker: " + e.Message); }
         }
 
         [HarmonyPatch(typeof(ZNet), "SaveWorld")]
-        static class Saved { static void Postfix() { if (IsServer) Marker("world-saved"); } }
+        static class Saved { static void Postfix() => HookGuard.Run(() => { if (IsServer) { Marker("world-saved"); ServerBookHooks.Save(); Plugin.CompressOldLogs(); } }); }   // 0.6: the server's book is saved with the world (C12); old daily logs compressed once a day
 
         static bool started;
         [HarmonyPatch(typeof(ZNet), "Start")]
-        static class Started { static void Postfix() { if (IsServer && !started) { started = true; Marker("server-start"); } } }
+        static class Started
+        {
+            static void Postfix() => HookGuard.Run(() =>
+            {
+                if (!IsServer) return;
+                if (!started) { started = true; Marker("server-start"); }
+                ServerBookHooks.Start();   // 0.6: after the marker, so a rebuild from the logs drops what this start rolled back
+                Plugin.CompressOldLogs();  // after the rebuild (DailyLogs.Gate keeps the two apart anyway)
+            });
+        }
 
         static ChestWatch()
         {
@@ -88,13 +98,17 @@ namespace Hearthwoven
         [HarmonyPatch(typeof(ZDOMan), "RPC_ZDOData")]
         static class Sender
         {
-            static void Prefix(ZRpc rpc)
+            static void Prefix(ZRpc rpc)   // every ZDO packet: no closure
             {
-                currentSender = 0;
-                if (!IsServer) return;
-                foreach (var peer in ZNet.instance.GetPeers()) if (peer.m_rpc == rpc) { currentSender = peer.m_uid; break; }
+                try
+                {
+                    currentSender = 0;
+                    if (!IsServer) return;
+                    foreach (var peer in ZNet.instance.GetPeers()) if (peer.m_rpc == rpc) { currentSender = peer.m_uid; break; }
+                }
+                catch (Exception e) { HookGuard.Fail(e, "ChestWatch.Sender.Prefix"); }
             }
-            static void Postfix() => currentSender = 0;
+            static void Postfix() { try { currentSender = 0; } catch (Exception e) { HookGuard.Fail(e, "ChestWatch.Sender.Postfix"); } }
         }
 
         [HarmonyPatch(typeof(ZDO), nameof(ZDO.Deserialize))]
@@ -104,7 +118,7 @@ namespace Hearthwoven
             static void Prefix(ZDO __instance, out byte[] __state)
             {
                 __state = null;
-                try { if (IsServer) __state = ZDOExtraData.GetByteArray(__instance.m_uid, ItemsHash); } catch { }
+                try { if (IsServer) __state = ZDOExtraData.GetByteArray(__instance.m_uid, ItemsHash); } catch (Exception e) { __state = null; HookGuard.Fail(e, "ChestWatch.Watch.Prefix"); }
             }
 
             static void Postfix(ZDO __instance, byte[] __state)
@@ -128,7 +142,7 @@ namespace Hearthwoven
                     if (events.Count == 0) return;
                     Write(__instance, kind, builder, events);
                 }
-                catch (Exception e) { Debug.LogWarning("[Hearthwoven] chest: " + e.Message); }
+                catch (Exception e) { HookGuard.Fail(e, "ChestWatch.Watch.Postfix"); }
             }
         }
 
@@ -159,12 +173,15 @@ namespace Hearthwoven
                     .Str("playerKey", peer != null ? PeerIdentity.Key(peer) : "")
                     .Str("via", e.Via).Str("container", container ? container.name : "#" + zdo.GetPrefab()).Str("kind", kind)
                     .Str("containerId", zdo.m_uid.ToString()).Num("containerBuilder", builder).Num("x", pos.x).Num("z", pos.z)
-                    .Str("item", ItemName(int.Parse(parts[0]))).Str("maker", parts[1]).Num("quality", int.Parse(parts[2]))
+                    .Str("item", ItemName(int.Parse(parts[0], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture))).Str("maker", parts[1]).Num("quality", int.Parse(parts[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture))
                     .Str("action", e.Action).Num("count", e.Count).Close()).Append('\n');
+                // 0.6: ships and carts also go into the server's book (cargo loaded and unloaded); a player without an id credits nobody
+                var id = peer != null ? PeerIdentity.Id(peer) : null;
+                ServerBookHooks.Chest(kind, zdo.m_uid.ToString(), e.Action, e.Via, id.HasValue ? PeerIdentity.Key(peer) : null, ItemName(int.Parse(parts[0], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)), e.Count, pos.x, pos.z);
             }
             var dir = Path.Combine(BepInEx.Paths.BepInExRootPath, "Hearthwoven");
             Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "chests-" + DateTime.UtcNow.ToString("yyyyMMdd") + ".jsonl"), lines.ToString());
+            File.AppendAllText(Path.Combine(dir, "chests-" + DailyLogs.Day(DateTime.UtcNow) + ".jsonl"), lines.ToString());
         }
     }
 }

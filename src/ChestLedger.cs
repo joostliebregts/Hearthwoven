@@ -15,7 +15,7 @@ namespace Hearthwoven
             public int X, Y, Prefab, Quality, Stack;
             public string Maker;
             /// <summary>Same item = same prefab, same maker, same quality. Moving or splitting stacks inside a chest keeps the sum per key.</summary>
-            public string Key => Prefab + "|" + (Maker ?? "") + "|" + Quality;
+            public string Key => Prefab.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" + (Maker ?? "") + "|" + Quality.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         /// <summary>A request from a player who is NOT the container's manager (MultiUserChest), seen as it passes the server.</summary>
@@ -288,7 +288,7 @@ namespace Hearthwoven
             int custom = p.ReadInt();
             for (int i = 0; i < custom; i++) { p.ReadString(); p.ReadString(); }
             if (crafterId == 0) maker = "";
-            return new Claim { Peer = peer, Kind = "add", Key = StringExtensionMethods.GetStableHashCode(prefab) + "|" + maker + "|" + quality, Amount = stack, T = now };
+            return new Claim { Peer = peer, Kind = "add", Key = StringExtensionMethods.GetStableHashCode(prefab).ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" + maker + "|" + quality.ToString(System.Globalization.CultureInfo.InvariantCulture), Amount = stack, T = now };
         }
     }
 }

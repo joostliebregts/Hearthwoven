@@ -24,83 +24,19 @@ HitData.DamageTypes D(string type, float v)
     return d;
 }
 
-// A sample evening for Rowan (fictional players), built through the mod's own recorders.
-PanelInput Sample()
-{
-    var log = new EventLog();
-    var t0 = now.AddHours(-3.5);
-    // Meadows warm-up 3.5 h ago, Black Forest 2 h ago, Swamp in the last hour
-    for (int i = 0; i < 6; i++) log.AddDamage(t0.AddMinutes(i), "Meadows", true, "Greyling", "Axes", D("slash", 18));
-    for (int i = 0; i < 10; i++) log.AddDamage(now.AddHours(-2).AddMinutes(i), "BlackForest", true, "Troll", "Axes", D("slash", 42));
-    for (int i = 0; i < 4; i++) log.AddDamage(now.AddHours(-2).AddMinutes(i), "BlackForest", false, "Troll", "EnemyHit", D("blunt", 55));
-    for (int i = 0; i < 14; i++) log.AddDamage(now.AddMinutes(-50 + i), "Swamp", true, "Draugr", "Swords", D("slash", 31));
-    for (int i = 0; i < 6; i++) log.AddDamage(now.AddMinutes(-50 + i), "Swamp", false, "Draugr", "EnemyHit", D("slash", 24));
-    // two falls in the Swamp to Blob poison, one in the Black Forest to a Troll
-    log.AddDamage(now.AddMinutes(-40), "Swamp", false, "Blob", "EnemyHit", D("poison", 30));
-    log.AddDamage(now.AddMinutes(-40).AddSeconds(4), "Swamp", false, "Blob", "Poisoned", D("poison", 22));
-    log.AddDeath(now.AddMinutes(-40).AddSeconds(6), "Swamp", 10, 20);
-    log.AddDamage(now.AddMinutes(-12), "Swamp", false, "BlobElite", "EnemyHit", D("poison", 45));
-    log.AddDamage(now.AddMinutes(-12).AddSeconds(3), "Swamp", false, "Blob", "Poisoned", D("poison", 25));
-    log.AddDeath(now.AddMinutes(-12).AddSeconds(5), "Swamp", 12, 22);
-    log.AddDamage(now.AddHours(-2).AddMinutes(5), "BlackForest", false, "Troll", "EnemyHit", D("blunt", 90));
-    log.AddDeath(now.AddHours(-2).AddMinutes(5).AddSeconds(1), "BlackForest", 5, 5);
-
-    var ev = new SessionEvents { Blocks = 55, Parries = 27 };
-    SessionEvents.Add(ev.AteFoodMadeBy, "Edda|Bread", 3); SessionEvents.Add(ev.AteFoodMadeBy, "Edda|FishWraps", 2);
-    SessionEvents.Add(ev.AteFoodMadeBy, "Tor|SerpentStew", 1); SessionEvents.Add(ev.AteFoodMadeBy, "Rowan|QueensJam", 2);
-    SessionEvents.Add(ev.AteFoodMadeBy, "unknown|Raspberry", 4);
-    SessionEvents.Add(ev.EquippedGearMadeBy, "Tor|SwordIron", 1); SessionEvents.Add(ev.EquippedGearMadeBy, "Tor|ArmorIronChest", 1);
-    SessionEvents.Add(ev.SailedWith, "Edda", 1260); SessionEvents.Add(ev.SailedWith, "Finch", 600);
-    SessionEvents.Add(ev.SailedUnderHelmOf, "Edda", 900);
-    SessionEvents.Add(ev.AteFromFeastOf, "42|FeastMeadows", 2);
-    SessionEvents.Add(ev.AteFromFeastOf, "77|FeastBlackforest", 1);
-    SessionEvents.Add(ev.PickaxeHits, "rock4_copper", 120); SessionEvents.Add(ev.Spent, "Haldor", 350);
-    SessionEvents.Add(ev.SkillPractice, "Axes", 14.5f); SessionEvents.Add(ev.SkillPractice, "Blocking", 9.2f);
-    SessionEvents.Add(ev.SkillPractice, "Run", 6.1f); SessionEvents.Add(ev.SkillPractice, "Swords", 4.4f);
-    SessionEvents.Add(ev.ChopHits, "Beech1", 64); SessionEvents.Add(ev.Repairs, "woodwall", 9); SessionEvents.Add(ev.MapShared, "piece_cartographytable", 2);
-    SessionEvents.Add(ev.CartMeters, "Cart", 840); SessionEvents.Add(ev.SmelterAdded, "smelter|CopperOre", 30); SessionEvents.Add(ev.SmelterAdded, "smelter|fuel", 12);
-    SessionEvents.Add(ev.Bought, "Haldor|YmirRemains", 3); SessionEvents.Add(ev.Bought, "Haldor|BeltStrength", 1);
-
-    var tally = new DamageTally();
-    tally.AddDealt("Troll", "Axes", D("slash", 420)); tally.AddTaken("Blob", "EnemyHit", D("poison", 122));
-    return new PanelInput
-    {
-        PlayerName = "Rowan", NowUtc = now, SessionStartUtc = now.AddHours(-3.6), ToLocal = t => t.AddHours(2),
-        Character = new Dictionary<string, float>
-        {
-            ["DistanceTraveled"] = 184200f, ["HarvestCrop"] = 312f, ["CraftFood"] = 146f, ["CraftWeapon"] = 9f, ["CraftArmor"] = 6f,
-            ["DistanceSailHelm"] = 6600f, ["Builds"] = 1204f, ["EnemyKills"] = 860f, ["BossKills"] = 3f, ["FishCaught"] = 0f,
-            ["Tree"] = 410f, ["BuildClusterDefense"] = 40f, ["TrapArmed"] = 2f, ["CraftGrill"] = 20f,
-            ["CraftTool"] = 4f, ["Upgrades"] = 11f, ["MineHits"] = 650f, ["EnemyHits"] = 5400f, ["HitsTakenEnemies"] = 1300f, ["PlayerHits"] = 3f,
-        },
-        // as the game books them: per craft action (a batch of arrows counts once), food from the grill +1 per piece
-        ItemsCrafted = new Dictionary<string, float> { ["$item_bread"] = 40, ["$item_fishwraps"] = 22, ["$item_sword_iron"] = 2, ["$item_carrotsoup"] = 118,
-            ["$item_shield_wood"] = 7, ["$item_axe_bronze"] = 6, ["$item_arrow_wood"] = 12, ["$item_modthing"] = 3 },
-        PiecesPlaced = new Dictionary<string, float> { ["$piece_woodwall"] = 520, ["$piece_woodfloor"] = 310, ["$piece_sharpstakes"] = 36,
-            ["$piece_levelground"] = 850, ["$piece_lowerground"] = 133, ["$piece_pavedroad"] = 40, ["$piece_sapling_carrot"] = 60, ["$piece_feast_meadows"] = 2 },
-        ItemsPickedUp = new Dictionary<string, float> { ["$item_wood"] = 2400, ["$item_finewood"] = 310, ["$item_roundlog"] = 520, ["$item_elderbark"] = 75,
-            ["$item_stone"] = 1800, ["$item_copperore"] = 240, ["$item_tinore"] = 90, ["$item_raspberries"] = 40 },
-        // what PanelUi derives from the game data at runtime (item type, drop tables, piece components); null = unknown
-        ItemKind = t => new Dictionary<string, string> { ["$item_bread"] = "food", ["$item_fishwraps"] = "food", ["$item_carrotsoup"] = "food", ["$item_sword_iron"] = "gear",
-            ["$item_shield_wood"] = "gear", ["$item_axe_bronze"] = "gear", ["$item_arrow_wood"] = "other" }.TryGetValue(t, out var k) ? k : null,
-        PieceKind = t => t == "$piece_lowerground" ? "ground" : t == "$piece_sapling_carrot" ? "planted" : t == "$piece_feast_meadows" ? "feast" : null,
-        EnemyKills = new Dictionary<string, float> { ["$enemy_greydwarf"] = 410, ["$enemy_troll"] = 12, ["$enemy_draugr"] = 96 },
-        SkillLevels = new Dictionary<string, float> { ["Axes"] = 38.4f, ["Blocking"] = 42.7f, ["Run"] = 55f, ["Swords"] = 21f, ["Cooking"] = 18f },
-        Session = tally, Events = ev, Log = log,
-        PlayerNames = new Dictionary<long, string> { [42] = "Edda" },
-        // what Localization returns in game for these prefabs (English)
-        DisplayName = p => new Dictionary<string, string> { ["BlobElite"] = "Oozer", ["SwordIron"] = "Iron sword", ["ArmorIronChest"] = "Iron scale mail",
-            ["FishWraps"] = "Fish wraps", ["SerpentStew"] = "Serpent stew", ["Greyling"] = "Greyling" }.TryGetValue(p, out var n) ? n : null,
-    };
-}
+// A sample evening for Rowan (fictional players), built through the mod's own recorders (src/Panel/PanelSample.cs, where the
+// game's Dev.SampleData mode reads it too)
+PanelInput Sample() => PanelSample.Evening(now);
 
 var input = Sample();
+var voyager = Program.VoyagesHallSample(Sample());   // Voyages and Hall numbers on top (test-panel/VoyagesHallTests.cs)
 PanelView Show(PanelInput i, Chapter c, string page = null, Action<PanelState> more = null)
 {
     var st = new PanelState { Chapter = c }; if (page != null) st.Page[c] = page; more?.Invoke(st);
     return PanelModel.Build(i, st);
 }
-Block Find(PanelView v, string kind, Func<Block, bool> where = null) => v.Blocks.FirstOrDefault(b => b.Kind == kind && (where == null || where(b)));
+// the page's blocks with the layout boxes opened (a plate, its columns, the chosen view of a switch)
+Block Find(PanelView v, string kind, Func<Block, bool> where = null) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == kind && (where == null || where(b)));
 
 // ---------- the measured event log: windows, biomes, deaths, hints ----------
 var all = PanelModel.Damage(input.Log, TimeWindow.Session, "", now);
@@ -108,11 +44,32 @@ var hour = PanelModel.Damage(input.Log, TimeWindow.LastHour, "", now);
 var three = PanelModel.Damage(input.Log, TimeWindow.LastThreeHours, "", now);
 Check(all.Any(r => r.Biome == "Meadows") && !three.Any(r => r.Biome == "Meadows") && three.Any(r => r.Biome == "BlackForest"), "window: 3.5 h ago only in the whole session, 2 h ago in the last three hours");
 Check(hour.All(r => r.Biome == "Swamp") && hour.Count > 0, "window: last hour keeps only the Swamp fight");
-var later = now.AddMinutes(5);   // window starts 21:35, inside the 21:30-21:40 bucket
-var edge = new EventLog(); edge.AddDamage(new DateTime(2026, 10, 7, 21, 31, 0, DateTimeKind.Utc), "Plains", true, "Deathsquito", "Bows", D("pierce", 5));
-Check(PanelModel.Damage(edge, TimeWindow.LastHour, "", later).Count == 1, "window: a 10-minute bucket that reaches into the window counts");
-edge = new EventLog(); edge.AddDamage(new DateTime(2026, 10, 7, 21, 28, 0, DateTimeKind.Utc), "Plains", true, "Deathsquito", "Bows", D("pierce", 5));
+var later = now.AddMinutes(5);   // window starts 21:35, inside the 21:35-21:36 bucket
+var edge = new EventLog(); edge.AddDamage(new DateTime(2026, 10, 7, 21, 35, 30, DateTimeKind.Utc), "Plains", true, "Deathsquito", "Bows", D("pierce", 5));
+Check(PanelModel.Damage(edge, TimeWindow.LastHour, "", later).Count == 1, "window: a minute bucket that reaches into the window counts");
+edge = new EventLog(); edge.AddDamage(new DateTime(2026, 10, 7, 21, 34, 30, DateTimeKind.Utc), "Plains", true, "Deathsquito", "Bows", D("pierce", 5));
 Check(PanelModel.Damage(edge, TimeWindow.LastHour, "", later).Count == 0, "window: a bucket that ended before the window does not");
+// the finer windows (Joost, play-test): the last 10 and 30 minutes of a fight, since install apart
+var fine = new EventLog(); var nowF = new DateTime(2026, 10, 7, 22, 30, 0, DateTimeKind.Utc);
+fine.AddDamage(nowF.AddMinutes(-25), "Swamp", true, "Draugr", "Axes", D("slash", 100));
+fine.AddDamage(nowF.AddSeconds(-510), "Swamp", true, "Draugr", "Axes", D("slash", 50));
+fine.AddDamage(nowF.AddMinutes(-2), "Swamp", true, "Troll", "Axes", D("slash", 7));
+fine.AddDamage(nowF.AddMinutes(-50), "Swamp", true, "Troll", "Axes", D("slash", 1000));
+double DealtIn(TimeWindow w) => PanelModel.Damage(fine, w, "", nowF).Where(r => r.Dir == "dealt").Sum(r => (double)r.Amount);
+Check(DealtIn(TimeWindow.LastTenMinutes) == 57 && DealtIn(TimeWindow.LastThirtyMinutes) == 157 && DealtIn(TimeWindow.LastHour) == 1157 && DealtIn(TimeWindow.Session) == 1157 &&
+      PanelModel.Cutoff(TimeWindow.LastTenMinutes, nowF) == nowF.AddMinutes(-10) && PanelModel.Cutoff(TimeWindow.SinceInstall, nowF) == null,
+      "window: last 10 and 30 minutes count the minutes that reach into them (57, 157), the hour 1 157; since install has no cutoff");
+Check(Enum.GetNames(typeof(TimeWindow)).SequenceEqual(new[] { "LastTenMinutes", "LastThirtyMinutes", "LastHour", "LastThreeHours", "Session", "Today", "SevenDays", "ThirtyDays", "SinceInstall" }) &&
+      Enum.GetValues(typeof(TimeWindow)).Cast<TimeWindow>().Select(PanelModel.WindowLabel).SequenceEqual(new[] { "Last 10 minutes", "Last 30 minutes", "Last hour", "Last 3 hours", "This session", "Today", "Last 7 days", "Last 30 days", "Since install" }) &&
+      Enum.GetValues(typeof(TimeWindow)).Cast<TimeWindow>().Select(PanelModel.WindowShort).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "7 days", "30 days", "All" }) &&
+      PanelModel.AllWindows.SequenceEqual(Enum.GetValues(typeof(TimeWindow)).Cast<TimeWindow>()),
+      "window: nine windows, shortest first (the log's, the days', All), each with its full name and its chip");
+// a copy from an older sender keeps ten-minute buckets (its JSON says so): a bucket reaches ten minutes on, not one
+var oldSender = PanelInput.FromSnapshot("{\"name\":\"Old\",\"measuredLog\":{\"bucketMinutes\":10,\"damage\":{\"2026-10-07T20:10Z|Swamp|dealt|Draugr|Axes|slash\":40},\"hits\":{}}}");
+var newSender = PanelInput.FromSnapshot("{\"name\":\"New\",\"measuredLog\":{\"bucketMinutes\":1,\"damage\":{\"2026-10-07T20:10Z|Swamp|dealt|Draugr|Axes|slash\":40},\"hits\":{}}}");
+var at2025 = new DateTime(2026, 10, 7, 20, 25, 0, DateTimeKind.Utc);
+Check(oldSender.Log.Span == 10 && newSender.Log.Span == 1 && PanelModel.Damage(oldSender.Log, TimeWindow.LastTenMinutes, "", at2025).Count == 1 && PanelModel.Damage(newSender.Log, TimeWindow.LastTenMinutes, "", at2025).Count == 0,
+      "window: a copy from an older sender reads its buckets as ten minutes long (the span travels in the JSON)");
 var deaths = PanelModel.Deaths(input.Log, TimeWindow.Session, "", now);
 Check(PanelModel.Deaths(input.Log, TimeWindow.LastHour, "", now).Count == 2 && deaths[0].Time > deaths[1].Time, "deaths: window filter, latest first");
 var killers = PanelModel.MostCommonKiller(deaths);
@@ -123,94 +80,124 @@ Check(!hints.Any(h => h.StartsWith("Black Forest")), "hint: no advice for a blun
 
 // ---------- the menu: six chapters, left lists, one owner per metric ----------
 var deeds = Show(input, Chapter.Deeds);
-Check(deeds.Chapters.Select(c => c.Label).SequenceEqual(new[] { "Deeds", "Company", "Stores", "Battle", "Voyages", "Skills" }) && deeds.Chapters[0].Selected,
-      "menu: six chapters in the agreed order, Deeds first");
-Check(deeds.List.Select(l => l.Label).SequenceEqual(new[] { "Overview", "Cooking", "Building", "Crafting", "Woodcutting", "Mining", "Farming", "Fishing", "Taming" }) && deeds.Page == "overview",
+Check(deeds.Chapters.Select(c => c.Label).SequenceEqual(new[] { "Deeds", "Feats", "Company", "Hall", "Battle", "Voyages", "Skills" }) && deeds.Chapters[0].Selected,
+      "menu: seven chapters in the agreed order, Deeds first, Feats its own chapter right after it (Joost 2026-10-09)");
+Check(deeds.List.Select(l => l.Label).SequenceEqual(new[] { "Overview", "Cooking", "Building", "Groundwork", "Crafting", "Woodcutting", "Mining", "Farming", "Fishing", "Taming" }) && deeds.Page == "overview",
       "menu: Deeds left list per the menu tree, Overview first");
-var grid = Find(deeds, "titles");
+var grid = Find(deeds, "strip");   // the other chapters' names earned (Deeds overview A)
 Check(grid != null && grid.Items.Single(t => t.Title == "Shieldbearer").Id == "Battle/defense" && grid.Items.Single(t => t.Title == "Helmskeeper").Id == "Voyages/sailing" &&
-      grid.Items.Single(t => t.Title == "Hearth Cook").Id == "Deeds/cooking", "overview: each title is a shortcut to its owner page (blocking in Battle, sailing in Voyages)");
-var jump = new PanelState(); PanelModel.Jump(jump, "Battle/defense");
+      Find(deeds, "cards").Items.Single(t => t.Title == "Hearth Cook").Id == "Deeds/cooking", "overview: each title is a shortcut to its owner page (blocking in Battle, sailing in Voyages)");
+var jump = new PanelState { Window = TimeWindow.SinceInstall }; PanelModel.Jump(jump, "Battle/defense");
 var defense = PanelModel.Build(input, jump);
 Check(defense.Active == Chapter.Battle && defense.Page == "defense" && defense.Badges.Select(b => b.Label).SequenceEqual(new[] { "Wallwarden", "Shieldbearer" }),
       "overview: the jump lands on Battle > Defense with its titles in the header");
-var blocksStat = Find(defense, "stat", b => b.Title == "successful blocks");
-Check(blocksStat != null && blocksStat.Value == "55" && blocksStat.Text == "including 27 parries", "defense: blocks phrased inclusively (55 blocks, including 27 parries)");
-Check(Find(defense, "rows", b => b.Items.Any(i => i.Title == "Defences built" && i.Value == "40")) != null, "defense: base defences live in Battle > Defense, from the character record");
+var guardBlock = Find(defense, "guard");   // ch-battle: the approved Defense page (r4battle-defense) replaced the stat
+Check(guardBlock != null && guardBlock.Value == "28" && guardBlock.Value2 == "27" && guardBlock.Note == null, "defense: blocks and parries apart (55 held blocks: 28 blocks and 27 parries)");
+Check(Find(defense, "rows", b => b.Items.Any(i => i.Title == "Most defences standing at once" && i.Value == "40")) != null, "defense: base defences live in Battle > Defense, from the character record");
 // one owner per number: walk every page of every chapter (both Company directions) and note where each number shows up
 var pages = new List<(string where, PanelView v)>();
 foreach (Chapter ch in Enum.GetValues(typeof(Chapter)))
     foreach (var l in PanelModel.Build(input, new PanelState { Chapter = ch }).List)
         foreach (var they in new[] { true, false })
-            pages.Add((ch + "/" + l.Id, PanelModel.Build(input, new PanelState { Chapter = ch, Page = { [ch] = l.Id }, TheyReceived = they })));
+            pages.Add((ch + "/" + l.Id, PanelModel.Build(input, new PanelState { Chapter = ch, Page = { [ch] = l.Id }, TheyReceived = they, Window = TimeWindow.SinceInstall })));   // All: every number since install (Defence's blocks have no session tally in this sample)
 IEnumerable<string> WhereShown(Func<string, bool> has) => pages.Where(p => PanelModel.AllText(p.v).Any(has)).Select(p => p.where).Distinct();
-Check(WhereShown(t => t.Contains("55 block") || t.Contains("successful block") || t.Contains("27 parr")).SequenceEqual(new[] { "Battle/defense" }),
-      "owner: blocks and parries show on Battle > Defense only (not Battle > Overview, not Deeds > Overview): " + string.Join(", ", WhereShown(t => t.Contains("27 parr"))));
-Check(WhereShown(t => t.Contains("at the helm") && t.Any(char.IsDigit)).SequenceEqual(new[] { "Voyages/sailing" }), "owner: helm distance shows on Voyages > Sailing only");
-Check(Find(deeds, "titles").Items.All(t => !t.Value.Any(char.IsDigit) && string.IsNullOrEmpty(t.Note)), "owner: Deeds > Overview titles are shortcuts without numbers");
+Check(pages.Where(p => PanelModel.Content(p.v).Any(b => b.Kind == "guard")).Select(p => p.where).Distinct().SequenceEqual(new[] { "Battle/defense" }) && !WhereShown(t => t.Contains("27 parr") || t.Contains("successful block")).Any(),
+      "owner: blocks and parries show on Battle > Defense only (not Battle > Overview, not Deeds > Overview)");
+// helm distance: Voyages > Overview (the journey) and Sailing only, in test-panel/VoyagesHallTests.cs
+Check(Find(deeds, "strip").Items.All(t => !(t.Value + t.Text).Any(char.IsDigit) && string.IsNullOrEmpty(t.Note)), "owner: Deeds > Overview: the other chapters' names earned are shortcuts without numbers (the deed cards may repeat their own page's numbers: Joost 2026-10-08)");
 var battleOverview = Show(input, Chapter.Battle);
 Check(Find(battleOverview, "link")?.Id == "Battle/defense" && !PanelModel.AllText(battleOverview).Any(t => t.Contains("27 parr") || t.Contains("55")), "owner: Battle > Overview links to Defense instead of repeating the count");
-var sailing = Show(input, Chapter.Voyages);
-Check(sailing.Page == "sailing" && sailing.Heading == "" + "Sailing" && Find(sailing, "stat", b => b.Title == "6.6 km at the helm") != null && sailing.Badges.Any(b => b.Label == "Helmskeeper"),
-      "owner: the helm lives in Voyages > Sailing with the Helmskeeper title");
-var stocked = Show(input, Chapter.Stores);
-Check(stocked.List.Select(l => l.Label).SequenceEqual(new[] { "Stocked", "Taken", "Carts", "Trader" }) && Find(stocked, "empty").Title == PanelModel.ChestsOnServer,
-      "stores: chest stocking says the records live on the server");
-var trader = Show(input, Chapter.Stores, "trader");
-Check(trader.Heading == "350 coins spent" && Find(trader, "tiles").Items.Select(t => t.Icon).SequenceEqual(new[] { "item:YmirRemains", "item:BeltStrength" }) && trader.Badges.Any(b => b.Label == "Far Trader"),
-      "stores: trader purchases as item tiles with the game's sprites, from this PC");
-Check(Show(input, Chapter.Stores, "carts").Heading == "840 m pulling a cart", "stores: carts from this PC");
+// Voyages and Hall (Overview, Trader, Smelters; chests and carts are server-only): test-panel/VoyagesHallTests.cs
+Program.VoyagesHallChecks(voyager, Check);
 
 // ---------- Deeds pages ----------
 var cookingAlone = Show(input, Chapter.Deeds, "cooking");
-Check(cookingAlone.Heading == "166 dishes cooked or grilled" && cookingAlone.Badges.Any(b => b.Label == "Hearth Cook"), "cooking: without fellow records, the profile count leads");
+Check(cookingAlone.Heading == "Cooking" && Find(cookingAlone, "hero")?.Value == "166" && Find(cookingAlone, "hero").Title == "dishes cooked" && cookingAlone.Badges.Any(b => b.Label == "Hearth Cook"), "cooking: without fellow records, the profile count leads (the hero number)");
 var crafting = Show(input, Chapter.Deeds, "crafting");
-Check(Find(crafting, "tiles").Items.Select(t => t.Icon + "=" + t.Value).SequenceEqual(new[] { "item:CopperOre=30" }), "crafting: ore into smelters as tiles (fuel is not an item)");
-Check(Find(crafting, "rows").Note == PanelModel.SourceCharacter, "crafting: crafted items labelled since this character was made");
+Check(Find(crafting, "tiles") == null && !PanelModel.AllText(crafting).Any(t => t.Contains("smelter")), "crafting: smelters are the Hall's, not on Crafting (round 4 page)");
+Check(Find(crafting, "filterbar").Src == "character" && Find(crafting, "filterbar").Note == null && Find(crafting, "itemgrid").Src == "character", "crafting: crafted gear carries the character mark, no source sentence");
 
 // ---------- B6: Crafting counts gear, food is Cooking (the game's own m_itemType switch) ----------
 Check(PanelModel.ItemKindOf("Consumable", "$item_carrotsoup") == "food" && PanelModel.ItemKindOf("Consumable", "$item_fishingbait_forest") == "other" &&
       PanelModel.ItemKindOf("TwoHandedWeaponLeft", "$item_x") == "gear" && PanelModel.ItemKindOf("Shield", "$item_x") == "gear" && PanelModel.ItemKindOf("Utility", "$item_x") == "gear" &&
       PanelModel.ItemKindOf("Trinket", "$item_x") == "gear" && PanelModel.ItemKindOf("Ammo", "$item_x") == "other" && PanelModel.ItemKindOf("Material", "$item_x") == "other" && PanelModel.ItemKindOf(null, "$item_x") == null,
       "B6 classify: food = consumable without bait; gear = weapons, shields, armour, tools, utility, trinkets (the game's craft switch)");
-var gearRows = crafting.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Gear made most")).Skip(1).First();
-Check(gearRows.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Shield wood=7", "Axe bronze=6", "Sword iron=2" }),
-      "B6 crafting: 'Gear made most' lists gear only: " + string.Join(", ", gearRows.Items.Select(i => i.Title + "=" + i.Value)));
+var gearRows = PanelModel.Content(crafting).First(b => b.Kind == "itemgrid");
+Check(gearRows.Items.Select(i => i.Title).OrderBy(t => t, StringComparer.Ordinal).SequenceEqual(new[] { "Bronze Axe", "Crude Bow", "Cultivator", "Hoe", "Iron Sword", "Leather Helmet", "Hammer", "Wood Shield" }.OrderBy(t => t, StringComparer.Ordinal)),
+      "B6 crafting: the item grid lists gear only (the game's gear switch): " + string.Join(", ", gearRows.Items.Select(i => i.Title + "=" + i.Value)));
 Check(!PanelModel.AllText(crafting).Any(t => t.Contains("Carrot") || t.Contains("Bread")), "B6 crafting: no food on the Crafting page");
-Check(Find(crafting, "stat", b => b.Title == "19 pieces of gear made") != null && Find(crafting, "stat", b => b.Title == "11 upgrades") != null,
-      "B6 crafting: the title line counts the same gear as the list (weapons 9 + armour 6 + tools 4) and upgrades on their own line");
-var alsoMade = crafting.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title.StartsWith("Also crafted (per craft"))).Skip(1).FirstOrDefault();
-Check(alsoMade != null && alsoMade.Items.Select(i => i.Title).SequenceEqual(new[] { "Arrow wood", "Modthing" }), "B6 crafting: ammo and items the game data does not know go under 'Also made', never under gear");
-var cookedRows = cookingAlone.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Cooked and brewed most")).Skip(1).FirstOrDefault();
-Check(cookedRows != null && cookedRows.Items.First().Title == "Carrotsoup" && cookedRows.Items.First().Value == "118" && cookedRows.Source == "character",
+Check(Find(crafting, "hero")?.Value == "19" && Find(crafting, "hero").Title == "gear crafted" && Find(crafting, "hero").Items.Single().Value == "11" && Find(crafting, "hero").Items.Single().Title == "upgrades made",
+      "B6 crafting: the hero counts the same gear as the tiles (weapons 9 + armour 6 + tools 4) and upgrades on their own");
+Check(!PanelModel.AllText(crafting).Any(t => t.Contains("Wood Arrow") || t.Contains("Modthing")), "B6 crafting: ammo and items the game data does not know never count as gear");
+var cookedRows = PanelModel.Content(cookingAlone).FirstOrDefault(b => b.Kind == "composition");
+Check(cookedRows != null && cookedRows.Items.First().Title == "Carrot Soup" && cookedRows.Items.First().Value == "118" && cookedRows.Source == "character",
       "B6 cooking: the food from ItemsCrafted is under Cooking, as a game counter");
 
 // ---------- B8: Building is build pieces; groundwork, plantings and feasts have their own place ----------
 Check(PanelModel.PieceKindOf(true, false, false) == "ground" && PanelModel.PieceKindOf(false, true, false) == "planted" && PanelModel.PieceKindOf(false, false, true) == "feast" && PanelModel.PieceKindOf(false, false, false) == "built",
       "B8 classify: TerrainOp = groundwork, Plant = planted, Feast = feast, anything else built");
 var building = Show(input, Chapter.Deeds, "building");
-var built = building.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Pieces built most")).Skip(1).First();
-var ground = building.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Groundwork")).Skip(1).First();
-Check(built.Items.Select(i => i.Value).SequenceEqual(new[] { "520", "310", "36" }) && ground.Items.Select(i => i.Value).SequenceEqual(new[] { "850", "133", "40" }),
-      "B8 building: built pieces and groundwork (levelled, lowered, paved) are separate lists");
-Check(Find(building, "stat", b => b.Title == "866 pieces built") != null && building.Badges.Any(b => b.Label == "Hallwright"),
-      "B8 building: a title line with the built count, the same pieces as the list");
+var built = PanelModel.Content(building).SkipWhile(b => !(b.Kind == "section" && b.Title == "Every piece")).Skip(1).First();
+var groundPage = Show(input, Chapter.Deeds, "groundwork");
+var ground = Find(groundPage, "composition");
+Check(built.Items.Select(i => i.Value).SequenceEqual(new[] { "520", "310", "36" }) && ground.Items.Select(i => i.Value).SequenceEqual(new[] { "850", "133", "40" }) &&
+      Find(building, "composition") == null && !building.Blocks.Any(b => b.Kind == "section" && b.Title == "Groundwork"),
+      "B8 building: built pieces as a list; groundwork (levelled, lowered, paved) is not here but on its own page, Groundwork, in one composition");
+Check(groundPage.Heading == "Groundwork" && groundPage.List.Select(l => l.Id).SkipWhile(i => i != "building").Skip(1).First() == "groundwork" && groundPage.List.Single(l => l.Id == "groundwork").Icon == "vocab:ground-lower" &&
+      Find(groundPage, "hero")?.Value == "1\u00A0023" && Find(groundPage, "hero").Title == "groundwork strokes" && ground.Title == null,
+      "Groundwork page: right after Building in the list, the ground-lower icon, the total as the hero, the bar under it");
+Check(Find(building, "hero").Value == "866" && building.Badges.Any(b => b.Label == "Hallwright"),
+      "B8 building: the built count in the ranking's head, the same pieces as the list");
 Check(!PanelModel.AllText(building).Any(t => t.Contains("Sapling") || t.Contains("Feast")), "B8 building: plantings and feasts are not building");
+// fix2 4 (Joost in game, Dev.SampleData: the game data does not know the sample's tokens, so "Beech Sapling" and "Feast
+// meadows" stood under pieces built): a piece the game data does not know is placed by its name
+var unknownPieces = Sample(); unknownPieces.PieceKind = _ => null;
+var builtUnknown = Show(unknownPieces, Chapter.Deeds, "building");
+Check(!PanelModel.AllText(builtUnknown).Any(t => t.Contains("Sapling") || t.Contains("Feast")) &&
+      PanelModel.Placed(unknownPieces, "planted").ContainsKey("$piece_sapling_carrot") && PanelModel.Placed(unknownPieces, "feast").ContainsKey("$piece_feast_meadows") &&
+      PanelModel.PieceKindByName("$piece_sapling_beech") == "planted" && PanelModel.PieceKindByName("$piece_feast_meadows") == "feast" && PanelModel.PieceKindByName("$piece_woodwall") == "built" &&
+      PanelModel.PieceKindByName("$piece_levelground") == "ground",
+      "fix2 4 building: a piece the game data does not know goes by its name: saplings and seeds to Farming, feasts to Cooking, never under pieces built");
+Check(Find(builtUnknown, "itemgrid").Items.All(i => i.Icon.StartsWith("piece:$")) && Find(builtUnknown, "itemgrid").Items.Select(i => i.Value).SequenceEqual(new[] { "520", "310", "36" }),
+      "fix2 4 building: pieces built is the item grid (picture, number, name) of the build pieces only");
 var farming = Show(input, Chapter.Deeds, "farming");
-Check(farming.Blocks.Any(b => b.Kind == "section" && b.Title == "Planted most"), "B8 farming: plantings live on Farming");
-Check(Find(cookingAlone, "stat", b => b.Title == "feasts set out")?.Value == "2", "B8 cooking: feasts set out live on Cooking");
+Check(Find(farming, "hero")?.Value == "60" && Find(farming, "hero").Title == "planted", "B8 farming: plantings live on Farming");
+Check((Find(cookingAlone, "stat", b => b.Title == "feasts set out")?.Value ?? Find(cookingAlone, "hero")?.Items?.FirstOrDefault(n => n.Title == "feasts set out")?.Value) == "2", "B8 cooking: feasts set out live on Cooking (beside the dishes cooked, or alone when those are counted on this PC)");
 
 // ---------- C1/C2: what came from trees and rocks, per kind ----------
 var wood = Show(input, Chapter.Deeds, "woodcutting");
-var woodRows = wood.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Wood picked up, at least")).Skip(1).First();
-Check(woodRows.Items.Select(i => i.Icon + "=" + i.Value).SequenceEqual(new[] { "item:$item_wood=2,400", "item:$item_roundlog=520", "item:$item_finewood=310", "item:$item_elderbark=75" }) && woodRows.Source == "character",
-      "C2 woodcutting: wood types picked up per kind, a game counter");
+var woodRows = Find(wood, "composition");
+Check(woodRows.Items.Select(i => i.Icon + "=" + i.Value).SequenceEqual(new[] { "item:$item_wood=2\u00A0400", "item:$item_roundlog=520", "item:$item_finewood=310", "item:$item_elderbark=75" }) && woodRows.Source == "character" &&
+      woodRows.Note == PanelModel.FadedKey && !PanelModel.AllText(wood).Contains(PanelModel.AtLeast) && !PanelModel.Content(wood).Any(b => b.Kind == "section" && b.Title.StartsWith("Wood brought in")),
+      "C2 woodcutting: wood brought in per kind in the composition (your character's count, no 'at least': About explains brought in); nothing counted exactly yet, so no list repeating it");
 var mining = Show(input, Chapter.Deeds, "mining");
-var oreRows = mining.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Stone and ore picked up, at least")).Skip(1).First();
-Check(oreRows.Items.Select(i => i.Icon + "=" + i.Value).SequenceEqual(new[] { "item:$item_stone=1,800", "item:$item_copperore=240", "item:$item_tinore=90" }) && !PanelModel.AllText(mining).Any(t => t.Contains("aspberr")),
-      "C1 mining: stone and ore picked up per kind, berries left out");
+var oreRows = Find(mining, "composition");
+Check(oreRows.Items.Select(i => i.Icon + "=" + i.Value).SequenceEqual(new[] { "item:$item_stone=1\u00A0800", "item:$item_copperore=240", "item:$item_tinore=90" }) && !PanelModel.AllText(mining).Any(t => t.Contains("aspberr")),
+      "C1 mining: stone and ore brought in per kind (the composition), berries left out");
+// composition colours follow the item's own icon (coal near black): the game's icon colour first, the sample table without
+// the game, the neutral palette for an item neither knows; wood keeps its grain look, a modded log takes its icon colour
+var coalIn = new PanelInput { ItemsPickedUp = new Dictionary<string, float> { ["$item_coal"] = 5, ["$item_stone"] = 4, ["$item_modore"] = 2, ["$item_wood"] = 1 }, GatherKind = _ => "mining" };
+var coalBar = Find(PanelModel.Build(coalIn, new PanelState { Page = { [Chapter.Deeds] = "mining" } }), "composition");
+coalIn.ItemColour = t => t == "$item_modore" ? "#123456" : t == "$item_stone" ? "#707070" : null;
+var tinted = Find(PanelModel.Build(coalIn, new PanelState { Page = { [Chapter.Deeds] = "mining" } }), "composition");
+var coalHex = coalBar.Items.First(i => i.Id == "$item_coal").Colour;
+Check(int.Parse(coalHex.Substring(1, 2), System.Globalization.NumberStyles.HexNumber) < 0x40 && tinted.Items.First(i => i.Id == "$item_modore").Colour == "#123456" &&
+      tinted.Items.First(i => i.Id == "$item_stone").Colour == PanelModel.MaterialColour["$item_stone"] && coalBar.Items.First(i => i.Id == "$item_modore").Colour.StartsWith("#"),
+      "C1 colours: a part takes its item's own icon colour (a mod's ore too), a well-known vanilla material its approved colour over the icon, coal near black, unknown items the neutral palette");
+var oreBar = Find(PanelModel.Build(new PanelInput { ItemsPickedUp = new Dictionary<string, float> { ["$item_stone"] = 9, ["$item_copperore"] = 5, ["$item_tinore"] = 3, ["$item_ironscrap"] = 1 }, GatherKind = _ => "mining",
+                                                 ItemColour = _ => "#556b2f" }, new PanelState { Page = { [Chapter.Deeds] = "mining" } }), "composition");
+int Hue(string hex) { var r = Convert.ToInt32(hex.Substring(1, 2), 16); var g = Convert.ToInt32(hex.Substring(3, 2), 16); var bl = Convert.ToInt32(hex.Substring(5, 2), 16); return r > g && g > bl ? 1 : r > g && r > bl ? 2 : 0; }
+var copperHex = oreBar.Items.First(i => i.Id == "$item_copperore").Colour; var tinHex = oreBar.Items.First(i => i.Id == "$item_tinore").Colour; var stoneHex = oreBar.Items.First(i => i.Id == "$item_stone").Colour;
+Check(Hue(copperHex) == 1 && Convert.ToInt32(copperHex.Substring(1, 2), 16) > 0xb0 && Convert.ToInt32(tinHex.Substring(1, 2), 16) > 0xc8 && Convert.ToInt32(stoneHex.Substring(1, 2), 16) > 0x98 &&
+      oreBar.Items.First(i => i.Id == "$item_ironscrap").Colour == PanelModel.MaterialColour["$item_ironscrap"],
+      "diff-05 colours: copper ore copper-orange, tin ore pale, stone light grey, iron scrap rust, even when their icons average otherwise");
+var woodTint = new PanelInput { ItemsPickedUp = new Dictionary<string, float> { ["$item_wood"] = 3, ["$item_modlog"] = 2 }, GatherKind = _ => "wood", ItemColour = _ => "#ff00ff" };
+var woodBar = Find(PanelModel.Build(woodTint, new PanelState { Page = { [Chapter.Deeds] = "woodcutting" } }), "composition");
+Check(woodBar.Items.First(i => i.Id == "$item_wood").Pattern == "vocab:grain-wood-n" && woodBar.Items.First(i => i.Id == "$item_wood").Colour == PanelModel.MaterialColour["$item_wood"] &&
+      woodBar.Items.First(i => i.Id == "$item_modlog").Colour == "#ff00ff" && woodBar.Items.First(i => i.Id == "$item_modlog").Pattern == PanelModel.GenericGrain,
+      "C2 colours (Addendum 5, diff-05): vanilla wood its approved colour, any other wood its icon's own colour over a neutral grain; a modded log the generic grain");
 var dataWood = new PanelInput { ItemsPickedUp = new Dictionary<string, float> { ["$item_modlog"] = 9, ["$item_wood"] = 3 }, GatherKind = t => t == "$item_modlog" ? "wood" : null };
-Check(PanelModel.Build(dataWood, new PanelState { Page = { [Chapter.Deeds] = "woodcutting" } }).Blocks.Any(b => b.Kind == "rows" && b.Items.Any(i => i.Icon == "item:$item_modlog")),
+Check(PanelModel.Content(PanelModel.Build(dataWood, new PanelState { Page = { [Chapter.Deeds] = "woodcutting" } })).Any(b => b.Kind == "composition" && b.Items.Any(i => i.Icon == "item:$item_modlog")),
       "C2 woodcutting: the list follows the game data (a mod's log counts as wood when trees drop it)");
 var muddled = new PanelInput { ItemsPickedUp = new Dictionary<string, float> { ["$item_wood"] = 5, ["$item_stone"] = 4 }, GatherKind = _ => "mining" };
 Check(PanelModel.PickedUp(muddled, "wood").Keys.SequenceEqual(new[] { "$item_wood" }) && PanelModel.PickedUp(muddled, "mining").Keys.SequenceEqual(new[] { "$item_stone" }),
@@ -224,103 +211,215 @@ Check(SessionEvents.PickedAmount(true, 20, 0, 20) == 0, "C7 rule: re-picking a s
 Check(SessionEvents.PickedAmount(false, 1, 3, 3) == 0 && SessionEvents.PickedAmount(false, 20, 10, 40) == 20, "C7 rule: refused counts 0; never more than the drop held");
 SessionEvents.Add(input.Events.PickedUp, "$item_wood", 140); SessionEvents.Add(input.Events.PickedUp, "$item_finewood", 12); SessionEvents.Add(input.Events.PickedUp, "$item_resin", 6);
 SessionEvents.Add(input.Events.PickedUp, "$item_copperore", 18); SessionEvents.Add(input.Events.PickedUp, "$item_silverore", 4);
+// K1: one layered bar per kind; without a stored baseline (this sample, a fellow's copy) the faded part is the game counter
+// minus the exact count, so nothing counts twice
 var woodEx = Show(input, Chapter.Deeds, "woodcutting");
-var woodExRows = woodEx.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Wood picked up this session")).Skip(1).First();
-Check(woodExRows.Items.Select(i => i.Title + "=" + i.Value + "/" + i.Source + "/" + (i.Items?.Single().Value ?? "-")).SequenceEqual(new[]
-      { "Wood=140/measured/2,400", "Finewood=12/measured/310", "Roundlog=/character/520", "Elderbark=/character/75" }) && woodExRows.Source == "measured" &&
-      woodExRows.Items[0].Text == "at least 2,400 since this character was made" && woodExRows.Items[0].Items[0].Source == "character" && !PanelModel.AllText(woodEx).Any(t => t.Contains("Resin")),
-      "C7 woodcutting: one row per kind, the exact count this session as the main number, the game's floor beside it (tagged character); resin is not wood");
+var woodExBar = Find(woodEx, "composition");
+var woodExWood = woodExBar.Items.Single(i => i.Id == "$item_wood");
+Check(woodExBar.Value == "3\u00A0305" && woodExWood.Value == "2\u00A0400" && Math.Abs(woodExWood.Fraction2 - 2260f / 2400f) < 1e-4 && woodExBar.Note == PanelModel.FadedKey &&
+      !PanelModel.Content(woodEx).Any(b => b.Kind == "section" && b.Title.Contains("counted exactly")) && !PanelModel.AllText(woodEx).Any(t => t.Contains("Resin")),
+      "K1 woodcutting: one bar, each wood its total; the part counted before Hearthwoven faded (no baseline: counter 2\u00A0400 minus 140 exact); no separate exact list; resin is not wood");
+var withBase = Sample(); withBase.Baseline = new Dictionary<string, Dictionary<string, float>> { ["pickedUp"] = new Dictionary<string, float> { ["$item_wood"] = 1000, ["$item_finewood"] = 300, ["$item_stone"] = 1500 } };
+SessionEvents.Add(withBase.Events.PickedUp, "$item_wood", 140); SessionEvents.Add(withBase.Events.PickedUp, "$item_finewood", 12); SessionEvents.Add(withBase.Events.PickedUp, "$item_copperore", 18);
+var baseBar = Find(Show(withBase, Chapter.Deeds, "woodcutting"), "composition");
+Check(baseBar.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Wood=1\u00A0140", "Finewood=312" }) && Math.Abs(baseBar.Items[0].Fraction2 - 1000f / 1140f) < 1e-4 &&
+      baseBar.Value == "1\u00A0452" && PanelModel.BroughtInTotal(withBase, "wood") == 1452 && PanelModel.BroughtInTotal(withBase, "mining") == 1518,
+      "K1 baseline: total = the game counter when Hearthwoven first ran + the exact count since; the counter's later growth (2\u00A0400) is never added; Together uses the same total");
+// an install from before the baseline: 50 wood counted exactly, then the baseline (the game counter, which partly holds
+// those 50) was taken; the solid part starts at 0 and grows only with new pickups
+var older = new PanelInput { Baseline = new Dictionary<string, Dictionary<string, float>> { ["pickedUp"] = new Dictionary<string, float> { ["$item_wood"] = 1000 } },
+                             ExactAtBaseline = new Dictionary<string, Dictionary<string, float>> { ["pickedUp"] = new Dictionary<string, float> { ["$item_wood"] = 50 } }, Events = new SessionEvents() };
+SessionEvents.Add(older.Events.PickedUp, "$item_wood", 50);
+var olderBefore = PanelModel.BroughtIn(older, "wood")["$item_wood"];
+SessionEvents.Add(older.Events.PickedUp, "$item_wood", 7);
+var olderAfter = PanelModel.BroughtIn(older, "wood")["$item_wood"];
+Check(olderBefore.before == 1000 && olderBefore.exact == 0 && olderAfter.before == 1000 && olderAfter.exact == 7 && PanelModel.BroughtInTotal(older, "wood") == 1007,
+      "K1 an older install: 50 exact before the baseline show as baseline + 0 solid (not 1\u00A0050), then only new pickups add (1\u00A0007)");
+var allExact = new PanelInput { Baseline = new Dictionary<string, Dictionary<string, float>> { ["pickedUp"] = new Dictionary<string, float>() }, Events = new SessionEvents(), ItemsPickedUp = new Dictionary<string, float> { ["$item_wood"] = 3 } };
+SessionEvents.Add(allExact.Events.PickedUp, "$item_wood", 40);
+var exactBar = Find(PanelModel.Build(allExact, new PanelState { Page = { [Chapter.Deeds] = "woodcutting" } }), "composition");
+Check(exactBar.Value == "40" && exactBar.Note == null && exactBar.Src == "pc" && exactBar.Items.All(i => i.Fraction2 == 0),
+      "K1 a character made with Hearthwoven: all solid, no faded note, since install");
+var chop = Sample(); chop.Events = new SessionEvents();
+foreach (var (k, v) in new[] { ("FirTree", 10f), ("FirTree_log", 5f), ("FirTree_log_half", 3f), ("Beech1", 64f), ("beech_log_half", 2f), ("Pinetree_01", 4f), ("SwampTree1_log", 1f), ("ModTree3_log", 2f) })
+    SessionEvents.Add(chop.Events.ChopHits, k, v);
+var chopRows = PanelModel.Content(Show(chop, Chapter.Deeds, "woodcutting")).SkipWhile(b => !(b.Kind == "section" && b.Title == "Axe hits per tree")).Skip(1).First();
+Check(chopRows.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Beech=66", "Fir=18", "Pine=4", "Mod Tree=2", "Ancient tree=1" }),
+      "I axe hits per tree: logs and log halves fold into their tree kind, plain tree names (a mod's tree without its suffixes)");
+Check(chopRows.Kind == "ranking" && chopRows.Columns == 3 && chopRows.Tone == PanelModel.ZoneTight && chopRows.Items.Select(i => i.Icon).SequenceEqual(new[] { "vocab:tree-beech", "vocab:tree-fir", "vocab:tree-pine", "", "vocab:tree-ancient" }) &&
+      chopRows.Items[0].Fraction == 1f && Math.Abs(chopRows.Items[1].Fraction - 18f / 66f) < 1e-4 && chopRows.Src == "pc" && chopRows.Items.All(i => i.Src == "pc"),
+      "fix2 2 axe hits per tree as approved (r2-refine-woodcutting): the tree's picture by kind (Codex tree-*), a bar on one scale, the number, three across on Woodcutting's tight zones (two on other pages); a mod's tree keeps an empty place");
+var pick = Sample(); pick.Events = new SessionEvents();
+foreach (var (k, v) in new[] { ("rock4_copper", 120f), ("MineRock_Tin", 40f), ("rock1_mountain", 30f), ("silvervein", 20f), ("mudpile", 6f), ("Leviathan", 3f) })
+    SessionEvents.Add(pick.Events.PickaxeHits, k, v);
+var pickRows = PanelModel.Content(Show(pick, Chapter.Deeds, "mining")).SkipWhile(b => !(b.Kind == "section" && b.Title == "Pickaxe hits per rock")).Skip(1).First();
+Check(pickRows.Kind == "ranking" && pickRows.Columns == 2 && pickRows.Items.Select(i => i.Icon).SequenceEqual(new[] { "item:CopperOre|vocab:rock-copper", "item:TinOre|vocab:rock-tin", "item:Stone|vocab:rock-stone", "item:SilverOre|vocab:rock-silver", "item:IronScrap|vocab:rock-scrap", "item:Chitin|vocab:rock-stone" }) &&
+      pickRows.Items.Select(i => i.Value).SequenceEqual(new[] { "120", "40", "30", "20", "6", "3" }),
+      "fix2 2 pickaxe hits per rock: the rock's picture (each rock shows the game's own ore or stone icon, Codex's rock-* sketch as fallback: copper, tin, stone, silver, scrap pile, the Leviathan's chitin), a bar, the number, two columns");
+// ---------- T3: trees felled, the game counter when Hearthwoven first ran (faded) + every tree counted since (solid) ----------
+Block TreeHero(PanelView v) { var h = Find(v, "hero"); return h == null ? null : new[] { h }.Concat(h.Items ?? new List<Block>()).FirstOrDefault(n => n.Title.Contains("felled")); }
+List<Block> TreeSection(PanelView v) => PanelModel.Content(v).SkipWhile(b => !(b.Kind == "section" && b.Title == "Trees felled per tree")).Skip(1).TakeWhile(b => b.Kind != "section").ToList();
+// one "Earlier counts may be incomplete." per zone (Joost 2026-10-09): with trees felled and wood brought in both marked, the line is the zone's last block, once
+IEnumerable<Block> IncWalk(IEnumerable<Block> bs) => (bs ?? new List<Block>()).Where(b => b != null).SelectMany(b => new[] { b }.Concat(IncWalk(b.Items)));
+bool OneIncompleteAtEnd(PanelView v) { var z = IncWalk(v.Blocks).FirstOrDefault(b => b.Kind == "zone" && b.Id == "character");
+    return z != null && IncWalk(z.Items).Sum(b => (b.Text == PanelModel.EarlierIncomplete ? 1 : 0) + (b.Note == PanelModel.EarlierIncomplete ? 1 : 0)) == 1 && z.Items.Last().Kind == "note" && z.Items.Last().Text == PanelModel.EarlierIncomplete; }
+var noTreeBase = Show(input, Chapter.Deeds, "woodcutting");
+Check(TreeHero(noTreeBase)?.Value == "410" && OneIncompleteAtEnd(noTreeBase) && TreeSection(noTreeBase).Count == 0 &&
+      !PanelModel.AllText(noTreeBase).Any(t => t.Contains("own area") || t.Contains("owner")),
+      "T3 no baseline (local totals not loaded): the game's counter alone, with the one line that it misses trees; never 'own area'");
+var treesIn = Sample(); treesIn.Events = new SessionEvents();
+treesIn.Baseline = new Dictionary<string, Dictionary<string, float>> { ["treesFelled"] = new Dictionary<string, float> { ["Tree"] = 410 } };
+treesIn.Character["Tree"] = 500;   // the game counter grew since (trees in an area this PC hosts): never added
+foreach (var (k, v) in new[] { ("Beech1", 12f), ("Birch2_aut", 3f), ("FirTree", 8f) }) SessionEvents.Add(treesIn.Events.Felled, k, v);
+var treesPage = Show(treesIn, Chapter.Deeds, "woodcutting");
+var treeStrip = Find(treesPage, "strip"); var treeRows = TreeSection(treesPage).FirstOrDefault();   // zones: the layered whole on stone, the rows under their heading in the ember zone
+Check(TreeHero(treesPage)?.Value == "433" && TreeHero(treesPage).Note == PanelModel.PartLine("23") && TreeHero(treesPage).Src == "character" && treeStrip == null &&   // zones-wording: "433 trees felled in all · 23 of them since install"
+      PanelModel.Content(treesPage).Any(b => b.Kind == "note" && b.Text == PanelModel.TreesMissedBefore) && PanelModel.Content(treesPage).Any(b => b.Kind == "section" && b.Title == "Trees felled per tree" && b.Value == "23") &&
+      treeRows?.Kind == "ranking" && treeRows.Columns == 3 && treeRows.Items[0].Icon == "vocab:tree-beech" && treeRows.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Beech=12", "Fir=8", "Birch=3" }) && Zoned.Says(treesPage, treeRows),
+      "T3 layers: 410 before Hearthwoven + 23 felled since = 433 in all, the 23 said at the total and as the per-tree heading; the game counter's later growth (500) never added; per tree kind since install");
+Check(PanelModel.DeedCards(PanelModel.Titles(treesIn)).Items.Single(c => c.Title == "Woodcutter").Value == "433", "T3 the Woodcutter card shows the same 433 as the page");
+var treesNew = new PanelInput { Character = new Dictionary<string, float>(), Events = new SessionEvents(),
+                                Baseline = new Dictionary<string, Dictionary<string, float>> { ["treesFelled"] = new Dictionary<string, float>() } };
+SessionEvents.Add(treesNew.Events.Felled, "Beech1", 5);
+var treesNewPage = Show(treesNew, Chapter.Deeds, "woodcutting");
+Check(TreeHero(treesNewPage)?.Value == "5" && TreeHero(treesNewPage).Src == "pc" && TreeSection(treesNewPage).Single().Kind == "ranking" && TreeSection(treesNewPage)[0].Items.Single().Value == "5" &&
+      PanelModel.Titles(treesNew).Any(t => t.Title == "Woodcutter"),
+      "T3 a character made with Hearthwoven: every tree counted since install (no faded part, no key), and they earn Woodcutter");
+var treesKept = new PanelInput { Character = new Dictionary<string, float> { ["Tree"] = 7 }, Events = new SessionEvents(),
+                                 Baseline = new Dictionary<string, Dictionary<string, float>> { ["treesFelled"] = new Dictionary<string, float>() } };
+Check(PanelModel.Titles(treesKept).Any(t => t.Title == "Woodcutter"), "T3 titles are never taken away: the game's own counter still earns Woodcutter");
+var treesFellow = Sample(); treesFellow.IsSelf = false; treesFellow.PlayerName = "Edda";
+Check(OneIncompleteAtEnd(Show(treesFellow, Chapter.Deeds, "woodcutting")) && OneIncompleteAtEnd(treesPage),
+      "T3 a fellow's page (no baseline of theirs): their game counter, the same line about them");
+// titles are never taken away (K6): the game's MineHits still earns Stonebreaker; the page shows no number from it
+var oldMiner = new PanelInput { Character = new Dictionary<string, float> { ["MineHits"] = 650 }, Events = new SessionEvents() };
+var oldMinerPage = Show(oldMiner, Chapter.Deeds, "mining");
+Check(PanelModel.Titles(oldMiner).Any(t => t.Title == "Stonebreaker") && !PanelModel.AllText(oldMinerPage).Any(t => t.Contains("650")),
+      "K6 titles: 650 game pickaxe hits and none since install keep Stonebreaker; the page shows no game hits number");
 var miningEx = Show(input, Chapter.Deeds, "mining");
-var oreEx = miningEx.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Stone and ore picked up this session")).Skip(1).First();
-Check(oreEx.Items.Select(i => i.Title + "=" + i.Value).Take(3).SequenceEqual(new[] { "Copperore=18", "Silverore=4", "Stone=" }) && oreEx.Items[1].Text == null,
-      "C7 mining: a kind only measured has no floor line; a kind only in the game's count has no exact number");
+Check(!PanelModel.Content(miningEx).Any(b => b.Kind == "section" && b.Title.Contains("counted exactly")) && Find(miningEx, "composition").Items.Any(i => i.Id == "$item_silverore" && i.Fraction2 == 0),
+      "K1 mining: no separate exact list; an ore only Hearthwoven counted is all solid");
 
 // ---------- titles: one table ----------
 var titles = PanelModel.Titles(input);
 string Line(List<PanelModel.TitleRow> ts, string title, int i) => ts.Single(t => t.Title == title).Lines[i].Key;
 string Src(List<PanelModel.TitleRow> ts, string title, int i) => ts.Single(t => t.Title == title).Lines[i].Value;
 Check(Line(titles, "Trailfinder", 0) == "184 km travelled" && Src(titles, "Trailfinder", 0) == PanelModel.SourceCharacter, "source: a lifetime counter says since this character was made");
-Check(Line(titles, "Woodcutter", 0) == "64 axe hits on trees and logs" && Src(titles, "Woodcutter", 0) == PanelModel.SourceSession &&
+Check(Line(titles, "Woodcutter", 0) == "64 axe hits" && Src(titles, "Woodcutter", 0) == PanelModel.SourceSession &&
       Line(titles, "Woodcutter", 1) == "410 trees felled" && Src(titles, "Woodcutter", 1) == PanelModel.SourceCharacter, "titles: several lines, each with its own source");
 Check(Line(titles, "Mapmaker", 0) == "Map shared 2 times at the table" && Line(titles, "Mender", 0) == "9 repairs with the hammer" &&
       Line(titles, "Wallwarden", 0) == "42 defences built, traps armed or turrets loaded" && Line(titles, "Bossbane", 0) == "3 boss fights won",
       "titles: the five new titles read the new measures and profile counters");
 Check(!titles.Any(t => t.Title == "Tidecatcher" || t.Title == "Beastkeeper" || t.Title == "Waymate"), "titles: zero counters earn no title, and no Waymate");
 Check(PanelModel.SagaTitles.Single(t => t.Title == "Hallwright").Descriptor == "Pieces raised with the hammer" && PanelModel.SagaTitles.Single(t => t.Title == "Tidecatcher").Descriptor == "Fish caught on the line" &&
-      PanelModel.SagaTitles.Single(t => t.Title == "Storekeeper").Descriptor == "Supplies stowed in chests and carts" && PanelModel.SagaTitles.Single(t => t.Title == "Beastkeeper").Descriptor == "Creatures petted, named and led",
+      PanelModel.SagaTitles.Single(t => t.Title == "Storekeeper").Descriptor == "Carts pulled home" && PanelModel.SagaTitles.Single(t => t.Title == "Beastkeeper").Descriptor == "Creatures tamed, petted and led",
       "titles: descriptors from the naming review");
 
 // ---------- Battle ----------
-var battle = Show(input, Chapter.Battle, null, s => s.Biome = "Swamp");
-var dmgPage = Show(input, Chapter.Battle, "damage", s => s.Biome = "Swamp");
-var bars = Find(dmgPage, "bars");
-Check(battle.Heading == "434 damage dealt, 266 received" && battle.Scope == "Swamp combat · all enemies · this session", "battle: one scope per screen, stated in the header");
-var hitRows = battle.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Hits")).Skip(1).First();
-Check(hitRows.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Hits on foes=5,400", "Hits on other players=3", "Hits received from foes=1,300" }) && hitRows.Source == "character",
-      "C3 battle overview: retroactive hit counts, labelled as game counters");
-var byBiome = battle.Blocks.Where(b => b.Kind == "bars").ToList();
-Check(byBiome.Count == 2 && byBiome[0].Items.Select(i => i.Title).SequenceEqual(new[] { "Swamp", "Black Forest", "Meadows" }) && byBiome[0].Items.Single(i => i.Selected).Title == "Swamp" &&
-      byBiome[1].Items.Select(i => i.Title).SequenceEqual(new[] { "Black Forest", "Swamp" }) && byBiome.All(b => b.Source == "measured"),
-      "C3 battle overview: measured damage dealt and received, split by biome (every biome, the chosen one lit)");
+var battle = Show(input, Chapter.Battle, null, s => PanelModel.ToggleFacet(s, PanelModel.BattleOverviewFilter, "biome", "Swamp"));
+var dmgPage = Show(input, Chapter.Battle, "damage", s => { PanelModel.ToggleFacet(s, PanelModel.BattleDamageFilter, "biome", "Swamp"); s.View["Battle/damage/view"] = "type"; });   // By type (By weapon is the default)
+var dmgGrid = Find(dmgPage, "damagegrid");
+var battleStrip = Find(battle, "biomes");
+Check(battle.Heading == "Battle" && battle.Scope == "Swamp combat · all foes · this session" && battleStrip.Value == "434" && battleStrip.Value2 == "266" && Find(battle, "hero") == null,
+      "battle: one scope per screen (the heading row's choices); the chosen window and biome's dealt and received totals ride in the strip's legend (slice 3: were the heading)");
+Check(!PanelModel.Content(battle).Any(b => b.Kind == "section" && b.Title == "Hits") && !PanelModel.AllText(battle).Any(t => t.Contains("5\u00A0400") || t.Contains("1\u00A0300")) &&
+      PanelModel.Content(Show(input, Chapter.Battle, "foes", s => s.Window = TimeWindow.SinceInstall)).SelectMany(b => new[] { b }.Concat(b.Items ?? new List<Block>())).Any(b => (b.Kind == "hero" || b.Kind == "number") && b.Value == "5\u00A0400" && b.Title == "hits on foes" && b.Src == "character"),
+      "C3 battle overview: the lifetime hit counts do not sit under the window chips; hits on foes live on Foes (your character's count here: no baseline in this sample)");
+var byBiome = Find(battle, "biomes");
+Check(!PanelModel.Content(battle).Any(b => b.Kind == "bars") && byBiome.Items.Select(i => i.Title + "=" + i.Value + "/" + i.Value2).SequenceEqual(new[] { "Meadows=108/", "Black Forest=420/310", "Swamp=434/266" }) &&
+      byBiome.Items.Single(i => i.Selected).Title == "Swamp" && byBiome.Source == "measured",
+      "C3 battle overview: damage dealt and received per biome on the strip only (the chosen one lit), no biome bars repeating it");
 Check(!PanelModel.AllText(battle).Concat(PanelModel.AllText(dmgPage)).Any(t => t.IndexOf("dealt after", StringComparison.OrdinalIgnoreCase) >= 0), "C3: no dealt-after-resistance number (owner trap, see FEEDBACK C3)");
-Check(bars.Items.Select(b => b.Title).SequenceEqual(new[] { "Slash", "Poison" }) && bars.Value == "150" && Math.Abs(bars.Items[1].Fraction - 122f / 150f) < 1e-4 && Math.Abs(bars.Items[0].Fraction - 144f / 150f) < 1e-4 && bars.Items[1].Icon == "status:poison" && bars.Items[0].Icon == "",
-      "battle: bars on one zero-based round scale (0 to 150) from the numbers; poison carries the game's status icon, slash none");
+Check(dmgGrid != null && dmgGrid.Value == "434" && dmgGrid.Items.Skip(1).Select(t => t.Title + "=" + t.Value).SequenceEqual(new[] { "Slash=434" }) && !PanelModel.Content(dmgPage).Any(b => b.Kind == "bars"),
+      "battle: Damage shows what you dealt, by type and weapon (r4battle-damage-type); received lives on the overview and Defense");
 Check(PanelModel.ScrollRoom(508, 500) == 0 && PanelModel.ScrollRoom(511.9f, 500) == 0 && PanelModel.ScrollRoom(512, 500) == 12 && PanelModel.ScrollRoom(400, 500) == 0,
       "B9 scrolling: under 12 px of overflow there is no scroll range (no jump on the next notch, no fade)");
 Check(PanelModel.NiceMax(580) == 600 && PanelModel.NiceMax(1410) == 1500 && PanelModel.NiceMax(100) == 100 && PanelModel.NiceMax(7) == 8, "bars: the scale ends on a round number (580 -> 600, as in the kit's assembly)");
-Check(battle.HasFilters && battle.Windows.Select(w => w.Label).SequenceEqual(new[] { "Last hour", "Last three hours", "This session" }), "battle: time window choices say session, not gathering");
-Check(Find(battle, "stat", b => b.Title == "deaths from poison")?.Value == "2", "battle: deaths grouped by damage type, not pinned on an attacker");
+Check(battle.HasFilters && battle.Windows.Select(w => w.Label).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "7 days", "30 days", "All" }) && battle.HeadingWindow == "this session", "battle: nine window chips, short; the plate's heading says the chosen window in full");
+var deathRows = Find(battle, "deathrows");
+Check(deathRows?.Items.Select(d => d.Value + " " + d.Title + "|" + d.Icon).SequenceEqual(new[] { "2 deaths from poison|vocab:dmg-poison" }) == true && deathRows.Items[0].Colour == "#3ccf6e" &&
+      Find(Show(input, Chapter.Battle), "deathrows").Items.Select(d => d.Value + " " + d.Title).SequenceEqual(new[] { "2 deaths from poison", "1 death from blunt" }),
+      "battle overview: deaths in aligned rows, per killer and damage type (a damage-over-time is never pinned on a newer attacker), the type's icon when the game gives no trophy");
 Check(Find(battle, "note", b => b.Tone == "hint") != null, "battle: the resistance hint is on the overview");
-var foes = Show(input, Chapter.Battle, "foes");
-Check(foes.Heading == "860 foes defeated" && Find(foes, "rows").Items[0].Title == "Greydwarf" && !foes.HasFilters, "foes: lifetime kills per kind; lifetime pages have no time filter");
+var foes = Show(input, Chapter.Battle, "foes", s => s.Window = TimeWindow.SinceInstall);
+Check(foes.Heading == "Foes" && Find(foes, "hero")?.Value == "860" && Find(foes, "hero").Title == "foes defeated" && Find(foes, "foetable").Items[0].Title == "Draugr" && foes.HasFilters, "foes on All: lifetime kills in the heading, the foes struck since install; the window chips (HISTORY-06)");
 var deathsPage = Show(input, Chapter.Battle, "deaths");
-Check(deathsPage.Heading == "3 deaths" && Find(deathsPage, "stat").Title == "Poison · Blob" && Find(deathsPage, "stat").Text == "Swamp · 8 Oct 00:18", "deaths: listed with local date and time");
-Check(PanelModel.Build(new PanelInput(), new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = "deaths" } }).Heading == PanelModel.NoDeaths, "deaths: none says No deaths recorded");
+Check(deathsPage.Heading == "Deaths" && Find(deathsPage, "deaths").Items[0].Title == "Blob" && Find(deathsPage, "deaths").Items[0].Text.EndsWith(" 00:18 · Swamp") && !Find(deathsPage, "deaths").Items[0].Text.StartsWith("today"), "deaths: listed with a dated local time (never \"today\") and biome");
+Check(PanelModel.Build(new PanelInput(), new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = "deaths" } }).Heading == PanelModel.NoDeaths, "deaths: none says No deaths yet");
+Program.BattleChecks(input, Check);   // ch-battle: test-panel/BattleTests.cs
 
 // ---------- Skills ----------
 var skillsOverview = Show(input, Chapter.Skills);
-Check(skillsOverview.List.Select(l => l.Id).SequenceEqual(new[] { "overview", "Axes", "Blocking", "Cooking", "Run", "Swords" }) && skillsOverview.List.Skip(1).All(l => l.Icon == "skill:" + l.Id) && skillsOverview.Page == "overview",
+Check(skillsOverview.List.Select(l => l.Id).SequenceEqual(new[] { "overview", "Axes", "Blocking", "Cooking", "Fishing", "Jump", "Pickaxes", "Run", "Swim", "Swords", "WoodCutting" }) && skillsOverview.List.Skip(1).All(l => l.Icon == "skill:" + l.Id) && skillsOverview.Page == "overview",
       "skills: Overview first, then one row per skill with the game's skill icon");
-var highest = skillsOverview.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Levels now")).Skip(1).First();
-var practised = skillsOverview.Blocks.SkipWhile(b => !(b.Kind == "section" && b.Title == "Practised most this session")).Skip(1).First();
-Check(highest.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Run=55", "Blocking=42", "Axes=38", "Swords=21", "Cooking=18" }) && highest.Source == "character" &&
-      practised.Items.First().Title == "Axes" && practised.Items.First().Value == "14.5" && practised.Source == "measured",
-      "C4 skills overview: highest skills (the game's levels) and practised most this session (measured)");
+var practisedView = Show(input, Chapter.Skills, null, s => s.View["Skills/overview/view"] = "practised");
+var practised = PanelModel.Content(practisedView).First(b => b.Kind == "ranking");   // no "Practised most" heading: the chip says Practised (J)
+Check(Math.Abs(practised.Items.Sum(i => i.Fraction) - 1) < 1e-3 && Math.Abs(practised.Items.First().Fraction - 0.42f) < 0.01f && practised.Items.All(i => PanelModel.ParseCount(i.Value.Replace(" %", "")) == Math.Round(i.Fraction * 100)),
+      "skills practised: each bar is its share of all the practice (the track is 100 %), so the top skill at 42 % does not fill it");
+Check(!PanelModel.Content(skillsOverview).Any(b => b.Kind == "section" && (b.Title == "Levels now" || b.Title == "Practised most")) && Find(practisedView, "ladders") == null && Find(skillsOverview, "ladders").Items.SelectMany(g => g.Items).Select(i => i.Id + "=" + i.Value).OrderBy(x => x)
+      .SequenceEqual(new[] { "Axes=38", "Blocking=42", "Cooking=18", "Fishing=15", "Jump=28", "Pickaxes=22", "Run=55", "Swim=9", "Swords=21", "WoodCutting=34" }) && practised.Items.First().Title == "Axes" && practised.Items.First().Value == "42 %" && practised.Items.Select(i => i.Value).SequenceEqual(new[] { "42 %", "27 %", "18 %", "13 %" }) && practised.Items.Sum(i => int.Parse(i.Value.TrimEnd(' ', '%'))) == 100 && Find(practisedView, "hero")?.Value == "42 %" && practised.Src == "pc" && !PanelModel.Content(practisedView).Any(b => b.Items != null && b.Items.Any(i => i.Value == "14.5")),
+      "C4 skills overview: every level once, on the ladders (no 'Levels now' list repeating them); practised most since install (measured) in its own view of the switch");
+var bestSkill = Find(skillsOverview, "hero");
+Check(bestSkill != null && bestSkill.Value == "55" && bestSkill.Title == "Run" && bestSkill.Note == "your highest skill" && bestSkill.Src == "character" && Find(skillsOverview, "ladders").Items.Single(g => g.Title == "Move").Items.Select(i => i.Id).SequenceEqual(new[] { "Jump", "Run", "Swim" }) && Find(Show(new PanelInput { SkillLevels = new Dictionary<string, float> { ["Run"] = 5 } }, Chapter.Skills), "hero") == null,
+      "skills overview: the highest level is the hero (one skill alone: none), Jump and Swim are on the ladders as on Voyages > On foot");
 var many = new PanelInput { SkillLevels = Enumerable.Range(1, 12).ToDictionary(n => "Skill" + n, n => (float)n) };
-Check(PanelModel.Build(many, new PanelState { Chapter = Chapter.Skills }).Blocks.Single(b => b.Kind == "rows").Items.Count == 12, "C4 skills overview: every skill is listed, not only the top eight");
+Check(Find(PanelModel.Build(many, new PanelState { Chapter = Chapter.Skills }), "ladders").Items.SelectMany(g => g.Items).Count() == 12, "C4 skills overview: every skill gets its ladder, not only the top eight");
 var skills = Show(input, Chapter.Skills, "Axes");
-Check(Find(skills, "stat", b => b.Title == "level").Value == "38" && Find(skills, "stat", b => b.Title == "practice").Value == "14.5", "skills: level now and practice this session");
+Check(Find(skills, "ladder").Value == "38" && Find(skills, "hero", h => h.Title == PanelModel.PracticeGained)?.Value == "42 %" && !skills.Blocks.Any(b => b.Kind == "stat"),
+      "skills: level now and practice since install, once each, on the skill's ladder (no stats repeating them)");
 var unpractised = new PanelInput { SkillLevels = new Dictionary<string, float> { ["Bows"] = 12f }, Events = new SessionEvents() };
-Check(Find(PanelModel.Build(unpractised, new PanelState { Chapter = Chapter.Skills, Page = { [Chapter.Skills] = "Bows" } }), "stat", b => b.Title == "practice") == null, "skills: no practice line when there was none (no '0 practice')");
+Check(!Find(PanelModel.Build(unpractised, new PanelState { Chapter = Chapter.Skills, Page = { [Chapter.Skills] = "Bows" } }), "ladder").Items.Any(i => i.Kind == "practice"), "skills: no practice line when there was none (no '0 practice')");
 var colours = PanelModel.PersonColors(new[] { "Rowan", "Edda", "Tor", "Finch", "Asa", "Bo", "Gunn", "Ylva", "edda" });
-Check(colours.Count == 8 && colours.Values.Distinct().Count() == 8 && Show(input, Chapter.Company).PersonColors["Edda"] != Show(input, Chapter.Company).PersonColors["Tor"], "people: eight players get eight different colours, stable by name");
+Check(colours.Count == 8 && colours.Values.Distinct().Count() == 8 && Show(input, Chapter.Voyages).PersonColors["Edda"] != Show(input, Chapter.Voyages).PersonColors["Finch"], "people: eight players get eight different colours, stable by name");
+var withYou = PanelModel.PersonColors(new[] { "Edda", "Asa", "Rowan", "Tor" }, "Rowan");
+Check(withYou["Rowan"] == 0 && withYou["Asa"] == 1 && withYou["Edda"] == 2 && withYou["Tor"] == 3 && PanelModel.PlayerPalette[0] == "#d6ccb3" && PanelModel.DarkTextOn(0) && !PanelModel.DarkTextOn(1),
+      "people: you are always slot 0 (birch), the others alphabetically after you (Nordic earth palette)");
 
-// ---------- Company ----------
+// ---------- Company: Fireside, Together, Food shared, Gear shared (test-panel/CompanyTests.cs) ----------
+CompanyChecks(input, now, Check);
+FiresideChecks(now, Check);   // Fireside's threads never cross or run together where they need not; the counts on them touch nothing (test-panel/FiresideTests.cs)
 var company = Show(input, Chapter.Company);
-Check(company.List.Select(l => l.Label).SequenceEqual(new[] { "Edda", "Finch", "Tor" }) && company.Page == "Edda", "company: companions alphabetical, equal rows, you excluded");
-Check(company.Toggle.Select(t => t.Label).SequenceEqual(new[] { "They enjoyed your food", "You enjoyed their food" }) && company.Toggle[0].Selected, "company: literal direction toggle, their side first, in grateful-use wording");
-Check(Find(company, "empty").Title == "No record from Edda yet.", "company: their side without their shared record says so");
-var mine = Show(input, Chapter.Company, "Edda", s => s.TheyReceived = false);
-var thread = Find(mine, "thread");
-Check(thread.Title == "Food Edda made" && thread.Text == "You enjoyed" && thread.Icon == "person:Rowan" && thread.Items.Select(i => i.Title + " " + i.Value).SequenceEqual(new[] { "Bread 3", "Fish wraps 2" }), "company: your side, maker to eater with item and count");
-Check(thread.Note == PanelModel.SourceSession && mine.Scope == "Rowan and Edda · this session, since 20:54", "company: your side is scoped and labelled as your session");
-Check(Find(mine, "stat", b => b.Title == "Edda held the helm for about 15 minutes") != null && Find(mine, "stat", b => b.Title == "Sailed together for about 21 minutes") != null, "company: helm and voyages as about-minutes");
-var tor = Show(input, Chapter.Company, "Tor", s => s.TheyReceived = false);
-Check(Find(tor, "tiles").Items.Select(i => i.Title + "|" + i.Value).SequenceEqual(new[] { "Iron scale mail|", "Iron sword|" }), "company: gear shown by name, not equip counts");
-Check(company.Keys.Contains("[A/D] Direction") && !deeds.Keys.Contains("[A/D] Direction") && deeds.Keys.Contains("[W/S] List") && deeds.Keys.Last() == "[H/Esc] Close",
+Check(!company.Keys.Contains("[A/D] Direction") && !deeds.Keys.Contains("[A/D] Direction") && deeds.Keys.Contains("[W/S] Page") && deeds.Keys.Last() == "[H/Esc] Close",
       "keys: the footer lists only bindings that work on this screen");
 Check(deeds.Keys.Contains("[T] About") && !deeds.Keys.Any(k => k.StartsWith("[I]")), "ISC-1 keys: the info key is T (I opens the AdventureBackpacks backpack)");
 // Joost 2026-10-08: where a number comes from is not interesting to most players; T opens one About page instead of a line per page
 var about = Show(input, Chapter.Battle, "damage", s => s.ShowAbout = true);
-Check(about.Heading == "About Hearthwoven" && about.Blocks.Select(b => b.Kind + ":" + b.Title).SequenceEqual(new[] { "stat:The game counts", "stat:Hearthwoven measures", "stat:Fellow players share", "stat:Titles", "stat:Your world" }) &&
-      about.Blocks.All(b => !string.IsNullOrEmpty(b.Text)) && !about.HasFilters && about.Badges.Count == 0,
-      "ISC-6 About: T shows one page of labelled rows (game counts, Hearthwoven measures, fellows share, titles, your world)");
-Check(about.Keys.SequenceEqual(new[] { "[Q/E] Chapter", "[W/S] List", "[T/Esc] Back", "[H] Close" }), "ISC-6 About: T or Esc goes back, H closes: " + string.Join("  ", about.Keys));
-Check(PanelModel.AllText(about).Any(t => t.Contains("ShareWithGroup")) && PanelModel.AllText(about).Any(t => t.Contains("remove Hearthwoven.dll")),
-      "ISC-6 About: says sharing is two-way and can be switched off, and how to uninstall");
-var crowd = new PanelInput { PlayerName = "Rowan", Events = new SessionEvents() };
-foreach (var n in new[] { "Gunn", "Asa", "Bo" }) SessionEvents.Add(crowd.Events.SailedWith, n, 60);
-Check(PanelModel.Build(crowd, new PanelState { Chapter = Chapter.Company }).List.Select(l => l.Id).SequenceEqual(new[] { "Asa", "Bo", "Gunn" }), "company: order is by name, never by amount");
+Check(deeds.Keys.SequenceEqual(new[] { "[Q/E\u00b7A/D] Chapter", "[W/S] Page", "[F] View", "[Backspace] Back", "[T] About", "[H/Esc] Close" }) || deeds.Keys.SequenceEqual(new[] { "[Q/E\u00b7A/D] Chapter", "[W/S] Page", "[Backspace] Back", "[T] About", "[H/Esc] Close" }),
+      "keys: the footer names every key that works on the page, short: " + string.Join("  ", deeds.Keys));
+// diff-05: About as designed (proto/vocab-about.png): its own list, no chapter tab lit; How it counts = the three source
+// cards, the Since when timeline and the four promises on the plate; What it reads and Sharing carry the honest words
+var aboutPlate = PanelModel.PlateOf(about);
+Check(about.Heading == "How Hearthwoven counts" && about.ListTitle == "About" && about.List.Select(l => l.Label).SequenceEqual(new[] { "How it counts", "What it reads", "Sharing" }) &&
+      about.List[0].Selected && about.Chapters.All(c => !c.Selected) && aboutPlate != null &&
+      aboutPlate.Items.Select(b => b.Kind).SequenceEqual(new[] { "origins", "sincewhen", "promises" }) && !about.HasFilters && about.Badges.Count == 0,
+      "ISC-6 About: its own list, no chapter lit; How it counts = source cards, Since when, promises on the plate");
+Check(aboutPlate.Items[0].Items.Select(c => c.Icon + " " + c.Title + " | " + c.Value).SequenceEqual(new[] {
+          "vocab:src-stone Your character's own count | since you made this character", "vocab:src-hearth Hearthwoven on this PC | since you installed it", "vocab:src-fellows Your fellow players' PCs | when they share too" }) &&
+      aboutPlate.Items[0].Items.All(c => !string.IsNullOrEmpty(c.Text)) &&
+      aboutPlate.Items[1].Items.Select(r => r.Tone).SequenceEqual(new[] { "character", "pc", "fellows" }) && aboutPlate.Items[1].Text == "Rowan made" && aboutPlate.Items[1].Value == "Hearthwoven installed",
+      "About: three source cards with icon, a short since line and examples; the timeline made -> install -> now, no dates the mod does not know");
+Check(aboutPlate.Items[2].Items.Select(p => p.Title).SequenceEqual(new[] { "Only reads", "Your world stays untouched", "Optional for every player", PanelModel.OtherModsTitle }) && aboutPlate.Items[2].Items[3].Text == PanelModel.OtherModsLine &&
+      aboutPlate.Items[2].Items.All(p => p.Icon.StartsWith("vocab:promise-")), "About: the four promises in one row; other mods' items show too, with its one true line (no 'works with any mod')");
+Check(about.Keys.SequenceEqual(new[] { "[Q/E\u00b7A/D] Chapter", "[W/S] Page", "[T/Esc] Back", "[H] Close" }), "ISC-6 About: T or Esc goes back, H closes: " + string.Join("  ", about.Keys));
+var aboutState = new PanelState { ShowAbout = true }; PanelModel.StepList(aboutState, about, 1);
+var aboutReads = PanelModel.Build(input, aboutState); PanelModel.StepList(aboutState, aboutReads, 1);
+var aboutSharing = PanelModel.Build(input, aboutState);
+Check(aboutState.ShowAbout && aboutReads.Heading == "What it reads" && aboutSharing.Heading == "Sharing" && aboutState.Page.Count == 0, "About: W/S step its own list and keep About open, the chapter pages untouched");
+var aboutText = string.Join(" ", PanelModel.AllText(about).Concat(PanelModel.AllText(aboutReads)).Concat(PanelModel.AllText(aboutSharing)));
+Check(PanelModel.AboutRows.Any(r => r.label == "Feats" && r.text.StartsWith("A moment worth telling") && r.text.Contains("Unsung") && r.text.Contains("never a rank")) &&
+      PanelModel.Content(aboutReads).SelectMany(b => b.Items ?? new List<Block>()).Any(r => r.Kind == "readrow" && r.Title == "Feats"),
+      "About > What it reads: one row says what a feat is, that none is a rank, and what Unsung means");
+Check(aboutSharing.Heading == "Sharing" && PanelModel.Content(aboutSharing).SelectMany(b => b.Items ?? new List<Block>()).Where(b => b.Kind == "readrow").Select(b => b.Title).SequenceEqual(new[] { "What fellow players see", "Turn sharing on or off", "What stays private", "Where your counts go" }) &&
+      aboutText.Contains("You see theirs the same way") && aboutText.Contains("ShareWithGroup") && aboutText.Contains("nobody sees yours") && aboutText.Contains("Where you died and which worlds you played") && aboutText.Contains("Remove Hearthwoven.dll") && !aboutText.Contains("(co-op)") &&
+      PanelModel.AboutRows.Any(r => r.label == "Feats" && r.text.Contains("A title is earned by its own count") && r.text.Contains("no combined score")) && PanelModel.AboutRows.All(r => r.label != "Titles"),
+      "ISC-6 About > Sharing: what fellow players see, how to switch it (the setting and where), what stays private, where the counts go, how to uninstall; the Titles line moved to What it reads, under Feats");
+// K5 (SOURCES.md fix 4): says once what comes from the character (every world; misses co-op hits in a fellow player's area and pickups onto a
+// carried stack) and that Hearthwoven counts since install, except Battle's time windows; never "this book shows the current session"
+Check(aboutText.Contains("in every world") && aboutText.Contains("a fellow player's PC hosts") && aboutText.Contains("onto a stack you already carry") &&
+      aboutText.Contains("Only these start at install") && aboutText.Contains("look back from now") && !aboutText.Contains("Every number counts since install") && !aboutText.Contains("current session") && !aboutText.Contains("true amount") &&
+      !aboutText.ToLowerInvariant().Contains("friend") && !aboutText.Contains("this session") &&
+      PanelModel.AboutRows.All(r => r.text.Length <= 280 && !r.text.Contains('—') && !r.text.Contains('–')),
+      "K5 About: the character's counts span every world and miss co-op hits in a fellow player's area and pickups onto a carried stack; Hearthwoven counts since install except Battle's windows; short, no dashes, never 'friend'");
 
 // ---------- navigation ----------
 var nav = new PanelState();
@@ -355,39 +454,84 @@ edda.NowUtc = now; edda.ToLocal = t => t.AddHours(2); edda.ViewerName = "Rowan";
 Check(edda.SkillLevels["Cooking"] == 31.2f && edda.Character["CraftFood"] == 210f, "snapshot: profile counters and skills come back");
 Check(eddaJson.Contains("\"pickedUp\"") && edda.Events.PickedUp.TryGetValue("$item_wood", out var eddaWood) && eddaWood == 33f, "C7 snapshot: measured pickups travel in the existing snapshot and the shared copy");
 var eddaTitles = PanelModel.Titles(edda);
-Check(Line(eddaTitles, "Trailfinder", 0) == "52.3 km travelled" && Src(eddaTitles, "Shieldbearer", 0) == "measured in their last session", "snapshot: their values keep their source labels");
+Check(Line(eddaTitles, "Trailfinder", 0) == "52.3 km travelled" && Src(eddaTitles, "Shieldbearer", 0) == "measured in last shared", "snapshot: their values keep their source labels");
 foreach (Chapter ch in Enum.GetValues(typeof(Chapter)))
 {
     var a = PanelModel.Build(input, new PanelState { Chapter = ch }); var b = PanelModel.Build(edda, new PanelState { Chapter = ch });
     Check(a.Chapters.Select(c => c.Label).SequenceEqual(b.Chapters.Select(c => c.Label)) && b.Blocks.Count > 0, "snapshot: chapter " + ch + " renders for a fellow player");
 }
+// a fellow player's book never says "you" or "your" about them (the viewer's own chip and the Company's "(you)" are the only places)
+{
+    var sampleSelf = PanelSample.Full(now); var sampleFellows = PanelSample.Fellows(now);
+    foreach (var f in sampleFellows) { f.ViewerName = sampleSelf.PlayerName; f.PlayerNames = sampleSelf.PlayerNames; f.Fellows = sampleFellows.Where(o => o != f).Concat(new[] { sampleSelf }).ToList(); f.ItemKind = sampleSelf.ItemKind; f.GatherKind = sampleSelf.GatherKind; f.PieceKind = sampleSelf.PieceKind; f.ItemToken = sampleSelf.ItemToken; f.CropOf = sampleSelf.CropOf; f.ItemType = sampleSelf.ItemType; f.Foe = sampleSelf.Foe; f.Arrows = sampleSelf.Arrows; }
+    sampleSelf.Fellows = sampleFellows;
+    var yous = new System.Text.RegularExpressions.Regex(@"(you|your|yours|You|Your)");
+    var bad = new List<string>(); var scanned = 0;
+    var rich = DeedsTests.Rich(input); rich.IsSelf = false; rich.PlayerName = "Tor"; rich.ViewerName = "Rowan"; rich.Fellows = new List<PanelInput> { input };   // deeds, fishing, taming, crops
+    var battleFellow = Program.BattleSample(); battleFellow.IsSelf = false; battleFellow.PlayerName = "Finch"; battleFellow.ViewerName = "Rowan";   // deaths, damage taken, biomes
+    foreach (var who in sampleFellows.Concat(new[] { edda, rich, battleFellow }))
+        foreach (var (name, v) in SampleTests.AllPages(who))
+        {
+            IEnumerable<string> Of(Block b) => new[] { b.Title, b.Value, b.Text, b.Note }.Concat((b.Items ?? new List<Block>()).SelectMany(Of));
+            foreach (var t in v.Blocks.SelectMany(Of).Concat(new[] { v.Heading, v.Scope }).Where(s => !string.IsNullOrEmpty(s)))
+            {
+                scanned++;
+                if (yous.IsMatch(t) && !t.Contains("(you)")) bad.Add(who.PlayerName + " " + name + ": " + t);
+            }
+        }
+    var finchText = SampleTests.AllPages(battleFellow).SelectMany(p => PanelModel.AllText(p.view)).ToList();
+    Check(finchText.Contains("What hurt Finch") && finchText.Contains("Where Finch fell") && finchText.Contains("after their armour") && SampleTests.AllPages(rich).SelectMany(p => PanelModel.AllText(p.view)).Contains("Who enjoyed Tor's food"),
+          "a fellow's Battle and Cooking pages name the player: What hurt Finch, Where Finch fell, after their armour");
+    foreach (var s in bad.Distinct().Take(60)) System.Console.WriteLine("  you-text: " + s);
+    Check(scanned > 500 && bad.Count == 0, "a fellow player's pages never say you or your about them (" + bad.Distinct().Count() + " strings in " + scanned + ")");
+}
 var eddaBattle = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Battle });
-Check(eddaBattle.Scope == "All biomes · all enemies · this session · Edda, their last session, 8 Oct 00:05" && Find(eddaBattle, "stat", b => b.Title == "death from frost") != null,
+Check(eddaBattle.Scope == "All biomes · all foes · Edda, last shared, 8 Oct 00:05" && eddaBattle.HeadingWindow == null && PanelModel.PlateOf(eddaBattle).Text.StartsWith("Edda, last shared session") && Find(eddaBattle, "deathrows")?.Items.Any(b => b.Title == "death from frost") == true,
       "snapshot: the Battle scope says whose copy and when it is from; deaths without positions still count by type");
 var oldCopy = PanelInput.FromSnapshot(eddaJson); oldCopy.NowUtc = now.AddDays(3); oldCopy.ToLocal = t => t.AddHours(2);
 var stale = PanelModel.Build(oldCopy, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastHour });
-Check(stale.Heading == "Edda's last record is from 8 Oct 00:05" && !PanelModel.AllText(stale).Contains(PanelModel.NoDeaths) && !PanelModel.AllText(stale).Contains("No damage received"),
-      "snapshot: a window after an old copy says when the copy is from, not that nothing happened");
-var eddaCompany = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Company });
-Check(eddaCompany.List.Select(l => l.Label).SequenceEqual(new[] { "Rowan (you)", "Tor" }), "snapshot: in their company you are marked, they are not their own company");
+Check(stale.Windows.Where(w => !w.Disabled).Select(w => w.Id).SequenceEqual(new[] { "Session" }) && stale.Windows.Count == 9 && stale.HeadingWindow == null && PanelModel.AllText(stale).Any(s => s.Contains("8 Oct 00:05")) && !PanelModel.AllText(stale).Contains("No damage received"),
+      "snapshot: a fellow's book offers only the window it can show (their last shared session; the others greyed, not dropped) and says when the copy is from, not that nothing happened");
+var staleOv = PanelModel.Build(oldCopy, new PanelState { Chapter = Chapter.Battle });
+Check(PanelModel.PlateOf(staleOv)?.Text?.EndsWith("Edda shares the last session only") == true && !PanelModel.StepView(new PanelState { Chapter = Chapter.Battle }, staleOv, 1) && !staleOv.Keys.Any(k => k.EndsWith("Window")),
+      "snapshot: the plate says why the windows are greyed (Joost 2026-10-09), and the view key does not cycle into a greyed window");
 edda.Fellows = new List<PanelInput> { input }; input.Fellows = new List<PanelInput> { edda };
-var eddaSide = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Company });
-var eddaThread = Find(eddaSide, "thread");
-Check(eddaSide.Toggle[0].Label == "You enjoyed Edda's food" && eddaThread.Title == "Food Edda made" && eddaThread.Text == "You enjoyed" && eddaThread.Icon == "person:Rowan" && eddaThread.Items.Select(i => i.Title + " " + i.Value).SequenceEqual(new[] { "Bread 3", "Fish wraps 2" }),
-      "both ways: Edda's side shows what you ate of hers, from your record");
-var rowanSide = PanelModel.Build(input, new PanelState { Chapter = Chapter.Company });
-Check(Find(rowanSide, "thread").Items.Single().Title == "Queens Jam" && Find(rowanSide, "thread").Items.Single().Value == "2", "both ways: your side shows what Edda ate of yours, from her shared record");
-Check(rowanSide.Scope == "Rowan and Edda · Edda's last session, 8 Oct 00:05" && Find(rowanSide, "thread").Note == PanelModel.SourceFellows,
-      "both ways: what she ate is scoped to her last session (with date) and labelled measured on their PCs");
-Check(Find(eddaSide, "thread").Note == "measured on your PC" && eddaSide.Scope == "Edda and Rowan · this session, since 20:54", "both ways: on Edda's page, what you ate of hers is labelled as measured on your PC");
-Check(Find(rowanSide, "tiles").Items.Single().Icon == "item:AxeBronze", "both ways: gear she equipped that you made");
 var cooking = Show(input, Chapter.Deeds, "cooking");
-Check(cooking.Heading == "2 meals enjoyed by companions" && Find(cooking, "rows").Items.Single().Title == "Edda" && Find(cooking, "rows").Note == PanelModel.SourceFellows,
+Check(cooking.Heading == "Cooking" && Find(cooking, "ranking").Items.Single().Title == "Edda" && Find(cooking, "ranking").Items.Single().Value == "2" && Find(cooking, "ranking").Note == null && Find(cooking, "ranking").Src == "fellows",
       "cooking: meals enjoyed by companions, who enjoyed them (by name), labelled measured on their PCs");
 Check(PanelModel.Titles(input).Single(t => t.Title == "Hearth Cook").Lines[0].Key == "2 times someone enjoyed food you made", "wording: Hearth Cook says someone enjoyed food you made");
 Check(PanelInput.FromSnapshot("not json") == null && PanelInput.FromSnapshot("") == null, "snapshot: unreadable JSON gives no input, no exception");
+
+// K3 (SOURCES.md fix 3): a fellow's copy carries their since-install totals too; an older copy (without them) reads as before
+string EddaSinceInstallSnapshot()
+{
+    var st = new PlayerProfile.PlayerStats[1]; st[0] = new PlayerProfile.PlayerStats(); st[0][PlayerStatType.CraftFood] = 210f;
+    var ev = new SessionEvents(); SessionEvents.Add(ev.AteFoodMadeBy, "Rowan|QueensJam", 2);   // this session: just reconnected
+    var since = new SessionEvents { Blocks = 40 }; SessionEvents.Add(since.AteFoodMadeBy, "Rowan|QueensJam", 9); SessionEvents.Add(since.EquippedGearMadeBy, "Rowan|AxeBronze", 4);
+    var log = new EventLog(); log.AddDamage(now.AddMinutes(-30), "Mountain", true, "Wolf", "Spears", D("pierce", 40));
+    var tally = new DamageTally(); tally.AddDealt("Wolf", "Spears", D("pierce", 40));
+    var tallySince = DamageTally.Sum(tally); tallySince.AddDealt("Troll", "Spears", D("pierce", 900)); tallySince.AddTaken("Troll", "EnemyHit", D("blunt", 120));
+    return GroupShare.SharedCopy(Snapshot.Build("0.2.1", 77L, "Edda", st, new Snapshot.SkillInfo[0], "Midgard", tally, "s2", ev, log, share: true, eventsSinceInstall: since, damageSinceInstall: tallySince));
+}
+var eddaNow = PanelInput.FromSnapshot(EddaSinceInstallSnapshot());
+eddaNow.NowUtc = now; eddaNow.ToLocal = t => t.AddHours(2); eddaNow.ViewerName = "Rowan"; eddaNow.DisplayName = input.DisplayName;
+Check(eddaNow.SharedSinceInstall && eddaNow.Events.AteFoodMadeBy["Rowan|QueensJam"] == 9f && eddaNow.Events.Blocks == 40 && eddaNow.Session.Dealt.Values.Sum() == 40f &&
+      eddaNow.DamageSinceInstall.Dealt.Values.Sum() == 940f && !edda.SharedSinceInstall && edda.DamageSinceInstall == null && edda.Events.AteFoodMadeBy["Rowan|QueensJam"] == 2f,
+      "K3 snapshot: a fellow's since-install totals come back (events and damage); an older copy keeps last shared (missing field = old behaviour)");
+var keepFellows = input.Fellows; input.Fellows = new List<PanelInput> { eddaNow };
+var foodNow = Find(Show(input, Chapter.Company, "food"), "axis");
+var giftsNow = Find(Show(input, Chapter.Company), "giving").Items.Where(g => g.Kind == "gift").ToDictionary(g => g.Id + "/" + g.Tone);
+input.Fellows = keepFellows;
+Check(foodNow.Items.Single(e => e.Kind == "end" && e.Tone == "right").Value == "9" && giftsNow["Rowan>Edda/food"].Value == "9" && giftsNow["Rowan>Edda/gear"].Value == "4",   // gear: times put to good use, as Gear shared's tile (fireside-route)
+      "K3 company: Food shared and Fireside read the fellow's since-install record, so a reconnect does not drop them back to zero");
+Check(Show(eddaNow, Chapter.Deeds).Scope == "Edda, since install, as of 8 Oct 00:00" && Show(edda, Chapter.Deeds).Scope == "Edda, last shared, 8 Oct 00:05",
+      "K3 scope: a since-install copy says so (with the date of its latest record); an older copy still says last shared");
+var eddaFoes = Show(eddaNow, Chapter.Battle, "foes", s => s.Window = TimeWindow.SinceInstall);
+Check(Find(eddaFoes, "foetable").Items.Select(r => r.Value).SequenceEqual(new[] { "900", "40" }) && PanelModel.PlateOf(eddaFoes).Text == "Edda, since install, as of 8 Oct 00:00\nEdda shares the last session and since install only" &&
+      Show(eddaNow, Chapter.Battle).Scope.EndsWith("Edda, last shared, 8 Oct 00:00"),
+      "K3 battle: a fellow's Foes read their damage since install and say so; the windowed overview keeps last shared");
 var bare = PanelInput.FromSnapshot("{\"name\":\"Finch\"}");
-Check(bare != null && Find(PanelModel.Build(bare, new PanelState()), "empty").Text == "Finch's deeds will appear here as they are recorded.", "snapshot: a snapshot with nothing in it shows empty states");
+Check(bare != null && Find(PanelModel.Build(bare, new PanelState()), "empty").Text == "Finch's deeds show up here as you play.", "snapshot: a snapshot with nothing in it shows empty states");
 
 // ---------- the player switcher ----------
 var sw = new PanelView();
@@ -398,14 +542,208 @@ Check(sw.Players[0].Selected, "switcher: a player no longer shared falls back to
 PanelModel.AddPlayers(sw, "Rowan", new string[0], "", true);
 Check(sw.Players.Count == 1 && sw.ShareNote == PanelModel.ShareWaitingNote, "switcher: sharing on but nobody else yet says so");
 PanelModel.AddPlayers(sw, "Rowan", new[] { "Tor" }, "Tor", false);
-Check(sw.Players.Count == 0 && sw.ShareNote == "You keep your stats to yourself, so you see only your own. Turn on ShareWithGroup in the mod settings to see your fellow players.",
-      "switcher: sharing off hides the switcher and says how to turn it on");
+var withKey = new PanelView(); withKey.Keys.Add("[T] About");
+Check(sw.Players.Count == 0 && sw.ShareNote == PanelModel.ShareOffNote + "\n" + PanelModel.ShareOffHow(sw) && PanelModel.ShareOffHow(withKey) == "[T] About > Sharing: how to turn it on" && PanelModel.ShareOffHow(sw) == "About > Sharing says how to turn it on",
+      "switcher: sharing off hides the switcher, says what off means and where to read how to turn it on (About > Sharing, with its key): " + sw.ShareNote.Replace("\n", " | "));
+
+// ---------- the visual vocabulary: composition, biomes, ladders, source marks (2026-10-08) ----------
+bool SumsMatch(Block c) => c != null && c.Items.Sum(i => double.Parse((i.Value).Replace(PanelModel.ThousandsGap, ""), System.Globalization.CultureInfo.InvariantCulture)) ==
+                           double.Parse((c.Value).Replace(PanelModel.ThousandsGap, ""), System.Globalization.CultureInfo.InvariantCulture) && Math.Abs(c.Items.Sum(i => i.Fraction) - 1f) < 1e-4;
+var vWood = Show(input, Chapter.Deeds, "woodcutting");
+var cWood = Find(vWood, "composition");
+Check(cWood != null && cWood.Title == "Wood brought in" && cWood.Value == "3\u00A0305" && SumsMatch(cWood) && cWood.Src == "character" && cWood.Items.All(i => i.Src == "character") &&
+      cWood.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Wood=2\u00A0400", "Corewood=520", "Finewood=310", "Ancient Bark=75" }) &&
+      cWood.Items[0].Pattern == "vocab:grain-wood-n" && cWood.Items[1].Pattern == "vocab:grain-corewood-n" && cWood.Items[1].Colour == PanelModel.MaterialColour["$item_roundlog"] && cWood.Items.All(i => i.Colour != null && i.Colour.StartsWith("#")),
+      "V composition woodcutting: wood brought in per kind, parts sum to the total, a neutral grain per wood kind in the icon's colour (Codex's samples without the game)");
+Check(PanelModel.Content(vWood).IndexOf(cWood) < PanelModel.Content(vWood).FindIndex(b => b.Kind == "section" && b.Title == "Axe hits per tree"), "V composition woodcutting: leads the page; the axe hits per tree below");
+var cOre = Find(Show(input, Chapter.Deeds, "mining"), "composition");
+Check(cOre.Items.Select(i => i.Title).SequenceEqual(new[] { "Stone", "Copper Ore", "Tin Ore", "Silver Ore" }) && Find(Show(input, Chapter.Deeds, "groundwork"), "composition").Items.Select(i => i.Title).SequenceEqual(new[] { "Level Ground", "Raise Ground", "Paved Road" }),
+      "names: the compositions show the game's display names (through the shared name token), never prefab names");
+var prefabish = new[] { "Roundlog", "Elderbark", "Copperore", "Tinore", "Silverore", "Levelground", "Pavedroad", "Woodwall", "Carrotsoup" };
+var prefabHit = new[] { "woodcutting", "mining", "building", "crafting", "cooking" }.SelectMany(pg => PanelModel.AllText(Show(input, Chapter.Deeds, pg))).FirstOrDefault(t => prefabish.Any(w => t.Contains(w)));
+Check(prefabHit == null, "names: no prefab-style name on the Deeds pages when the game has a display name" + (prefabHit != null ? ": " + prefabHit : ""));
+Check(PanelModel.Content(PanelModel.Build(new PanelInput { ItemsPickedUp = new Dictionary<string, float> { ["$item_modwood"] = 4 }, GatherKind = _ => "wood", DisplayName = t => t },
+      new PanelState { Page = { [Chapter.Deeds] = "woodcutting" } })).Single(b => b.Kind == "composition").Items.Single().Title == "Modwood",
+      "names: a token the game cannot name falls back to a readable name, never the raw $token");
+var oreHero = Find(Show(input, Chapter.Deeds, "mining"), "hero");
+Check(cOre != null && cOre.Title == null && oreHero.Title == "stone and ore brought in" && oreHero.Value == "2\u00A0134" && cOre.Items.Sum(i => double.Parse(i.Value.Replace(PanelModel.ThousandsGap, ""), System.Globalization.CultureInfo.InvariantCulture)) == 2134 && !cOre.Items.Any(i => i.Title.Contains("aspberr")) && cOre.Items.All(i => i.Pattern == null),
+      "V composition mining: the hero is the stone and ore brought in (silver only counted exactly), the bar under it has no head of its own, berries left out, sums match");
+var cGround = Find(Show(input, Chapter.Deeds, "groundwork"), "composition");
+Check(cGround != null && cGround.Title == null && Find(Show(input, Chapter.Deeds, "groundwork"), "hero").Value == "1\u00A0023" && Math.Abs(cGround.Items.Sum(i => i.Fraction) - 1f) < 1e-4 && cGround.Items.Select(i => i.Value).SequenceEqual(new[] { "850", "133", "40" }),
+      "V composition building: groundwork per kind, apart from building (materials per piece are not collected, so not shown)");
+var vBattle = Show(input, Chapter.Battle, null, s => PanelModel.ToggleFacet(s, PanelModel.BattleOverviewFilter, "biome", "Swamp"));
+var strip = PanelModel.BiomeStrip(input, PanelModel.Damage(input.Log, TimeWindow.Session, "", now), PanelModel.Deaths(input.Log, TimeWindow.Session, "", now), "Swamp");   // the block itself: on the page its bosses sit in the stone zone (ZonesTests.cs)
+Check(strip != null && strip.Items.Select(i => i.Id).SequenceEqual(new[] { "Meadows", "BlackForest", "Swamp" }) && strip.Items.Select(i => i.Title).SequenceEqual(new[] { "Meadows", "Black Forest", "Swamp" }),
+      "V biomes: only biomes with evidence, in journey order (no Mountains, Plains, Ocean: never fought there, no boss)");
+Check(strip.Items.Select(i => i.Value + "/" + i.Value2 + "/" + i.Count).SequenceEqual(new[] { "108//0", "420/310/1", "434/266/2" }) && strip.Items.Single(i => i.Selected).Id == "Swamp" &&
+      Math.Abs(strip.Items.Max(i => i.Fraction) - 1f) < 1e-4 && strip.Items.All(i => i.Src == "pc" && i.Colour != null && i.Icon.StartsWith("vocab:biome-")),
+      "V biomes: dealt rises, received hangs, deaths per biome, the chosen biome lit, every tile carries Src pc (data: Battle draws no label)");
+var allRows = PanelModel.Damage(input.Log, TimeWindow.Session, "", now);
+Check(strip.Items.Sum(i => double.Parse((i.Value == "" ? "0" : i.Value).Replace(PanelModel.ThousandsGap, ""), System.Globalization.CultureInfo.InvariantCulture)) == Math.Round(allRows.Where(r => r.Dir == "dealt").Sum(r => r.Amount)) &&
+      strip.Items.Sum(i => i.Count) == PanelModel.Deaths(input.Log, TimeWindow.Session, "", now).Count, "V biomes: tile sums match the session's dealt damage and deaths");
+var meadowsBoss = strip.Items[0].Items?.Single(); var elder = strip.Items[1].Items?.Single();
+Check(meadowsBoss != null && meadowsBoss.Kind == "boss" && meadowsBoss.Title == "Eikthyr" && meadowsBoss.Icon == "item:TrophyEikthyr" && meadowsBoss.Src == "character" &&
+      elder?.Title == "The Elder" && strip.Items[2].Items == null, "V biomes: a defeated boss sits on its biome with Src character; zero kills (Bonemass) is no medal");
+input.EnemyKills["$enemy_dragon"] = 1;
+Check(Find(Show(input, Chapter.Battle), "biomes").Items.Select(i => i.Id).SequenceEqual(new[] { "Meadows", "BlackForest", "Swamp", "Mountain" }), "V biomes: a defeated boss alone is evidence of the biome (Moder: Mountains shown)");
+input.EnemyKills.Remove("$enemy_dragon");
+// the game's own record of found biomes (Player.m_knownBiome): a biome found without a fight still has its tile (Joost's
+// first test: Meadows missing), in journey order with the Ocean last; a defeated boss sits in its tile
+var explorer = new PanelInput { Log = new EventLog(), KnownBiomes = new[] { "Ocean", "BlackForest", "Meadows" }, EnemyKills = new Dictionary<string, float> { ["$enemy_eikthyr"] = 1 } };
+var foundStrip = PanelModel.BiomeStrip(explorer, new List<PanelModel.DamageRow>(), new List<EventLog.Death>(), "");   // the block itself (a page without numbers leaves it out: ZonesTests.cs)
+Check(foundStrip != null && foundStrip.Items.Select(i => i.Id).SequenceEqual(new[] { "Meadows", "BlackForest", "Ocean" }) && foundStrip.Items[0].Items?.Single().Title == "Eikthyr" &&
+      foundStrip.Items.All(i => i.Value == "" && i.Value2 == "" && i.Count == 0),
+      "V biomes: every biome the character found shows (the game's record), journey order, Ocean last, Eikthyr on Meadows, no numbers without data");
+var explorerState = new PanelState { Chapter = Chapter.Battle, ViewKey = "F" }; explorerState.Page[Chapter.Battle] = "deaths";   // Overview, Damage and Deaths filter by biome in a bar; no heading chip on any
+explorer.KnownBiomes = new[] { "Ocean", "BlackForest", "Meadows" };
+var bv = PanelModel.Build(explorer, explorerState);
+Check(bv.Biomes.Count == 0 && PanelModel.FilterOf(bv) == null && !bv.Keys.Any(k => k.Contains("Filter")),
+      "biome choice: no falls yet, nothing to narrow: no Biome row, no key, and never a heading chip (the Biome row lives in BattleFilterTests)");
+Check(PanelModel.Build(new PanelInput { Log = new EventLog() }, new PanelState { Chapter = Chapter.Battle, ViewKey = "F", Page = { [Chapter.Battle] = "deaths" } }) is var none && none.Biomes.Count == 0 && !none.Keys.Any(k => k.Contains("Filter")),
+      "biome choice: nothing found, no choice and no key (nothing to filter)");
+var quiet = PanelModel.Build(explorer, new PanelState { Chapter = Chapter.Battle });
+var quietEmpty = Find(quiet, "empty");
+Check(quietEmpty != null &&
+      quietEmpty.Text == "Fight something and it fills up. Choose All for everything since install." && quietEmpty.Title == "Nothing yet this session" &&   // the session window says so, not "from install"
+      !PanelModel.AllText(quiet).Contains(PanelModel.NoDeaths),
+      "empty: Battle without data says Nothing yet and the next step, once (no No damage / No deaths lines under it)");
+// carts left the panel (Hall = Overview, Trader, Smelters; integrate-05): the same pattern on the Trader
+var quietTrader = PanelModel.Build(new PanelInput(), new PanelState { Chapter = Chapter.Stores, Page = { [Chapter.Stores] = "trader" } });
+Check(Find(quietTrader, "empty")?.Title == "Nothing yet" && Zoned.Zones(quietTrader).Single().Note == PanelModel.ZoneLine(null) && Find(quietTrader, "empty").Text == null,   // the dimmed ember zone's line says the next step (ZonesTests.cs)
+      "empty: every page that only counts since install uses the same pattern (trader)");
+explorer.KnownBiomes = null;
+Check(PanelModel.BiomeStrip(explorer, new List<PanelModel.DamageRow>(), new List<EventLog.Death>(), "").Items.Select(i => i.Id).SequenceEqual(new[] { "Meadows" }),
+      "V biomes: without the game's record (a fellow's copy) only evidence shows");
+var hourStrip = Find(Show(input, Chapter.Battle, null, s => s.Window = TimeWindow.LastHour), "biomes");
+Check(hourStrip.Items.Select(i => i.Id + "=" + i.Value + "/" + i.Count).SequenceEqual(new[] { "Meadows=/0", "BlackForest=/0", "Swamp=434/2" }), "V biomes: the time window filters the numbers; bosses (since you were made) keep their tiles");
+var hurt = Find(vBattle, "composition");
+Check(hurt != null && hurt.Title == PanelModel.WhatHurtYou + " in the Swamp" && hurt.Title == "What hurt you in the Swamp" && hurt.Value == "266" && SumsMatch(hurt) && hurt.Note == "after your armour" && hurt.Src == "pc" &&
+      hurt.Items.Select(i => i.Title + "=" + i.Value + "=" + i.Colour).SequenceEqual(new[] { "Slash=144=#aab6c2", "Poison=122=#3ccf6e" }) && hurt.Items[1].Icon == "damage:poison",
+      "V What hurt you: received by damage type in the chosen biome, palette colours, after your armour, matches the heading");
+Check(PanelModel.DealtQualifier == "before the foe's armour" && PanelModel.ReceivedQualifier == "after your armour" && PanelModel.DealtLabel == "damage dealt" && PanelModel.ReceivedLabel == "damage received" &&
+      PanelModel.DiedHere == "died here" && PanelModel.BossDefeated == "boss defeated", "V words: the strip's legend in the word list's terms");
+var vSkills = Show(input, Chapter.Skills);
+var lad = Find(vSkills, "ladders");
+Check(lad != null && lad.Items.Select(g => g.Title).SequenceEqual(new[] { "Fight", "Gather", "Move", "Make" }) && lad.Items[1].Items.Select(i => i.Id).SequenceEqual(new[] { "Pickaxes", "WoodCutting", "Fishing" }) && lad.Items[0].Items.Select(i => i.Id).SequenceEqual(new[] { "Swords", "Blocking", "Axes" }),
+      "V ladders: grouped Fight, Gather, Move, Make in the prototype's order; empty groups left out");
+var axes = lad.Items[0].Items[2];
+Check(axes.Level == 38 && axes.Value == "38" && Math.Abs(axes.Progress - 0.62f) < 1e-4 && axes.Practised && axes.Src == "character" && axes.Icon == "skill:Axes" &&
+      !lad.Items[3].Items[0].Practised, "V ladders: level, progress to the next level, practised since install as the glow (Cooking: not practised)");
+var oneAxes = Find(Show(input, Chapter.Skills, "Axes"), "ladder");
+var onePractice = Find(Show(input, Chapter.Skills, "Axes"), "hero", h => h.Title == PanelModel.PracticeGained);   // in the ember zone (ZonesTests.cs)
+Check(oneAxes != null && oneAxes.Value2 == "39" && PanelModel.Ladder(input, "Axes").Items.Single(i => i.Kind == "practice").Value == "42 %" && onePractice?.Value == "42 %" && onePractice.Note == "the most of any skill" && onePractice.Src == "pc" &&
+      !(oneAxes.Items ?? new List<Block>()).Any(i => i.Kind == "link"), "V ladder: one skill large, next level, practice since install with Src pc");
+var wcInput = Sample(); wcInput.SkillLevels["WoodCutting"] = 34; wcInput.SkillProgress = null;
+var wc = Find(PanelModel.Build(wcInput, new PanelState { Chapter = Chapter.Skills, Page = { [Chapter.Skills] = "WoodCutting" } }), "ladder");
+Check(wc != null && wc.Progress == -1 && wc.Items.Single(i => i.Kind == "link").Id == "Deeds/woodcutting" && Find(PanelModel.Build(wcInput, new PanelState { Chapter = Chapter.Skills }), "ladders").Items.Single(g => g.Title == "Gather").Items.Any(i => i.Id == "WoodCutting"),
+      "V ladder: progress unknown stays -1 (not drawn, never guessed); the skill links to its deed page");
+var gameSkill = new Skills.Skill(new Skills.SkillDef()) { m_level = 10, m_accumulator = 7.3f };
+Check(Math.Abs(PanelModel.ProgressOf(10, 7.3f) - gameSkill.GetLevelPercentage()) < 1e-4, "V ladder: a shared snapshot's progress matches the game's own GetLevelPercentage (" + gameSkill.GetLevelPercentage() + ")");
+Check(edda.SkillProgress != null && edda.SkillProgress.ContainsKey("Cooking"), "V ladder: progress travels in the shared snapshot");
+// the skill beside its deed (polish-06): small at the bottom of the plate, the same ladder block as On foot's Jump, Run and Swim
+string Strip(PanelView v) { var last = PanelModel.PlateOf(v)?.Items.LastOrDefault(); return last?.Kind == "ladders" ? last.Items.Single().Title + ":" + string.Join(",", last.Items.Single().Items.Select(i => i.Id + "=" + i.Value)) : null; }
+Check(Strip(Show(input, Chapter.Deeds, "woodcutting")) == "Skill:WoodCutting=34" && Strip(Show(input, Chapter.Deeds, "mining")) == "Skill:Pickaxes=22" &&
+      Strip(Show(input, Chapter.Deeds, "cooking")) == "Skill:Cooking=18" && Strip(Show(DeedsTests.Rich(input), Chapter.Deeds, "fishing")) == "Skill:Fishing=15",
+      "skill beside its deed: Woodcutting, Mining, Cooking and Fishing end their plate with their own skill's ladder (level + progress, as On foot)");
+Check(Strip(Show(Program.BattleSample(), Chapter.Battle, "damage")) == "Weapon skills:Swords=21,Knives=9,Clubs=16,Spears=27,Axes=38,Bows=31",
+      "skill beside its deed: Battle > Damage ends with the weapon skills the hits were booked on (tool damage left out), in the Fight order");
+Check(Strip(Show(new PanelInput(), Chapter.Deeds, "woodcutting")) == null && Strip(Show(Sample(), Chapter.Deeds, "fishing")) == null,
+      "skill beside its deed: a character without the skill, or an empty page, shows no strip");
+// source marks replace the source sentences (Joost 2026-10-08)
+Check(Show(input, Chapter.Deeds, "woodcutting").Scope == null && Show(input, Chapter.Voyages).Scope == null && Show(input, Chapter.Skills).Scope == null && Show(input, Chapter.Stores).Scope == null &&
+      Show(input, Chapter.Battle, "foes").Scope.EndsWith("· this session"), "Src: no scope sentence on your own pages outside Battle's windows (the since-install label says it); Foes has the window set now (HISTORY-06)");
+Check(PanelModel.Build(edda, new PanelState { Chapter = Chapter.Deeds }).Scope == "Edda, last shared, 8 Oct 00:05", "Src: a fellow's page still says whose copy it is and when it is from");
+Check(Find(vBattle, "biomes").Src == "pc" && Find(Show(input, Chapter.Battle, "foes", s => s.Window = TimeWindow.SinceInstall), "hero").Src == "character" && Show(input, Chapter.Deeds, "cooking").HeadingSrc == null, "Src: the heading's number carries its Src; a heading without a number carries none; (data)");
+// no icons beside numbers (Joost 2026-10-08): Src stays data; only a number counted on this PC gets "since install", once
+IEnumerable<Block> Every(IEnumerable<Block> bs) => bs.SelectMany(b => new[] { b }.Concat(Every(b.Items ?? new List<Block>())));
+int Labels(PanelView v) => Zoned.Labels(v);   // the labels, and each "Since install" zone (ZonesTests.cs)
+var carts = Show(input, Chapter.Stores);
+Check(Labels(carts) == 1, "since install: a page whose numbers were all counted on this PC says it once, after the heading");
+var yourSide = Show(input, Chapter.Company, "food");
+Check(Labels(yourSide) >= 1 && Every(yourSide.Blocks).Where(b => b.SinceInstall).All(b => b.Src == "pc"), "since install: Company > Food shared labels what you enjoyed (this PC), never what fellow players recorded");
+var skillsLabels = Show(input, Chapter.Skills, null, s => s.View["Skills/overview/view"] = "practised");
+var practisedHead = PanelModel.Content(skillsLabels).Single(b => b.Kind == "ranking");
+Check(!skillsLabels.HeadingSinceInstall && Zoned.Says(skillsLabels, practisedHead) && Labels(skillsLabels) == 1 && Labels(Show(input, Chapter.Skills)) == 0 && !Find(Show(input, Chapter.Skills), "ladders").SinceInstall,
+      "since install: a whole section from this PC says it once after its heading, also inside a switch's view; the ladders (your character) carry nothing");
+var woodLabels = Show(input, Chapter.Deeds, "woodcutting");
+var woodHero = Find(woodLabels, "hero");
+Check(woodHero.Value == "410" && woodHero.Title == "trees felled" && !woodHero.SinceInstall && woodHero.Items == null && Find(woodLabels, "hero", h => h.Value == "64")?.Title == "axe hits" &&
+      Zoned.Says(woodLabels, Find(woodLabels, "hero", h => h.Value == "64")) && !Zoned.Says(woodLabels, woodHero) && !Zoned.Says(woodLabels, Find(woodLabels, "composition")),
+      "since install: a single number from this PC gets it beside the number (the hero's second number); the character's counts carry nothing");
+var axesPage = Show(input, Chapter.Skills, "Axes");
+Check(PanelModel.PlateOf(axesPage) != null && PanelModel.PlateOf(axesPage).Icon == "skill:Axes", "plate: a single skill's page sits on the plate like every page (in-game snapshot: unreadable over the world)");
+Check(Zoned.Says(axesPage, Find(axesPage, "hero", h => h.Title == PanelModel.PracticeGained)) && !Zoned.Says(axesPage, Find(axesPage, "ladder")), "since install: the practice under a skill's ladder, not the level");
+
+// ---------- page layout: plate, hero, columns, switch, cards (slice 3) ----------
+Check(PanelModel.SplitNumber("410 trees felled") == ("410", "trees felled") && PanelModel.SplitNumber("1\u00A0180 pickaxe hits") == ("1\u00A0180", "pickaxe hits") &&
+      PanelModel.SplitNumber("6.6 km at the helm") == ("6.6", "km at the helm") && PanelModel.SplitNumber("Map shared 2 times at the table") == (null, "Map shared 2 times at the table"),
+      "L hero: a title line splits into its number and its label; a line without a leading number stays whole");
+var hero2 = PanelModel.Hero(("220", "planted", "character", null), ("", "nothing", "pc", null), ("194", "harvested", "pc", null));
+Check(hero2.Kind == "hero" && hero2.Value == "220" && hero2.Title == "planted" && hero2.Src == "character" && hero2.Source == "character" &&
+      hero2.Items.Single().Kind == "number" && hero2.Items.Single().Value == "194" && hero2.Items.Single().Src == "pc" && hero2.Items.Single().Source == "measured" &&
+      PanelModel.Hero(("", "x", "pc", null)) == null, "L hero: the big number leads, further numbers ride on the right with their own Src; no value, no number; none, no hero");
+var cards = PanelModel.DeedCards(PanelModel.Titles(input));
+var woodCard = cards.Items.Single(c => c.Title == "Woodcutter");
+Check(cards.Kind == "cards" && cards.Items.All(c => c.Kind == "card" && c.Id.StartsWith("Deeds/") && c.Icon.StartsWith("title:")) &&
+      woodCard.Value == "410" && woodCard.Text == "trees felled" && woodCard.Src == "character" && woodCard.Items.Single().Value == "64" && woodCard.Items.Single().Title == "axe hits" &&
+      woodCard.Items.Single().Src == "pc" && woodCard.Id == "Deeds/woodcutting" && !cards.Items.Any(c => c.Title == "Trailfinder" || c.Title == "Shieldbearer"),
+      "L cards: one card per earned deed title, your character's count big, the next line small under it, a click opens the owner page; other chapters' titles stay out");
+var follow = new PanelState();
+PanelModel.Follow(follow, "view:Skills/overview/view=practised"); PanelModel.Follow(follow, "Battle/defense");
+Check(follow.View["Skills/overview/view"] == "practised" && follow.Chapter == Chapter.Battle && follow.PageOf(Chapter.Battle) == "defense", "L switch: a chip's target picks the view; other targets still jump to their page");
+Check(PanelModel.IsBox(new Block { Kind = "plate" }) && PanelModel.IsBox(new Block { Kind = "columns" }) && PanelModel.IsBox(new Block { Kind = "view" }) && !PanelModel.IsBox(new Block { Kind = "hero" }) && !PanelModel.IsBox(new Block { Kind = "cards" }),
+      "L boxes: plate, columns, column, switch and view hold blocks of the page; hero and cards are blocks themselves");
+var plated = new[] { Show(input, Chapter.Deeds, "woodcutting"), Show(input, Chapter.Deeds, "mining"), Show(input, Chapter.Skills), Show(input, Chapter.Battle) };
+Check(plated.All(p => PanelModel.PlateOf(p) != null && p.Blocks.Count == 1 && PanelModel.PlateOf(p).Title == p.Heading && PanelModel.PlateOf(p).Text == null) &&
+      plated.Select(p => PanelModel.PlateOf(p).Icon).SequenceEqual(new[] { "title:woodcutter", "title:miner", "ui:chapter-skills", "ui:chapter-battle" }),
+      "L plate: Woodcutting, Mining, Skills overview and Battle sit on the plate; its heading row is the page heading with its icon; your own pages carry no line on it");
+var woodPlate = PanelModel.PlateOf(plated[0]);
+Check(woodPlate.Pill == "Woodcutter" && woodPlate.PillIcon == "title:woodcutter" && PanelModel.PlateOf(plated[2]).Pill == null && PanelModel.PlateOf(Show(input, Chapter.Battle, "defense")).Pill == null && Find(Show(input, Chapter.Battle, "defense"), "featband") is Block defBand && defBand.Note == "Wallwarden · Shieldbearer" && defBand.Text == "Titles" && defBand.Icon == "title:wallwarden",
+      "L plate: the page's title badge rides in the heading row's pill; on Battle > Defense (fix4) both its titles are the one strip with its feat, no pill; pages without a title have none");
+Check(PanelModel.Content(plated[0]).Where(b => b.Kind != "plate" && b.Kind != "zone").Select(b => b.Kind).SequenceEqual(new[] { "hero", "composition", "note", "hero", "section", "ranking", "ladders" }) &&
+      Find(plated[0], "section").Title == "Axe hits per tree" && Find(Show(input, Chapter.Deeds, "mining"), "section").Title == "Pickaxe hits per rock",   // zones: the axe hits lead the ember zone
+      "L under the composition: the hits per tree or rock (the exact counts live in the bar now, K1)");
+Check(Find(Show(edda, Chapter.Deeds, "woodcutting"), "plate")?.Text == "Edda, last shared, 8 Oct 00:05", "L plate: a fellow player's copy says whose it is and when, on the plate");
+var bPlate = PanelModel.PlateOf(plated[3]);
+Check(Find(plated[3], "biomes") != null && Find(plated[3], "composition")?.Title == "What hurt you" && Find(plated[3], "link")?.Id == "Battle/defense" && Find(plated[3], "section", s => s.Title == "Hits") == null,
+      "L battle overview: the biome strip, then what hurt you beside the way to Defense (the lifetime hit counts left for Foes and Defense)");
+var skSw = Find(plated[2], "switch");
+Check(skSw.Id == "Skills/overview/view" && skSw.Items.Select(x => x.Id + "=" + x.Title + "=" + x.Selected).SequenceEqual(new[] { "levels=Levels=True", "practised=Practised=False" }) &&
+      skSw.Items[0].Items.Select(i => i.Kind).SequenceEqual(new[] { "hero", "ladders" }) && skSw.Items[1].Items == null && plated[2].Keys.Contains("[F] View") && !plated[0].Keys.Any(k => k.Contains("View")),
+      "L switch: Skills overview has two views, Levels first; only the chosen view carries blocks; the footer names the view key on pages with a switch only");
+var swState = new PanelState { Chapter = Chapter.Skills };
+var step = PanelModel.StepView(swState, PanelModel.Build(input, swState), 1);
+var afterStep = PanelModel.Build(input, swState);
+Check(step && swState.View["Skills/overview/view"] == "practised" && Find(afterStep, "switch").Items[1].Selected && Find(afterStep, "ranking") != null &&
+      !PanelModel.StepView(new PanelState(), plated[0], 1), "L switch: the view key moves to the next view and the page keeps it; a page without a switch ignores the key");
+// a chip's press (Follow) and the view key (StepView) both rebuild the page on the other view, and back again
+var flip = new PanelState { Chapter = Chapter.Skills };
+var before = PanelModel.ToJson(PanelModel.Build(input, flip));
+PanelModel.Follow(flip, PanelModel.ViewLink(Find(PanelModel.Build(input, flip), "switch"), Find(PanelModel.Build(input, flip), "switch").Items[1]));
+var flipped = PanelModel.Build(input, flip);
+PanelModel.StepView(flip, flipped, 1);
+Check(PanelModel.ToJson(flipped) != before && Find(flipped, "ladders") == null && Find(flipped, "ranking") != null &&
+      PanelModel.ToJson(PanelModel.Build(input, flip)) == before, "L switch: a chip press rebuilds the page on the chosen view; the view key flips it back");
+swState.Page[Chapter.Skills] = "Axes"; PanelModel.Build(input, swState); swState.Page[Chapter.Skills] = "overview";
+Check(Find(PanelModel.Build(input, swState), "switch").Items[1].Selected, "L switch: the choice is kept per page while you look at other pages");
+// every skill the character has a level in gets a ladder: each of the game's own skills in its group (Dodge under Move,
+// Joost's first test showed it under Other), a mod's skill under Other, level 0 left out (the game lists it nowhere either)
+var gameSkills = Enum.GetNames(typeof(Skills.SkillType)).Where(n => n != "None" && n != "All").ToList();
+var everySkill = new PanelInput { SkillLevels = gameSkills.ToDictionary(n => n, n => 5f) };
+everySkill.SkillLevels["-48211"] = 3; everySkill.SkillLevels["Sneak"] = 0;
+var allLadders = Find(PanelModel.Build(everySkill, new PanelState { Chapter = Chapter.Skills }), "ladders");
+Check(allLadders.Items.Select(g => g.Title).SequenceEqual(new[] { "Fight", "Gather", "Move", "Make", "Other" }) && allLadders.Items.Last().Items.Select(i => i.Id).SequenceEqual(new[] { "-48211" }) &&
+      allLadders.Items.SelectMany(g => g.Items).Count() == gameSkills.Count && allLadders.Items[2].Items.Any(i => i.Id == "Dodge") && !allLadders.Items.SelectMany(g => g.Items).Any(i => i.Id == "Sneak"),
+      "ladders: every skill with a level shows, each of the game's skills in its group (Dodge under Move), a mod's skill under Other, level 0 left out");
+var only = new PanelInput { SkillLevels = new Dictionary<string, float> { ["Run"] = 5 } };
+Check(Find(PanelModel.Build(only, new PanelState { Chapter = Chapter.Skills }), "switch") == null && Find(PanelModel.Build(only, new PanelState { Chapter = Chapter.Skills }), "ladders") != null,
+      "L switch: nothing practised since install, no second view: the ladders stand alone, no chips");
 
 // ---------- empty states, copy ----------
 var empty = new PanelInput();
 var emptyViews = Enum.GetValues(typeof(Chapter)).Cast<Chapter>().Select(c => PanelModel.Build(empty, new PanelState { Chapter = c })).ToList();
 Check(emptyViews.All(v => v.Blocks.Count > 0) && Find(emptyViews[1], "empty").Text == PanelModel.CompanyEmpty, "empty: every chapter survives no data; Company uses the agreed empty text");
-Check(PanelModel.Build(null, null).Chapters.Count == 6, "empty: null input and state do not throw");
+Check(PanelModel.Build(null, null).Chapters.Count == 7, "empty: null input and state do not throw");
 var views = new List<PanelView>(emptyViews);
 foreach (var who in new[] { input, edda })
     foreach (Chapter ch in Enum.GetValues(typeof(Chapter)))
@@ -431,8 +769,30 @@ foreach (var v in views)
     foreach (var b in v.Blocks) Walk(b, null);
 }
 Check(untagged == null, "ISC-A-2 source tags: every number has a source tag" + (untagged != null ? ": " + untagged : ""));
-var tags = views.SelectMany(v => v.Blocks).Select(b => b.Source).Where(t => t != null).Distinct().OrderBy(t => t).ToList();
-Check(tags.SequenceEqual(new[] { "character", "fellows", "measured" }), "ISC-6 source tags: only character, fellows, measured: " + string.Join(",", tags));
+string unmarked = null;
+foreach (var v in views)
+{
+    void Mark(Block b) { if (b.Kind != "bars" && (b.Value ?? "").Any(char.IsDigit) && b.Src == null) unmarked ??= v.Active + "/" + v.Page + ": " + (b.Title ?? b.Value); foreach (var i in b.Items ?? new List<Block>()) Mark(i); }
+    foreach (var b in v.Blocks) Mark(b);
+}
+Check(unmarked == null, "Src: every number carries its Src (data; drawn only as since install)" + (unmarked != null ? ": " + unmarked : ""));
+var labelled = new List<string>(); var battleLabels = 0; var pcUnlabelled = new List<string>();
+foreach (var v in views)
+{
+    foreach (var b in Every(v.Blocks).Where(b => b.SinceInstall))
+        if (b.Kind != "section" && b.Src != "pc") labelled.Add(v.Active + "/" + v.Page + ": " + (b.Title ?? b.Value));
+    if (v.Active == Chapter.Battle && !v.ShowAbout && v.HasFilters) battleLabels += Labels(v);
+    else if (Every(v.Blocks).Any(b => b.Src == "pc") && Labels(v) == 0) pcUnlabelled.Add(v.Active + "/" + v.Page);
+}
+Check(labelled.Count == 0, "since install: never on your character's or fellow players' numbers" + (labelled.Count > 0 ? ": " + labelled[0] : ""));
+Check(battleLabels == 0, "since install: none on Battle's windowed pages (the page states its time window once)");
+Check(Labels(defense) == 1, "since install: Battle > Defense (no window) says its blocks are since install, once after the heading (P7)");
+Check(pcUnlabelled.Count == 0, "since install: every page outside Battle with a number from this PC says so somewhere" + (pcUnlabelled.Count > 0 ? ": " + pcUnlabelled[0] : ""));
+var oldWords = new[] { "since this character was made", "measured this session", "measured in last shared", "measured on", "picked up", "cooked or grilled", "enemies", "enemy", "damage taken", "resistance  " };
+var oldHit = text.FirstOrDefault(t => oldWords.Any(w => t.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0));
+Check(oldHit == null, "words: no source sentences, no picked up, cooked or grilled, enemies or damage taken" + (oldHit != null ? ": " + oldHit : ""));
+var tags = views.SelectMany(PanelModel.Content).Select(b => b.Source).Where(t => t != null).Distinct().OrderBy(t => t).ToList();
+Check(tags.Except(new[] { "server" }).SequenceEqual(new[] { "character", "fellows", "measured" }), "ISC-6 source tags: only character, fellows, measured (and the server book of 0.6): " + string.Join(",", tags));
 var dashes = text.Where(s => s.Contains('\u2014') || s.Contains('\u2013')).ToList();
 Check(dashes.Count == 0, "copy: no em-dash or en-dash in any player-visible text" + (dashes.Count > 0 ? ": " + dashes[0] : ""));
 var banned = new[] { "A shared saga", "Room for every kind of viking", "A shared deed, not a debt", "The things you bring to the fire", "Each title shows", "Counts meals eaten", "gathering" };
@@ -446,42 +806,209 @@ foreach (var v in views) try { JsonDocument.Parse(PanelModel.ToJson(v)); } catch
 Check(valid, "preview JSON is valid for every chapter and page");
 input.Fellows = null; edda.Fellows = null;
 
+fails += DeedsTests.Run(input, edda);   // the Deeds chapter pages (test-panel/DeedsTests.cs)
+fails += ParseCountTests.Run(input, edda);   // RESILIENCE-06 item 1: counts read back culture-proof, Cooking from the numbers (test-panel/ParseCountTests.cs)
+fails += DeedsTwinTests.Run(input, edda);   // the Deeds twins: both zones on every page the game counts completely (test-panel/DeedsTwinTests.cs)
+fails += FacetTests.Run(input);   // the filter bar and Crafting's filter (test-panel/FacetTests.cs)
+fails += BattleFilterTests.Run();   // Battle's filters: the biome tiles, Damage's Biome and Foe, Foes' Weapon, Damage type and Kin (test-panel/BattleFilterTests.cs)
+fails += BuildingFacetTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // the same bar on Deeds > Building (test-panel/BuildingFacetTests.cs)
+fails += GatherTests.Run();   // B12: what counts as wood and mining (test-panel/GatherTests.cs)
+fails += NavTests.Run(input);   // Backspace: back to the page you came from (test-panel/NavTests.cs)
+fails += FeatsTests.Run();   // Feats: the table, noticing, the ledger, the page with its detail area, Known for, the band (test-panel/FeatsTests.cs)
+var textGroup = Sample(); textGroup.PlayerId = 11; textGroup.Fellows = CompanyFellows(now);   // Company with three sharing
+var textSamples = new (string, PanelInput)[] { ("sample", input), ("voyager", voyager), ("battle", Program.BattleSample()), ("deeds", DeedsTests.Rich(input)), ("company", textGroup), ("edda", edda) };
+fails += PanelTextTests.Run(textSamples);   // every label fits, no "at least" (test-panel/PanelTextTests.cs)
+fails += ZonesTests.Run(input, edda, voyager, Program.BattleSample());   // design B: the stone and ember zones (test-panel/ZonesTests.cs)
+fails += MarksTests.Run(voyager, textSamples);   // Codex's last sprites wired; every vocab picture a page asks for is shipped (test-panel/MarksTests.cs)
+fails += CoherenceTests.Run();   // one story for every number: overview = detail pages, windows nest, fish and crops add up (test-panel/CoherenceTests.cs)
+fails += SampleTests.Run();   // Dev.SampleData: the in-game sample fills every page and writes nothing (test-panel/SampleTests.cs)
+fails += CargoTests.Run(voyager, input, now);
+fails += ServerBookPanelTests.Run(now);   // 0.6: the server book on Sailing and Taming (test-panel/ServerBookPanelTests.cs)   // 0.6: cargo carried and born in your care (test-panel/CargoTests.cs)
+fails += LedTests.Run(now);   // 0.6: Heavy Keel best load and the animals led, with their feats (test-panel/LedTests.cs)
+fails += SelfCheckTests.Run();   // Dev.SelfCheck bookkeeping, the filter key Tab and the clash scan (test-panel/SelfCheckTests.cs)
+fails += PerfTests.Run();   // Dev.SelfCheck: the frame-cost meter and its one-minute line (test-panel/PerfTests.cs)
+fails += FellowPanelTests.Run();   // same-name fellows each with a chip and a colour; the singleplayer line (test-panel/FellowPanelTests.cs)
+
 var dump = Array.IndexOf(args, "--dump");
 if (dump >= 0 && dump + 1 < args.Length)
 {
     var dir = args[dump + 1];
     System.IO.Directory.CreateDirectory(dir);
-    input.Fellows = new List<PanelInput> { edda }; edda.Fellows = new List<PanelInput> { input };   // as PanelUi wires the group
+    input.Fellows = new List<PanelInput> { edda }; edda.Fellows = new List<PanelInput> { input };   // as PanelUi wires the group (the --text dump below reads them)
+    // sample-one (2026-10-09): EVERY preview shot reads the one sample world, PanelSample.Full (Rowan with Edda, Finch and Tor: SampleWorld), so the pages
+    // never contradict each other (CoherenceTests.cs checks the identities). The only shots that read anything else are the NAMED SCENARIOS below, labelled in
+    // preview-data.js (window.PANEL_SCENARIOS): states the world is not in (an empty first evening, a young character, a stress sample, an install that
+    // began later, sharing off). A scenario's name says what it is for; none of them is a page of the world.
+    var world = PanelSample.Full(now);
+    var books = FullDump.Books(world).ToDictionary(b => b.who, b => b.book);   // Rowan's own; Edda, Finch and Tor as the copies Rowan receives
     var group = new[] { "Edda", "Tor", "Finch" };
+    var scenarios = new Dictionary<string, string>();
+    PanelInput Scenario(string name, string what, PanelInput inp) { scenarios[name] = what; return inp; }
+    var young = Sample(); young.Character = new Dictionary<string, float> { ["Tree"] = 12, ["CraftFood"] = 3, ["FishCaught"] = 4 };   // a young character: a few names earned, the rest unsung
+    young.Events = new SessionEvents(); young.Fellows = null;
+    young.PiecesPlaced = new Dictionary<string, float> { ["$piece_woodwall"] = 12 }; young.ItemsPickedUp = new Dictionary<string, float> { ["$item_wood"] = 30, ["$item_stone"] = 8 }; young.ItemsCrafted = new Dictionary<string, float>();
+    // a first evening with Hearthwoven: nothing measured yet, Meadows and Black Forest found, Eikthyr defeated
+    var fresh = new PanelInput { PlayerName = "Rowan", Log = new EventLog(), Character = world.Character, EnemyKills = new Dictionary<string, float> { ["$enemy_eikthyr"] = 1 },
+                                 KnownBiomes = new[] { "Meadows", "BlackForest" }, SkillLevels = world.SkillLevels };
+    // an older install: the picked counters were first read two days ago (Deeds > Farming says so), on the world itself
+    var installLater = PanelSample.Full(now);
+    installLater.BaselineAt[LocalTotals.StatsKind] = installLater.BaselineAt[LocalTotals.PickablesKind] = installLater.NowUtc.AddDays(-2);
+    // fish-held: Joost's own fishing book in game (ingame-0.6rc/deeds-fishing.json and his local totals, 9 Oct) on the sample character: 20 hooked,
+    // 8 got away, no catch reeled in, 6 fish picked up (4 + 1 + 1); the rest of the sample stays
+    var fishHeld = PanelSample.Full(now);
+    fishHeld.Character = fishHeld.Character.Where(kv => !kv.Key.StartsWith("Fish")).ToDictionary(kv => kv.Key, kv => kv.Value); fishHeld.Character["FishHooked"] = 20; fishHeld.Character["FishLost"] = 8;
+    fishHeld.Harvested = (fishHeld.Harvested ?? new Dictionary<string, float>()).Where(kv => !kv.Key.StartsWith("$")).ToDictionary(kv => kv.Key, kv => kv.Value);
+    fishHeld.ItemsPickedUp = (fishHeld.ItemsPickedUp ?? new Dictionary<string, float>()).Where(kv => !kv.Key.StartsWith("$animal_fish")).ToDictionary(kv => kv.Key, kv => kv.Value);
+    fishHeld.ItemsPickedUp["$animal_fish5"] = 4; fishHeld.ItemsPickedUp["$animal_fish1"] = 1; fishHeld.ItemsPickedUp["$animal_fish7"] = 1;
+    // the game's own names (Hearthwoven's in-game icon dump, Fish5 / Fish7: "$animal_fish5" Trollfish, "$animal_fish7" Grouper)
+    { var dn = fishHeld.DisplayName; fishHeld.DisplayName = k => k == "$animal_fish5" ? "Trollfish" : k == "$animal_fish7" ? "Grouper" : dn?.Invoke(k); }
+    if (fishHeld.BaselineAt != null) { fishHeld.BaselineAt.Remove(LocalTotals.StatsKind); fishHeld.BaselineAt.Remove(LocalTotals.PickablesKind); }
+    var fishHeldS = Scenario("deeds-fishing-picked", "case: Joost's fishing book in game, 20 hooked, 8 got away, none reeled in, 6 fish picked up another way", fishHeld);
+    var emptyS = Scenario("battle-empty", "empty: a first evening with Hearthwoven, nothing measured yet", fresh);
+    var youngS = Scenario("deeds-young", "young: a character with a few names earned and the rest unsung", young);
+    var laterS = Scenario("deeds-farming-later", "install-later: the picked counters were first read two days after the install", installLater);
+    var bigS = Scenario("deeds-farming-big", "stress: a long-played character, thousands of crops", DeedsTests.Big(Sample()));
+    var layeredS = Scenario("deeds-farming-layered", "case: the live Flax case, the game's planted counter beside every plant counted", DeedsTests.Layered(Sample()));
+    var cookedS = Scenario("deeds-cooking-layered", "case: dishes taken off a fellow's grill, the game books them to the station's owner", DeedsTests.Cooked(Sample(), edda));
+    scenarios["deeds-unsung"] = "young: the unsung names of a young character"; scenarios["company-together-alone"] = "alone: nobody else shares yet";
+    scenarios["company-food-alone"] = "alone: nobody else shares yet"; scenarios["sharing-off"] = "sharing off: no fellow players";
+    scenarios["company-fireside-busy"] = "stress: a busy six around the fire (gifts both ways on most pairs), FireLayout's test group; the drawing only";
+    PanelState Battle(TimeWindow w, string page = null, Dictionary<string, List<string>> facets = null)
+    {
+        var s = new PanelState { Chapter = Chapter.Battle, Window = w }; if (page != null) s.Page[Chapter.Battle] = page;
+        if (facets != null) foreach (var kv in facets) s.Facets[kv.Key] = kv.Value;
+        return s;
+    }
+    var swamp = new Dictionary<string, List<string>> { [PanelModel.BattleOverviewFilter + "|biome"] = new List<string> { "Swamp" } };
+    PanelState Page(Chapter c, string page, Action<PanelState> more = null) { var s = new PanelState { Chapter = c }; if (page != null) s.Page[c] = page; more?.Invoke(s); return s; }
+    PanelState Together(string category = null, string window = null) => Page(Chapter.Company, "together", s => { if (category != null) s.View["Company/together/category"] = category; if (window != null) s.View["Company/together/window"] = window; });
+    PanelState As(string who, Chapter c, string page) { var s = Page(c, page); s.Player = who; return s; }
     var shots = new (string name, PanelInput inp, PanelState st, bool sharing)[]
     {
-        ("deeds", input, new PanelState { Chapter = Chapter.Deeds }, true),
-        ("deeds-cooking", input, new PanelState { Chapter = Chapter.Deeds, Page = { [Chapter.Deeds] = "cooking" } }, true),
-        ("company", input, new PanelState { Chapter = Chapter.Company }, true),
-        ("company-you-ate", input, new PanelState { Chapter = Chapter.Company, TheyReceived = false }, true),
-        ("stores", input, new PanelState { Chapter = Chapter.Stores }, true),
-        ("stores-trader", input, new PanelState { Chapter = Chapter.Stores, Page = { [Chapter.Stores] = "trader" } }, true),
-        ("battle", input, new PanelState { Chapter = Chapter.Battle, Biome = "Swamp" }, true),
-        ("battle-deaths", input, new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = "deaths" } }, true),
-        ("about", input, new PanelState { ShowAbout = true }, true),
-        ("voyages", input, new PanelState { Chapter = Chapter.Voyages }, true),
-        ("skills", input, new PanelState { Chapter = Chapter.Skills }, true),
-        ("edda-company", edda, new PanelState { Chapter = Chapter.Company, Player = "Edda" }, true),
-        ("sharing-off", input, new PanelState { Chapter = Chapter.Deeds }, false),
+        ("battle-10min", world, Battle(TimeWindow.LastTenMinutes), true),
+        ("battle-30min", world, Battle(TimeWindow.LastThirtyMinutes), true),
+        ("battle-all", world, Battle(TimeWindow.SinceInstall), true),
+        ("battle-all-swamp", world, Battle(TimeWindow.SinceInstall, null, swamp), true),
+        ("battle-damage-10min", world, Battle(TimeWindow.LastTenMinutes, "damage"), true),
+        ("battle-damage-swamp", world, Page(Chapter.Battle, "damage", s => { PanelModel.ToggleFacet(s, PanelModel.BattleDamageFilter, "biome", "Swamp"); s.OpenFilters.Add(PanelModel.BattleDamageFilter); }), true),
+        ("battle-deaths-swamp", world, Page(Chapter.Battle, "deaths", s => { PanelModel.ToggleFacet(s, PanelModel.BattleDeathsFilter, "biome", "Swamp"); s.OpenFilters.Add(PanelModel.BattleDeathsFilter); }), true),
+        ("battle-damage-all", world, Battle(TimeWindow.SinceInstall, "damage"), true),
+        ("battle-deaths-all", world, Battle(TimeWindow.SinceInstall, "deaths"), true),
+        ("deeds", world, Page(Chapter.Deeds, null), true),
+        ("deeds-cooking", world, Page(Chapter.Deeds, "cooking"), true),
+        ("deeds-young", youngS, Page(Chapter.Deeds, null), true),
+        ("deeds-unsung", youngS, Page(Chapter.Deeds, null, s => s.View["Deeds/overview/view"] = "unsung"), true),
+        ("company", world, Page(Chapter.Company, null), true),
+        ("company-together", world, Together(), true),
+        ("company-together-cargo", world, Together("cargo"), true),
+        ("company-food", world, Page(Chapter.Company, "food"), true),
+        ("company-gear", world, Page(Chapter.Company, "gear"), true),
+        ("company-together-dealt", world, Together("dealt"), true),
+        ("company-together-dealt-10min", world, Together("dealt", "LastTenMinutes"), true),
+        ("company-together-dealt-hour", world, Together("dealt", "LastHour"), true),
+        ("company-together-dealt-3h", world, Together("dealt", "LastThreeHours"), true),
+        ("company-together-dealt-session", world, Together("dealt", "Session"), true),
+        ("company-together-alone", world, Together(), false),
+        ("company-food-alone", world, Page(Chapter.Company, "food"), false),
+        ("hall", world, Page(Chapter.Stores, null), true),
+        ("hall-trader", world, Page(Chapter.Stores, "trader"), true),
+        ("hall-smelters", world, Page(Chapter.Stores, "smelters"), true),
+        ("battle", world, Battle(TimeWindow.Session), true),
+        ("battle-swamp", world, Battle(TimeWindow.Session, null, swamp), true),
+        ("battle-focus", world, new PanelState { Chapter = Chapter.Battle, FilterRow = 0, FilterCursor = 1, Facets = { [PanelModel.BattleOverviewFilter + "|biome"] = new List<string> { "Swamp" } } }, true),
+        ("battle-deaths", world, Battle(TimeWindow.Session, "deaths"), true),
+        ("battle-damage", world, Battle(TimeWindow.Session, "damage"), true),
+        ("battle-damage-type", world, Page(Chapter.Battle, "damage", s => s.View["Battle/damage/view"] = "type"), true),   // By weapon is the default (battle-damage)
+        ("battle-foes", world, Battle(TimeWindow.Session, "foes"), true),
+        ("battle-foes-type", world, Page(Chapter.Battle, "foes", s => s.View["Battle/foes/view"] = "type"), true),
+        ("battle-defense", world, Battle(TimeWindow.Session, "defense"), true),
+        // the day history (HISTORY-06.md): the one window set on the pages Joost asked for
+        ("battle-defense-7days", world, Battle(TimeWindow.SevenDays, "defense"), true),
+        ("battle-defense-today", world, Battle(TimeWindow.Today, "defense"), true),
+        ("battle-defense-1h", world, Battle(TimeWindow.LastHour, "defense"), true),
+        ("battle-deaths-7days", world, Battle(TimeWindow.SevenDays, "deaths"), true),
+        ("battle-foes-7days", world, Battle(TimeWindow.SevenDays, "foes"), true),
+        ("battle-foes-1h", world, Battle(TimeWindow.LastHour, "foes"), true),
+        ("battle-7days", world, Battle(TimeWindow.SevenDays), true),
+        ("battle-damage-7days", world, Battle(TimeWindow.SevenDays, "damage"), true),
+        ("voyages-sailing-7days", world, Page(Chapter.Voyages, "sailing", s => s.Window = TimeWindow.SevenDays), true),
+        ("voyages-sailing-today", world, Page(Chapter.Voyages, "sailing", s => s.Window = TimeWindow.Today), true),
+        ("voyages-cargo-7days", world, Page(Chapter.Voyages, "cargo", s => s.Window = TimeWindow.SevenDays), true),
+        ("deeds-woodcutting-7days", world, Page(Chapter.Deeds, "woodcutting", s => s.Window = TimeWindow.SevenDays), true),
+        ("deeds-mining-7days", world, Page(Chapter.Deeds, "mining", s => s.Window = TimeWindow.SevenDays), true),
+        ("company-together-dealt-7days", world, Together("dealt", "SevenDays"), true),
+        ("company-together-dealt-30days", world, Together("dealt", "ThirtyDays"), true),   // before the history: greyed, All shown, the one line
+        ("battle-deaths-30min", world, Battle(TimeWindow.LastThirtyMinutes, "deaths"), true),
+        ("battle-empty", emptyS, new PanelState { Chapter = Chapter.Battle, ViewKey = "F" }, true),
+        ("about", world, new PanelState { ShowAbout = true }, true),
+        ("about-reads", world, new PanelState { ShowAbout = true, AboutPage = "reads" }, true),
+        ("about-sharing", world, new PanelState { ShowAbout = true, AboutPage = "sharing" }, true),
+        ("voyages", world, Page(Chapter.Voyages, null), true),
+        ("voyages-sailing", world, Page(Chapter.Voyages, "sailing"), true),
+        ("voyages-cargo", world, Page(Chapter.Voyages, "cargo"), true),
+        ("voyages-onfoot", world, Page(Chapter.Voyages, "onfoot"), true),
+        ("voyages-maps", world, Page(Chapter.Voyages, "maps"), true),
+        ("skills", world, Page(Chapter.Skills, null), true),
+        ("skills-practised", world, Page(Chapter.Skills, null, s => s.View["Skills/overview/view"] = "practised"), true),
+        ("skill-axes", world, Page(Chapter.Skills, "Axes"), true),
+        ("deeds-woodcutting", world, Page(Chapter.Deeds, "woodcutting"), true),
+        ("deeds-mining", world, Page(Chapter.Deeds, "mining"), true),
+        ("deeds-building", world, Page(Chapter.Deeds, "building"), true),
+        ("deeds-building-furniture-finewood", world, Page(Chapter.Deeds, "building", s => { s.Facets["Deeds/building/pieces|tab"] = new List<string> { "Furniture" }; s.Facets["Deeds/building/pieces|material"] = new List<string> { "Fine wood" }; }), true),
+        ("deeds-building-open", world, Page(Chapter.Deeds, "building", s => s.OpenFilters.Add(PanelModel.BuildFilter)), true),
+        ("deeds-building-focus", world, Page(Chapter.Deeds, "building", s => { s.FilterRow = 1; s.FilterCursor = 2; s.Facets["Deeds/building/pieces|tab"] = new List<string> { "Building", "Stonecutter" }; }), true),
+        ("deeds-groundwork", world, Page(Chapter.Deeds, "groundwork"), true),
+        ("deeds-crafting", world, Page(Chapter.Deeds, "crafting"), true),
+        ("deeds-crafting-open", world, Page(Chapter.Deeds, "crafting", s => s.OpenFilters.Add(PanelModel.CraftFilter)), true),
+        ("deeds-crafting-armour-leather", world, Page(Chapter.Deeds, "crafting", s => { s.Facets["Deeds/crafting/gear|kind"] = new List<string> { "armour" }; s.Facets["Deeds/crafting/gear|material"] = new List<string> { "Leather" }; }), true),
+        ("deeds-crafting-focus", world, Page(Chapter.Deeds, "crafting", s => { s.FilterRow = 1; s.FilterCursor = 2; s.Facets["Deeds/crafting/gear|kind"] = new List<string> { "weapons", "armour" }; }), true),
+        ("deeds-farming", world, Page(Chapter.Deeds, "farming"), true),
+        ("deeds-fishing", world, Page(Chapter.Deeds, "fishing"), true),
+        ("deeds-fishing-picked", fishHeldS, Page(Chapter.Deeds, "fishing"), true),
+        ("deeds-taming", world, Page(Chapter.Deeds, "taming"), true),
+        ("deeds-farming-later", laterS, Page(Chapter.Deeds, "farming"), true),
+        ("deeds-farming-big", bigS, Page(Chapter.Deeds, "farming"), true),
+        ("deeds-farming-layered", layeredS, Page(Chapter.Deeds, "farming"), true),
+        ("deeds-cooking-layered", cookedS, Page(Chapter.Deeds, "cooking"), true),
+        // the fellows' books, as Rowan sees them (Edda hauls and sails, Finch scouts, Tor holds the line)
+        ("edda-woodcutting", books["Edda"], As("Edda", Chapter.Deeds, "woodcutting"), true),
+        ("tor-cooking", books["Tor"], As("Tor", Chapter.Deeds, "cooking"), true),
+        ("edda-company", books["Edda"], As("Edda", Chapter.Company, "food"), true),
+        ("edda-fireside", books["Edda"], As("Edda", Chapter.Company, "fireside"), true),
+        ("company-fireside-busy", world, Page(Chapter.Company, null), true),
+        ("edda-sailing", books["Edda"], As("Edda", Chapter.Voyages, "sailing"), true),
+        ("edda-cargo", books["Edda"], As("Edda", Chapter.Voyages, "cargo"), true),
+        ("finch-maps", books["Finch"], As("Finch", Chapter.Voyages, "maps"), true),
+        ("tor-battle", books["Tor"], As("Tor", Chapter.Battle, null), true),
+        ("sharing-off", world, Page(Chapter.Deeds, null), false),
     };
-    var js = "// Generated by test-panel --dump from PanelModel.Build on a sample evening (fictional players). Do not edit.\nwindow.PANEL_DATA = {\n" +
+    // the rule: a shot that is not a named scenario reads the world (Rowan's own book, or a fellow's copy of it)
+    var offWorld = shots.Where(s => !scenarios.ContainsKey(s.name) && !ReferenceEquals(s.inp, world) && !books.Values.Any(b => ReferenceEquals(b, s.inp))).Select(s => s.name).ToList();
+    Check(offWorld.Count == 0, "dump: every preview shot reads the sample world (PanelSample.Full) unless it is a named scenario" + (offWorld.Count > 0 ? ": " + string.Join(", ", offWorld) : " (" + shots.Length + " shots, " + scenarios.Count + " scenarios)"));
+    var firePlans = new List<string>();   // the Fireside plans as FireLayout worked them out (render-check.mjs compares the HTML port with them)
+    var js = "// Generated by test-panel --dump from PanelModel.Build on the sample world (PanelSample.Full: Rowan, Edda, Finch and Tor; fictional). Do not edit.\n" +
+             "// Every shot reads that one world except the scenarios listed in window.PANEL_SCENARIOS.\nwindow.PANEL_DATA = {\n" +
              string.Join(",\n", shots.Select(s =>
              {
                  var keep = s.inp.Fellows;
                  if (!s.sharing) s.inp.Fellows = null;   // sharing off: PanelUi passes no fellow players
                  var v = PanelModel.Build(s.inp, s.st);
                  s.inp.Fellows = keep;
+                 var give = PanelModel.Content(v).FirstOrDefault(b => b.Kind == "giving");
+                 if (give != null && s.name == "company-fireside-busy") give.Items = FireBusy(6, 69).Items;   // the stress group in place of the world's four (labelled scenario)
+                 if (give != null) firePlans.Add("  \"" + s.name + "\": " + FireLayout.ToJson(FireLayout.Build(give, 180, 232)));
                  PanelModel.AddPlayers(v, "Rowan", group, s.st.Player, s.sharing);
                  return "  \"" + s.name + "\": " + PanelModel.ToJson(v);
-             })) + "\n};\n";
+             })) + ",\n" + FeatsTests.DumpShots(group, now) + "\n};\n" +
+             "window.PANEL_SCENARIOS = {\n" + string.Join(",\n", scenarios.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => "  \"" + kv.Key + "\": \"" + kv.Value.Replace("\"", "'") + "\"")) + "\n};\n";   // FeatsTests: the Feats views (test-panel/FeatsTests.cs)
+    js += "window.FIRE_PLANS = {" + string.Join(",", firePlans) + "};\n";
     System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "preview-data.js"), js);
     System.Console.WriteLine("wrote " + System.IO.Path.Combine(dir, "preview-data.js"));
 }
+
+// --fulltext <file>: every page of the whole sample world (PanelSample.Full), Rowan and each fellow, as plain text
+var fullAt = Array.IndexOf(args, "--fulltext");
+if (fullAt >= 0 && fullAt + 1 < args.Length) { System.IO.File.WriteAllText(args[fullAt + 1], FullDump.Text(now)); System.Console.WriteLine("wrote " + args[fullAt + 1]); }
 
 // --text <file>: every page of the sample evening as plain text (heading, the [T] line, blocks with their source tags), for reading
 var textAt = Array.IndexOf(args, "--text");
@@ -514,3 +1041,11 @@ if (textAt >= 0 && textAt + 1 < args.Length)
 
 System.Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
 return fails == 0 ? 0 : 1;
+
+// The game's own English names for the sample's tokens and prefabs (reference/item-names.json, the game's localization),
+// so the preview shows what the panel shows in game: "Corewood", never the prefab's "Roundlog". In game PanelUi resolves
+// every key through its shared name token and Localization; this small table stands in for that here.
+static partial class Program
+{
+    internal static readonly Dictionary<string, string> GameNames = PanelSample.Names;   // src/Panel/PanelSample.cs
+}

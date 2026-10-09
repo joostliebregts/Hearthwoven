@@ -23,7 +23,7 @@ namespace Hearthwoven.Panel
                     PanelUi.BindConfig(info.Instance.Config);
                     if (!__instance.GetComponent<PanelUi>()) __instance.gameObject.AddComponent<PanelUi>();   // goes away with the HUD
                 }
-                catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel not attached: " + e.Message); }
+                catch (Exception e) { HookGuard.Fail(e, "PanelHooks.AttachToHud.Postfix"); }   // the panel stays off
             }
         }
 
@@ -33,13 +33,14 @@ namespace Hearthwoven.Panel
         [HarmonyPatch(typeof(PlayerController), "TakeInput")]
         static class NoMovement
         {
-            static bool Prefix(ref bool __result) { if (!PanelUi.Blocking) return true; __result = false; return false; }
+            // every frame: no closure; on an error the game's input runs as always (true), its result untouched
+            static bool Prefix(ref bool __result) { try { if (!PanelUi.Blocking) return true; __result = false; return false; } catch (Exception e) { HookGuard.Fail(e, "PanelHooks.NoMovement.Prefix"); return true; } }
         }
 
         [HarmonyPatch(typeof(Player), "TakeInput")]
         static class NoActions
         {
-            static bool Prefix(ref bool __result) { if (!PanelUi.Blocking) return true; __result = false; return false; }
+            static bool Prefix(ref bool __result) { try { if (!PanelUi.Blocking) return true; __result = false; return false; } catch (Exception e) { HookGuard.Fail(e, "PanelHooks.NoActions.Prefix"); return true; } }
         }
 
         // ...and reports itself as the trader's window for what the input block does not reach: the mouse wheel zooming
@@ -48,7 +49,7 @@ namespace Hearthwoven.Panel
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.IsVisible))]
         static class CountAsWindow
         {
-            static void Postfix(ref bool __result) { if (!__result && PanelUi.Blocking) __result = true; }
+            static void Postfix(ref bool __result) { try { if (!__result && PanelUi.Blocking) __result = true; } catch (Exception e) { HookGuard.Fail(e, "PanelHooks.CountAsWindow.Postfix"); } }
         }
 
         // The game writes the hover text of whatever is under the crosshair ("Spice Rack", "[E] Open") every frame, on the
@@ -61,14 +62,40 @@ namespace Hearthwoven.Panel
             static bool hid;
             static void Postfix(Hud __instance)
             {
-                if (PanelUi.Blocking)
+                try
                 {
-                    if (__instance.m_hoverName) __instance.m_hoverName.text = "";
-                    if (__instance.m_pieceHealthRoot) __instance.m_pieceHealthRoot.gameObject.SetActive(false);
-                    if (__instance.m_hoveredPieceAuthorWindow) __instance.m_hoveredPieceAuthorWindow.SetActive(false);
-                    if (__instance.m_crosshair && __instance.m_crosshair.enabled) { __instance.m_crosshair.enabled = false; hid = true; }
+                    if (PanelUi.Blocking)
+                    {
+                        if (__instance.m_hoverName) __instance.m_hoverName.text = "";
+                        if (__instance.m_pieceHealthRoot) __instance.m_pieceHealthRoot.gameObject.SetActive(false);
+                        if (__instance.m_hoveredPieceAuthorWindow) __instance.m_hoveredPieceAuthorWindow.SetActive(false);
+                        if (__instance.m_crosshair && __instance.m_crosshair.enabled) { __instance.m_crosshair.enabled = false; hid = true; }
+                    }
+                    else if (hid) { if (__instance.m_crosshair) __instance.m_crosshair.enabled = true; hid = false; }
                 }
-                else if (hid) { if (__instance.m_crosshair) __instance.m_crosshair.enabled = true; hid = false; }
+                catch (Exception e) { HookGuard.Fail(e, "PanelHooks.NoHoverText.Postfix"); }
+            }
+        }
+
+        // The creature hud (a hen's name and health bar over the creature you look at, a boss bar) draws on top of the open
+        // panel (playtest B5). The game sets its root active every frame (EnemyHud.LateUpdate: shown unless the player hid the
+        // HUD); while the panel is open it stays off, and the next frame after closing the game shows it again by itself.
+        [HarmonyPatch(typeof(EnemyHud), "LateUpdate")]
+        static class NoCreatureHud
+        {
+            static void Postfix(EnemyHud __instance) { try { if (PanelUi.Blocking && __instance && __instance.m_hudRoot) __instance.m_hudRoot.SetActive(false); } catch (Exception e) { HookGuard.Fail(e, "PanelHooks.NoCreatureHud.Postfix"); } }
+        }
+
+        // Tab is the filter key (Panel.FilterKey) and also the game's inventory key: while the panel is open, the press of the filter key
+        // does not also open the inventory (which would close the panel: PanelUi.Update). Only then: with the panel shut, or on any other
+        // key or button, InventoryGui.Show runs as always; a chest (Show with a container) is never touched.
+        [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Show))]
+        static class FilterKeyNotInventory
+        {
+            static bool Prefix(Container container)   // on an error: the inventory opens as always
+            {
+                try { return container != null || !PanelUi.FilterKeyHeld(); }
+                catch (Exception e) { HookGuard.Fail(e, "PanelHooks.FilterKeyNotInventory.Prefix"); return true; }
             }
         }
 
@@ -77,12 +104,12 @@ namespace Hearthwoven.Panel
         static class SessionStart
         {
             static SessionEvents seen;
-            static void Postfix(Player __instance)
+            static void Postfix(Player __instance) => HookGuard.Run(() =>
             {
                 if (__instance != Player.m_localPlayer || ReferenceEquals(seen, Plugin.Events)) return;
                 seen = Plugin.Events;
                 PanelUi.SessionStart = DateTime.UtcNow;
-            }
+            });
         }
     }
 }

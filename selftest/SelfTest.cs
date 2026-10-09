@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using BepInEx;
 using HarmonyLib;
 using Hearthwoven;
+using Hearthwoven.Panel;
 using UnityEngine;
 
 // TEST SERVER ONLY. Never install on a live server. Exercises the server side of Hearthwoven in the real runtime.
@@ -44,9 +46,9 @@ public class SelfTest : BaseUnityPlugin
         // (no tuples: the game's Mono runtime has no System.ValueTuple)
         var types = new Type[] { typeof(Character), typeof(Character), typeof(Humanoid), typeof(MineRock5), typeof(MineRock), typeof(Destructible), typeof(Trader),
             typeof(Smelter), typeof(Smelter), typeof(Player), typeof(Feast), typeof(Skills), typeof(ZRoutedRpc), typeof(ZDO),
-            typeof(ZDOMan), typeof(Character), typeof(Player), typeof(Humanoid), typeof(Humanoid) };
+            typeof(ZDOMan), typeof(Character), typeof(Player), typeof(Humanoid), typeof(Humanoid), typeof(TreeBase), typeof(ZDOMan) };
         var methods = new[] { "Damage", "ApplyDamage", "BlockAttack", "Damage", "Damage", "Damage", "OnBought", "OnAddOre", "OnAddFuel", "EatFood",
-            "RPC_EatConfirmation", "RaiseSkill", "RPC_RoutedRPC", "Deserialize", "RPC_ZDOData", "RPC_Damage", "OnDeath", "EquipItem", "Pickup" };
+            "RPC_EatConfirmation", "RaiseSkill", "RPC_RoutedRPC", "Deserialize", "RPC_ZDOData", "RPC_Damage", "OnDeath", "EquipItem", "Pickup", "Damage", "HandleDestroyedZDO" };
         var missing = Enumerable.Range(0, types.Length).Where(i => { var m = AccessTools.Method(types[i], methods[i]); var info = m == null ? null : Harmony.GetPatchInfo(m);
             return info == null || !info.Owners.Contains(Plugin.Guid); }).Select(i => types[i].Name + "." + methods[i]).ToList();
         Check(missing.Count == 0, "all hook targets attached" + (missing.Count > 0 ? " (missing: " + string.Join(", ", missing) + ")" : ""));
@@ -82,14 +84,25 @@ public class SelfTest : BaseUnityPlugin
         // 3. a server without the mod: an unknown routed RPC is ignored without error
         Check(Send(Routed("Hearthwoven_NotRegisteredHere", serverId, new object[] { new ZPackage() })), "unknown RPC (server without the mod) is ignored without error");
 
-        // 4. routed damage is still logged (players without the mod)
+        // 4. routed damage (players without the mod): only when the server switches it on
         var hit = new HitData { m_skill = Skills.SkillType.Bows, m_hitType = HitData.HitType.PlayerHit }; hit.m_damage.m_pierce = 55f;
         int Lines(string prefix) { var f = Directory.GetFiles(root, prefix + "*.jsonl").FirstOrDefault(); if (f == null) return 0;
             using (var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) using (var r = new StreamReader(fs)) return r.ReadToEnd().Split('\n').Count(l => l.Length > 0); }
+        // Server.LogRoutedDamage is off by default (Joost, 2026-10-09): nothing is logged then; switched on, the fallback works as before
+        var routedOn = (BepInEx.Configuration.ConfigEntry<bool>)AccessTools.Field(typeof(Plugin), "logRouted").GetValue(null);
+        bool routedWas = routedOn.Value;
+        void FlushRouted() => AccessTools.Field(typeof(Plugin), "routedWriter").GetValue(null)?.GetType().GetMethod("Flush").Invoke(AccessTools.Field(typeof(Plugin), "routedWriter").GetValue(null), null);
+        routedOn.Value = false;
+        int dOff = Lines("damage-routed-");
+        Send(Routed("RPC_Damage", 987654321L, new object[] { hit }));
+        FlushRouted();
+        Check(Lines("damage-routed-") == dOff, "routed damage not logged while Server.LogRoutedDamage is off (the default)");
+        routedOn.Value = true;
         int d0 = Lines("damage-routed-");
         Send(Routed("RPC_Damage", 987654321L, new object[] { hit }));
-        AccessTools.Field(typeof(Plugin), "routedWriter").GetValue(null)?.GetType().GetMethod("Flush").Invoke(AccessTools.Field(typeof(Plugin), "routedWriter").GetValue(null), null);
-        Check(Lines("damage-routed-") == d0 + 1, "routed damage logged as fallback");
+        FlushRouted();
+        Check(Lines("damage-routed-") == d0 + 1, "routed damage logged as fallback when Server.LogRoutedDamage is on");
+        routedOn.Value = routedWas;
 
         // 5. chest watcher through the REAL path: a player's PC sends a container update -> ZDO.Deserialize (our prefix + postfix)
         byte[] Inv(params object[] flat)   // prefab, stack, maker, prefab, stack, maker, ...
@@ -184,6 +197,54 @@ public class SelfTest : BaseUnityPlugin
         Check(ChestText().Contains("\"marker\":\"server-start\""), "C12 server-start marker written");
         AccessTools.Method(typeof(ChestWatch), "Marker").Invoke(null, new object[] { "world-saved" });
         Check(ChestText().Contains("\"marker\":\"world-saved\""), "C12 world-saved marker written");
+        // 0.6 the server book: loaded at start, saved with the world, ships go in through the real path, births are seen once
+        var hooks = AccessTools.TypeByName("Hearthwoven.ServerBookHooks");
+        var book = AccessTools.Field(hooks, "Book")?.GetValue(null) as ServerBook;
+        Check(book != null, "0.6 server book: started with the server");
+        if (book != null)
+        {
+            var ship = Make("VikingShip", new Vector3(100, 30, 100), 1001L);
+            int c7 = Lines("chests-");
+            ClientSends(ship, Inv("IronScrap", 30, ""));
+            int lotsAfterPut = book.LotsIn(ship.m_uid.ToString());
+            ship.SetPosition(new Vector3(1100, 30, 100));
+            ClientSends(ship, Inv());
+            var t7 = NewLines(c7);
+            Check(t7.Contains("\"kind\":\"ship\"") && lotsAfterPut == 1 && book.LotsIn(ship.m_uid.ToString()) == 0,
+                  "0.6 cargo: a ship's put and take through ZDO.Deserialize go into the server book (one lot in, used up by the take) (" + lotsAfterPut + ")");
+            ZDOMan.instance.DestroyZDO(ship);
+            AccessTools.Method(hooks, "Save").Invoke(null, null);
+            var bookFile = Directory.GetFiles(root, "server-book-*.json").FirstOrDefault();
+            Check(bookFile != null && ServerBook.FromJson(File.ReadAllText(bookFile)) != null, "0.6 server book: saved with the world and reads back (" + (bookFile == null ? "no file" : Path.GetFileName(bookFile)) + ")");
+            // a tamed young animal the server sees for the first time (its prefab is still 0 before the data arrives)
+            ZDO Born(string prefab, bool tamed, Vector3 at)
+            {
+                var fresh = ZDOMan.instance.CreateNewZDO(at, 0);
+                var copy = ZDOMan.instance.CreateNewZDO(at + new Vector3(0, 500, 0), prefab.GetStableHashCode()); copy.SetPrefab(prefab.GetStableHashCode());
+                if (tamed) copy.Set(ZDOVars.s_tamed, true);
+                var pkg = new ZPackage(); copy.Serialize(pkg); pkg.SetPos(0);
+                fresh.Deserialize(pkg); ZDOMan.instance.DestroyZDO(copy);
+                return fresh;
+            }
+            int b0 = Lines("births-");
+            var piglet = Born("Boar_piggy", true, new Vector3(110, 30, 110));
+            Check(Lines("births-") == b0 + 1, "0.6 born near: a tamed piglet appearing for the first time is one birth (births log line)");
+            var wild = Born("Boar_piggy", false, new Vector3(112, 30, 110));
+            var adult = Born("Boar", true, new Vector3(114, 30, 110));
+            var again = ZDOMan.instance.CreateNewZDO(piglet.GetPosition() + new Vector3(0, 500, 0), piglet.GetPrefab()); again.SetPrefab(piglet.GetPrefab()); again.Set(ZDOVars.s_tamed, true);
+            var pk = new ZPackage(); again.Serialize(pk); pk.SetPos(0); piglet.Deserialize(pk); ZDOMan.instance.DestroyZDO(again);
+            Check(Lines("births-") == b0 + 1, "0.6 born near: a wild young one, a tamed adult and a later update of the same piglet are no births");
+            foreach (var z in new[] { piglet, wild, adult }) ZDOMan.instance.DestroyZDO(z);
+            var bpre = AccessTools.Method(AccessTools.Inner(hooks, "BornWatch"), "Prefix");
+            var bpost = AccessTools.Method(AccessTools.Inner(hooks, "BornWatch"), "Postfix");
+            var probe = ZDOMan.instance.CreateNewZDO(new Vector3(40, 30, 40), "Greyling".GetStableHashCode());
+            var bsw = Stopwatch.StartNew();
+            for (int i = 0; i < 20000; i++) { var a = new object[] { probe, false }; bpre.Invoke(null, a); bpost.Invoke(null, new object[] { probe, a[1] }); }
+            double bornUs = bsw.Elapsed.TotalMilliseconds * 1000 / 20000;
+            Logger.LogInfo($"KS-SELFTEST overhead: {bornUs:0.0} us per object update for the birth watcher (reflection calls included)");
+            Check(bornUs < 20, "0.6 born near: watcher overhead small");
+            ZDOMan.instance.DestroyZDO(probe);
+        }
         // panel: inert on a dedicated server (no UI object created)
         Check(GameObject.Find("Hearthwoven") == null, "panel creates nothing on a dedicated server");
 
@@ -199,5 +260,80 @@ public class SelfTest : BaseUnityPlugin
         Logger.LogInfo($"KS-SELFTEST overhead: {plainUs:0.0} us per ordinary object update, {chestUs:0.0} us per unchanged chest update");
         Check(plainUs < 20 && chestUs < 200, "chest watcher overhead small");
         foreach (var z in new[] { chest, world, grave, plain }) ZDOMan.instance.DestroyZDO(z);
+
+        // 7. panel vocabulary: every sprite decodes, and the four new block kinds draw without exceptions off screen (no
+        // canvas, no player, no clicks: PanelProbe), leaving nothing behind and still no panel on the server
+        var unloaded = PanelProbe.MissingSprites();
+        Check(unloaded.Count == 0, "vocabulary sprites all load from the manifest" + (unloaded.Count > 0 ? " (missing: " + string.Join(", ", unloaded) + ")" : ""));
+        Block Part(string title, string value, float share, string colour, string pattern) => new Block { Title = title, Value = value, Fraction = share, Colour = colour, Pattern = pattern, Src = "character" };
+        Block Skill(string id, float level, float progress, bool practised) => new Block { Kind = "ladder", Id = id, Icon = "skill:" + id, Title = id, Value = ((int)level).ToString(), Level = level, Progress = progress, Practised = practised, Src = "character" };
+        var blocks = new List<Block>
+        {
+            new Block { Kind = "composition", Title = "Wood brought in", Value = "1,775", Src = "character", Items = new List<Block> {
+                Part("Wood", "1,240", 0.70f, "#9a6d42", "vocab:grain-wood"), Part("Fine wood", "310", 0.17f, "#d6c79a", "vocab:grain-finewood"),
+                Part("Core wood", "180", 0.10f, "#6e4630", "vocab:grain-corewood"), Part("Ancient bark", "45", 0.03f, "#4d4438", "vocab:grain-ancientbark") } },
+            new Block { Kind = "composition", Title = "What hurt you", Value = "514", Src = "pc", Items = new List<Block> {
+                new Block { Icon = "damage:blunt", Title = "Blunt", Value = "171", Fraction = 0.33f, Colour = "#6b7076", Src = "pc" },
+                new Block { Icon = "damage:poison", Title = "Poison", Value = "170", Fraction = 0.33f, Colour = "#5fbf3a", Src = "pc" },
+                new Block { Icon = "damage:pierce", Title = "Pierce", Value = "1", Fraction = 0.002f, Colour = "#e8dcbc", Src = "pc" } } },
+            new Block { Kind = "biomes", Src = "pc", Items = new List<Block> {
+                new Block { Kind = "biome", Id = "Meadows", Title = "Meadows", Icon = "vocab:biome-meadows", Colour = "#7fa04a", Tone = "dark-text", Value = "410", Fraction = 0.33f, Value2 = "14", Fraction2 = 0.05f, Src = "pc",
+                    Items = new List<Block> { new Block { Kind = "boss", Icon = "item:TrophyEikthyr", Title = "Eikthyr", Src = "character" } } },
+                new Block { Kind = "biome", Id = "BlackForest", Title = "Black Forest", Icon = "vocab:biome-blackforest", Colour = "#3f6b4a", Tone = "light-text", Value = "1,240", Fraction = 1f, Value2 = "210", Fraction2 = 0.5f, Count = 1, Src = "pc", Selected = true },
+                new Block { Kind = "biome", Id = "Ocean", Title = "Ocean", Icon = "vocab:biome-ocean", Colour = "#3d6f96", Tone = "light-text", Src = "pc" } } },
+            new Block { Kind = "ladders", Items = new List<Block> {
+                new Block { Kind = "group", Title = "Fight", Items = new List<Block> { Skill("Axes", 22, 0.55f, true), Skill("Blocking", 18, -1f, false) } },
+                new Block { Kind = "group", Title = "Move", Items = new List<Block> { Skill("Run", 41, 0.15f, true) } } } },
+            new Block { Kind = "ladder", Id = "WoodCutting", Icon = "skill:WoodCutting", Title = "Wood cutting", Value = "34", Value2 = "35", Level = 34, Progress = 0.62f, Practised = true, Src = "character",
+                Items = new List<Block> { new Block { Kind = "practice", Value = "6.8", Title = "practised", Src = "pc", SinceInstall = true }, new Block { Kind = "link", Id = "Deeds/woodcutting", Title = "Woodcutting" } } },
+        };
+        // the page layout kinds (slice 3): a plate holding a hero, columns, a view switch and cards
+        Block Num(string kind, string value, string title, string src, bool since = false) => new Block { Kind = kind, Value = value, Title = title, Src = src, SinceInstall = since };
+        var hero = Num("hero", "410", "trees felled", "character"); hero.Items = new List<Block> { Num("number", "64", "axe hits", "pc", true) };
+        blocks.Add(new Block { Kind = "plate", Title = "Woodcutting", Icon = "title:woodcutter", Pill = "Woodcutter", PillIcon = "title:woodcutter", Text = "Edda, last shared", Items = new List<Block> {
+            hero, blocks[0],
+            new Block { Kind = "columns", Items = new List<Block> {
+                new Block { Kind = "column", Items = new List<Block> { blocks[1] } },
+                new Block { Kind = "column", Items = new List<Block> { new Block { Kind = "section", Title = "Axe hits per tree" } } } } },
+            new Block { Kind = "switch", Id = "Skills/overview/view", Items = new List<Block> {
+                new Block { Kind = "view", Id = "levels", Title = "Levels", Selected = true, Items = new List<Block> { blocks[3] } },
+                new Block { Kind = "view", Id = "practised", Title = "Practised" } } },
+            new Block { Kind = "cards", Items = new List<Block> {
+                new Block { Kind = "card", Id = "Deeds/woodcutting", Icon = "title:woodcutter", Title = "Woodcutter", Value = "103", Text = "trees felled", Src = "character",
+                    Items = new List<Block> { Num("number", "462", "axe hits", "pc", true) } },
+                new Block { Kind = "card", Id = "Deeds/mining", Icon = "title:miner", Title = "Stonebreaker", Value = "1,180", Text = "pickaxe hits", Src = "pc", SinceInstall = true } } } } });
+        int placed = -1; string error = null;
+        try { placed = PanelProbe.Draw(blocks); } catch (Exception e) { error = e.GetType().Name + ": " + e.Message; }
+        Check(error == null && placed > 100, "panel vocabulary draws composition, biomes, ladders, ladder and the page layout (plate, hero, columns, switch, cards) without exceptions (" + (error ?? placed + " objects") + ")");
+        // ch-battle: the Battle kinds (damage grid, weapon bars, foe table and chips, guard, sources, where you fell, deaths)
+        // built by the model from a small log, then drawn off screen the same way
+        var bLog = new Hearthwoven.EventLog(); var bNow = DateTime.UtcNow;
+        HitData.DamageTypes Dt(float slash, float fire, float poison) { var d = new HitData.DamageTypes(); d.m_slash = slash; d.m_fire = fire; d.m_poison = poison; return d; }
+        bLog.AddDamage(bNow.AddMinutes(-5), "Swamp", true, "Draugr", "Swords", Dt(120, 30, 0)); bLog.AddDamage(bNow.AddMinutes(-4), "Swamp", true, "Blob", "Bows", Dt(0, 40, 0));
+        bLog.AddDamage(bNow.AddMinutes(-4), "Swamp", true, "Draugr", "ElementalMagic", Dt(0, 50, 0));
+        bLog.AddDamage(bNow.AddSeconds(-6), "Swamp", false, "Draugr", "EnemyHit", Dt(60, 0, 25)); bLog.AddDeath(bNow, "Swamp", 1, 1);
+        var bFoe = new PanelModel.FoeData { Trophy = "TrophyDraugr" }; bFoe.Modifiers["fire"] = "Resistant"; bFoe.Modifiers["poison"] = "Immune"; bFoe.Modifiers["slash"] = "Weak";
+        var bInput = new PanelInput { NowUtc = bNow, Log = bLog, Foe = f => f == "Draugr" ? bFoe : null };
+        var bRows = PanelModel.Damage(bLog, TimeWindow.Session, "", bNow); var bDeaths = PanelModel.Deaths(bLog, TimeWindow.Session, "", bNow);
+        var battle = new List<Block> { PanelModel.DamageGrid(bRows), PanelModel.FoeTable(bInput, bRows), PanelModel.FoeTypes(bInput, bRows), PanelModel.ReceivedSources(bInput, bRows),
+            PanelModel.DeathStrip(bInput, bDeaths), PanelModel.DeathList(bInput, bDeaths),
+            new Block { Kind = "guard", Value = "312", Title = "blocks", Value2 = "58", Text = "parries", Fraction = 58f / 312f, Src = "pc" } };
+        battle.AddRange(PanelModel.DamageMixes(bRows));
+        int bPlaced = 0; string bError = battle.Any(b => b == null) ? "a Battle builder returned nothing" : null;
+        if (bError == null) try { bPlaced = PanelProbe.Draw(battle); } catch (Exception e) { bError = e.GetType().Name + ": " + e.Message; }
+        Check(bError == null && bPlaced > 100, "panel Battle kinds draw without exceptions (" + (bError ?? bPlaced + " objects") + ")");
+        // Feats (Chapters/FeatsUi.cs): the sample's Feats page (grid, detail area), Known for and an owner-page band, built by the model, drawn off screen
+        var fSample = PanelSample.Full(DateTime.UtcNow);
+        var fPage = PanelModel.Build(fSample, new PanelState { Chapter = Chapter.Feats, Page = { [Chapter.Feats] = "earned" } });
+        var fBlocks = new List<Block> { PanelModel.Content(fPage).FirstOrDefault(b => b.Kind == "feats"), PanelModel.Content(fPage).FirstOrDefault(b => b.Kind == "featdetail"),
+            PanelModel.FeatsKnownFor(fSample), PanelModel.FeatBand(fSample, Chapter.Battle, "defense") };
+        int fPlaced = 0; string fError = fBlocks.Any(b => b == null) ? "a Feats builder returned nothing" : null;
+        if (fError == null) try { fPlaced = PanelProbe.Draw(fBlocks); } catch (Exception e) { fError = e.GetType().Name + ": " + e.Message; }
+        Check(fError == null && fPlaced > 100, "panel Feats kinds (cards, detail area, Known for, band) draw without exceptions (" + (fError ?? fPlaced + " objects") + ")");
+        var asked = PanelProbe.PressSwitch(new Block { Kind = "switch", Id = "Skills/overview/view", Items = new List<Block> {
+            new Block { Kind = "view", Id = "levels", Title = "Levels", Selected = true, Items = new List<Block> { blocks[3] } },
+            new Block { Kind = "view", Id = "practised", Title = "Practised" } } });
+        Check(asked == PanelModel.ViewTarget + "Skills/overview/view=practised", "panel view switch: pressing the Practised chip asks for that view (" + (asked ?? "no chip reacted") + ")");
+        Check(GameObject.Find("HearthwovenProbe") == null && GameObject.Find("Hearthwoven") == null, "vocabulary probe leaves nothing behind; still no panel on a dedicated server");
     }
 }

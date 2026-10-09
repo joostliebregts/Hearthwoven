@@ -25,5 +25,7 @@
   <ItemGroup><EmbeddedResource Include="src/Panel/icons/*.png" LogicalName="Hearthwoven.icons.%(Filename).png" /></ItemGroup>
   <!-- UI kit: original Hearthwoven art by Codex Finn (work/branding-kritterstats/ui-kit), with its 9-slice manifest -->
   <ItemGroup><EmbeddedResource Include="src/Panel/ui/*.png" LogicalName="Hearthwoven.ui.%(Filename).png" /><EmbeddedResource Include="src/Panel/ui/kit.json" LogicalName="Hearthwoven.ui.kit.json" /></ItemGroup>
+  <!-- visual vocabulary sprites: original Hearthwoven art by Codex Finn (work/hearthwoven-visual-vocabulary/ui-language), with their manifest -->
+  <ItemGroup><EmbeddedResource Include="src/Panel/vocab/*.png" LogicalName="Hearthwoven.vocab.%(Filename).png" /><EmbeddedResource Include="src/Panel/vocab/kit-additions.json" LogicalName="Hearthwoven.vocab.kit-additions.json" /></ItemGroup>
   <ItemGroup><Compile Remove="test/**;test-panel/**;selftest/**" /></ItemGroup>
 </Project>

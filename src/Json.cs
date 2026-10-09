@@ -20,7 +20,10 @@ namespace Hearthwoven
             }
             return sb.Append('"').ToString();
         }
-        public static string F(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+        /// <summary>A number as JSON. NaN and +/-Infinity are not JSON (and MiniJson used to reject the whole file for one):
+        /// they are written as 0, so one odd value from a hook or another mod never costs a file (RESILIENCE-06 item 2).</summary>
+        public static string F(double v) => IsFinite(v) ? v.ToString("0.###", CultureInfo.InvariantCulture) : "0";
+        public static bool IsFinite(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
         Json Sep() { if (needComma) b.Append(','); needComma = true; return this; }
         public Json Open() { Sep(); b.Append('{'); needComma = false; return this; }
         public Json Close() { b.Append('}'); needComma = true; return this; }
@@ -33,7 +36,7 @@ namespace Hearthwoven
         public Json Dict(string k, IEnumerable<KeyValuePair<string, float>> d)
         {
             Key(k); b.Append('{'); var first = true;
-            foreach (var kv in d) { if (kv.Value == 0f) continue; if (!first) b.Append(','); b.Append(Q(kv.Key)).Append(':').Append(F(kv.Value)); first = false; }
+            foreach (var kv in d) { if (kv.Value == 0f || !IsFinite(kv.Value)) continue; if (!first) b.Append(','); b.Append(Q(kv.Key)).Append(':').Append(F(kv.Value)); first = false; }
             b.Append('}'); needComma = true; return this;
         }
         public override string ToString() => b.ToString();

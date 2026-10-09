@@ -12,7 +12,7 @@ namespace Hearthwoven
     {
         static bool Local(Character c) => c != null && c == Player.m_localPlayer;
         static string Prefab(Component c) => c == null ? "?" : Utils.GetPrefabName(c.gameObject);
-        static void Safe(Action a) { try { a(); } catch (Exception e) { Debug.LogWarning("[Hearthwoven] " + e.Message); } }
+        static void Safe(Action a) => HookGuard.Run(a);   // RESILIENCE-06 item 6: one guard for every hook
 
         // Where the local player is: the biome under their feet, looked up at most once a second.
         static string biome = "None"; static float biomeAt = -10f;
@@ -55,6 +55,8 @@ namespace Hearthwoven
                 if (hit != null && Local(hit.GetAttacker()) && !Local(__instance))
                 {
                     Plugin.Session.AddDealt(Prefab(__instance), hit.m_skill.ToString(), hit.m_damage);
+                    // every hit, also on a foe another PC owns (the game's EnemyHits/PlayerHits miss those: owner trap)
+                    SessionEvents.Add(Plugin.Events.Battle, __instance is Player ? "PlayerHits" : "EnemyHits");
                     Plugin.Log.AddDamage(DateTime.UtcNow, Biome(), true, Prefab(__instance), hit.m_skill.ToString(), hit.m_damage);
                 }
             });
@@ -82,6 +84,7 @@ namespace Hearthwoven
                 if (!Local(__instance)) return;
                 var pos = __instance.transform.position;
                 Plugin.Log.AddDeath(DateTime.UtcNow, Biome(), pos.x, pos.z);
+                SessionEvents.Add(Plugin.Events.Battle, "Deaths");   // since install (LocalTotals), under the game's count at first run
             });
         }
 
@@ -90,15 +93,19 @@ namespace Hearthwoven
         [HarmonyPatch(typeof(Humanoid), "BlockAttack")]
         static class Block
         {
-            static readonly AccessTools.FieldRef<Humanoid, float> timer = AccessTools.FieldRefAccess<Humanoid, float>("m_blockTimer");
+            static readonly GameField<Humanoid, float> timer = new GameField<Humanoid, float>("m_blockTimer");   // looked up on first use, never at type load
             static readonly System.Reflection.MethodInfo getBlocker = AccessTools.Method(typeof(Humanoid), "GetCurrentBlocker");
             static void Prefix(Humanoid __instance, out bool __state)
             {
                 __state = false;
-                if (!Local(__instance)) return;
-                var blocker = getBlocker?.Invoke(__instance, null) as ItemDrop.ItemData;
-                float t = timer(__instance);
-                __state = blocker != null && blocker.m_shared.m_timedBlockBonus > 1f && t != -1f && t < 0.25f;
+                try
+                {
+                    if (!Local(__instance)) return;
+                    var blocker = getBlocker?.Invoke(__instance, null) as ItemDrop.ItemData;
+                    float t = timer.Of(__instance);
+                    __state = blocker != null && blocker.m_shared.m_timedBlockBonus > 1f && t != -1f && t < 0.25f;
+                }
+                catch (Exception e) { __state = false; HookGuard.Fail(e, "ClientHooks.Block.Prefix"); }   // the block itself goes on as the game decides
             }
             static void Postfix(Humanoid __instance, bool __result, bool __state) => Safe(() =>
             {
@@ -123,7 +130,7 @@ namespace Hearthwoven
 
         // Woodcutting: your axe hits per tree and log (the profile's own tree counters only count for the area owner).
         [HarmonyPatch(typeof(TreeBase), nameof(TreeBase.Damage))]
-        static class ChopTree { static void Prefix(TreeBase __instance, HitData hit) => Chop(__instance, hit); }
+        static class ChopTree { static void Prefix(TreeBase __instance, HitData hit) { Chop(__instance, hit); Felling(__instance, hit); } }
         [HarmonyPatch(typeof(TreeLog), nameof(TreeLog.Damage))]
         static class ChopLog { static void Prefix(TreeLog __instance, HitData hit) => Chop(__instance, hit); }
         static void Chop(Component tree, HitData hit) => Safe(() =>
@@ -131,6 +138,108 @@ namespace Hearthwoven
             if (hit != null && hit.m_damage.m_chop > 0f && Local(hit.GetAttacker()))
                 SessionEvents.Add(Plugin.Events.ChopHits, Prefab(tree));
         });
+
+        // Trees you felled, wherever the area is hosted (the game's own counter only books trees felled where your PC hosts
+        // the area). One rule, in TreeFalls: your axe hit that should bring the tree down by the game's own sum (its damage
+        // after the tree's resistances, a good enough tool, at least the health left), then that tree's network object
+        // destroyed within 5 s. The destroy reaches every PC in the area; walking away only unloads a tree, never counts.
+        static readonly TreeFalls<ZDOID> falls = new TreeFalls<ZDOID>();
+        static void Felling(TreeBase tree, HitData hit) => Safe(() =>
+        {
+            if (hit == null || hit.m_damage.m_chop <= 0f || !Local(hit.GetAttacker())) return;
+            var zdo = tree.GetComponent<ZNetView>()?.GetZDO();
+            if (zdo == null || !hit.CheckToolTier(tree.m_minToolTier, true)) return;
+            var probe = hit.Clone(); probe.ApplyResistance(tree.m_damageModifiers, out _);   // a copy: the hit itself stays as it is
+            falls.Hit(zdo.m_uid, Prefab(tree), zdo.GetFloat(ZDOVars.s_health, tree.m_health), probe.GetTotalDamage(), Time.time);
+        });
+        [HarmonyPatch(typeof(ZDOMan), "HandleDestroyedZDO")]
+        static class TreeGone
+        {
+            static void Prefix(ZDOID uid) => Safe(() =>
+            {
+                var tree = falls.Destroyed(uid, Time.time);
+                if (tree != null) SessionEvents.Add(Plugin.Events.Felled, tree);
+            });
+        }
+
+        // Farming: every plant you put in the ground, counted per plant. Piece.SetCreator runs for each placed piece (the
+        // game's Player.PlacePiece, and mods that plant many at once such as PlantEasily's grid); it only sets a creator that
+        // was still empty, on the piece's owner. The game's own planted counter books one per TryPlacePiece, so a grid of 171
+        // plants can show as 1 there (SOURCES.md, live doubt 1).
+        [HarmonyPatch(typeof(Piece), nameof(Piece.SetCreator))]
+        static class Planting
+        {
+            static void Prefix(Piece __instance, out long __state) { __state = -1; try { if (__instance != null) __state = __instance.GetCreator(); } catch (Exception e) { __state = -1; HookGuard.Fail(e, "ClientHooks.Planting.Prefix"); } }
+            static void Postfix(Piece __instance, long __state) => Safe(() =>
+            {
+                if (__instance == null || __state < 0 || Player.m_localPlayer == null || Game.instance == null) return;
+                var you = Game.instance.GetPlayerProfile()?.GetPlayerID() ?? 0L;
+                SessionEvents.CountPlanting(Plugin.Events.Planted, __instance.m_name, __instance.GetComponent<Plant>() != null, __state, __instance.GetCreator(), you);
+            });
+        }
+
+        // Cooking: what you made yourself, per item. The game books a cooking station's dish (grill, iron cooking station, oven,
+        // any mod's CookingStation) to the station's OWNER: OnInteract on the cook's PC sends "RPC_RemoveDoneItem" to the
+        // owner, whose SpawnItem calls IncrementStatItemCraft there (GAME-METRICS 1f). So the dish is counted on the PC of
+        // whoever takes it off (TakeOff: the dish the station hands out first, the amount it sends, bonus included), the
+        // owner-side booking is skipped (StationSpawn), and every other booking (the crafting window: cauldron, food table,
+        // mead ketill) is the crafter's own (MadeByYou). Read only: nothing the game does changes.
+        static int stationSpawn;          // > 0 inside CookingStation.SpawnItem
+        static string takingOff;          // the dish (item token) the local player is taking off right now; null = none
+        static bool takingBurnt;
+        static readonly System.Reflection.MethodInfo isItemDone = AccessTools.Method(typeof(CookingStation), "IsItemDone");
+
+        [HarmonyPatch(typeof(CookingStation), "OnInteract")]
+        static class TakeOff
+        {
+            static void Prefix(CookingStation __instance, Humanoid user) => Safe(() =>
+            {
+                takingOff = null; takingBurnt = false;
+                if (!Local(user) || __instance == null || isItemDone == null) return;
+                var zdo = __instance.GetComponent<ZNetView>()?.GetZDO();
+                if (zdo == null || __instance.m_slots == null) return;
+                for (int i = 0; i < __instance.m_slots.Length; i++)   // the slot RPC_RemoveDoneItem empties: the first done one
+                {
+                    var item = zdo.GetString("slot" + i);
+                    if (string.IsNullOrEmpty(item) || !(isItemDone.Invoke(__instance, new object[] { item }) is bool done) || !done) continue;
+                    var prefab = ObjectDB.instance ? ObjectDB.instance.GetItemPrefab(item) : null;
+                    takingOff = prefab ? prefab.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_name : null;
+                    takingBurnt = __instance.m_overCookedItem && __instance.m_overCookedItem.name == item;
+                    return;
+                }
+            });
+            static void Finalizer() { try { takingOff = null; } catch (Exception e) { HookGuard.Fail(e, "ClientHooks.TakeOff.Finalizer"); } }
+        }
+
+        // the amount OnInteract sends with the take-off (only while a take-off of the local player is under way)
+        [HarmonyPatch(typeof(ZNetView), nameof(ZNetView.InvokeRPC), typeof(string), typeof(object[]))]
+        static class TakeOffAmount
+        {
+            static void Prefix(string method, object[] parameters)   // every RPC of the game passes here: the cheap check first, no closure
+            {
+                try
+                {
+                    if (takingOff == null || method != "RPC_RemoveDoneItem") return;
+                    var dish = takingOff; takingOff = null;
+                    SessionEvents.CountTakenOff(Plugin.Events.Made, dish, takingBurnt, parameters);
+                }
+                catch (Exception e) { HookGuard.Fail(e, "ClientHooks.TakeOffAmount.Prefix"); }
+            }
+        }
+
+        [HarmonyPatch(typeof(CookingStation), "SpawnItem")]
+        static class StationSpawn
+        {
+            static void Prefix() { try { stationSpawn++; } catch (Exception e) { HookGuard.Fail(e, "ClientHooks.StationSpawn.Prefix"); } }
+            static void Finalizer() { try { if (stationSpawn > 0) stationSpawn--; } catch (Exception e) { HookGuard.Fail(e, "ClientHooks.StationSpawn.Finalizer"); } }
+        }
+
+        [HarmonyPatch(typeof(PlayerProfile), nameof(PlayerProfile.IncrementStatItemCraft))]
+        static class MadeByYou
+        {
+            static void Prefix(PlayerProfile __instance, string name, float amount) => Safe(() =>
+                SessionEvents.CountMade(Plugin.Events.Made, name, amount, stationSpawn > 0, Game.instance != null && __instance == Game.instance.GetPlayerProfile()));
+        }
 
         // Sharing your map at the cartography table: your exploration becomes the group's.
         [HarmonyPatch(typeof(MapTable), "OnWrite")]
@@ -147,8 +256,8 @@ namespace Hearthwoven
         [HarmonyPatch(typeof(Player), "Repair")]
         static class RepairBy
         {
-            static void Prefix(Player __instance) { repairing = __instance == Player.m_localPlayer; }
-            static void Postfix() { repairing = false; }
+            static void Prefix(Player __instance) { try { repairing = __instance == Player.m_localPlayer; } catch (Exception e) { HookGuard.Fail(e, "ClientHooks.RepairBy.Prefix"); } }   // the postfix sets it back
+            static void Postfix() { try { repairing = false; } catch (Exception e) { HookGuard.Fail(e, "ClientHooks.RepairBy.Postfix"); } }
         }
         [HarmonyPatch(typeof(WearNTear), nameof(WearNTear.Repair))]
         static class Repaired
@@ -208,7 +317,7 @@ namespace Hearthwoven
         [HarmonyPatch(typeof(Feast), "RPC_EatConfirmation")]
         static class FeastEat
         {
-            static void Finalizer() { feasting = false; }   // runs even if the game's method throws
+            static void Finalizer() { try { feasting = false; } catch (Exception e) { HookGuard.Fail(e, "ClientHooks.FeastEat.Finalizer"); } }   // runs even if the game's method throws
             static void Prefix(Feast __instance) => Safe(() =>
             {
                 feasting = true;
@@ -229,16 +338,40 @@ namespace Hearthwoven
         }
 
         // Voyages: who else is aboard, and who holds the helm. Sampled every 10 s from Plugin.Update.
-        static readonly AccessTools.FieldRef<Ship, System.Collections.Generic.List<Player>> shipPlayers =
-            AccessTools.FieldRefAccess<Ship, System.Collections.Generic.List<Player>>("m_players");
+        static readonly GameField<Ship, System.Collections.Generic.List<Player>> shipPlayers = new GameField<Ship, System.Collections.Generic.List<Player>>("m_players");   // first use, not type load
         internal static void SampleVoyage(float seconds) => Safe(() =>
         {
             var me = Player.m_localPlayer; var ship = Ship.GetLocalShip();
+            CargoHooks.SampleShip(me, ship);   // cargo carried: at the helm, what lies in the ship times the metres it moved
+            SampleLed(me);                     // animals led: tamed animals that follow you, the metres they moved
             if (me == null || ship == null || !ship.IsPlayerInBoat(me)) return;
-            foreach (var p in shipPlayers(ship)) if (p != null && p != me) SessionEvents.Add(Plugin.Events.SailedWith, p.GetPlayerName(), seconds);
+            foreach (var p in shipPlayers.Of(ship)) if (p != null && p != me) SessionEvents.Add(Plugin.Events.SailedWith, p.GetPlayerName(), seconds);
             var helm = ship.m_shipControlls ? ship.m_shipControlls.GetUser() : 0L;
             if (helm != 0L && helm != me.GetPlayerID())
                 foreach (var p in Player.GetAllPlayers()) if (p.GetPlayerID() == helm) { SessionEvents.Add(Plugin.Events.SailedUnderHelmOf, p.GetPlayerName(), seconds); break; }
+        });
+
+        // Animals led (Drover, Long Lead): tamed animals that follow YOU and that this PC owns (the game runs an animal's AI only on its
+        // owner's PC, and the follow target is only known there: labelled "while your PC hosted them"). Sampled with the voyages, every 10 s.
+        static readonly LedTracker led = new LedTracker();
+        internal static void SampleLed(Player me) => Safe(() =>
+        {
+            var followers = new System.Collections.Generic.List<LedTracker.Follower>();
+            if (me != null)
+                foreach (var c in Character.GetAllCharacters())
+                {
+                    if (c == null || c == me || c is Player || !c.IsTamed() || !c.IsOwner()) continue;
+                    var ai = c.GetComponent<MonsterAI>();
+                    var target = ai != null ? ai.GetFollowTarget() : null;
+                    if (target == null || target != me.gameObject) continue;
+                    var zdo = c.GetComponent<ZNetView>()?.GetZDO();
+                    var p = c.transform.position;
+                    followers.Add(new LedTracker.Follower { Id = zdo != null ? zdo.m_uid.ToString() : c.GetInstanceID().ToString(), Kind = Prefab(c), X = p.x, Y = p.y, Z = p.z });
+                }
+            led.Sample(Time.realtimeSinceStartup, followers, Plugin.Events.LedMeters);
+            if (DevCheck.On) DevCheck.Led(me, System.Linq.Enumerable.ToList(System.Linq.Enumerable.Select(followers, f => f.Kind)), led.Total, led.BestMetres, led.BestKind);   // Dev.SelfCheck
+            var ledger = Plugin.FeatsLedger;
+            if (ledger != null && led.BestMetres > ledger.Count(LedTracker.BestKey)) ledger.NoteBest(LedTracker.BestKey, led.BestMetres, DateTime.UtcNow, Biome(), led.BestKind);
         });
 
         // Hauling: metres you pulled a cart, sampled with the voyages.
@@ -251,7 +384,7 @@ namespace Hearthwoven
             if (me != null) foreach (var v in carts()) if (v != null && v.IsAttached(me)) { pulled = v; break; }
             if (pulled == null) { cartWas = false; return; }
             var pos = pulled.transform.position;
-            if (cartWas) { var d = Vector3.Distance(pos, cartLast); if (d < 200f) SessionEvents.Add(Plugin.Events.CartMeters, Prefab(pulled), d); }
+            if (cartWas) { var d = Vector3.Distance(pos, cartLast); if (d < 200f) { SessionEvents.Add(Plugin.Events.CartMeters, Prefab(pulled), d); CargoHooks.CartMoved(pulled, d); } }
             cartLast = pos; cartWas = true;
         });
 
@@ -276,7 +409,7 @@ namespace Hearthwoven
                     __state = new PickState { Item = data.m_shared.m_name, Held = data.m_pickedUp, Stack = data.m_stack,
                                               Before = inv.CountItems(data.m_shared.m_name, -1, false) };
                 }
-                catch (Exception e) { __state = null; Debug.LogWarning("[Hearthwoven] " + e.Message); }
+                catch (Exception e) { __state = null; HookGuard.Fail(e, "ClientHooks.Pickup.Prefix"); }
             }
             static void Postfix(Humanoid __instance, PickState __state) => Safe(() =>
             {
