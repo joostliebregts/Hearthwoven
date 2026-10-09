@@ -2,78 +2,104 @@
 
 # Everyone plays their own part
 
-One player mines iron. Another sails it home. Someone else cooks for the next trip. Hearthwoven makes those parts visible: a book of deeds for your whole group. Press **H** to see who cooked for whom, who carried the ore home and what each of you added.
+Hearthwoven is a Valheim mod that adds a book of deeds to the game. Press **H** to open it: what you did, what your friends did and who it helped.
 
-In single player, the book shows your own deeds.
-
-[Installation](#installation) · [Reference](#reference) · [Feedback](#feedback)
-
-[![The book with a group: deeds, feats, Fireside, Together and Sailing](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-group.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-group.gif)
+[![The book with a group: deeds, feats, who helped whom and each player's share](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-group.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-group.gif)
 
 *Sample data. Rowan, Edda, Finch and Tor are fictional players.*
 
-## Around the hearth
+[Why](#why) · [How it works](#how-it-works) · [What is in the book](#what-is-in-the-book) · [Installation](#installation) · [Reference](#reference)
 
-See who enjoyed whose cooking and who put whose gear to good use. Company > Fireside shows these connections around the hearth. Each count sits on its own thread, from the player who gave to the player who received.
+## Why
 
-[![Company: food and gear shared between players](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)
+In a group, everyone finds their own part. One player mines iron. Another sails it home. Someone else cooks for the next trip, and someone keeps the smelters fed. Valheim shows none of this. Once the trip is over, the quiet work is gone, and only the boss kills are remembered.
 
-*Sample data. Rowan, Edda, Finch and Tor are fictional players. Select any image to open it at full size.*
+Hearthwoven keeps the record, so every way of playing is seen. There is no ranking and no winner: just who did what, and who it helped.
 
-## Each player's share
+## How it works
 
-Company > Together puts the group side by side: wood and ore brought in, pieces built, dishes cooked, damage dealt, distance sailed and cargo carried. No ranking, just who did what.
+- **It counts as you play.** Trees felled, ore carried home, dishes cooked, pieces built, damage dealt, distance sailed. Valheim's own counters for your character are shown too, so the book also covers your play from before you installed it.
+- **It shares through the server.** On a server with Hearthwoven, players who have it can open each other's books. Players without it can still join and play.
+- **It only reads.** Hearthwoven does not change the world or other mods. Items and pieces from other mods appear with their own names and icons.
 
-[![Company: each player's share of the cargo](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)
+In single player, the book shows your own deeds.
+
+## What is in the book
+
+### Who helped whom
+
+Who enjoyed whose cooking, and who put whose gear to good use. Each thread runs from the player who gave to the player who received. (Company > Fireside)
+
+[![Food and gear shared between players](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)
+
+*Sample data. Select any image to open it at full size.*
+
+### Each player's share
+
+The group side by side: wood and ore brought in, pieces built, dishes cooked, damage dealt, distance sailed and cargo carried. (Company > Together)
+
+[![Each player's share of the cargo carried](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)
 
 *Sample data, with Cargo carried chosen.*
 
-Cargo is measured in **item-km**: one item carried one kilometre while you steer a ship or pull a cart. The distance is measured in straight sections, so winding routes can be undercounted. With Hearthwoven 0.6.0 or newer on the server, Voyages > Cargo also shows what you loaded into a ship or cart and what you unloaded somewhere else. Chests do not count.
+### Your own deeds
 
-## Your part in it
+Your deeds are grouped under titles such as Hearth Cook, Hallwright and Woodcutter, one for each way of playing. Open one to see what went into it.
 
-Your own deeds sit under titles such as Hearth Cook, Hallwright and Woodcutter. The overview also shows what you are known for: up to three of your feats. Open a deed to see what went into its total.
-
-[![Deeds: titles for different playstyles](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)
+[![Deeds: titles for different ways of playing](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)
 
 *Deeds overview.*
-
-## Filter what you made
-
-On the Crafting and Building pages, filter by kind, by the hammer's tab and by material. Combine filters to answer a question, such as how much of the hall is core wood, and the bars and counts follow.
-
-[![Filters on the Crafting page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)
-
-*Crafting: filter by kind and material.*
-
-[![Filters on the Building page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)
-
-*Building: filter by the hammer's tab and material.*
-
-## Look closer
-
-- **Cooking:** the dishes you cooked, where you cooked them and who enjoyed your food.
-- **Building and crafting:** what you made, with filters for type and material.
-- **Woodcutting and mining:** trees felled, axe and pickaxe hits, and the wood, stone and ore you brought in.
-- **Taming:** young born in your care, young born near you and the animals you led.
-- **Battle:** damage dealt and received, by biome, foe and damage type. See your blocks, parries and what killed you.
-- **Voyages:** distance sailed and on foot, who sailed with you and the cargo you carried.
-- **Hall:** the shared household, including trader purchases and items put into smelters.
-
-Select a biome or a time period to see more detail. Time periods run from the last 10 minutes to everything since install.
 
 [![One player's own book, page by page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g2-own-book.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g2-own-book.gif)
 
 *A real character's book, from cooking to voyages.*
 
-[![Battle: damage dealt and received in each biome](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)
+### Battle
 
-*Battle overview, since install, by biome.*
+Every fight since you installed Hearthwoven, counted: the damage you dealt and received, in each biome, against each foe and by damage type. See how many blows you blocked or parried, what hurt you most after your armour, and the last 30 seconds before each death. The Foes page shows what each foe takes more, less or no damage from, so you know what to bring next time. Choose a time period, from the last 10 minutes to everything since install, to look at one fight or a whole trip. (Battle)
+
+[![Battle: damage dealt by type and weapon](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)
+
+*Damage dealt by type and weapon. Sample data.*
+
+[![Battle: what each foe takes more, less or no damage from](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s7-battle-foes.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s7-battle-foes.png)
+
+*Foes: what each foe takes more, less or no damage from. Sample data.*
+
+### Everything you made
+
+Every piece of gear you crafted and every piece you built, counted and grouped by kind and material, with the game's own icons. Want to know how much of the hall is core wood, or how many weapons you made? Choose a material or a kind, and the bars and counts follow.
+
+[![The Crafting page: gear by kind and material](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)
+
+*Crafting: what you made, by kind and material.*
+
+[![The Building page: pieces by the hammer's tab and material](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)
+
+*Building: what you built, by the hammer's tab and material.*
+
+### Feats
+
+A feat is a moment worth telling, earned by doing it: steering a ship 2 km with a heavy load of ore, holding blows on your shield beside a friend, having your food enjoyed by three fellow players. Some feats have bronze, silver and gold levels. **Unsung** shows the ones still ahead and why.
+
+[![Earned feats in the Feats chapter](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)
+
+*Feats, Earned.*
+
+### And more
+
+- **Cooking:** the dishes you cooked, where you cooked them and who enjoyed your food.
+- **Woodcutting and mining:** trees felled, axe and pickaxe hits, and the wood, stone and ore you brought in.
+- **Taming:** young born in your care, young born near you and the animals you led.
+- **Voyages:** distance sailed and on foot, who sailed with you and the cargo you carried.
+- **Hall:** the shared household, including trader purchases and items put into smelters.
+
+Choose a biome or a time period to see more detail. Time periods run from the last 10 minutes to everything since install.
 
 <details>
-<summary>Feats: recognition for your deeds</summary>
+<summary>All feats, explained</summary>
 
-Feats have their own chapter. A feat recognises a specific achievement: a rule, a number and a day. Open it to see the rule, your progress and when it was first recorded.
+A feat recognises a specific achievement: a rule, a number and a day. Open it to see the rule, your progress and when it was first recorded.
 
 - **Heavy Keel:** steer a ship 2 km with a heavy load of metal or ore aboard.
 - **Shield Wall:** hold blows on your shield with a fellow player nearby.
@@ -81,13 +107,9 @@ Feats have their own chapter. A feat recognises a specific achievement: a rule, 
 - **Kept the Fires:** put ore and fuel into smelters, kilns and furnaces.
 - **Full Table:** have your food enjoyed by three fellow players who share their books.
 
-Some feats have several levels, marked bronze, silver and gold. Each level has its own target. The targets may change after the first weeks of play.
+Each level has its own target. The targets may change after the first weeks of play.
 
 **Earned** shows the feats you have. **Unsung** shows the feats still ahead, and says why each one is not earned yet. **Together** shows Iron for the Forge: the ore and metal the whole group brings home. It needs Hearthwoven 0.6.0 or newer on the server.
-
-[![Earned feats in the Feats chapter](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)
-
-*Feats, Earned: what you've done that's worth telling*
 
 </details>
 
@@ -108,7 +130,7 @@ Install Hearthwoven with your mod manager, such as Gale or r2modman. Start the g
 
 Your own book works on any server. Hearthwoven is optional. Players without it can still join and play.
 
-**Other mods' items show too.** Hearthwoven reads the game's lists of items, building pieces, creatures and skills. Content from other mods appears with its own names and icons. Hearthwoven does not change other mods. See **Tested with other mods** under Reference for the mods we use in testing.
+See **Tested with other mods** under Reference for the mods we use in testing.
 
 ### Play with friends
 
@@ -241,6 +263,10 @@ All Battle pages, Sailing, Cargo, Woodcutting, Mining and Company > Together hav
 Other players' data comes from their own copy of Hearthwoven, shared through the server. On a fellow player's book, the time periods they do not share show greyed, with the reason.
 
 With Hearthwoven 0.6.0 or newer, the server also counts what only it can see in full: cargo loaded and unloaded, young born near you and the group's Iron for the Forge. "Born near you" means near, not bred: the game does not record who fed the animals.
+
+### Cargo
+
+Cargo is measured in **item-km**: one item carried one kilometre while you steer a ship or pull a cart. The distance is measured in straight sections, so winding routes can be undercounted. With Hearthwoven 0.6.0 or newer on the server, Voyages > Cargo also shows what you loaded into a ship or cart and what you unloaded somewhere else. Chests do not count.
 
 ### Gaps in Valheim's counters
 
