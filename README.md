@@ -9,6 +9,7 @@ In single player, the book shows your own deeds.
 [Installation](#installation) · [Reference](#reference) · [Feedback](#feedback)
 
 [![The book with a group: deeds, feats, Fireside, Together and Sailing](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-group.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-group.gif)
+
 *Sample data. Rowan, Edda, Finch and Tor are fictional players.*
 
 ## Around the hearth
@@ -16,6 +17,7 @@ In single player, the book shows your own deeds.
 See who enjoyed whose cooking and who put whose gear to good use. Company > Fireside shows these connections around the hearth. Each count sits on its own thread, from the player who gave to the player who received.
 
 [![Company: food and gear shared between players](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)
+
 *Sample data. Rowan, Edda, Finch and Tor are fictional players. Select any image to open it at full size.*
 
 ## Each player's share
@@ -23,6 +25,7 @@ See who enjoyed whose cooking and who put whose gear to good use. Company > Fire
 Company > Together puts the group side by side: wood and ore brought in, pieces built, dishes cooked, damage dealt, distance sailed and cargo carried. No ranking, just who did what.
 
 [![Company: each player's share of the cargo](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)
+
 *Sample data, with Cargo carried chosen.*
 
 Cargo is measured in **item-km**: one item carried one kilometre while you steer a ship or pull a cart. The distance is measured in straight sections, so winding routes can be undercounted. With Hearthwoven 0.6.0 or newer on the server, Voyages > Cargo also shows what you loaded into a ship or cart and what you unloaded somewhere else. Chests do not count.
@@ -32,6 +35,7 @@ Cargo is measured in **item-km**: one item carried one kilometre while you steer
 Your own deeds sit under titles such as Hearth Cook, Hallwright and Woodcutter. The overview also shows what you are known for: up to three of your feats. Open a deed to see what went into its total.
 
 [![Deeds: titles for different playstyles](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)
+
 *Deeds overview.*
 
 ## Filter what you made
@@ -39,9 +43,11 @@ Your own deeds sit under titles such as Hearth Cook, Hallwright and Woodcutter. 
 On the Crafting and Building pages, filter by kind, by the hammer's tab and by material. Combine filters to answer a question, such as how much of the hall is core wood, and the bars and counts follow.
 
 [![Filters on the Crafting page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)
+
 *Crafting: filter by kind and material.*
 
 [![Filters on the Building page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)
+
 *Building: filter by the hammer's tab and material.*
 
 ## Look closer
@@ -57,9 +63,11 @@ On the Crafting and Building pages, filter by kind, by the hammer's tab and by m
 Select a biome or a time period to see more detail. Time periods run from the last 10 minutes to everything since install.
 
 [![One player's own book, page by page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g2-own-book.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g2-own-book.gif)
+
 *A real character's book, from cooking to voyages.*
 
 [![Battle: damage dealt and received in each biome](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)
+
 *Battle overview, since install, by biome.*
 
 <details>
@@ -78,6 +86,7 @@ Some feats have several levels, marked bronze, silver and gold. Each level has i
 **Earned** shows the feats you have. **Unsung** shows the feats still ahead, and says why each one is not earned yet. **Together** shows Iron for the Forge: the ore and metal the whole group brings home. It needs Hearthwoven 0.6.0 or newer on the server.
 
 [![Earned feats in the Feats chapter](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)
+
 *Feats, Earned: what you've done that's worth telling*
 
 </details>
@@ -88,6 +97,7 @@ Some feats have several levels, marked bronze, silver and gold. Each level has i
 See how many trees you felled, how many axe hits each tree took and which types of wood you brought in.
 
 [![Woodcutting: trees felled and wood brought in](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s3-woodcutting.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s3-woodcutting.png)
+
 *Woodcutting.*
 
 </details>
@@ -289,6 +299,7 @@ For MultiUserChest, Hearthwoven reads that mod's messages to find who moved an i
 Each question gets one form, the same on every page. A number shows the total. A bar shows its parts. A strip of biomes shows where. A ladder shows each skill. A connection shows who helped whom. Items, foes and skills carry the game's own icons.
 
 [![Examples of the book's visual forms](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/design-language.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/design-language.png)
+
 *Design examples, not a game screenshot.*
 
 </details>
