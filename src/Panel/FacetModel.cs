@@ -235,6 +235,25 @@ namespace Hearthwoven.Panel
         /// <summary>The page's filter bar, if it has one (looked for in the layout boxes too).</summary>
         public static Block FilterOf(PanelView v) => Content(v).FirstOrDefault(b => b.Kind == "filterbar");
 
+        /// <summary>B16: the words on a filter bar's chips, chosen tokens and bar parts that are only a number ("10", a category
+        /// the enum has no name for); empty when every label is words. The tests and the in-game self-check (facet-number) ask.</summary>
+        public static List<string> FacetNumberLabels(PanelView v) => v == null ? new List<string>() : FacetNumberLabels(Content(v));
+
+        /// <summary>The same over blocks: every filter bar among them, its rows, tokens and bars.</summary>
+        public static List<string> FacetNumberLabels(IEnumerable<Block> blocks)
+        {
+            var found = new List<string>();
+            void Walk(Block b, bool inBar)
+            {
+                if (b == null) return;
+                inBar = inBar || b.Kind == "filterbar";
+                if (inBar && (b.Kind == "chip" || b.Kind == "token" || b.Kind == "part") && BareNumber(b.Title)) found.Add(b.Title);
+                foreach (var c in b.Items ?? new List<Block>()) Walk(c, inBar);
+            }
+            foreach (var b in blocks ?? Enumerable.Empty<Block>()) Walk(b, false);
+            return found;
+        }
+
         static List<Block> FacetRows(PanelView v) => FilterOf(v)?.Items?.Where(b => b.Kind == "facet").ToList() ?? new List<Block>();
 
         // the next chip that can be chosen in a direction (wraps); -1 when the row has none

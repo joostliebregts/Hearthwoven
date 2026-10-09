@@ -5,6 +5,8 @@ log line and in Gale always says which build runs.
 
 ## 0.6.2 (2026-10-09, client release)
 - Feats cards and details no longer show raw text formatting codes. All formatted text now goes through one helper, and a self-check catches any slip.
+- The Feat tag above a page is no longer cut off.
+- Building filters name the categories that other mods add, or group them under Other; no more bare numbers.
 
 ## 0.6.1 (2026-10-09, client release)
 The client build of the 0.6 line. It needs a server on **0.6.0 or newer** to show what only the server counts (cargo loaded and unloaded, born near you); without one, everything else works and those two are left out.

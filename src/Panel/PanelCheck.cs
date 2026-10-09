@@ -24,6 +24,8 @@ namespace Hearthwoven.Panel
     /// - richtext-fix: on every page each visible text is read as TMP shows it (GetParsedText); a text that shows a tag as letters
     ///   ("&lt;b&gt;", "&lt;color=…&gt;": rich text off on a marked-up label, the 0.6.1 Feats bug) fails the page and gets an
     ///   "HW-CHECK FAIL markup" line naming it; after the walk one "markup" line says PASS or how many pages failed.
+    /// - B16: on every page a filter bar whose chip, token or bar part is only a number (a piece category the enum has no name
+    ///   for) fails the page with an "HW-CHECK FAIL facet-number" line naming the labels; after the walk one "facet-number" line.
     /// </summary>
     public partial class PanelUi
     {
@@ -155,7 +157,7 @@ namespace Hearthwoven.Panel
         IEnumerator CheckRun()
         {
             string failure = null;
-            int pages = 0, bad = 0, small = 0, rawPages = 0;
+            int pages = 0, bad = 0, small = 0, rawPages = 0, numberPages = 0;
             var warnings = new List<string>();
             Application.LogCallback grab = (msg, stack, type) =>
             {
@@ -229,9 +231,10 @@ namespace Hearthwoven.Panel
                         }
                         var kinds = view == null ? new List<string>() : Every(PanelModel.Content(view)).Select(b => b.Kind).Where(k => k != null && NewKinds.Contains(k)).Distinct().ToList();
                         hasFilter = view != null && PanelModel.FilterOf(view) != null;
+                        var numbers = PanelModel.FacetNumberLabels(view);   // B16: a filter label that is only a number
                         List<string> seen; lock (warnings) seen = warnings.ToList();
                         var shows = Shows(shot);
-                        var status = error != null || seen.Count > 0 || !shows || raw > 0 ? "FAIL" : below > 0 || hidden > 0 ? "WARN" : "PASS";
+                        var status = error != null || seen.Count > 0 || !shows || raw > 0 || numbers.Count > 0 ? "FAIL" : below > 0 || hidden > 0 ? "WARN" : "PASS";
                         if (status == "FAIL") bad++; if (below > 0) small++;
                         var text = label + ": " + (error != null ? "threw " + error : seen.Count > 0 ? "warned: " + seen[0] + (seen.Count > 1 ? " (+" + (seen.Count - 1) + " more)" : "") : shows ? "drawn" : "another page showed") +
                                    ", " + objects + " objects, smallest text " + (least < 999f ? least.ToString("0.0") + " px" + (below > 0 ? " (" + below + " under " + PanelLook.MinText + ": " + leastText + ")" : "") : "none") +
@@ -240,6 +243,7 @@ namespace Hearthwoven.Panel
                                    ", focus marks " + Marks() + (kinds.Count > 0 ? "; " + string.Join(", ", kinds.ToArray()) : "");
                         DevCheck.Book.Say(status, "page", text);
                         if (raw > 0) { rawPages++; DevCheck.Book.Say("FAIL", "markup", label + ": " + raw + " text(s) show raw markup: " + string.Join("; ", rawTexts.ToArray()) + (raw > rawTexts.Count ? " (+" + (raw - rawTexts.Count) + " more)" : "")); }
+                        if (numbers.Count > 0) { numberPages++; DevCheck.Book.Say("FAIL", "facet-number", label + ": " + numbers.Count + " filter label(s) only a number: " + string.Join(", ", numbers.Distinct().Take(6).ToArray())); }
                     }
                     catch (Exception e) { DevCheck.Book.Say("FAIL", "page", label + ": measuring failed: " + e.Message); bad++; }
                     if (!hasFilter || error != null) continue;
@@ -272,6 +276,7 @@ namespace Hearthwoven.Panel
             }
             catch (Exception e) { DevCheck.Book.Say("FAIL", "icons", e.Message); }
             DevCheck.Book.Say(rawPages == 0 ? "PASS" : "FAIL", "markup", rawPages == 0 ? pages + " pages walked, no visible text shows a tag as letters" : rawPages + " of " + pages + " pages show raw markup (each named in a markup line above)");
+            DevCheck.Book.Say(numberPages == 0 ? "PASS" : "FAIL", "facet-number", numberPages == 0 ? pages + " pages walked, every filter label is words" : numberPages + " of " + pages + " pages have a filter label that is only a number (each named in a facet-number line above)");
             if (failure != null) DevCheck.Book.Say("FAIL", "pages", "walk stopped: " + failure);
             DevCheck.Done(pages + " pages walked, " + bad + " failed, " + small + " with text under " + PanelLook.MinText + " px, " + rawPages + " with raw markup");
         }

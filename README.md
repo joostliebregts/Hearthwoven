@@ -1,19 +1,38 @@
 [![Hearthwoven](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png)
 
-# Your own way of playing
+# Everyone plays their own part
 
-One player mines iron. Another sails it home. Someone else cooks for the next trip. Everyone plays Valheim in their own way.
+One player mines iron. Another sails it home. Someone else cooks for the next trip. Hearthwoven makes those parts visible: a book of deeds for your whole group. Press **H** to see who cooked for whom, who carried the ore home and what each of you added.
 
-Hearthwoven is a book of your deeds. See the food you cooked, the things you built and the damage you dealt. Press **H** to open it.
+In single player, the book shows your own deeds.
 
 [Installation](#installation) · [Reference](#reference) · [Feedback](#feedback)
 
-## Your deeds, at a glance
+[![The book with a group: deeds, feats, Fireside, Together and Sailing](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-group.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-group.gif)
+*Sample data. Rowan, Edda, Finch and Tor are fictional players.*
 
-See your cooking, building and other deeds in one place, under titles such as Hearth Cook, Hallwright and Woodcutter. The overview also shows what you are known for: up to three of your feats. Open a deed to see what went into its total.
+## Around the hearth
+
+See who enjoyed whose cooking and who put whose gear to good use. Company > Fireside shows these connections around the hearth. Each count sits on its own thread, from the player who gave to the player who received.
+
+[![Company: food and gear shared between players](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)
+*Sample data. Rowan, Edda, Finch and Tor are fictional players. Select any image to open it at full size.*
+
+## Each player's share
+
+Company > Together puts the group side by side: wood and ore brought in, pieces built, dishes cooked, damage dealt, distance sailed and cargo carried. No ranking, just who did what.
+
+[![Company: each player's share of the cargo](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)
+*Sample data, with Cargo carried chosen.*
+
+Cargo is measured in **item-km**: one item carried one kilometre while you steer a ship or pull a cart. The distance is measured in straight sections, so winding routes can be undercounted. With Hearthwoven 0.6.0 or newer on the server, Voyages > Cargo also shows what you loaded into a ship or cart and what you unloaded somewhere else. Chests do not count.
+
+## Your part in it
+
+Your own deeds sit under titles such as Hearth Cook, Hallwright and Woodcutter. The overview also shows what you are known for: up to three of your feats. Open a deed to see what went into its total.
 
 [![Deeds: titles for different playstyles](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)
-*Deeds overview. Select any image to open it at full size.*
+*Deeds overview.*
 
 ## Look closer
 
@@ -22,9 +41,13 @@ See your cooking, building and other deeds in one place, under titles such as He
 - **Woodcutting and mining:** trees felled, axe and pickaxe hits, and the wood, stone and ore you brought in.
 - **Taming:** young born in your care, young born near you and the animals you led.
 - **Battle:** damage dealt and received, by biome, foe and damage type. See your blocks, parries and what killed you.
-- **Company:** who enjoyed your food, who put your gear to good use and the cargo each of you carried.
+- **Voyages:** distance sailed and on foot, who sailed with you and the cargo you carried.
+- **Hall:** the shared household, including trader purchases and items put into smelters.
 
 Select a biome or a time period to see more detail. Time periods run from the last 10 minutes to everything since install.
+
+[![One player's own book, page by page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g2-own-book.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g2-own-book.gif)
+*A real character's book, from cooking to voyages.*
 
 [![Battle: damage dealt and received in each biome](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)
 *Battle overview, since install, by biome.*
@@ -50,35 +73,18 @@ Some feats have several levels, marked bronze, silver and gold. Each level has i
 </details>
 
 <details>
-<summary>More detail: woodcutting and cargo</summary>
-
-### A deed, up close
+<summary>A deed, up close: woodcutting and filters</summary>
 
 See how many trees you felled, how many axe hits each tree took and which types of wood you brought in. On the Crafting and Building pages, you can filter by type and material.
 
 [![Woodcutting: trees felled and wood brought in](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s3-woodcutting.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s3-woodcutting.png)
 *Woodcutting.*
 
-### Carry cargo together
+[![Filters on the Crafting page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3a-crafting.gif)
+*Crafting: filter by kind and material.*
 
-See the cargo you carried while steering a ship or pulling a cart.
-
-Cargo is measured in **item-km**: one item carried one kilometre. The distance is measured in straight sections, so winding routes can be undercounted. Company > Together shows each player's share side by side.
-
-With Hearthwoven 0.6.0 or newer on the server, Cargo also shows what you loaded into a ship or cart and what you unloaded somewhere else. Chests do not count.
-
-[![Company: each player's share of the cargo](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)
-*Sample data. Rowan, Edda, Finch and Tor are fictional players.*
-
-</details>
-
-<details>
-<summary>Food and gear shared with fellow players</summary>
-
-See who enjoyed your cooking and put your gear to good use. Company > Fireside shows these connections around the hearth. Each count sits on its own thread, from the player who gave to the player who received.
-
-[![Company: food and gear shared between players](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)
-*Sample data. Rowan, Edda, Finch and Tor are fictional players.*
+[![Filters on the Building page](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g3b-building.gif)
+*Building: filter by the hammer's tab and material.*
 
 </details>
 
@@ -282,9 +288,6 @@ Each question gets one form, the same on every page. A number shows the total. A
 *Design examples, not a game screenshot.*
 
 </details>
-
-[![Book walkthrough](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-book.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-book.gif)
-*Sample data. Rowan, Edda, Finch and Tor are fictional players.*
 
 ## Coming later
 

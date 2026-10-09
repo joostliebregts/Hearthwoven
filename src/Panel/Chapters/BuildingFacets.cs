@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace Hearthwoven.Panel
 {
@@ -18,7 +19,9 @@ namespace Hearthwoven.Panel
     /// Building's filter (Deeds > Building, FILTERING-06): the pieces built as the same filter bar Crafting uses (FacetModel.cs), over
     /// two rows, then the pieces that pass as the item grid. Only what the game's own data says about a piece, so modded pieces work:
     ///   Category      = the hammer tab the piece sits on (Piece.m_category, named by its piece table): Misc, Crafting, Building,
-    ///                   Stonecutter, Furniture, and whatever a mod adds.
+    ///                   Stonecutter, Furniture, and whatever a mod adds. A mod's category is an enum value past the vanilla
+    ///                   ones (Jotunn adds them so); its words come from the tab's label or the mod's name for it
+    ///                   (PieceCategoryName, GameData), and a category nothing names is "Other": never a bare number (B16).
     ///   Main material = the build resource that best marks the tier (PieceMainMaterial below). It says "by main material", never
     ///                   "made only of"; a piece the game data cannot place is "Other".
     /// The counts are the page's own unit, pieces built (the game's placed-pieces counter; a piece you move counts again).
@@ -63,9 +66,77 @@ namespace Hearthwoven.Panel
                 case "BuildingWorkbench": return "Building";
                 case "BuildingStonecutter": return "Stonecutter";
                 case "DeepNorth": return "Deep North";
-                default: return string.IsNullOrEmpty(category) ? null : category;
+                default: return string.IsNullOrEmpty(category) || BareNumber(category) ? null : category;
             }
         }
+
+        /// <summary>True for a text that is only a number (digits, spaces, separators): "10", "10 139". A category the enum has no
+        /// name for prints so (Piece.PieceCategory 10, a mod's tab); such a text never becomes a label (B16).</summary>
+        public static bool BareNumber(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            var digits = false;
+            foreach (var c in s)
+            {
+                if (char.IsDigit(c)) digits = true;
+                else if (!char.IsWhiteSpace(c) && c != '-' && c != '+' && c != '.' && c != ',') return false;
+            }
+            return digits;
+        }
+
+        // what a mod's category name or token starts with that says nothing to the player ("$jotunn_cat_clay_works")
+        static readonly string[] CategoryPrefixes = { "jotunn_cat_", "piece_category_", "piececategory_", "category_" };
+
+        /// <summary>
+        /// A category's internal name or token in words (B16): the game's mark for an untranslated word ("[...]") and a leading "$"
+        /// dropped, then a known prefix ("jotunn_cat_"), underscores and dashes made spaces, CamelCase split, the first letter
+        /// capital: "$jotunn_cat_clay_works" -> "Clay works", "ClayBuildPieces" -> "Clay Build Pieces". A plain word stays as it is.
+        /// null when no words are left (empty, a bare number).
+        /// </summary>
+        public static string ReadableTabName(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            var s = raw.Trim();
+            if (s.Length > 1 && s[0] == '[' && s[s.Length - 1] == ']') s = s.Substring(1, s.Length - 2).Trim();
+            s = s.TrimStart('$');
+            foreach (var p in CategoryPrefixes)
+                if (s.Length > p.Length && s.StartsWith(p, StringComparison.OrdinalIgnoreCase)) { s = s.Substring(p.Length); break; }
+            var sb = new StringBuilder();
+            for (int i = 0; i < s.Length; i++)
+            {
+                var c = s[i];
+                if (c == '_' || c == '-' || char.IsWhiteSpace(c)) { if (sb.Length > 0 && sb[sb.Length - 1] != ' ') sb.Append(' '); continue; }
+                if (i > 0 && sb.Length > 0 && sb[sb.Length - 1] != ' ')
+                {
+                    var prev = s[i - 1];
+                    var lowerToUpper = char.IsUpper(c) && (char.IsLower(prev) || char.IsDigit(prev));
+                    var acronymEnd = char.IsUpper(c) && char.IsUpper(prev) && i + 1 < s.Length && char.IsLower(s[i + 1]);
+                    var letterToDigit = char.IsDigit(c) && char.IsLetter(prev);
+                    if (lowerToUpper || acronymEnd || letterToDigit) sb.Append(' ');
+                }
+                sb.Append(c);
+            }
+            var r = sb.ToString().Trim();
+            if (r.Length == 0 || BareNumber(r)) return null;
+            return char.ToUpperInvariant(r[0]) + r.Substring(1);
+        }
+
+        /// <summary>
+        /// The words for a piece category (B16): the label its piece table gives the hammer's tab, else the game's enum name in its
+        /// own words (TabNameOf), else the name the mod gave the category (Jotunn adds a mod's categories as enum values past the
+        /// vanilla ones, whose ToString is only the number: GameData reads the name at runtime), each made readable. null when
+        /// none says anything: the piece then counts under "Other", never as a number.
+        /// </summary>
+        public static string PieceCategoryName(string enumText, string tableLabel, string modName)
+        {
+            var label = ReadableTabName(tableLabel);
+            if (label != null) return label;
+            if (!string.IsNullOrWhiteSpace(enumText) && !BareNumber(enumText)) return TabNameOf(enumText.Trim());
+            return ReadableTabName(modName);
+        }
+
+        /// <summary>A piece's tab as the filter holds it: the words the game data gives, "Other" for none or for a bare number (B16).</summary>
+        static string PieceTabValue(string tab) => string.IsNullOrWhiteSpace(tab) || BareNumber(tab) ? MaterialOther : tab.Trim();
 
         /// <summary>What a resource stands for as a material: (label, rank), or (null, -1) for one that marks no tier (iron nails, resin, flint, hides...).</summary>
         public static (string material, int rank) MaterialOfPieceIngredient(PieceIngredient i)
@@ -116,7 +187,7 @@ namespace Hearthwoven.Panel
         static FacetItem PieceFacetItem(PanelInput input, string key, double weight)
         {
             var it = new FacetItem { Key = key, Weight = weight };
-            it.Values["tab"] = Ask(input.PieceTab, key) ?? MaterialOther; it.Values["material"] = Ask(input.PieceMaterial, key) ?? MaterialOther;
+            it.Values["tab"] = PieceTabValue(Ask(input.PieceTab, key)); it.Values["material"] = Ask(input.PieceMaterial, key) ?? MaterialOther;
             return it;
         }
 

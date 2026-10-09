@@ -1,5 +1,7 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 
 namespace Hearthwoven.Panel
@@ -12,7 +14,12 @@ namespace Hearthwoven.Panel
     ///   (PanelModel.GatherKindOf); what any smelter, kiln or refinery makes (Coal, Iron, ...) is never gathered, even when
     ///   some drop table also holds it (B12). The standing tree's own drops are left out: they are resin, cones and seeds,
     ///   not wood. PanelModel checks the vanilla names first;
-    /// - pieces: TerrainOp/TerrainModifier = groundwork, Plant = planted, Feast = feast, the rest built.
+    /// - pieces: TerrainOp/TerrainModifier = groundwork, Plant = planted, Feast = feast, the rest built;
+    /// - piece categories (B16): the hammer tab's label from the piece tables, else the enum's name, else, for a mod's category
+    ///   (an enum value past the vanilla ones, whose ToString is only the number), the name its mod gave it: the enum as Jotunn
+    ///   and similar libraries extend Enum.GetNames/GetValues, or Jotunn's own book of categories by reflection (no reference to
+    ///   Jotunn). Looked up when asked, so a tab Jotunn adds once the hammer is used is found too; a category nothing names is
+    ///   null ("Other"), looked for again after a few seconds. None of it ever throws.
     /// Reads only. An unknown token gets null: PanelModel keeps such an item out of gear and food, leaves such a pickup out
     /// of wood and mining, and counts such a piece as built unless it carries a vanilla groundwork name.
     /// </summary>
@@ -23,7 +30,12 @@ namespace Hearthwoven.Panel
         static readonly Dictionary<string, string> tokens = new Dictionary<string, string>();   // Deeds: Cooking (item prefab -> token)
         static readonly HashSet<string> stationDishes = new HashSet<string>();   // Deeds: Cooking (what cooking stations hand out, by item token)
         static readonly Dictionary<string, string> materials = new Dictionary<string, string>();   // Deeds: Crafting (item token -> main material)
-        static readonly Dictionary<string, string> pieceTabs = new Dictionary<string, string>(), tabLabels = new Dictionary<string, string>(), pieceMats = new Dictionary<string, string>();   // Deeds: Building (piece token -> category; category -> the hammer tab's label; piece token -> main material)
+        static readonly Dictionary<string, string> pieceMats = new Dictionary<string, string>();   // Deeds: Building (piece token -> main material)
+        static readonly Dictionary<string, int> pieceCats = new Dictionary<string, int>();   // Deeds: Building (piece token -> Piece.m_category as its number)
+        static readonly Dictionary<int, string> tabLabels = new Dictionary<int, string>(), catNames = new Dictionary<int, string>();   // category -> the hammer tab's label; category -> its words, once found (B16)
+        static readonly Dictionary<int, int> catTried = new Dictionary<int, int>();   // category -> when nothing named it last (Environment.TickCount)
+        static readonly HashSet<int> catLogged = new HashSet<int>();
+        static bool jotunnLooked; static Type jotunnPieces;
         static readonly Dictionary<string, Sprite> pieceIcons = new Dictionary<string, Sprite>();
         static bool ready;
 
@@ -38,12 +50,104 @@ namespace Hearthwoven.Panel
         public static bool StationDish(string token) { Ensure(); return token != null && stationDishes.Contains(token); }
         /// <summary>An item's main material from its recipe ("Bronze"): the ingredient that best marks the tier (PanelModel.MainMaterial); null = no recipe or no ingredient that marks a tier.</summary>
         public static string MainMaterial(string token) { Ensure(); return token != null && materials.TryGetValue(token, out var k) ? k : null; }
-        /// <summary>The hammer tab a piece sits on ("Furniture"): the label its piece table gives that category, else the category's own name; null = not known (Piece.m_category).</summary>
+        /// <summary>The hammer tab a piece sits on ("Furniture"): the label its piece table gives that category, else the category's own name, else the name a mod gave it (B16); null = not known (Piece.m_category), counted as "Other".</summary>
         public static string PieceTab(string token)
         {
             Ensure();
-            if (token == null || !pieceTabs.TryGetValue(token, out var cat)) return null;
-            return tabLabels.TryGetValue(cat, out var label) ? label : PanelModel.TabNameOf(cat);
+            if (token == null || !pieceCats.TryGetValue(token, out var cat)) return null;
+            return CategoryName(cat);
+        }
+
+        /// <summary>B16: a piece category in words (PanelModel.PieceCategoryName), remembered once found; null when nothing names it yet.</summary>
+        static string CategoryName(int cat)
+        {
+            try
+            {
+                if (catNames.TryGetValue(cat, out var known)) return known;
+                var now = Environment.TickCount;
+                if (catTried.TryGetValue(cat, out var at) && unchecked(now - at) < 5000) return null;   // nothing named it a moment ago: look again later, not every frame
+                var text = ((Piece.PieceCategory)cat).ToString();
+                var modded = PanelModel.BareNumber(text);   // the enum has no name for it: a mod's category
+                if (modded) LearnLiveTabs();   // the tables' labels as they are now: Jotunn adds a mod's tab once the hammer is used
+                tabLabels.TryGetValue(cat, out var label);
+                var name = PanelModel.PieceCategoryName(text, label, modded ? ModCategoryName(cat) : null);
+                if (name != null) catNames[cat] = name; else catTried[cat] = now;
+                if (modded && catLogged.Add(cat))
+                    Debug.Log("[Hearthwoven] piece category " + cat + ": " + (name != null ? "\"" + name + "\"" : "no name found yet, counted as Other"));
+                return name;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>The labels a piece table gives its categories (the hammer's tabs), translated; the first label of each category stays.</summary>
+        static void LearnTabs(PieceTable table)
+        {
+            if (table == null || table.m_categories == null) return;
+            for (int i = 0; i < table.m_categories.Count; i++)
+            {
+                var label = table.m_categoryLabels != null && i < table.m_categoryLabels.Count ? table.m_categoryLabels[i] : null;
+                var key = (int)table.m_categories[i];
+                if (!string.IsNullOrWhiteSpace(label) && !tabLabels.ContainsKey(key)) tabLabels[key] = LocalizedName(label);
+            }
+        }
+
+        /// <summary>Every tool's piece table as it is now: labels Jotunn added after the first read (the hammer in hand shares its table with the item's data).</summary>
+        static void LearnLiveTabs()
+        {
+            try
+            {
+                if (!ObjectDB.instance || ObjectDB.instance.m_items == null) return;
+                foreach (var go in ObjectDB.instance.m_items)
+                {
+                    var table = go ? go.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_buildPieces : null;
+                    if (table) LearnTabs(table);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// The name a mod gave a category the vanilla enum does not have; null when none is found. First the enum as the category
+        /// managers extend it (Jotunn patches Enum.GetNames and Enum.GetValues for Piece.PieceCategory; ToString it does not, which
+        /// is where the bare numbers came from), then Jotunn's own book of its categories by reflection, read only, never created.
+        /// </summary>
+        static string ModCategoryName(int cat)
+        {
+            try
+            {
+                var values = Enum.GetValues(typeof(Piece.PieceCategory)); var names = Enum.GetNames(typeof(Piece.PieceCategory));
+                if (values != null && names != null && values.Length == names.Length)
+                    for (int i = 0; i < values.Length; i++)
+                        if (Convert.ToInt32(values.GetValue(i)) == cat && !string.IsNullOrWhiteSpace(names[i]) && !PanelModel.BareNumber(names[i])) return names[i];
+            }
+            catch { }
+            try
+            {
+                if (!jotunnLooked)
+                {
+                    jotunnLooked = true;
+                    foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        try { if (a.GetName().Name == "Jotunn") { jotunnPieces = a.GetType("Jotunn.Managers.PieceManager", false); break; } } catch { }
+                    }
+                }
+                if (jotunnPieces == null) return null;
+                const BindingFlags any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
+                var manager = jotunnPieces.GetField("_instance", any)?.GetValue(null);   // the manager as Jotunn made it; never created here
+                if (manager == null) return null;
+                var books = new List<IDictionary>();
+                foreach (var f in new[] { "PieceCategories", "OtherPieceCategories" })
+                    if (jotunnPieces.GetField(f, any)?.GetValue(manager) is IDictionary d) books.Add(d);   // name -> category
+                if (jotunnPieces.GetMethod("GetPieceCategoriesMap", any, null, Type.EmptyTypes, null)?.Invoke(manager, null) is IDictionary map) books.Add(map);   // category -> name
+                foreach (var book in books)
+                    foreach (DictionaryEntry e in book)
+                    {
+                        var name = e.Key as string ?? e.Value as string; var value = e.Key is string ? e.Value : e.Key;
+                        if (name != null && value != null && Convert.ToInt32(value) == cat && !PanelModel.BareNumber(name)) return name;
+                    }
+            }
+            catch { }
+            return null;
         }
         /// <summary>A piece's main material from its build resources ("Fine wood"), judged by PanelModel.PieceMainMaterial; null = no resource marks one.</summary>
         public static string PieceMaterial(string token) { Ensure(); return token != null && pieceMats.TryGetValue(token, out var k) ? k : null; }
@@ -62,21 +166,11 @@ namespace Hearthwoven.Panel
             try
             {
                 var pieceObjs = new Dictionary<string, Piece>();   // the first Piece of each name, for its build resources (judged once the smelters are known)
-                void LearnTabs(PieceTable table)
-                {
-                    if (table == null || table.m_categories == null) return;
-                    for (int i = 0; i < table.m_categories.Count; i++)
-                    {
-                        var label = table.m_categoryLabels != null && i < table.m_categoryLabels.Count ? table.m_categoryLabels[i] : null;
-                        var key = table.m_categories[i].ToString();
-                        if (!string.IsNullOrWhiteSpace(label) && !tabLabels.ContainsKey(key)) tabLabels[key] = LocalizedName(label);
-                    }
-                }
                 void Piece(GameObject go)
                 {
                     var p = go ? go.GetComponent<Piece>() : null;
                     if (!p || string.IsNullOrEmpty(p.m_name)) return;
-                    if (!pieceTabs.ContainsKey(p.m_name)) pieceTabs[p.m_name] = p.m_category.ToString();
+                    if (!pieceCats.ContainsKey(p.m_name)) pieceCats[p.m_name] = (int)p.m_category;   // the number: a mod's category has no enum name (B16, CategoryName)
                     if (!pieceObjs.ContainsKey(p.m_name)) pieceObjs[p.m_name] = p;
                     var kind = PanelModel.PieceKindOf(go.GetComponent<TerrainOp>() || go.GetComponent<TerrainModifier>(), go.GetComponent<Plant>(), go.GetComponent<Feast>());
                     if (!pieces.ContainsKey(p.m_name) || pieces[p.m_name] == "built") pieces[p.m_name] = kind;

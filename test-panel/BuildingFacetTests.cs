@@ -118,6 +118,39 @@ static class BuildingFacetTests
         Check(Row(moddedView, "tab").Items.Select(c => c.Title).SequenceEqual(new[] { "Misc", "Crafting", "Building", "Stonecutter", "Furniture", "Clay Works", "Other" }) &&
               Row(moddedView, "tab").Items.First(c => c.Title == "Clay Works").Value == "5" && Row(moddedView, "tab").Items.First(c => c.Title == "Other").Value == "4",
               "building filter: a mod's own tab joins after the hammer's (only when something was built on it), a piece with no tab is Other: " + Chips(moddedView, "tab"));
+
+        // ---------- B16: a mod's category the enum has no name for ("10 139" on the chip) ----------
+        Check(PanelModel.BareNumber("10") && PanelModel.BareNumber("10 139") && PanelModel.BareNumber(" 13 ") && PanelModel.BareNumber("1 576") &&
+              !PanelModel.BareNumber("Misc") && !PanelModel.BareNumber("Tier 2") && !PanelModel.BareNumber("") && !PanelModel.BareNumber(null),
+              "B16 bare number: digits and spaces only are a number, words with a digit are not");
+        Check(PanelModel.ReadableTabName("$jotunn_cat_clay_works") == "Clay works" && PanelModel.ReadableTabName("[jotunn_cat_odin]") == "Odin" &&
+              PanelModel.ReadableTabName("ClayBuildPieces") == "Clay Build Pieces" && PanelModel.ReadableTabName("OdinArchitect_Walls") == "Odin Architect Walls" &&
+              PanelModel.ReadableTabName("Furniture") == "Furniture" && PanelModel.ReadableTabName("Deep North") == "Deep North" &&
+              PanelModel.ReadableTabName("10") == null && PanelModel.ReadableTabName("  ") == null && PanelModel.ReadableTabName(null) == null,
+              "B16 readable name: the token's prefix and marks dropped, CamelCase and underscores made words, a number gives none");
+        Check(PanelModel.PieceCategoryName("10", null, "OdinArchitect") == "Odin Architect" && PanelModel.PieceCategoryName("12", "$jotunn_cat_refined_stone", null) == "Refined stone" &&
+              PanelModel.PieceCategoryName("11", "Clay", "ClayBuildPieces") == "Clay" && PanelModel.PieceCategoryName("BuildingWorkbench", null, null) == "Building" &&
+              PanelModel.PieceCategoryName("Furniture", "Furniture", null) == "Furniture" && PanelModel.PieceCategoryName("13", null, null) == null &&
+              PanelModel.PieceCategoryName("16", "16", "16") == null && PanelModel.TabNameOf("10") == null,
+              "B16 category name: the tab's label, else the enum's name, else the mod's name; a value outside the enum with no name gives none (Other)");
+        var numbered = PanelSample.Full(now);
+        numbered.PieceTab = t => t == "$piece_table" ? "10" : t == "$piece_bed" ? "13 " : t == "$piece_throne" ? PanelModel.PieceCategoryName("11", null, "ClayBuildPieces") : t == "$piece_chair" ? PanelModel.PieceCategoryName("16", null, null) : tab0(t);
+        var numberedView = Show(numbered);
+        var tabChips = Row(numberedView, "tab").Items.Select(c => c.Title).ToList();
+        Check(tabChips.SequenceEqual(new[] { "Misc", "Crafting", "Building", "Stonecutter", "Furniture", "Clay Build Pieces", "Other" }) &&
+              Row(numberedView, "tab").Items.First(c => c.Title == "Other").Value == "23" && Row(numberedView, "tab").Items.First(c => c.Title == "Clay Build Pieces").Value == "1",
+              "B16 building filter: categories outside the enum are a named chip when a name is found, else one Other chip with their summed count (Table 5 + Bed 4 + Chair 14): " + Chips(numberedView, "tab"));
+        var otherOnly = Show(numbered, Chosen(("tab", "Other")));
+        Check(PanelModel.FacetNumberLabels(numberedView).Count == 0 && PanelModel.FacetNumberLabels(otherOnly).Count == 0 && !Parts(numberedView, "tab").Items.Any(p => PanelModel.BareNumber(p.Title)) &&
+              Bar(otherOnly).Items.First(b => b.Kind == "applied").Items.Any(t => t.Title == "Other") && Grid(otherOnly) == "Chair=14,Table=5,Bed=4",
+              "B16 building filter: no chip, token or bar part is only a number; Other chosen lists the unnamed pieces");
+        var allViews = new[] { Show(full), moddedView, numberedView, otherOnly };
+        Check(allViews.All(v => PanelModel.FacetNumberLabels(v).Count == 0) && Row(numberedView, "tab").Items.All(c => !string.IsNullOrWhiteSpace(c.Title) && !c.Title.All(ch => char.IsDigit(ch) || char.IsWhiteSpace(ch))),
+              "B16 building filter: no facet label is purely digits and spaces, on the sample, the modded and the numbered copy");
+        var probe = PanelModel.Facets(new PanelState(), "probe", new List<FacetDef> { new FacetDef { Id = "x", Title = "X", Options = new List<FacetOption> { new FacetOption { Id = "10", Label = "10" }, new FacetOption { Id = "a", Label = "A" } } } },
+                                      new List<FacetItem> { new FacetItem { Key = "k", Weight = 3, Values = { ["x"] = "10" } } }, "built", "character");
+        Check(PanelModel.FacetNumberLabels(new[] { probe.Bar }).Contains("10") && !PanelModel.FacetNumberLabels(new[] { probe.Bar }).Contains("A"),
+              "B16 self-check: a filter bar with a label that is only a number is found (the facet-number line in game)");
         var bare = PanelSample.Full(now); bare.PieceTab = null; bare.PieceMaterial = null;
         var bareView = Show(bare);
         Check(Bar(bareView) == null && PanelModel.Content(bareView).Any(b => b.Kind == "itemgrid") && PanelModel.Content(bareView).Any(b => b.Kind == "section" && b.Title == "Every piece") && !bareView.Keys.Any(k => k.Contains("Filter")),

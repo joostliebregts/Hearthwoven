@@ -299,7 +299,7 @@ namespace Hearthwoven.Panel
             // what goes on the line, measured first (the same label settings as drawn): (marker icon, text, colour, style, tag)
             float Measure(Rich text, float size, FontStyles style, float spacing = 0)
             {
-                var m = RichLabel(col, "featband", text, size, Color.white, style: style);   // measured as drawn: rich text on, so tags take no width m.textWrappingMode = TextWrappingModes.NoWrap; m.characterSpacing = spacing;
+                var m = RichLabel(col, "featband", text, size, Color.white, style: style); m.textWrappingMode = TextWrappingModes.NoWrap; m.characterSpacing = spacing;   // measured as drawn: rich text on, so tags take no width; letter spacing counts (the FEAT tag was cut to "FE..." in 0.6.2)
                 var w = Mathf.Ceil(m.preferredWidth); m.gameObject.SetActive(false); Destroy(m.gameObject); return w;
             }
             var many = feats.Count > 1;
