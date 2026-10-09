@@ -1,5 +1,4 @@
-<!-- SCREENSHOT PLACEHOLDER (banner, not in the public docs/ yet): replace this comment with
-[![Hearthwoven](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png) -->
+[![Hearthwoven](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png)
 
 # Your own way of playing
 
@@ -13,9 +12,8 @@ Hearthwoven is a book of your deeds. See the food you cooked, the things you bui
 
 See your cooking, building and other deeds in one place, under titles such as Hearth Cook, Hallwright and Woodcutter. The overview also shows what you are known for: up to three of your feats. Open a deed to see what went into its total.
 
-<!-- SCREENSHOT PLACEHOLDER (SHOTS.md S1): replace this comment with
 [![Deeds: titles for different playstyles](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s1-deeds-overview.png)
-*Deeds overview. Select any image to open it at full size.* -->
+*Deeds overview. Select any image to open it at full size.*
 
 ## Look closer
 
@@ -28,9 +26,8 @@ See your cooking, building and other deeds in one place, under titles such as He
 
 Select a biome or a time period to see more detail. Time periods run from the last 10 minutes to everything since install.
 
-<!-- SCREENSHOT PLACEHOLDER (SHOTS.md S4): replace this comment with
 [![Battle: damage dealt and received in each biome](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s4-battle.png)
-*Battle overview, since install, by biome.* -->
+*Battle overview, since install, by biome.*
 
 <details>
 <summary>Feats: recognition for your deeds</summary>
@@ -47,9 +44,8 @@ Some feats have several levels, marked bronze, silver and gold. Each level has i
 
 **Earned** shows the feats you have. **Unsung** shows the feats still ahead, and says why each one is not earned yet. **Together** shows Iron for the Forge: the ore and metal the whole group brings home. It needs Hearthwoven 0.6.0 or newer on the server.
 
-<!-- SCREENSHOT PLACEHOLDER (SHOTS.md S2): replace this comment with
-[![Heavy Keel: an earned feat](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)
-*Feats, Earned, with Heavy Keel selected.* -->
+[![Earned feats in the Feats chapter](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s2-feats.png)
+*Feats, Earned: what you've done that's worth telling*
 
 </details>
 
@@ -60,9 +56,8 @@ Some feats have several levels, marked bronze, silver and gold. Each level has i
 
 See how many trees you felled, how many axe hits each tree took and which types of wood you brought in. On the Crafting and Building pages, you can filter by type and material.
 
-<!-- SCREENSHOT PLACEHOLDER (SHOTS.md S3): replace this comment with
 [![Woodcutting: trees felled and wood brought in](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s3-woodcutting.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s3-woodcutting.png)
-*Woodcutting.* -->
+*Woodcutting.*
 
 ### Carry cargo together
 
@@ -72,9 +67,8 @@ Cargo is measured in **item-km**: one item carried one kilometre. The distance i
 
 With Hearthwoven 0.6.0 or newer on the server, Cargo also shows what you loaded into a ship or cart and what you unloaded somewhere else. Chests do not count.
 
-<!-- SCREENSHOT PLACEHOLDER (SHOTS.md S5): replace this comment with
 [![Company: each player's share of the cargo](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s5-together-cargo.png)
-*Sample data. Rowan, Edda, Finch and Tor are fictional players.* -->
+*Sample data. Rowan, Edda, Finch and Tor are fictional players.*
 
 </details>
 
@@ -83,9 +77,8 @@ With Hearthwoven 0.6.0 or newer on the server, Cargo also shows what you loaded 
 
 See who enjoyed your cooking and put your gear to good use. Company > Fireside shows these connections around the hearth. Each count sits on its own thread, from the player who gave to the player who received.
 
-<!-- SCREENSHOT PLACEHOLDER (SHOTS.md S6): replace this comment with
 [![Company: food and gear shared between players](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/s6-fireside.png)
-*Sample data. Rowan, Edda, Finch and Tor are fictional players.* -->
+*Sample data. Rowan, Edda, Finch and Tor are fictional players.*
 
 </details>
 
@@ -285,15 +278,13 @@ For MultiUserChest, Hearthwoven reads that mod's messages to find who moved an i
 
 Each question gets one form, the same on every page. A number shows the total. A bar shows its parts. A strip of biomes shows where. A ladder shows each skill. A connection shows who helped whom. Items, foes and skills carry the game's own icons.
 
-<!-- SCREENSHOT PLACEHOLDER (design-language, not in the public docs/ yet): replace this comment with
 [![Examples of the book's visual forms](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/design-language.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/design-language.png)
-*Design examples, not a game screenshot.* -->
+*Design examples, not a game screenshot.*
 
 </details>
 
-<!-- SCREENSHOT PLACEHOLDER (SHOTS.md G1): replace this comment with
 [![Book walkthrough](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-book.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/g1-book.gif)
-*Sample data. Rowan, Edda, Finch and Tor are fictional players.* -->
+*Sample data. Rowan, Edda, Finch and Tor are fictional players.*
 
 ## Coming later
 
