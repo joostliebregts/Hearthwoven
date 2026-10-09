@@ -330,16 +330,34 @@ Each question gets one form, the same on every page. A number shows the total. A
 
 </details>
 
+<details>
+<summary>Credits and inspiration</summary>
+
+Thank you to these projects. Their ideas and lessons shaped Hearthwoven:
+
+- [CrewStats](https://thunderstore.io/c/valheim/p/Bagr/CrewStats/) and [DamageMeter](https://thunderstore.io/c/valheim/p/Bagr/DamageMeter/) (Bagr): damage per type for the whole crew; per-discipline awards.
+- [DudeWhatAreMyStats](https://thunderstore.io/c/valheim/p/DeathMonger/DudeWhatAreMyStats/) (DeathMonger): read only stat slot 0 (other slots overlap and double-count); scoreboard incl. offline players.
+- [ValheimSagas](https://thunderstore.io/c/valheim/p/Pendulum/ValheimSagas/) (Pendulum): small fragments with spacing instead of bursts that stall multiplayer.
+- [CombatStats](https://thunderstore.io/c/valheim/p/Muindor/CombatStats/) (Muindor): register the RPC on every new session.
+- [GsValheimStatsClient](https://thunderstore.io/c/valheim/p/Proudlock_Technology/GsValheimStatsClient/) (Proudlock Technology): damage is only real on the owner; sum per reporter.
+- [StatCreditFix](https://thunderstore.io/c/valheim/p/Qua8ion/StatCreditFix/) (Qua8ion) and [Almanac](https://thunderstore.io/c/valheim/p/RustyMods/Almanac/) (RustyMods): owner-only counters undercount in co-op.
+- [VikingStoryteller](https://thunderstore.io/c/valheim/p/JacobsValheim/VikingStoryteller/) (JacobsValheim): contribution as a story of the group.
+- [Skald](https://github.com/casmith/skald) (casmith, MIT) and [valheim-save-research](https://github.com/Erhuangjing/valheim-save-research) (Erhuangjing, MIT): reading the 1.0 world save and map from outside the game.
+
+Art: the book's frame, tabs, chapter icons and title emblems are original Hearthwoven art, made with AI. Items, skills and status effects use the game's own icons at runtime; no game art is shipped.
+
+</details>
+
 ## Coming later
 
 A Discord companion that shows what happened on the server while you were away.
 
 ## Feedback
 
-Something odd, a number that looks wrong, or an idea? Tell us on the GitHub issues page (link follows when the repository is public). Screenshots help.
+Something odd, a number that looks wrong, or an idea? Tell us on the [GitHub issues page](https://github.com/joostliebregts/Hearthwoven/issues). Screenshots help.
 
 ## Thanks
 
-Hearthwoven learned from other statistics mods. See the credits in the source repository (link follows when the repository is public).
+Hearthwoven learned from other statistics mods. See **Credits and inspiration** under Reference. The source code is on [GitHub](https://github.com/joostliebregts/Hearthwoven).
 
 AIL-4: idea, design and every decision by me; code, text and art made with AI.
