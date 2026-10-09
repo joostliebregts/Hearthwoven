@@ -33,7 +33,7 @@ Hearthwoven uses three sources. The About page in the book (press T) explains th
 |---|---|---|
 | Your character | The game itself keeps many counters: trees felled, pieces built, crafts, kills, skills. | The day you made your character. Full from the first minute. |
 | Hearthwoven on your PC | What the game does not keep: damage per biome and foe, the cause of each death, exactly what you picked up, whose food you ate. | Each session you play with it. The book shows the current session; the server keeps them all. |
-| The server | Who put what into which chest or cart, and who took it out. | From the moment the server runs it, for every player, also without the mod. You will see it on the companion page (coming later). |
+| The server | Who put what into which chest or cart, and who took it out. | From the moment the server runs it, for every player, also without the mod. |
 
 ## Together on a server
 
@@ -41,7 +41,7 @@ Hearthwoven uses three sources. The About page in the book (press T) explains th
   You see theirs only while you share yours. You can turn sharing off (`ShareWithGroup`). Shared copies leave out
   where you died and which worlds you played.
 - The server keeps every session and a log of every chest and cart, also for friends who do not install the mod.
-  The companion page (coming later) turns that into the story of your evenings.
+  The Discord companion (coming later) turns that into the story of your evenings.
 
 ## Install
 
@@ -62,8 +62,7 @@ it never changes another mod.
 
 ## Coming later
 
-A companion tool that posts a daily picture of your group's evening to Discord, and a page you can open on your
-phone. It will install with one command.
+A Discord companion that shows what happened on the server while you were away.
 
 ## Feedback
 
