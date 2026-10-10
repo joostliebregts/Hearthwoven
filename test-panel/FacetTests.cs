@@ -50,7 +50,7 @@ static class FacetTests
         var bar = Bar(all);
         Check(bar != null && bar.Src == "character" && bar.KeyCap == "K" && bar.Items.Count(b => b.Kind == "facet") == 2 && bar.Items.Count(b => b.Kind == "facetbar") == 2,
               "filter: a filter bar with a Kind row and a Main material row, a bar for each, the filter key as its keycap");
-        Check(Chips(all, "kind") == "Weapons=9,Armour=6,Tools=4,Trinkets=1", "filter: the Kind chips count what was crafted: " + Chips(all, "kind"));
+        Check(Chips(all, "kind") == "Weapons=13,Armor=2,Tools=4,Trinkets=1", "filter: the Kind chips count what was crafted, as the game's counters group it (a shield is a weapon): " + Chips(all, "kind"));
         Check(Chips(all, "material") == "Wood=9,Leather=2,Bronze=7,Iron=2,Silver=0(0),Black metal=0(0)", "filter: the Main material chips, zero chips stay in place, dimmed: " + Chips(all, "material"));
         Check(Row(all, "material").Note == "by main material" && Parts(all, "material").Note == null, "filter: the honest line \"by main material\" stays under the row; the bar's own title says it, so it is not repeated there");
         Check(bar.Text == "9 items · 20 crafted" && bar.Items.First(b => b.Kind == "applied").Title == "No filter: every item" && !bar.Items.First(b => b.Kind == "applied").Items.Any(),
@@ -62,20 +62,20 @@ static class FacetTests
               "filter: the kinds' bar and the materials' bar share no colour (blue never means two things); each material has its own");
 
         // ---------- OR within a row, AND across rows, live counts, the crossfilter bars ----------
-        var armour = Show(rich, Chosen(("kind", "armour")));
-        Check(Chips(armour, "material") == "Wood=4,Leather=2,Bronze=0(0),Iron=0(0),Silver=0(0),Black metal=0(0)", "filter: a chosen kind narrows the material chips' counts: " + Chips(armour, "material"));
-        Check(Chips(armour, "kind") == "Weapons=9,Armour=6,Tools=4,Trinkets=1" && Row(armour, "kind").Items[1].Selected, "filter: the chosen row's own counts stay (you can add another kind), the chosen chip is marked");
-        var both = Show(rich, Chosen(("kind", "armour"), ("material", "Leather")));
-        Check(Grid(both) == "Leather Helmet=2" && Bar(both).Text == "1 item · 2 crafted", "filter: Armour and Leather leave the Leather Helmet: \"1 item · 2 crafted\"");
-        Check(Chips(both, "kind") == "Weapons=0(0),Armour=2,Tools=0(0),Trinkets=0(0)" && Chips(both, "material") == "Wood=4,Leather=2,Bronze=0(0),Iron=0(0),Silver=0(0),Black metal=0(0)",
+        var weapons = Show(rich, Chosen(("kind", "weapons")));
+        Check(Chips(weapons, "material") == "Wood=5,Leather=0(0),Bronze=6,Iron=2,Silver=0(0),Black metal=0(0)", "filter: a chosen kind narrows the material chips' counts: " + Chips(weapons, "material"));
+        Check(Chips(weapons, "kind") == "Weapons=13,Armor=2,Tools=4,Trinkets=1" && Row(weapons, "kind").Items[0].Selected, "filter: the chosen row's own counts stay (you can add another kind), the chosen chip is marked");
+        var both = Show(rich, Chosen(("kind", "weapons"), ("material", "Wood")));
+        Check(Grid(both) == "Wood Shield=4,Crude Bow=1" && Bar(both).Text == "2 items · 5 crafted", "filter: Weapons and Wood leave the Wood Shield and the Crude Bow: \"2 items · 5 crafted\"");
+        Check(Chips(both, "kind") == "Weapons=5,Armor=0(0),Tools=4,Trinkets=0(0)" && Chips(both, "material") == "Wood=5,Leather=0(0),Bronze=6,Iron=2,Silver=0(0),Black metal=0(0)",
               "filter: each row's counts follow the other row: " + Chips(both, "kind") + " | " + Chips(both, "material"));
         var tokens = Bar(both).Items.First(b => b.Kind == "applied").Items;
-        Check(tokens.Select(t => t.Title + "/" + t.Text).SequenceEqual(new[] { "Armour/Kind", "Leather/Main material" }), "filter: the chosen chips are removable tokens, in the order chosen");
+        Check(tokens.Select(t => t.Title + "/" + t.Text).SequenceEqual(new[] { "Weapons/Kind", "Wood/Main material" }), "filter: the chosen chips are removable tokens, in the order chosen");
         var kb = Parts(both, "kind").Items; var mb = Parts(both, "material").Items;
-        Check(kb.Where(p => p.Fraction > 0).Select(p => p.Id).SequenceEqual(new[] { "armour" }) && kb.First(p => p.Id == "armour").Selected && Math.Abs(kb.First(p => p.Id == "armour").Fraction - 1) < 1e-5,
-              "filter: the kind bar is filtered by the material, not by its own choice: armour 100 %, its part outlined");
-        Check(mb.First(p => p.Id == "Leather").Selected && !mb.First(p => p.Id == "Wood").Selected && Math.Abs(mb.First(p => p.Id == "Wood").Fraction - 4f / 6) < 1e-5 && Math.Abs(mb.First(p => p.Id == "Leather").Fraction - 2f / 6) < 1e-5,
-              "filter: the material bar is filtered by the kind only: wood 4 of 6 stays beside the chosen leather 2 of 6");
+        Check(kb.Where(p => p.Fraction > 0).Select(p => p.Id).SequenceEqual(new[] { "weapons", "tools" }) && kb.First(p => p.Id == "weapons").Selected && Math.Abs(kb.First(p => p.Id == "weapons").Fraction - 5f / 9) < 1e-5,
+              "filter: the kind bar is filtered by the material, not by its own choice: weapons 5 of 9 wooden pieces beside the tools, its part outlined");
+        Check(mb.First(p => p.Id == "Wood").Selected && !mb.First(p => p.Id == "Bronze").Selected && Math.Abs(mb.First(p => p.Id == "Bronze").Fraction - 6f / 13) < 1e-5 && Math.Abs(mb.First(p => p.Id == "Wood").Fraction - 5f / 13) < 1e-5,
+              "filter: the material bar is filtered by the kind only: bronze 6 of 13 stays beside the chosen wood 5 of 13");
         var two = Show(rich, Chosen(("material", "Wood"), ("material", "Leather")));
         Check(Grid(two) == "Wood Shield=4,Hammer=2,Leather Helmet=2,Crude Bow=1,Cultivator=1,Hoe=1" && Bar(two).Text == "6 items · 11 crafted", "filter: two chips in one row are OR: Wood or Leather");
         var empty = Show(rich, Chosen(("kind", "weapons"), ("material", "Leather")));
@@ -99,7 +99,7 @@ static class FacetTests
         // ---------- what a page without material data and without item types says ----------
         var bare = DeedsTests.Rich(input); bare.MainMaterial = null; bare.ItemType = null;
         var bareView = Show(bare);
-        Check(Chips(bareView, "kind") == "Weapons=0(0),Armour=0(0),Tools=0(0),Trinkets=0(0)" && Chips(bareView, "material").EndsWith("Other=20") && Grid(bareView).StartsWith("Bronze Axe=6"),
+        Check(Chips(bareView, "kind") == "Weapons=0(0),Armor=0(0),Tools=0(0),Trinkets=0(0)" && Chips(bareView, "material").EndsWith("Other=20") && Grid(bareView).StartsWith("Bronze Axe=6"),
               "filter: without item types or recipes (a fellow's copy) every item is Other, the grid still lists all of it: " + Chips(bareView, "material"));
         var modded = DeedsTests.Rich(input); modded.MainMaterial = t => t == "$item_axe_bronze" ? "Mithril" : t == "$item_hoe" ? "Carapace" : "Wood";
         var moddedView = Show(modded);
@@ -107,8 +107,7 @@ static class FacetTests
               "filter: a later biome's material and a mod's own join the row after the known ones (only when something was crafted from it)");
 
         // ---------- where it sits ----------
-        var z = Zoned.ZoneOf(all, Bar(all));
-        Check(z != null && z.Id == "character" && !Zoned.Says(all, Bar(all)) && !Bar(all).SinceInstall, "filter: the bar sits in your character's zone with the gear it filters, no \"since install\" on it");
+        Check(!Zoned.Says(all, Bar(all)), "filter: the bar sits on the plate with the gear it filters, no \"since install\" on it (0.7 rule B: Crafting has no zones)");
         Check(PanelModel.ToJson(all).Contains("filterbar") && PanelModel.ToJson(all).Contains("keyCap"), "filter: the preview bridge gets the bar and its keycap");
         Check(all.Keys.Any(k => k == "[K] Filter") && !PanelModel.Build(rich, new PanelState { Chapter = Chapter.Skills }).Keys.Any(k => k.Contains("Filter")), "filter: the footer says [K] Filter on this page only");
         var noKey = new PanelState { FilterKey = "" };
@@ -166,7 +165,9 @@ static class FacetTests
         var cs = new PanelState(); var cv = Show(rich, cs); var cb = Bar(cv);
         Check(!cb.Open && cb.Items.Count(b => b.Kind == "facet") == 2 && cb.Items.First(b => b.Kind == "applied").Value == "all" && cb.Text == "9 items · 20 crafted",
               "collapse: the bar starts collapsed: the header says all and the result line, the rows stay in the data for the keys");
-        Check(cb.Items.Where(b => b.Kind == "facetbar").All(b => b.Tone == null), "collapse: the two slim bars fit above the fold on this page, so they stay while collapsed");
+        var cbars = cb.Items.Where(b => b.Kind == "facetbar").ToList();
+        Check(cbars.Count == 2 && cbars[0].Tone == null && cbars[0].Items.Count > 0 && cbars.Skip(1).All(b => b.Tone == "hidden"),
+              "collapse: the first bar with its list (the page's overview) shows while collapsed; the second waits for the open filter");
         var tallBar = PanelModel.Facets(new PanelState(), "x/y", defs, items, "placed", "character", "piece", "pieces", "Every piece", above: 420);
         var tallOpen = new PanelState(); PanelModel.ToggleFilterOpen(tallOpen, "x/y");
         Check(tallBar.Bar.Items.Where(b => b.Kind == "facetbar").All(b => b.Tone == "hidden") && tallBar.Bar.Items.Where(b => b.Kind == "facetbar").All(b => b.Items.Count > 0) &&
@@ -191,7 +192,7 @@ static class FacetTests
         var chosenCollapsed = Show(rich, Chosen(("kind", "armour"), ("material", "Leather")));
         Check(!Bar(chosenCollapsed).Open && Bar(chosenCollapsed).Items.First(b => b.Kind == "applied").Items.Count == 2 && Bar(chosenCollapsed).Text == "1 item · 2 crafted" && Grid(chosenCollapsed) == "Leather Helmet=2",
               "collapse: a collapsed bar keeps its choices: the tokens and the result line stay on the header, the list stays filtered");
-        Check(Parts(cv, "kind").Items.Select(p => p.Title).SequenceEqual(new[] { "Weapons", "Armour", "Tools", "Trinkets" }) && Parts(cv, "kind").Title == "By kind",
+        Check(Parts(cv, "kind").Items.Select(p => p.Title).SequenceEqual(new[] { "Weapons", "Tools", "Armor", "Trinkets" }) && Parts(cv, "kind").Title == "By kind",
               "collapse: a legend entry is the colour's name; the counts are on the chips");
         Check(PanelModel.ToJson(Show(rich, new PanelState())).Contains("\"open\"") && Bar(Show(rich, new PanelState { OpenFilters = { PanelModel.CraftFilter } })).Open, "collapse: the preview bridge gets the open flag");
 

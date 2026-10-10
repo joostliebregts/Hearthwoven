@@ -92,6 +92,10 @@ static class HistoryTests
         var year = new LocalTotals { PlayerId = Id, Name = "Rowan" };
         var day0 = new DateTime(2026, 1, 5, 20, 0, 0);
         string[] pool = Enumerable.Range(0, 400).Select(k => "token" + k).ToArray();
+        // 0.7: a big builder's per-token game counters (pieces placed, plants and fish picked): 300 piece kinds and 80 picked kinds,
+        // modded names, some of them growing every evening; the rows keep their growth and the mark holds every kind
+        string[] pieces = Enumerable.Range(0, 300).Select(k => "$piece_modded_building_piece_" + k).ToArray(), picks = Enumerable.Range(0, 80).Select(k => "Modded_Pickable_Plant_" + k).ToArray();
+        var placedNow = new Dictionary<string, float>(); var pickedNow = new Dictionary<string, float>();
         var session = 0;
         for (var d = day0; d < day0.AddDays(365); d = d.AddDays(1))
         {
@@ -108,7 +112,12 @@ static class HistoryTests
                 else if (bucket == 4) SessionEvents.Add(ev.ChopHits, k, rng.Next(1, 200));
                 else SessionEvents.Add(ev.SkillPractice, k, rng.Next(1, 200) + 0.37f);
             }
-            year.Record("Y" + (session++), dmg, ev, null, new Dictionary<string, float> { ["DistanceSail"] = session * 4000f, ["EnemyKills"] = session * 30f }, d);
+            foreach (var k in pieces.OrderBy(_ => rng.Next()).Take(rng.Next(20, 60))) SessionEvents.Add(placedNow, k, rng.Next(1, 80));
+            foreach (var k in picks.OrderBy(_ => rng.Next()).Take(rng.Next(10, 30))) SessionEvents.Add(pickedNow, k, rng.Next(1, 100));
+            var gameNow = new Dictionary<string, float> { ["DistanceSail"] = session * 4000f, ["EnemyKills"] = session * 30f, ["CreatureTamed"] = session };
+            foreach (var kv in placedNow) gameNow[DayHistory.PlacedPrefix + kv.Key] = kv.Value;
+            foreach (var kv in pickedNow) gameNow[DayHistory.PickedPrefix + kv.Key] = kv.Value;
+            year.Record("Y" + (session++), dmg, ev, null, gameNow, d);
         }
         var clock = Stopwatch.StartNew();
         var yearJson = year.ToJson(day0.AddDays(365));
@@ -116,7 +125,10 @@ static class HistoryTests
         var yearBack = LocalTotals.FromJson(yearJson);
         var read = clock.Elapsed.TotalMilliseconds;
         var historyBytes = yearJson.Length - new LocalTotals { PlayerId = Id, Name = "Rowan", PreviousEvents = year.PreviousEvents, PreviousDamage = year.PreviousDamage, LastEvents = year.LastEvents, LastDamage = year.LastDamage, Sessions = year.Sessions, LastSession = year.LastSession }.ToJson(day0).Length;
-        System.Console.WriteLine($"INFO size: a heavy year (156 evenings, 150-220 kinds each): history {historyBytes / 1024} KB in a {yearJson.Length / 1024} KB file, {year.History.Rows.Count} rows; write {write:0.0} ms, read {read:0.0} ms");
+        var markKeys = year.History.GameMark.Count; var familyKeys = year.History.Rows.Sum(r => r.Game.Keys.Count(k => k.Contains("|")));
+        System.Console.WriteLine($"INFO size: a heavy year (156 evenings, 150-220 kinds each; 0.7: 300 piece kinds and 80 picked kinds): history {historyBytes / 1024} KB in a {yearJson.Length / 1024} KB file, {year.History.Rows.Count} rows, {familyKeys} per-token keys in the rows, {markKeys} keys in the mark, {year.History.Rows.Count(r => r.IsDay && r.Clipped)} of {year.History.Rows.Count(r => r.IsDay)} day rows clipped; write {write:0.0} ms, read {read:0.0} ms");
+        Check(year.History.GameMark.Keys.Count(k => k.StartsWith(DayHistory.PlacedPrefix) && k.Length > DayHistory.PlacedPrefix.Length) == 300 && familyKeys > 0,
+              "H size: the heavy year's mark holds every piece kind and its rows the per-token growth (the size below includes both)");
         Check(historyBytes < 250 * 1024 && year.History.Rows.Count <= 88, "H size: a heavy year of play keeps the history under 250 KB (" + historyBytes / 1024 + " KB)");
         Check(yearBack != null && yearBack.History.Rows.Count == year.History.Rows.Count && yearBack.History.Rows.Zip(year.History.Rows, (a, b) => a.Period == b.Period && Math.Abs(Chops(a.Events) - Chops(b.Events)) < 0.01 && a.Damage.HitsDealt == b.Damage.HitsDealt).All(x => x),
               "H size: the year's history reads back row for row");
@@ -130,8 +142,13 @@ static class HistoryTests
             for (int k = 0; k < DayHistory.CapOf(period); k++) r.Damage.Dealt["Some Modded Creature Name " + k + "|BloodMagic|lightning"] = 123456.7f + k;
             worst.Rows.Add(r);
         }
+        // 0.7: and the mark of a big builder with modded names: 300 piece kinds and 80 picked kinds, beside the counters
+        foreach (var k in pieces) worst.GameMark[DayHistory.PlacedPrefix + k + "_with_a_long_modded_suffix"] = 123456.7f;
+        foreach (var k in picks) worst.GameMark[DayHistory.PickedPrefix + k + "_with_a_long_modded_suffix"] = 123456.7f;
+        foreach (var st in DayHistory.GameStats) worst.GameMark[st] = 1234567.8f;
         var wj = new Json().Open(); worst.WriteTo(wj); var worstBytes = wj.Close().ToString().Length;
-        System.Console.WriteLine($"INFO size: the worst case (86 full rows of long keys: 250 a day, 120 a week, 80 a month): {worstBytes / 1024} KB");
+        var mj = new Json().Open().Dict("mark", worst.GameMark).Close().ToString().Length;
+        System.Console.WriteLine($"INFO size: the worst case (86 full rows of long keys: 250 a day, 120 a week, 80 a month; a mark of {worst.GameMark.Count} keys, {mj / 1024} KB): {worstBytes / 1024} KB");
         Check(worstBytes < 1024 * 1024, "H size: the worst case (every row full, long modded names) stays under 1 MB (" + worstBytes / 1024 + " KB)");
         var shared = year.History.DealtByDay(day0.AddDays(364));
         var sharedJson = new Json().Open().Dict("dealtByDay", shared).Close().ToString();
@@ -171,12 +188,52 @@ static class HistoryTests
             var zj = new Json().Open(); zero.WriteTo(zj); var zBack = DayHistory.ReadFrom(MiniJson.Parse(zj.Close().ToString()) is Dictionary<string, object> zr ? MiniJson.Obj(zr, "history") : null);
             Check(zBack.GameMark.Count > 0 && zBack.GameGrowth(new Dictionary<string, float> { ["DistanceSail"] = 50 }, false)["DistanceSail"] == 50,
                   "H file: a mark of zeros is still a mark after a reload (a new character's first 50 m are booked, not lost)");
+            // 0.7: a counter a later version keeps (CreatureTamed) or a per-token family (pieces placed) on a history that already runs: its first save books
+            // nothing (never a lifetime count on one day) and says from which day it is kept; a token new to a kept family stood at 0; it all reads back
+            var older = new DayHistory(); older.Add(Day1, null, null, null, new Dictionary<string, float> { ["DistanceSail"] = 100 });
+            older.GameMark.Remove(DayHistory.PlacedPrefix); older.GameMark.Remove(DayHistory.PickedPrefix);   // as a 0.6 mark: no families
+            var day2 = Day1.AddDays(1);
+            older.Add(day2, null, null, null, new Dictionary<string, float> { ["DistanceSail"] = 150, ["CreatureTamed"] = 12, [DayHistory.PlacedPrefix + "$piece_woodwall"] = 900 });
+            var b2 = older.Rows.Last();
+            older.Add(day2.AddMinutes(5), null, null, null, new Dictionary<string, float> { ["DistanceSail"] = 150, ["CreatureTamed"] = 13, [DayHistory.PlacedPrefix + "$piece_woodwall"] = 904, [DayHistory.PlacedPrefix + "$piece_stonewall"] = 2 });
+            var oj = new Json().Open(); older.WriteTo(oj); var oBack = DayHistory.ReadFrom(MiniJson.Parse(oj.Close().ToString()) is Dictionary<string, object> or ? MiniJson.Obj(or, "history") : null);
+            Check(Get(b2.Game, "DistanceSail") == 50 && Get(b2.Game, "CreatureTamed") == 1 && Get(b2.Game, DayHistory.PlacedPrefix + "$piece_woodwall") == 4 && Get(b2.Game, DayHistory.PlacedPrefix + "$piece_stonewall") == 2 &&
+                  older.KeptFrom("CreatureTamed", day2) == day2.Date && older.KeptFrom(DayHistory.PlacedPrefix, day2) == day2.Date && older.KeptFrom("DistanceSail", day2) == Day1.Date &&
+                  oBack.KeptFrom(DayHistory.PlacedPrefix, day2) == day2.Date && oBack.GameMark.ContainsKey(DayHistory.PlacedPrefix),
+                  "H record: a counter kept from a later version books nothing on its first save (not 12 tamed, not 900 walls on one day), then its growth; a new piece kind from 0; from when it is kept reads back");
             var messy = "{\"from\":\"2026-10-09\",\"rows\":[{\"p\":\"2026-10-10\",\"ev\":{\"chopHits\":{\"Beech1\":2}}},{\"p\":\"2026-10-09\",\"ev\":{\"chopHits\":{\"Beech1\":9}}},{\"p\":\"nonsense\"},{\"p\":\"2026-10-11\",\"ev\":{\"chopHits\":{\"Beech1\":1}}}]}";
             var m = DayHistory.ReadFrom(MiniJson.Parse(messy) as Dictionary<string, object>);
             Check(m.Rows.Select(r => r.Period).SequenceEqual(new[] { "2026-10-10", "2026-10-11" }), "H file: a row out of order or with an unreadable period is not trusted; the rest stays");
             Check(DayHistory.ReadFrom(null).Rows.Count == 0 && DayHistory.ReadFrom(new Dictionary<string, object> { ["rows"] = "x" }).Rows.Count == 0, "H file: a missing or odd history reads as empty, never an error");
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
+
+        // ---------- REVIEW-07 #4: 0.7 -> 0.6.5 -> 0.7 keeps the 0.7-only day counters honest ----------
+        {
+            var g1 = new Dictionary<string, float> { ["DistanceSail"] = 100, [DayHistory.PlacedPrefix + "$piece_woodwall"] = 10, ["CreatureTamed"] = 2 };
+            var v7 = new LocalTotals { PlayerId = Id, Name = "Rowan" };
+            v7.Record("S1", null, Ev(1), null, g1, Day1);
+            v7.Record("S1", null, Ev(1), null, new Dictionary<string, float>(g1) { [DayHistory.PlacedPrefix + "$piece_woodwall"] = 12 }, Day1.AddMinutes(30));
+            v7.LastEvents.ChestFed["charcoal_kiln|$item_wood"] = 40; v7.Feats.SeenGroup = 3;
+            var json7 = v7.ToJson(Day1.ToUniversalTime());
+            // what 0.6.5 writes back a day later: it drops "began" inside history, "chestFed" inside measured and "seenGroup" inside feats, keeps
+            // the 0.7-only marks frozen (it never moves them) and the unknown top-level keys as they were
+            var root = (Dictionary<string, object>)MiniJson.Parse(json7);
+            ((Dictionary<string, object>)root["history"]).Remove("began");
+            ((Dictionary<string, object>)((Dictionary<string, object>)((Dictionary<string, object>)root["totals"])["lastSession"])["measured"]).Remove("chestFed");
+            if (root.TryGetValue("feats", out var fo) && fo is Dictionary<string, object> fd) fd.Remove("seenGroup");
+            root["saved"] = Day1.AddDays(1).ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture);
+            var back7 = LocalTotals.FromJson(MiniJson.Write(root));
+            var day4 = Day1.AddDays(3);   // 300 walls built in the 0.6.5 days; 0.7 again
+            back7.Record("S3", null, Ev(1), null, new Dictionary<string, float>(g1) { [DayHistory.PlacedPrefix + "$piece_woodwall"] = 312, ["CreatureTamed"] = 5 }, day4);
+            var row4 = back7.History.Rows.Last();
+            Check(Get(row4.Game, DayHistory.PlacedPrefix + "$piece_woodwall") == 0 && Get(row4.Game, "CreatureTamed") == 0 &&
+                  back7.History.KeptFrom(DayHistory.PlacedPrefix, day4) == day4.Date && back7.History.KeptFrom("CreatureTamed", day4) == day4.Date &&
+                  (back7.LastEvents.ChestFed.TryGetValue("charcoal_kiln|$item_wood", out var cf) ? cf : back7.PreviousEvents.ChestFed.TryGetValue("charcoal_kiln|$item_wood", out var pf) ? pf : 0) == 40 && back7.Feats.SeenGroup == 3,
+                  "H downgrade: after a 0.6.5 save in between, the walls and tames of the 0.6.5 days do not land on one 0.7 day, the windows count them from that day, and Stoker feeding and seen group tiers come back" +
+                  " [walls " + Get(row4.Game, DayHistory.PlacedPrefix + "$piece_woodwall") + " tamed " + Get(row4.Game, "CreatureTamed") + " kept " + back7.History.KeptFrom(DayHistory.PlacedPrefix, day4).ToString("MM-dd") + "/" + back7.History.KeptFrom("CreatureTamed", day4).ToString("MM-dd") +
+                  " chest " + (back7.LastEvents.ChestFed.Count + back7.PreviousEvents.ChestFed.Count) + " seen " + back7.Feats.SeenGroup + "]");
+        }
 
         // ---------- shared per day ----------
         var sh = new DayHistory();

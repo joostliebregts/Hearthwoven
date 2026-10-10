@@ -18,7 +18,7 @@ namespace Hearthwoven.Panel
         public const string CargoLine = "at the helm or pulling a cart · straight line, so the real figure is higher";
         /// <summary>fix4-rest: the one line under the Cargo carried bar says first what the unit is in plain words, then the honest line ("item-km: 1 item carried 1 km · at the helm ...").</summary>
         public static string CargoNote(double total) => CargoUnit(total) + ": " + CargoUnitWords(total) + " · " + CargoLine;
-        public const string ItemMetresUnit = "item-metres", ItemKmUnit = "item-km";
+        public const string ItemMetresUnit = "item-meters", ItemKmUnit = "item-km";
 
         // ---------- cargo ----------
 
@@ -122,11 +122,20 @@ namespace Hearthwoven.Panel
             var averages = loads != null;
             if (keel != null) { if (loads == null) loads = new Block { Kind = "itemgrid", Src = SrcPc, Source = TagMeasured, Items = new List<Block>() }; loads.Items.Add(keel); }
             var hero = Hero((CargoNumber(total, total), CargoUnit(total), SrcPc, null));
-            if (hero != null) hero.Tone = Compact;   // one modest line: the cargo sits above the fold (fix2-rest), the page's hero is the km sailed
+            // 0.7 rule C6: the cargo counter group's own start (LocalTotals.StartCargo), on every block this PC counted
+            DateCargo(input, hero); DateCargo(input, bar); DateCargo(input, loads);
             if (bar != null) bar.Tone = Thin;
             Columns(view,
                 Stretch(v => { Add(v, hero); if (bar != null) { bar.Title = null; bar.Value = null; v.Blocks.Add(bar); } v.Blocks.Add(new Block { Kind = "note", Text = CargoNote(total) }); }),   // the unit and the honest line under the bar they qualify: above the fold with it
                 Stretch(v => { if (loads != null) { if (averages) v.Blocks.Add(Section(AverageLoad)); v.Blocks.Add(loads); } }));
+        }
+
+        /// <summary>Rule C6 (0.7): every block this PC counted in a cargo group carries the cargo group's own start, so its label says "from 8 October".</summary>
+        static void DateCargo(PanelInput input, Block b)
+        {
+            if (b == null) return;
+            if (b.Src == SrcPc) b.From = StartOf(input, LocalTotals.StartCargo);
+            foreach (var i in b.Items ?? new List<Block>()) DateCargo(input, i);
         }
 
         // ---------- cargo loaded and unloaded (the server's book) ----------
@@ -142,9 +151,9 @@ namespace Hearthwoven.Panel
         /// travelled and whoever steered, Cargo carried only while this player held the helm or pulled the cart.</summary>
         public static string ServerVersusCarried(PanelInput input) =>
             "It counts wherever the cargo went and whoever steered, so it can be more than Cargo carried, which counts only while " + (input.IsSelf ? "you" : Name(input)) + " steered or pulled.";
-        /// <summary>The scope of the server's cargo book (fix4-rest): the server counts for itself, from the first cargo it saw ("counted by the server since 8 Oct").</summary>
+        /// <summary>The label of the server's cargo book (rule S, 0.7): the server counts for itself, from the first cargo it saw: "Recorded by the server from 8 October".</summary>
         public static string ServerScope(PanelInput input, ServerBook.Shared book) =>
-            "counted by the server" + (book != null && book.CargoFrom.HasValue ? " since " + ZoneDate(Local(input, book.CargoFrom.Value), Local(input, input.NowUtc)) : "");
+            "Recorded by the server" + (book != null && book.CargoFrom.HasValue ? " from " + RecordDate(input, book.CargoFrom.Value) : "");
 
         /// <summary>One table of the server's book as a thin bar by item, in the unit of <paramref name="scale"/>; null when empty.</summary>
         static Block ServerItemBar(PanelInput input, string title, Dictionary<string, double> items, double scale)
@@ -166,8 +175,8 @@ namespace Hearthwoven.Panel
         /// <summary>
         /// Voyages > Cargo, after Cargo carried (0.6, the server's book; FEASIBILITY-06 option A): what you loaded into a ship or cart
         /// that someone took out elsewhere (loaded) and what you took out that someone loaded elsewhere (unloaded), item-km per item,
-        /// never summed. fix4-rest: its own zone (Id "server") whose heading says who counted and since when; outside your character's and this PC's
-        /// zones, since the server counted it. Nothing when the server has nothing for you (no ghosts).
+        /// never summed. fix4-rest: its own part, whose heading says who counted and since when; the server counted it, apart from your character's
+        /// and this PC's numbers. Nothing when the server has nothing for you (no ghosts). 0.7: a section with the server's label, no zone.
         /// </summary>
         static void ServerCargoGroup(PanelView view, PanelInput input)
         {
@@ -179,7 +188,7 @@ namespace Hearthwoven.Panel
             Block Side(double total, string word)
             {
                 if (total <= 0) return null;
-                var h = Hero((CargoNumber(total, scale), CargoUnit(scale) + " " + word, SrcServer, null)); if (h != null) h.Tone = Compact;
+                var h = Hero((CargoNumber(total, scale), CargoUnit(scale) + " " + word, SrcServer, null));
                 return h;
             }
             var inside = new PanelView();
@@ -187,7 +196,8 @@ namespace Hearthwoven.Panel
                             Stretch(v => { Add(v, Side(delivered, "unloaded")); var bar = ServerItemBar(input, null, book.Delivered, scale); if (bar != null) { bar.Value = null; Add(v, bar); } }));
             inside.Blocks.Add(new Block { Kind = "note", Text = ServerCargoLine(input) });
             if (CargoItemMetres(input) > 0) inside.Blocks.Add(new Block { Kind = "note", Text = ServerVersusCarried(input) });   // why loaded can be more than carried
-            view.Blocks.Add(new Block { Kind = "zone", Id = SrcServer, Title = ServerCargoTitle, Text = ServerScope(input, book), Items = inside.Blocks });
+            view.Blocks.Add(new Block { Kind = "section", Title = ServerCargoTitle, RecordedFrom = ServerScope(input, book) });   // 0.7 rule S: the server's own label, no zone
+            view.Blocks.AddRange(inside.Blocks);
         }
 
         /// <summary>
@@ -206,12 +216,12 @@ namespace Hearthwoven.Panel
             var noDaysLine = day && serverBook;
             if (view.Blocks.Count == 0)
             {
-                var none = day ? DayEmpty(input, w) : SinceInstallEmpty(input, "cargo", "what you carry in ships and carts shows up");
+                var none = day ? DayEmpty(input, w) : NothingHere(input, StartOf(input, LocalTotals.StartCargo));   // rule C6.3
                 if (noDaysLine) { none.Text = NoDaysServerBook; noDaysLine = false; }
                 view.Blocks.Add(none);
             }
             if (noDaysLine) view.Blocks.Add(new Block { Kind = "note", Text = NoDaysServerBook });
-            Plate(view, "vocab:cargo-mark", FellowScope(input));
+            Plate(view, "vocab:cargo-mark", RecordedScope(input));
         }
 
         // ---------- born near (the server's book) ----------
@@ -227,7 +237,10 @@ namespace Hearthwoven.Panel
         {
             var born = (input.Book?.BornNear ?? new Dictionary<string, double>()).Where(kv => kv.Value > 0).ToDictionary(kv => kv.Key, kv => kv.Value);
             if (born.Count == 0) return;
-            view.Blocks.Add(new Block { Kind = "section", Title = input.IsSelf ? BornNearTitle : "Born near " + Name(input), Icon = "vocab:young-creature", Value = N(born.Values.Sum()), Src = SrcServer, Source = TagServer });
+            // 0.7 rule S: the server's book is labelled by its own start (BornFrom), "Recorded by the server from 8 October"; no date: "Recorded by the server"
+            var since = input.Book?.BornFrom;
+            view.Blocks.Add(new Block { Kind = "section", Title = input.IsSelf ? BornNearTitle : "Born near " + Name(input), Icon = "vocab:young-creature", Value = N(born.Values.Sum()), Src = SrcServer, Source = TagServer,
+                                        RecordedFrom = since.HasValue ? "Recorded by the server from " + RecordDate(input, since.Value) : "Recorded by the server" });
             view.Blocks.Add(BornStrip(input, born, SrcServer));   // fix4: one strip, not a grid of tiles: the page's since-install block fits the plate with both groups whole
             view.Blocks.Add(new Block { Kind = "note", Text = BornNearLine(input) });
         }
@@ -259,8 +272,12 @@ namespace Hearthwoven.Panel
             var born = (input.Events?.BornInCare ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0).ToDictionary(kv => kv.Key, kv => (double)kv.Value);
             if (born.Count == 0) return;
             var title = input.IsSelf ? BornTitle : "Born in " + Name(input) + "'s care";
-            view.Blocks.Add(new Block { Kind = "section", Title = title, Icon = "vocab:young-creature", Value = N(born.Values.Sum()), Src = SrcPc, Source = TagMeasured });
-            view.Blocks.Add(BornStrip(input, born, SrcPc));
+            // 0.7 rule C6: the group's own start (StartBorn); every number in the strip carries it, so the label says that date
+            var from = StartOf(input, LocalTotals.StartBorn);
+            view.Blocks.Add(new Block { Kind = "section", Title = title, Icon = "vocab:young-creature", Value = N(born.Values.Sum()), Src = SrcPc, Source = TagMeasured, From = from });
+            var strip = BornStrip(input, born, SrcPc);
+            if (strip != null) { strip.From = from; foreach (var item in strip.Items) item.From = from; }
+            view.Blocks.Add(strip);
             view.Blocks.Add(new Block { Kind = "note", Text = BornLine(input) });
         }
 

@@ -82,7 +82,7 @@ namespace Hearthwoven.Panel
         static Block BiomeFilterBar(PanelState state, string filter, Block strip, List<DamageRow> rows, List<EventLog.Death> deaths)
         {
             var tiles = (strip?.Items ?? new List<Block>()).Where(t => t.Kind == "biome").ToList();
-            // a strip without a single number (a first evening) is left out of the page (ZonesModel), and so is its filter
+            // a strip without a single number (a first evening) is left out of the page, and so is its filter
             if (tiles.Count == 0 || !tiles.Any(t => (t.Value ?? "").Any(char.IsDigit) || (t.Value2 ?? "").Any(char.IsDigit) || t.Count > 0)) return null;
             var defs = new List<FacetDef> { new FacetDef { Id = "biome", Title = "Biome", Bar = false, Options = tiles.Select(t => new FacetOption { Id = t.Id, Label = t.Title, Colour = t.Colour }).ToList() } };
             var items = tiles.Select(t =>
@@ -115,7 +115,7 @@ namespace Hearthwoven.Panel
 
         public const string BattleDeathsFilter = "Battle/deaths";
         /// <summary>Damage since install keeps no biome on its rows (the weapon is not folded per biome): the Biome line says so instead of a dim, dead control.</summary>
-        public const string DamageAllBiomeNote = "Not kept per biome since install · choose a time window to narrow by biome";
+        public const string DamageAllBiomeNote = "Not kept per biome on All · choose a time window to narrow by biome";
 
         /// <summary>The Biome row both pages share: every biome the character found, in journey order with the Ocean last (the strip's order and colours).</summary>
         static FacetDef BiomeRow(PanelInput input)

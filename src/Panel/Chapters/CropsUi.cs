@@ -34,7 +34,7 @@ namespace Hearthwoven.Panel
                 var tile = Kit(grid, i.Title, "meter-track").rectTransform;
                 var p = Pic(tile, i.Icon, CropPic); p.anchorMin = p.anchorMax = p.pivot = new Vector2(0, 0.5f); p.anchoredPosition = new Vector2(8, 0);
                 float x = 8 + CropPic + 8, bw = w - x - 8 - PairLabelW - 6;
-                OneLine(Label(tile, i.Title, 13, PanelLook.Muted)).rectTransform.Box(x, 5, w - x - 6, 18);
+                OneLine(Label(tile, i.Title, 14, PanelLook.Muted)).rectTransform.Box(x, 5, w - x - 6, 18);
                 var pairs = i.Items ?? new List<Block>();
                 for (int k = 0; k < pairs.Count && k < 2; k++)
                 {
@@ -45,7 +45,7 @@ namespace Hearthwoven.Panel
                     if (full > 0 && fade > 0) Img(tile, "Faded", null, new Color(colour.r, colour.g, colour.b, FadedAlpha)).rectTransform.Box(x, top + 5, Mathf.Max(1, full * fade), PairH);
                     if (full > 0 && fade < 1) Img(tile, "Fill", null, colour).rectTransform.Box(x + full * fade, top + 5, Mathf.Max(2, full * (1 - fade)), PairH);
                     // the number and its word beside the bar ("72 planted"); formatted numbers and fixed words only, so rich text is safe
-                    var t = RichLabel(tile, "cropgrid", Rich.Plain(pair.Value).Bold() + " " + Rich.Plain(pair.Title).Ink(faint), 12, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+                    var t = RichLabel(tile, "cropgrid", Rich.Plain(pair.Value).Bold() + " " + Rich.Plain(pair.Title).Ink(faint), 14, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
                     t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Box(x + bw + 6, top, PairLabelW, 16);
                 }
             }
@@ -55,12 +55,12 @@ namespace Hearthwoven.Panel
                 var row = Kit(col, i.Title, "meter-track"); Size(row, -1, 40);
                 var r = row.rectTransform;
                 var sp = Pic(r, i.Icon, 26); sp.anchorMin = sp.anchorMax = sp.pivot = new Vector2(0, 0.5f); sp.anchoredPosition = new Vector2(8, 0);
-                OneLine(Label(r, i.Title, 13, PanelLook.Muted)).rectTransform.Box(44, 11, 150, 18);
+                OneLine(Label(r, i.Title, 14, PanelLook.Muted)).rectTransform.Box(44, 11, 150, 18);
                 var x = 206f;
                 foreach (var pair in i.Items ?? new List<Block>())
                 {
                     Img(r, "Swatch", null, Hex(pair.Colour, PanelLook.Accent)).rectTransform.Box(x, 17, 18, PairH);
-                    var t = RichLabel(r, "cropgrid", Rich.Plain(pair.Value).Bold() + " " + Rich.Plain(pair.Title).Ink(faint), 12, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+                    var t = RichLabel(r, "cropgrid", Rich.Plain(pair.Value).Bold() + " " + Rich.Plain(pair.Title).Ink(faint), 14, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
                     t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Box(x + 24, 11, PairLabelW, 18);
                     x += 24 + PairLabelW + 8;
                 }
@@ -70,14 +70,14 @@ namespace Hearthwoven.Panel
             void Swatch(string hex, string word)
             {
                 Size(Img(key, "Swatch", null, Hex(hex, PanelLook.Accent)), 18, PairH);
-                Label(key, word, 13, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+                Label(key, word, 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
                 Size(Node("Gap", key), 6, 1);
             }
             Swatch(PanelModel.PlantedColour, PanelModel.PlantedWord);
             Swatch(PanelModel.PickedColour, PanelModel.PickedWord);
-            if (!string.IsNullOrEmpty(b.Text)) Label(key, b.Text, 13, PanelLook.Faint, style: FontStyles.Italic).textWrappingMode = TextWrappingModes.NoWrap;
+            if (!string.IsNullOrEmpty(b.Text)) Label(key, b.Text, 14, PanelLook.Faint, style: FontStyles.Italic).textWrappingMode = TextWrappingModes.NoWrap;
             if (b.Note == PanelModel.FadedKey) { Size(Node("Gap", key), 6, 1); FadedChip(key); }
-            if (b.SinceInstall) Since(col, 13);
+            if (Labelled(b)) Since(col, 14, b);
         }
     }
 }

@@ -32,11 +32,33 @@ namespace Hearthwoven
         public readonly Dictionary<string, float> CargoStretch = new Dictionary<string, float>();   // item token -> metres travelled with some of it aboard (item-metres / this = the average amount aboard)
         public readonly Dictionary<string, float> LedMeters = new Dictionary<string, float>();      // creature prefab ("Wolf") -> metres tamed animals of that kind walked (or sailed) following you while your PC hosted them (LedTracker)
         public readonly Dictionary<string, float> BornInCare = new Dictionary<string, float>();     // creature prefab ("Boar_piggy") -> tamed animals born or hatched within 40 m of you while your PC hosted them
+        /// <summary>"station|item" (item "fuel" for fuel, as SmelterAdded) -> what a Stoker's Chest (the OverDrive-SmelterUpgrades mod) put in while
+        /// this PC hosted the chest (StokerHooks). Nobody's own work: never part of SmelterAdded, a title or a player's feat.</summary>
+        public readonly Dictionary<string, float> ChestFed = new Dictionary<string, float>();
+        /// <summary>Feasts (0.8, B22): the game names a placed feast's PLACER as its creator and forgets the feast item's crafter once it is
+        /// placed. "creatorId|feast|feast id" -> servings you ate from that one feast (its ZDO id, the same on every PC), beside AteFromFeastOf's
+        /// total, so the feast's maker can be looked up in its placer's SetOutFeastMadeBy (ClientHooks.FeastEat).</summary>
+        public readonly Dictionary<string, float> AteFromFeastAt = new Dictionary<string, float>();
+        /// <summary>"crafter|feast|feast id" -> 1: a feast you set out and who crafted it, read from the feast item the game takes from your bag
+        /// (ClientHooks.SetOutFeast). Read only: nothing is written to the world; the record travels in your shared copy.</summary>
+        public readonly Dictionary<string, float> SetOutFeastMadeBy = new Dictionary<string, float>();
+        /// <summary>Materials recovered (0.8): item token -> amount you picked up from what a piece dropped when it came down (taken down with
+        /// the hammer, broken, worn away; SalvageWatch). Materials coming back, never brought in from the world: never part of PickedUp.</summary>
+        public readonly Dictionary<string, float> Recovered = new Dictionary<string, float>();
         /// <summary>Battle, counted from your own side (ClientHooks): "EnemyHits" / "PlayerHits" = your hits on a foe / another
         /// player as your PC sends them (the game's counters of the same name book only hits on what your PC owns, the owner
         /// trap), "Deaths" = your deaths. Keyed by the game's stat names so they layer on its counters (LocalTotals.Layers).</summary>
         public readonly Dictionary<string, float> Battle = new Dictionary<string, float>();
         public int Blocks, Parries;
+        /// <summary>Families a newer Hearthwoven wrote that this version does not count (0.8, RESILIENCE item 4): read, added up and written
+        /// back unchanged, so a file saved by an older version keeps them (its previous sessions, last session and day rows). Never shown.</summary>
+        public readonly Dictionary<string, Dictionary<string, float>> Unknown = new Dictionary<string, Dictionary<string, float>>();
+        static HashSet<string> known;
+        static bool Known(string key)
+        {
+            if (known == null) { var k = new HashSet<string> { "blocks", "parries" }; foreach (var kv in new SessionEvents().Named()) k.Add(kv.Key); known = k; }
+            return known.Contains(key);
+        }
 
         public static void Add(Dictionary<string, float> d, string key, float v = 1f)
         {
@@ -52,6 +74,17 @@ namespace Hearthwoven
         /// </summary>
         public static int PickedAmount(bool alreadyHeld, int dropStack, int carriedBefore, int carriedAfter) =>
             alreadyHeld ? 0 : System.Math.Max(0, System.Math.Min(dropStack, carriedAfter - carriedBefore));
+
+        /// <summary>
+        /// One pickup booked (ClientHooks.Pickup): the amount by PickedAmount's rule, into Recovered when the drop is a piece's material
+        /// (<paramref name="fromPiece"/>: SalvageWatch knows it), else into PickedUp. Returns the amount counted.
+        /// </summary>
+        public static int CountPickup(SessionEvents into, string item, bool alreadyHeld, bool fromPiece, int dropStack, int carriedBefore, int carriedAfter)
+        {
+            var n = PickedAmount(alreadyHeld, dropStack, carriedBefore, carriedAfter);
+            if (n > 0 && into != null) Add(fromPiece ? into.Recovered : into.PickedUp, item, n);
+            return n;
+        }
 
         /// <summary>
         /// One new piece got its creator (ClientHooks.Planting, on Piece.SetCreator): it counts as one plant you planted when
@@ -103,12 +136,16 @@ namespace Hearthwoven
             yield return P("pickedUp", PickedUp); yield return P("planted", Planted); yield return P("made", Made); yield return P("treesFelled", Felled);
             yield return P("battle", Battle);
             yield return P("cargoMeters", CargoMeters); yield return P("cargoStretch", CargoStretch); yield return P("bornInCare", BornInCare); yield return P("ledMeters", LedMeters);
+            yield return P("chestFed", ChestFed);
+            yield return P("ateFromFeastAt", AteFromFeastAt); yield return P("setOutFeastMadeBy", SetOutFeastMadeBy);
+            yield return P("recovered", Recovered);
         }
 
         public void WriteTo(Json j, string key = "measuredThisSession")
         {
             j.Key(key).Open().Num("blocks", Blocks).Num("parries", Parries);
             foreach (var kv in Named()) j.Dict(kv.Key, kv.Value);
+            foreach (var kv in Unknown) j.Dict(kv.Key, kv.Value);   // a newer version's families, as read
             j.Close();
         }
 
@@ -118,6 +155,12 @@ namespace Hearthwoven
             if (o == null) return this;
             Blocks = (int)MiniJson.Num(o, "blocks"); Parries = (int)MiniJson.Num(o, "parries");
             foreach (var kv in Named()) MiniJson.Into(MiniJson.Obj(o, kv.Key), kv.Value);
+            foreach (var kv in o)
+                if (kv.Value is Dictionary<string, object> fam && !Known(kv.Key))
+                {
+                    if (!Unknown.TryGetValue(kv.Key, out var d)) Unknown[kv.Key] = d = new Dictionary<string, float>();
+                    MiniJson.Into(fam, d);
+                }
             return this;
         }
 
@@ -128,6 +171,11 @@ namespace Hearthwoven
             Blocks += other.Blocks; Parries += other.Parries;
             var theirs = other.Named().ToList(); int i = 0;
             foreach (var mine in Named()) { foreach (var kv in theirs[i].Value) Add(mine.Value, kv.Key, kv.Value); i++; }
+            foreach (var fam in other.Unknown)
+            {
+                if (!Unknown.TryGetValue(fam.Key, out var d)) Unknown[fam.Key] = d = new Dictionary<string, float>();
+                foreach (var kv in fam.Value) Add(d, kv.Key, kv.Value);
+            }
         }
 
         /// <summary>What <paramref name="now"/> holds beyond <paramref name="was"/> (null: nothing before), per key, never below zero: what
@@ -146,6 +194,15 @@ namespace Hearthwoven
                     if (kv.Value - w > 0) Add(into.Value, kv.Key, kv.Value - w);
                 }
                 i++;
+            }
+            foreach (var fam in now.Unknown)
+            {
+                Dictionary<string, float> wasFam = null; was?.Unknown.TryGetValue(fam.Key, out wasFam);
+                foreach (var kv in fam.Value)
+                {
+                    float w = 0; wasFam?.TryGetValue(kv.Key, out w);
+                    if (kv.Value - w > 0) { if (!d.Unknown.TryGetValue(fam.Key, out var into)) d.Unknown[fam.Key] = into = new Dictionary<string, float>(); Add(into, kv.Key, kv.Value - w); }
+                }
             }
             return d;
         }

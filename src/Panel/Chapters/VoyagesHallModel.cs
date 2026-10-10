@@ -16,7 +16,7 @@ namespace Hearthwoven.Panel
         public const string HallOverview = "Hall", JourneyTitle = "Journey", SailedWithTitle = "Sailed with",
                             HomeAway = "Home and away", UnderEachHelm = "Under the helm of", SeaRoute = "Sea route",
                             WalkRun = "Walking and running", MovementSkills = "Movement skills", Found = "Finds",
-                            FarEdge = "Time far out", FarEdgeLine = "beyond 10 km from the centre", BiomesFound = "Biomes found", CoinsSpent = "Trader",
+                            FarEdge = "Time far out", FarEdgeLine = "beyond 10 km from the center", BiomesFound = "Biomes found", CoinsSpent = "Trader",
                             IntoSmelters = "Smelters", BoughtPerTrader = "Bought, per trader", PerStation = "Put in, per station";
 
         // ---------- formats ----------
@@ -36,16 +36,21 @@ namespace Hearthwoven.Panel
 
         static Block Tagged(Block b, string src) { b.Src = src; b.Source = TagOfSrc(src); return b; }
 
+        /// <summary>The empty state of a page or section this PC counts (rule C.3): "Nothing from 8 October", one line, no number to mark; its tag says whose count it is.</summary>
+        static Block NothingHere(PanelInput input, DateTime? from) { var b = Empty(NothingFrom(input, from)); b.Source = TagMeasured; return b; }
+
         // ---------- Voyages ----------
 
         static void Voyages(PanelInput input, string page, PanelView view, PanelState state = null)
         {
-            view.Scope = FellowScope(input);
+            view.Recorded = true;   // 0.7 (REDESIGN-RULES.md, group G7): no zones; the dated labels are automatic
+            view.Scope = RecordedScope(input);
             // Sailing and Cargo have the day windows (HISTORY-06.md): Today, 7 days, 30 days from the day history, and All. A day window
             // reads the window's copy of the input (InWindow): km from the game counters' growth those days, crew and cargo from the rows
             var offered = WindowsOf(Chapter.Voyages, page);
             var w = offered != null && state != null ? WindowChips(input, state, view, offered) : TimeWindow.SinceInstall;
             var src = IsDayWindow(w) ? InWindow(input, w) ?? input : input;
+            if (!IsDayWindow(w)) VoyagesAboutNumbers(input, view);   // the box: All only (a day window has none, rule W.1)
             switch (page)
             {
                 case "sailing": Sailing(src, view, w); return;
@@ -54,6 +59,21 @@ namespace Hearthwoven.Panel
                 case "maps": Maps(input, view); return;
                 default: VoyagesOverview(input, view); return;
             }
+        }
+
+        /// <summary>
+        /// About these numbers, Voyages (SOURCE-MATRIX): before the game's stats baseline the game's own distances, finds and biomes; from it
+        /// what this PC counted (who you sailed with, under whose helm, maps shared, cargo carried). Cargo carried has its own date when its
+        /// counter group started later (hard case 4): the From line says so.
+        /// </summary>
+        static void VoyagesAboutNumbers(PanelInput input, PanelView view)
+        {
+            var stats = StartOf(input, LocalTotals.StatsKind); var cargo = StartOf(input, LocalTotals.StartCargo);
+            var from = cargo.HasValue && stats.HasValue && RecordDate(input, cargo.Value) != RecordDate(input, stats.Value)
+                ? "Hearthwoven also counted who you sailed with, under whose helm and maps shared, on this PC. Cargo carried is counted from " + RecordDate(input, cargo.Value) + "."
+                : "Hearthwoven also counted who you sailed with, under whose helm, maps shared and cargo carried, on this PC.";
+            AboutNumbers(view, input, stats, "The game's own count of distances, finds and biomes.", from,
+                         "Cargo is a straight line between samples, so the real figure is higher. Cargo loaded and unloaded is counted by the server.");
         }
 
         // the journey's colours (r2-voyages.css): foot path, the helm in amber, the sea as passenger
@@ -97,12 +117,13 @@ namespace Hearthwoven.Panel
             var with = (input.Events?.SailedWith ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0 && !SameName(kv.Key, input.PlayerName)).ToList();
             if (with.Count == 0) return null;
             var max = with.Max(kv => kv.Value);
-            return new Block
+            // rule C (0.7): counted on this PC since the install; a fellow's copy of their last session only says so (rule E), the label says the rest
+            return Tagged(new Block
             {
-                Kind = "crew", Note = MeasuredOf(input),
+                Kind = "crew", Note = input.IsSelf || input.SharedSinceInstall ? null : "as " + Name(input) + " last shared it",
                 Items = with.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
                             .Select(kv => new Block { Kind = "person", Id = kv.Key, Icon = "person:" + kv.Key, Title = kv.Key, Value = Minutes(kv.Value), Fraction = kv.Value / max }).ToList(),
-            };
+            }, SrcPc);
         }
 
         public const string UnderHelmNote = "fellow players' helms only";   // your own helm is the km "at the helm" (the game does not tell the mod your helm minutes)
@@ -146,7 +167,7 @@ namespace Hearthwoven.Panel
             // fix4-rest (review: three bands of one weight): the journey is the page; home and away is one thin line under it, the crew the quiet strip last
             var home = HomeAndAway(input); if (home != null) { home.Tone = Thin; view.Blocks.Add(home); }
             Group(view, SailedWithTitle, Crew(input));
-            Plate(view, "ui:chapter-voyages", FellowScope(input));
+            Plate(view, "ui:chapter-voyages", RecordedScope(input));
         }
 
         // r4voy-sailing: km sailed as the hero, the sea route, then the crew beside the helms and the leviathans (the cargo: Voyages > Cargo)
@@ -158,6 +179,7 @@ namespace Hearthwoven.Panel
             // beside the km in the hero (fix-rest: its own line pushed the crew off the fold)
             var sunk = C(input, "LeviathanSink") + C(input, "LavaLeviathanSink");
             Add(view, Hero((sail > 0 ? KmNumber(sail) : null, "km sailed", SrcCharacter, null), (sunk > 0 ? N(sunk) : null, sunk == 1 ? "leviathan sunk" : "leviathans sunk", SrcCharacter, null)));
+            SkillBeside(view, input, SkillKeyNamed(input, SailingSkillName));   // 0.8: a mod's sailing skill in the hero's row, when the character has one (the game has none)
             var segs = SeaSegments(input);
             if (segs.Count > 0)
             {
@@ -167,7 +189,7 @@ namespace Hearthwoven.Panel
             Columns(view, Stretch(v => Group(v, SailedWithTitle, Crew(input))),
                           Stretch(v => Add(v, UnderHelm(input))));
             if (IsDayWindow(w) && view.Blocks.All(b => b.Kind == "columns" && (b.Items ?? new List<Block>()).All(c => (c.Items ?? new List<Block>()).Count == 0))) { view.Blocks.Clear(); view.Blocks.Add(DayEmpty(input, w)); }
-            Plate(view, "ui:chapter-voyages", FellowScope(input));
+            Plate(view, "ui:chapter-voyages", RecordedScope(input));
         }
 
         static readonly string[] MoveSkills = { "Jump", "Run", "Swim" };
@@ -199,9 +221,9 @@ namespace Hearthwoven.Panel
             // ladders as Skills > Overview, only Jump, Run and Swim, only those your character has
             var have = new HashSet<string>(SkillNames(input));
             var skills = MoveSkills.Where(have.Contains).Select(k => LadderOf(input, k, "ladder")).ToList();
-            var right = Stretch(v => { if (skills.Count > 0) v.Blocks.Add(Tagged(new Block { Kind = "ladders", Items = new List<Block> { new Block { Kind = "group", Title = MovementSkills, Items = skills } } }, SrcCharacter)); });
+            var right = Stretch(v => { if (skills.Count > 0) v.Blocks.Add(Tagged(new Block { Kind = "ladders", Text = PractisedKeyText(input), Items = new List<Block> { new Block { Kind = "group", Title = MovementSkills, Items = skills } } }, SrcCharacter)); });   // the key's own date (PractisedKeyText)
             Columns(view, left, right);
-            Plate(view, "title:explorer", FellowScope(input));
+            Plate(view, "title:explorer", RecordedScope(input));
         }
 
         // the far edge: the game counts seconds beyond 10350 m on each axis (Player.UpdateStats). Its x-axis names are
@@ -222,12 +244,12 @@ namespace Hearthwoven.Panel
             }, SrcCharacter);
         }
 
-        /// <summary>"Which biomes did I find?": one tile per biome your character knows (the game's own record, kept with the
-        /// character), in journey order with the Ocean last. Biomes not found are not shown; a fellow player's shared copy
-        /// carries no biomes, so their page shows none.</summary>
         /// <summary>"6 of 9": found out of the biomes the game defines (the journey's nine, the Ocean included).</summary>
         public static string BiomesOf(int found) => found + " of " + BiomeTiles.Length;
 
+        /// <summary>"Which biomes did I find?": one tile per biome found (FoundBiomes), in journey order with the Ocean last. Your own book:
+        /// the game's own record plus evidence. A fellow's book: only the evidence their copy carries (damage or a death there); their shared
+        /// "knownBiomes" only opens the group feats' gate, so a fellow's Maps never names a land the copy shows no trace of. Not found: not shown.</summary>
         public static Block BiomeTilesFound(PanelInput input)
         {
             var known = new HashSet<string>(FoundBiomes(input), StringComparer.OrdinalIgnoreCase);   // one source with Battle: the game's record plus evidence
@@ -254,7 +276,7 @@ namespace Hearthwoven.Panel
             var bios = BiomeTilesFound(input);
             // how many of the game's biomes (Joost: "6 of 9"), from the same found-biomes record as the tiles
             if (bios != null) { view.Blocks.Add(new Block { Kind = "section", Title = BiomesFound, Value = BiomesOf(bios.Items.Count), Src = SrcCharacter, Source = TagCharacter }); view.Blocks.Add(bios); }
-            Plate(view, "title:mapmaker", FellowScope(input));
+            Plate(view, "title:mapmaker", RecordedScope(input));
         }
 
         // your character's finds, in the prototype's order (the game's own counters)
@@ -269,7 +291,11 @@ namespace Hearthwoven.Panel
 
         static void Stores(PanelInput input, string page, PanelView view)
         {
-            view.Scope = FellowScope(input);
+            view.Recorded = true;   // 0.7 (G7): every Hall page counts this PC's own numbers since the install: one label, no zones
+            view.Scope = RecordedScope(input);
+            AboutNumbers(view, input, StartOf(input, null), "Not recorded: the game keeps no count of trades or smelting.",
+                         "Hearthwoven counted what you bought and put in, on this PC.",
+                         "The game does not name the fuel; each station's usual fuel is shown. What a Stoker's Chest feeds is shown apart, never as yours.");
             switch (page)
             {
                 case "trader": TraderPage(input, view); return;
@@ -337,7 +363,6 @@ namespace Hearthwoven.Panel
             var total = comp.Value; var n = ParseCount(total);
             if (section != null) v.Blocks.Add(Section(section));
             var hero = Hero((total, n == 1 ? one : many, SrcPc, null));
-            if (hero != null && compact) hero.Tone = Compact;
             Add(v, hero);
             comp.Title = null; comp.Value = null;
             if (compact) comp.Tone = Thin;
@@ -379,8 +404,8 @@ namespace Hearthwoven.Panel
                     HeroAndBar(v, IntoSmelters, SmelterComposition(input), "item put in", "items put in", compact: true);
                     Add(v, SmelterRows(input, Smelted(input), int.MaxValue));   // the item tiles say it: no "by item" heading
                 }));
-            if (PanelModel.Content(view).All(b => IsBox(b))) { view.Blocks.Clear(); view.Blocks.Add(SinceInstallEmpty(input, "trades and smelting", "what you buy and put into smelters shows up")); }
-            Plate(view, "ui:chapter-stores", FellowScope(input));
+            if (PanelModel.Content(view).All(b => IsBox(b))) { view.Blocks.Clear(); Add(view, NothingHere(input, StartOf(input, null))); }
+            Plate(view, "ui:chapter-stores", RecordedScope(input));
         }
 
         static void TraderPage(PanelInput input, PanelView view)
@@ -399,8 +424,8 @@ namespace Hearthwoven.Panel
                               .OrderByDescending(r => r.n).ThenBy(r => r.item, StringComparer.Ordinal).Select(r => Chip(input, r.item, r.n, colours(t), false)).ToList(),
             }));
             if (ledger != null) { view.Blocks.Add(Section(BoughtPerTrader)); view.Blocks.Add(ledger); }
-            if (view.Blocks.Count == 0) view.Blocks.Add(SinceInstallEmpty(input, "trades", "what you buy from traders shows up"));   // vf-fix1's empty state
-            Plate(view, "ui:chapter-stores", FellowScope(input));
+            if (view.Blocks.Count == 0) Add(view, NothingHere(input, StartOf(input, null)));   // rule C.3: one empty state, its date
+            Plate(view, "ui:chapter-stores", RecordedScope(input));
         }
 
         // smelters, kilns, furnaces, refineries, the windmill and the spinning wheel all take ore or a raw good; the game
@@ -418,9 +443,9 @@ namespace Hearthwoven.Panel
         }
         const string FuelKey = "fuel";
 
-        // (station, item or fuel prefab, is fuel, amount)
-        static List<(string station, string item, bool fuel, double n)> Smelted(PanelInput input) =>
-            (input.Events?.SmelterAdded ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0).Select(kv =>
+        // (station, item or fuel prefab, is fuel, amount): what was put in by hand, or (chests) what a Stoker's Chest put in
+        static List<(string station, string item, bool fuel, double n)> Smelted(PanelInput input, bool chests = false) =>
+            ((chests ? input.Events?.ChestFed : input.Events?.SmelterAdded) ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0).Select(kv =>
             {
                 var p = Split2(kv.Key); var fuel = p[1] == FuelKey;
                 return (p[0], fuel ? FuelOf(p[0]) ?? FuelKey : p[1], fuel, (double)kv.Value);
@@ -488,6 +513,15 @@ namespace Hearthwoven.Panel
         /// something went in as fuel, so the picture is the station's usual fuel (FuelOf).</summary>
         public const string FuelNote = "The game does not name the fuel: each station's usual fuel is shown.";
 
+        /// <summary>True when this game has the Stoker's Chest (StokerHooks found the OverDrive-SmelterUpgrades mod on this PC). The mod is enforced
+        /// on the server, so every fellow's book here has the chests too.</summary>
+        public static bool StokersChests;
+        /// <summary>Stoker's Chests feed the smelters here: the mod is on this PC, or the book counted a chest's feeding.</summary>
+        public static bool ChestsFeed(PanelInput input) => StokersChests || (input?.Events?.ChestFed.Values.Any(v => v > 0) ?? false);
+        public const string FedByChests = "Fed by Stoker's Chests", ChestsNoneYet = "Nothing fed by a Stoker's Chest yet. Its feeding shows here, apart from yours.";
+        /// <summary>Under the chests' part: nobody's own work, and only what this PC (or the fellow's) hosted.</summary>
+        public static string ChestNote(PanelInput input) => "Nobody's own work: what the chests put in while " + (input.IsSelf ? "your" : Name(input) + "'s") + " PC hosted them.";
+
         static void SmeltersPage(PanelInput input, PanelView view)
         {
             view.Heading = "Smelters";
@@ -501,8 +535,13 @@ namespace Hearthwoven.Panel
             }));
             if (ledger != null && smelted.Any(s => s.fuel)) ledger.Note = FuelNote;
             if (ledger != null) { view.Blocks.Add(Section(PerStation)); view.Blocks.Add(ledger); }
-            if (view.Blocks.Count == 0) view.Blocks.Add(SinceInstallEmpty(input, "what goes into smelters", "the ore, wood and fuel you put in show up"));
-            Plate(view, "ui:chapter-stores", FellowScope(input));
+            // a Stoker's Chest's feeding (StokerHooks): its own part, never in "items put in" (a chest's feeding is nobody's)
+            var chest = SmelterRows(input, Smelted(input, chests: true), int.MaxValue);
+            if (chest != null) chest.Note = ChestNote(input);
+            if (view.Blocks.Count == 0 && chest == null) Add(view, NothingHere(input, StartOf(input, null)));
+            if (chest != null) { view.Blocks.Add(Section(FedByChests)); view.Blocks.Add(chest); }
+            else if (ChestsFeed(input)) Add(view, Empty(ChestsNoneYet));
+            Plate(view, "ui:chapter-stores", RecordedScope(input));
         }
     }
 }

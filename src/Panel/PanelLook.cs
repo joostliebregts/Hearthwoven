@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Hearthwoven.Panel
 {
@@ -19,13 +20,46 @@ namespace Hearthwoven.Panel
             SlotEdge = Hex("#4a3a28"), Text = Hex("#e9dcc4"), Muted = Hex("#b9a688"), Faint = Hex("#b0a086"),
             Gold = Hex("#e8c27a"), Focus = Hex("#fff3d6"), Accent = Hex("#e8a948"), Track = new Color(0.17f, 0.13f, 0.09f, 1f), Rule = new Color(0.42f, 0.32f, 0.2f, 0.6f);
 
-        /// <summary>The smallest text in the panel, px at 1080p (rubric 4; was 13, raised round 3: Averia has a small x-height, 13 px read as about 11): Label never goes below it. Faint was #8c7b62 (2.9:1 on the character zone), now #b0a086 (4.6:1 there, 7:1 on the plate).</summary>
+        /// <summary>The smallest text in the panel, px at 1080p (rubric 4; was 13, raised round 3: Averia has a small x-height, 13 px read as about 11): Label never goes below it. Faint was #8c7b62 (2.9:1 on the character zone), now #b0a086 (4.6:1 there, 7:1 on the plate).
+        /// One exception (Joost, 2026-10-10 13:40): a number inside a damage-bar part, digits only and bold, may be MinBarDigits. The floor exists because
+        /// Averia's lowercase reads small at 1080p (13 px read like 11); lining digits are cap height, so a bold 12 px digit stands taller than 14 px
+        /// lowercase. Only PanelUi.BarDigits draws it (named BarDigitsName, its text BarDigitsText); render-check, its source scan and PanelCheck allow
+        /// nothing else under MinText.</summary>
         public const float MinText = 14f;
+        public const float MinBarDigits = 12f;
+        public const string BarDigitsName = "BarDigits";
+        /// <summary>What an in-bar number under MinText may hold: digits and the spaces between thousands, nothing else.</summary>
+        public static bool BarDigitsText(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            var digit = false;
+            foreach (var c in s) { if (char.IsDigit(c)) digit = true; else if (c != ' ' && c != '\u00A0' && c != '\u2009' && c != '\u202F') return false; }
+            return digit;
+        }
 
         static Color Hex(string h) { ColorUtility.TryParseHtmlString(h, out var c); return c; }
 
         public static TMP_FontAsset Body, Title, Plain;   // Plain: a sans for small counts (the serif and Norse faces blur a "11")
         public static Sprite Circle;
+        /// <summary>The one bar form's part (BAR-FORM.md): a white rounded rectangle, radius 5, nine-sliced, tinted per part; and its
+        /// 2 px outline in the same shape (a chosen part).</summary>
+        public static Sprite Rounded, RoundedEdge;
+        /// <summary>A feat's tier mark (B30, Joost: each tier its own achievement): a small square, all four corners rounded. Filled: Rounded;
+        /// not reached yet: this outline, its rim thick enough to stay 1 px when drawn TierMarkScale times smaller (radius 5 / 2.5 = 2 px).</summary>
+        public static Sprite TierMarkEdge;
+        /// <summary>0.8 Battle (a foe's outcome, Chapters/BattleFeedUi.cs): a ring and a half-filled ring, drawn at twice the 11 to 13 px they show
+        /// at, so the rim stays about 1.5 px. The filled mark is Circle.</summary>
+        public static Sprite Ring, HalfRing;
+        /// <summary>The "×N" badge's outline (0.8): a pill 20 px tall, fully rounded, its rim about 1 px; nine-sliced to any width.</summary>
+        public static Sprite PillEdge;
+        /// <summary>0.8 Compare: the change mark's arrow, a small triangle pointing up (turned for down), white, tinted by the label's colour: the
+        /// game's text faces may not hold the ▲ glyph (Chapters/CompareModel.cs ChangeParts).</summary>
+        public static Sprite Triangle;
+        /// <summary>0.8 layout D+ (PanelUi.Islands): an island's ground, a white rounded rectangle, radius 10, nine-sliced, tinted IslandGround.</summary>
+        public static Sprite Island;
+        /// <summary>The island's ground: a lighter, greyish wash over the plate (the preview's rgba(255, 240, 210, .04)).</summary>
+        public static readonly Color IslandGround = new Color(1f, 0.94f, 0.82f, 0.04f);
+        public const float TierMarkScale = 2.5f;
         static bool resolved;
 
         public static void Resolve()
@@ -45,6 +79,10 @@ namespace Hearthwoven.Panel
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel fonts: " + e.Message); }
             Circle = Drawn(CircleTexture());
+            Rounded = RoundedSprite(false); RoundedEdge = RoundedSprite(true); TierMarkEdge = RoundedSprite(true, 2.5f);
+            Ring = Drawn(RingTexture(false)); HalfRing = Drawn(RingTexture(true)); PillEdge = PillSprite();
+            Triangle = Drawn(TriangleTexture());
+            Island = IslandSprite();
             Debug.Log("[Hearthwoven] Hearthwoven panel uses font '" + (Body ? Body.name : "TMP default") + "', titles '" + (Title ? Title.name : "TMP default") +
                       "', digits '" + (Plain ? Plain.name : "TMP default") + "'" + (Plain == Body ? " (LiberationSans not found: the panel's own font)" : ""));
         }
@@ -151,31 +189,21 @@ namespace Hearthwoven.Panel
         }
 
         // the sprite's rectangle, copied into a small readable texture through a RenderTexture (game icons sit in atlases
-        // that cannot be read directly), then averaged
+        // that cannot be read directly), then averaged. ReadPixels waits for the GPU: the first page with new items paid it per
+        // item, so the colours are asked ahead without waiting (WarmColours) and this is only the fallback for one not asked yet
         static string Average(Sprite s)
         {
-            var tex = s.texture; if (!tex) return null;
-            var r = s.textureRect;
-            int w = Mathf.Clamp(Mathf.RoundToInt(r.width), 1, 64), h = Mathf.Clamp(Mathf.RoundToInt(r.height), 1, 64);
-            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            var rt = Blitted(s, out var w, out var h); if (!rt) return null;
             var before = RenderTexture.active;
             Texture2D copy = null;
             try
             {
-                Graphics.Blit(tex, rt, new Vector2(r.width / tex.width, r.height / tex.height), new Vector2(r.x / tex.width, r.y / tex.height));
                 RenderTexture.active = rt;
                 copy = new Texture2D(w, h, TextureFormat.RGBA32, false);
                 copy.ReadPixels(new Rect(0, 0, w, h), 0, 0, false);
-                double sr = 0, sg = 0, sb = 0; int n = 0;
-                foreach (var p in copy.GetPixels32())
-                {
-                    if (p.a <= 127) continue;
-                    sr += p.r; sg += p.g; sb += p.b; n++;
-                }
-                if (n == 0) return null;
-                Color.RGBToHSV(new Color((float)(sr / n / 255), (float)(sg / n / 255), (float)(sb / n / 255)), out var hue, out var sat, out var val);
-                var bar = Color.HSVToRGB(hue, Mathf.Clamp01(sat * 1.2f + 0.04f), val * 0.85f);
-                return "#" + ColorUtility.ToHtmlStringRGB(bar).ToLowerInvariant();
+                var px = copy.GetPixels32(); var sum = new ColourSum();
+                for (int i = 0; i < px.Length; i++) sum.Add(px[i]);
+                return sum.Bar();
             }
             finally
             {
@@ -183,6 +211,94 @@ namespace Hearthwoven.Panel
                 RenderTexture.ReleaseTemporary(rt);
                 if (copy) UnityEngine.Object.Destroy(copy);
             }
+        }
+
+        // the icon's rectangle drawn into a small temporary RenderTexture (at most 64 px a side); null when the sprite has no texture
+        static RenderTexture Blitted(Sprite s, out int w, out int h)
+        {
+            w = h = 0;
+            var tex = s ? s.texture : null; if (!tex) return null;
+            var r = s.textureRect;
+            w = Mathf.Clamp(Mathf.RoundToInt(r.width), 1, 64); h = Mathf.Clamp(Mathf.RoundToInt(r.height), 1, 64);
+            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            var before = RenderTexture.active;
+            try { Graphics.Blit(tex, rt, new Vector2(r.width / tex.width, r.height / tex.height), new Vector2(r.x / tex.width, r.y / tex.height)); }
+            catch { RenderTexture.ReleaseTemporary(rt); throw; }
+            finally { RenderTexture.active = before; }
+            return rt;
+        }
+
+        // the average of an icon's opaque pixels (alpha over 0.5) as a bar colour: a little darker and more saturated
+        struct ColourSum
+        {
+            double r, g, b; int n;
+            public void Add(Color32 p) { if (p.a <= 127) return; r += p.r; g += p.g; b += p.b; n++; }
+            public string Bar()
+            {
+                if (n == 0) return null;
+                Color.RGBToHSV(new Color((float)(r / n / 255), (float)(g / n / 255), (float)(b / n / 255)), out var hue, out var sat, out var val);
+                var bar = Color.HSVToRGB(hue, Mathf.Clamp01(sat * 1.2f + 0.04f), val * 0.85f);
+                return "#" + ColorUtility.ToHtmlStringRGB(bar).ToLowerInvariant();
+            }
+        }
+
+        // ---------- warming up (0.8.1, PanelWarm.cs): what the book loads the first time, done before it is needed ----------
+
+        static List<string> colourQueue; static int colourNext, coloursAsked, coloursPending, coloursRead;
+        /// <summary>Item colours asked of the GPU so far, answered, and still on their way (Dev.Bench's header).</summary>
+        public static string ColourWarmth => coloursRead + " of " + coloursAsked + " read" + (coloursPending > 0 ? ", " + coloursPending + " on the way" : "");
+
+        /// <summary>
+        /// Asks the GPU for up to <paramref name="budget"/> more items' icon colours without waiting for it (AsyncGPUReadback: the answer
+        /// comes a frame or two later, on the main thread, and fills the same table IconColour reads, by the same sum). true once every item
+        /// of the game was asked and answered. Where the GPU cannot answer that way nothing is asked: IconColour reads them as before.
+        /// </summary>
+        public static bool WarmColours(int budget)
+        {
+            if (!SystemInfo.supportsAsyncGPUReadback) return true;
+            if (colourQueue == null)
+            {
+                var all = Tokens(); if (all.Count == 0) { byToken = null; return false; }   // ObjectDB not filled yet: look again later
+                colourQueue = all.Keys.ToList();
+            }
+            for (; budget > 0 && colourNext < colourQueue.Count; colourNext++)
+            {
+                var token = colourQueue[colourNext];
+                if (iconColours.ContainsKey(token) || !Tokens().TryGetValue(token, out var s) || !s) continue;
+                Ask(token, s); budget--;
+            }
+            return colourNext >= colourQueue.Count && coloursPending == 0;
+        }
+
+        static void Ask(string token, Sprite s)
+        {
+            var rt = Blitted(s, out _, out _); if (!rt) return;
+            coloursAsked++; coloursPending++;
+            AsyncGPUReadback.Request(rt, 0, TextureFormat.RGBA32, answer =>
+            {
+                coloursPending--;
+                try
+                {
+                    if (answer.hasError || iconColours.ContainsKey(token)) return;   // read meanwhile (IconColour, for a page that needed it first)
+                    var px = answer.GetData<Color32>(); var sum = new ColourSum();
+                    for (int i = 0; i < px.Length; i++) sum.Add(px[i]);
+                    iconColours[token] = sum.Bar(); coloursRead++;
+                }
+                catch (Exception e) { Debug.LogWarning("[Hearthwoven] icon colour " + token + ": " + e.Message); }
+                finally { RenderTexture.ReleaseTemporary(rt); }
+            });
+        }
+
+        /// <summary>Every picture of the panel's own, as Icon references: the UI kit, the visual vocabulary and the title emblems.</summary>
+        public static List<string> OwnPictures()
+        {
+            var refs = new List<string>();
+            foreach (var n in kit.Names()) refs.Add("ui:" + n);
+            foreach (var n in vocab.Names()) refs.Add("vocab:" + n);
+            const string icons = "Hearthwoven.icons.";
+            foreach (var name in typeof(PanelLook).Assembly.GetManifestResourceNames())
+                if (name.StartsWith(icons, StringComparison.Ordinal) && name.EndsWith(".png", StringComparison.Ordinal)) refs.Add("title:" + name.Substring(icons.Length, name.Length - icons.Length - 4));
+            return refs;
         }
 
         static int StatusHash(string type)
@@ -362,6 +478,106 @@ namespace Hearthwoven.Panel
         public static readonly Color Selected = Hex("#ffcf80");   // chapter icons multiply to amber when chosen (kit.json)
 
         static Sprite Drawn(Texture2D t) => Sprite.Create(t, new Rect(0, 0, t.width, t.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+
+        // a rounded rectangle 16 x 16, radius 5 (anti-aliased), border 6 so it slices to any size; edge: only its rim (2 px, or rim)
+        static Sprite RoundedSprite(bool edge, float rim = 2f)
+        {
+            const int s = 16; const float r = 5f;
+            var t = new Texture2D(s, s, TextureFormat.RGBA32, false) { name = edge ? "hearthwoven-rounded-edge" : "hearthwoven-rounded", wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[s * s];
+            float Inside(float x, float y, float rad, float inset)
+            {
+                // distance outside the rounded box (inset from the texture edge), negative inside
+                float cx = Mathf.Clamp(x, inset + rad, s - inset - rad), cy = Mathf.Clamp(y, inset + rad, s - inset - rad);
+                float d = Mathf.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) - rad;
+                return Mathf.Clamp01(0.5f - d);
+            }
+            for (int y = 0; y < s; y++)
+                for (int x = 0; x < s; x++)
+                {
+                    float fx = x + 0.5f, fy = y + 0.5f, a = Inside(fx, fy, r, 0);
+                    if (edge) a = Mathf.Clamp01(a - Inside(fx, fy, r - rim, rim));
+                    px[y * s + x] = new Color(1, 1, 1, a);
+                }
+            t.SetPixels32(px); t.Apply(false, true);
+            return Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(6, 6, 6, 6));
+        }
+
+        // an island's ground: 24 px square, radius 10 (anti-aliased), border 11 so it slices to any size
+        static Sprite IslandSprite()
+        {
+            const int s = 24; const float r = 10f;
+            var t = new Texture2D(s, s, TextureFormat.RGBA32, false) { name = "hearthwoven-island", wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[s * s];
+            for (int y = 0; y < s; y++)
+                for (int x = 0; x < s; x++)
+                {
+                    float fx = x + 0.5f, fy = y + 0.5f, cx = Mathf.Clamp(fx, r, s - r), cy = Mathf.Clamp(fy, r, s - r);
+                    px[y * s + x] = new Color(1, 1, 1, Mathf.Clamp01(r + 0.5f - Mathf.Sqrt((fx - cx) * (fx - cx) + (fy - cy) * (fy - cy))));
+                }
+            t.SetPixels32(px); t.Apply(false, true);
+            return Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(11, 11, 11, 11));
+        }
+
+        // a pill's outline: 22 px square, radius 10, rim 1.25 px (anti-aliased), border 10 so it slices to any width at a 20 px height
+        static Sprite PillSprite()
+        {
+            const int s = 22; const float r = 10f, rim = 1.25f;
+            var t = new Texture2D(s, s, TextureFormat.RGBA32, false) { name = "hearthwoven-pill-edge", wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[s * s];
+            for (int y = 0; y < s; y++)
+                for (int x = 0; x < s; x++)
+                {
+                    float fx = x + 0.5f, fy = y + 0.5f, cx = Mathf.Clamp(fx, r + 1, s - r - 1), cy = Mathf.Clamp(fy, r + 1, s - r - 1);
+                    float d = Mathf.Sqrt((fx - cx) * (fx - cx) + (fy - cy) * (fy - cy));
+                    float outer = Mathf.Clamp01(r + 0.5f - d), inner = Mathf.Clamp01(r - rim + 0.5f - d);
+                    px[y * s + x] = new Color(1, 1, 1, Mathf.Clamp01(outer - inner));
+                }
+            t.SetPixels32(px); t.Apply(false, true);
+            return Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(10, 10, 10, 10));
+        }
+
+        // a ring 26 px across with a 3 px rim (anti-aliased); half: its left half filled too (a foe defeated with fellow players)
+        static Texture2D RingTexture(bool half)
+        {
+            const int s = 26; const float rim = 3f;
+            var t = new Texture2D(s, s, TextureFormat.RGBA32, false) { name = half ? "hearthwoven-half-ring" : "hearthwoven-ring", wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[s * s];
+            for (int y = 0; y < s; y++)
+                for (int x = 0; x < s; x++)
+                {
+                    float dx = x - s / 2f + 0.5f, dy = y - s / 2f + 0.5f, r = Mathf.Sqrt(dx * dx + dy * dy);
+                    float outer = Mathf.Clamp01(s / 2f - r), inner = Mathf.Clamp01(s / 2f - rim - r);
+                    var a = outer - inner;
+                    if (half && dx < 0) a = outer;
+                    px[y * s + x] = new Color(1, 1, 1, Mathf.Clamp01(a));
+                }
+            t.SetPixels32(px); t.Apply(false, true);
+            return t;
+        }
+
+        // an upward triangle 32 x 28 (apex at the top), anti-aliased by 4 x 4 samples per pixel
+        static Texture2D TriangleTexture()
+        {
+            const int w = 32, h = 28;
+            var t = new Texture2D(w, h, TextureFormat.RGBA32, false) { name = "hearthwoven-triangle", wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int hit = 0;
+                    for (int sy = 0; sy < 4; sy++)
+                        for (int sx = 0; sx < 4; sx++)
+                        {
+                            float fx = x + (sx + 0.5f) / 4f, fy = y + (sy + 0.5f) / 4f;   // y up: the base at 1, the apex at h - 1
+                            float half = (w / 2f - 1) * (1 - (fy - 1) / (h - 2));
+                            if (fy >= 1 && fy <= h - 1 && Mathf.Abs(fx - w / 2f) <= half) hit++;
+                        }
+                    px[y * w + x] = new Color(1, 1, 1, hit / 16f);
+                }
+            t.SetPixels32(px); t.Apply(false, true);
+            return t;
+        }
 
         // a soft-edged disc for person markers
         static Texture2D CircleTexture()

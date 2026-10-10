@@ -29,14 +29,28 @@ namespace Hearthwoven
             return h.All(char.IsDigit) ? "Steam_" + h : h;
         }
 
-        /// <summary>A shared copy with the sender's platform id in front (server side, or the host for its own copy). A copy that
-        /// already starts with one keeps it; no platform id: unchanged.</summary>
+        /// <summary>A shared copy with the sender's platform id in front (server side, or the host for its own copy). A platform id the
+        /// copy already starts with is the CLIENT's word and is replaced by the server's (0.7 review: a client could name itself someone
+        /// else); no platform id known: unchanged.</summary>
         public static string WithPlatform(string json, string host)
         {
             var p = PlatformOf(host);
             if (string.IsNullOrEmpty(json) || p.Length == 0 || !json.StartsWith("{", StringComparison.Ordinal)) return json;
-            if (json.StartsWith("{\"" + PlatformField + "\":", StringComparison.Ordinal)) return json;
+            json = WithoutLeadingPlatform(json);
             return "{" + "\"" + PlatformField + "\":" + Json.Q(p) + (json.Length > 2 && json[1] != '}' ? "," : "") + json.Substring(1);
+        }
+
+        // the copy without a platform id field at its very start (and its comma); anything else unchanged
+        static string WithoutLeadingPlatform(string json)
+        {
+            var head = "{\"" + PlatformField + "\":\"";
+            if (!json.StartsWith(head, StringComparison.Ordinal)) return json;
+            int i = head.Length;
+            for (; i < json.Length && json[i] != '"'; i++) if (json[i] == '\\') i++;
+            if (i >= json.Length) return json;
+            i++;   // the closing quote
+            if (i < json.Length && json[i] == ',') i++;
+            return "{" + json.Substring(i);
         }
 
         /// <summary>The key of one shared copy (see the class); "" when the copy says nothing about who it is.</summary>

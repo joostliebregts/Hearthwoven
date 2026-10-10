@@ -161,6 +161,27 @@ static partial class CoherenceTests
                   all.Contains("if (e != null) PanelUi.SetKeyFocus(false);") && all.Contains("if (!Mathf.Approximately(d, 0f)) SetKeyFocus(false);") && all.Contains("KeyFocus = false; pointerKnown = false;") &&
                   html.Contains("body.kbd .fcard.sel::after, body.kbd .fb-chip.cur::after, body.kbd .b2-col.cur .b2-tile::after") && html.Contains("-webkit-mask-box-image:url(../vocab/focus-ring.png) 14 / 14px") && !html.Contains(".fb-chip.cur { box-shadow"),
                   "focus: one soft rounded ring (vocab focus-ring, sliced 14) on chips, biome tiles and feat cards, shown only after a key press, in the panel and the bridge");
+            // 0.8.1 (Joost sailing: the rudder, the wind, the hotbar and another mod's clock drew over the book): the book's canvas is on top, every
+            // canvas of its own (the reason tags) sits relative to it, never at a fixed order the book would cover, and the game's own windows close it
+            var fixedOrders = chapterSrc.SelectMany(s => System.Text.RegularExpressions.Regex.Matches(s, @"sortingOrder\s*=\s*\d+").Cast<System.Text.RegularExpressions.Match>().Select(m => m.Value)).ToList();
+            Check(fixedOrders.Count == 0 && System.Text.RegularExpressions.Regex.IsMatch(ui, @"const int BookOrder = [1-3]\d{4};") && ui.Contains("canvas.sortingOrder = BookOrder;") &&
+                  ui.Contains("if (GameOnTop()) { Close(); return; }") && ui.Contains("static bool CanOpen() => !GameOnTop()"),
+                  "on top: the book's canvas is above the HUD, its tags sit relative to it (fixed orders: " + (fixedOrders.Count == 0 ? "none" : string.Join(", ", fixedOrders)) + "), the game's own windows close it and keep it shut");
+            // 0.8.1 (reviewer, a BLOCKER in game): our own patch makes the trader's IsVisible true while the book is open, so GameOnTop took the book for
+            // a trader and closed it on the next frame. What decides whether the book gives way (CanOpen, GameOnTop) never calls a method this mod
+            // patches. Harmony does not run here, so the source says it: every [HarmonyPatch(typeof(T), "M")] against every call in those two methods
+            // (a call on a variable counts when any patched method has its name)
+            var patchedSrc = string.Join("\n", System.IO.Directory.GetFiles(System.IO.Path.Combine(src, "src"), "*.cs", System.IO.SearchOption.AllDirectories).Select(System.IO.File.ReadAllText));
+            var patched = System.Text.RegularExpressions.Regex.Matches(patchedSrc, @"\[HarmonyPatch\(typeof\((\w+)\),\s*(?:nameof\((?:\w+\.)?(\w+)\)|""(\w+)"")").Cast<System.Text.RegularExpressions.Match>()
+                .Select(m => (type: m.Groups[1].Value, method: m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value)).ToList();
+            var from = ui.IndexOf("static bool CanOpen()", StringComparison.Ordinal); var gate = ui.IndexOf("static bool GameOnTop()", StringComparison.Ordinal);
+            var end = gate < 0 ? -1 : ui.IndexOf("\n        }", gate, StringComparison.Ordinal);
+            var decides = from < 0 || end < 0 ? "" : System.Text.RegularExpressions.Regex.Replace(ui.Substring(from, end - from), @"//[^\n]*", "");   // the code, not its comments
+            var throughPatch = System.Text.RegularExpressions.Regex.Matches(decides, @"\b([A-Za-z_]\w*)(?:\.instance)?\.(\w+)\s*\(").Cast<System.Text.RegularExpressions.Match>()
+                .Where(m => char.IsUpper(m.Groups[1].Value[0]) ? patched.Contains((m.Groups[1].Value, m.Groups[2].Value)) : patched.Any(p => p.method == m.Groups[2].Value))
+                .Select(m => m.Value.TrimEnd('(')).Distinct().ToList();
+            Check(patched.Count > 20 && patched.Contains(("StoreGui", "IsVisible")) && decides.Contains("Menu.IsVisible()") && throughPatch.Count == 0,
+                  "on top: CanOpen and GameOnTop read the game's windows, never through a method this mod patches (" + patched.Count + " patched; through a patch: " + (throughPatch.Count == 0 ? "none" : string.Join(", ", throughPatch)) + ")");
             Check(lowBoxes.Count == 0 && chapterSrc.Any(s => s.Contains("static float LineBox(")), "text: no one-line label sits in a box lower than its font's line (TMP's ellipsis would drop it whole)" + (lowBoxes.Count > 0 ? ": " + string.Join(" | ", lowBoxes) : ""));
         }
         return fails;

@@ -35,6 +35,16 @@ namespace Hearthwoven.Panel
         public readonly bool Decimals;
         /// <summary>A feat of the whole group (Iron for the Forge): one number for everyone who shares, on the Together page, never in a player's own Earned or Unsung, never in Known for.</summary>
         public readonly bool Group;
+        /// <summary>A group feat's land (Heightmap.Biome name, "Swamp"): not on the Together page until the group found it (GroupVisible); null = no gate.</summary>
+        public string Biome;
+        /// <summary>The picture when it is not the family's emblem ("item:$item_bronze|title:smith": the game's own icon, the emblem when it has none).</summary>
+        public string Picture;
+        /// <summary>A group feat's riddle until someone who shares has held its material (FeatsGroup.cs); null = always its own name.</summary>
+        public FeatVeil Veil;
+        /// <summary>A group feat: one member's own part of the number (B37: "Who helped", each with their share); null = Iron for the Forge's crew from the
+        /// server's book ("Carried by", names only). Helped: the row's heading in the feat's own verb ("Who cooked"). Overlaps: the number is a set (each
+        /// different thing once), so members' parts overlap: their own counts, no per cent.</summary>
+        public Func<PanelInput, double> Part; public string Helped = PanelModel.WhoHelped; public bool Overlaps;
 
         public FeatDef(string id, string name, string family, Chapter chapter, string page, string honours, double[] tiers, Func<double, string> rule,
                        Func<PanelInput, double?> value, string source, string caveat, bool exact = true, bool derived = false, bool retro = false, string needs = null,
@@ -53,7 +63,7 @@ namespace Hearthwoven.Panel
     ///              Selected (the one the detail area shows), Items = [its detail].
     ///   featdetail the one fixed detail area: Icon, Title, Value ("II of III"), Text (what it honours), Tone, Items = Kind
     ///              "rule" (Title; Value = the tier's numeral; Selected = reached), "progress" (Title "3 400 of 5 000", Fraction),
-    ///              "counted" (Text), "caveat" (Text), "moment" (Text; Note = a quiet "(or earlier)"), "crew" (a group feat: Items = who carried, Icon "person:Name").
+    ///              "counted" (Text), "caveat" (Text), "moment" (Text; Note = a quiet "(or earlier)"), "crew" (a group feat: Title "Who cooked", Tone "share" when the parts add up; Items = who, Icon "person:Name", Value their part, Note "66 %", Fraction).
     ///              Every card carries its own, so a hover can fill the area.
     ///   Colour     on a card, the detail, a rule and a Known for / band item: the tier's colour (TierColour: I bronze, II silver, III and a one-off gold).
     ///   knownfor   Deeds > Overview: "Known for" and up to three feats (Items: Icon, Title, Value = numeral, Id = feat id); Id "Feats/earned".
@@ -72,14 +82,14 @@ namespace Hearthwoven.Panel
         /// <summary>The Titles page (B18, Joost 2026-10-09: titles and feats stay two systems, explained): every title, the ones held first with why, then the
         /// ones not held yet with what earns them. A title in a page's strip opens it here ("Feats/titles/wallwarden"). The list icon: the laurel ring (no line icon
         /// for titles exists yet).</summary>
-        public const string TitlesPageId = "titles", TitlesLink = "Feats/titles", TitlesIcon = "vocab:boss-ring", TitlesHeading = "Titles", TitleKind = "title";
+        public const string TitlesPageId = "titles", TitlesLink = "Feats/titles", TitlesIcon = "vocab:list-titles", TitlesHeading = "Titles", TitleKind = "title";
         public const string TitlesDefinition = "A title names a kind of work you do, earned the first time you do it. A feat is a moment you reach.";
         public const string TitleHeld = "Held", TitleNotHeld = "Not held yet", TitlePageWord = "Its page: ";
         /// <summary>The tiers' colours, Valheim metals (Joost: colour-code I, II, III): bronze, silver, gold. A one-off feat is earned in full: gold. Never a player's
         /// or a damage colour; always with its numeral or notches, never colour alone.</summary>
         public static readonly string[] TierColours = { "", "#c27a4a", "#c9d2da", "#f0c862" };
         public static string TierColour(int level, int count) => level <= 0 ? null : count <= 1 || level >= 3 ? TierColours[3] : TierColours[Math.Min(level, 3)];
-        public const string CountedCharacter = "Your character", CountedPc = "Since install · this PC", CountedFellows = "Fellow players who share", CountedServer = "The server, from its cargo book";
+        public const string CountedCharacter = "Your character", CountedPc = "Recorded on this PC", CountedFellows = "Fellow players who share", CountedServer = "The server, from its cargo book";
         public const string KnownForTitle = "Known for", FeatsHeading = "Feats", FeatsNone = "No feats earned yet.", FeatsAllEarned = "Every feat earned.";
         public const string NotCountedYet = "Hearthwoven does not count this yet.";
         /// <summary>Why an Unsung feat reads 0 (feats-real, Joost's own book showed "0 of 16" with no reason): the card's second small line. A feat counted
@@ -129,6 +139,7 @@ namespace Hearthwoven.Panel
         /// <summary>The picture of a feat: Codex's own line pictures for the ones that have one (Waymate, the young, the lead rope), else its family's title emblem.</summary>
         public static string FeatIcon(FeatDef d)
         {
+            if (d.Picture != null) return d.Picture;
             switch (d.Id)
             {
                 case "waymate": return "vocab:feat-waymate";
@@ -139,7 +150,7 @@ namespace Hearthwoven.Panel
             }
         }
 
-        public static readonly FeatDef[] FeatDefs =
+        public static readonly FeatDef[] FeatDefs = new FeatDef[]
         {
             // ----- Hearth Cook -----
             new FeatDef("fulltable", "Full Table", "cook", Chapter.Deeds, "cooking", "A table the whole group sat at.", new[] { 3.0 },
@@ -187,7 +198,7 @@ namespace Hearthwoven.Panel
             new FeatDef("stoodfast", "Stood Fast", "defender", Chapter.Battle, "defense", "Taking the blows so others can fight.", new[] { 10000.0 },
                 t => "Stop " + N(t) + " damage with {your} shield.",
                 i => FeatCount(i, FeatsCounters.Stopped),
-                CountedPc, "It counts damage before {your} armour.", brief: t => N(t) + " damage stopped", unit: "damage"),
+                CountedPc, "It counts damage before {your} armor.", brief: t => N(t) + " damage stopped", unit: "damage"),
             new FeatDef("unbroken", "Unbroken", "defender", Chapter.Battle, "defense", "Not one blow got through.", new[] { 10.0 },
                 t => "Parry " + N(t) + " blows in a row before a hit lands on {them}.",
                 i => FeatCount(i, FeatsCounters.BestStreak),
@@ -226,8 +237,18 @@ namespace Hearthwoven.Panel
             new FeatDef("ironforge", "Iron for the Forge", "hauler", Chapter.Feats, FeatsTogetherId, "Bringing the ore home, all of us.", new[] { 10000.0 },
                 t => "Together, move " + N(t) + " item-km of ore and metal by ship or cart.",
                 GroupOre, CountedServer, "Counted when ore or metal comes off a ship or cart. Only fellow players who share are seen.", exact: false, derived: true, needs: "cargoDelivered",
-                brief: t => N(t) + " item-km moved", unit: "item-km", decimals: true, group: true),
-        };
+                brief: t => N(t) + " item-km moved", unit: "item-km", decimals: true, group: true)
+                {
+                    Biome = "Swamp",   // 0.7 decision 4: it names iron, so it waits for the Swamp like Bog Iron (name kept)
+                    // and, like Bog Iron, its name stays a riddle until someone who shares held iron (review fix: the Swamp found is not iron found);
+                    // its number counts copper and tin ore too, so moving ore does not lift it
+                    Veil = new FeatVeil
+                    {
+                        Name = "Ore for the Forge", Honours = "Bringing the ore home, all of us.", Lifts = new[] { "$item_ironscrap", "$item_iron" }, ValueLifts = false,
+                        Rule = t => "Together, move " + N(t) + " item-km of ore and metal by ship or cart.", Brief = t => N(t) + " item-km moved", Unit = "item-km",
+                    },
+                },
+        }.Concat(GroupFeatDefs()).ToArray();   // the group's eight (FeatsGroup.cs)
 
         /// <summary>The group's ore and metal moved by ship or cart (item-km): what the server's book booked as unloaded, summed over you and every fellow player who shares
         /// (each haul once: from where it was loaded to where it came off). null when no one's book is there (a server before 0.6): the feat waits.</summary>
@@ -238,27 +259,72 @@ namespace Hearthwoven.Panel
             return books.Sum(b => b.Delivered.Where(kv => CargoVoyage.MetalOre.Contains(kv.Key)).Sum(kv => kv.Value)) / 1000.0;
         }
         static List<(string name, ServerBook.Shared book)> GroupBooks(PanelInput i) =>
-            i == null ? new List<(string, ServerBook.Shared)>() : new[] { i }.Concat(FellowsOf(i)).Where(p => p?.Book != null).GroupBy(p => p.PlayerName ?? "", StringComparer.OrdinalIgnoreCase)
-                .Select(g => (g.Key, g.First().Book)).ToList();
+            GroupMembers(i).Where(p => p.Book != null).Select(p => (p.PlayerName ?? "", p.Book)).ToList();   // each person once, by who they are (MemberKey), not by name
         /// <summary>Who loaded or unloaded ore or metal for the group, by name (no numbers each: no comparison, and who gets the credit is Joost's call).</summary>
         public static List<string> GroupCrew(PanelInput i) =>
             GroupBooks(i).Where(x => x.book.Sent.Concat(x.book.Delivered).Any(kv => kv.Value > 0 && CargoVoyage.MetalOre.Contains(kv.Key)))
                 .Select(x => x.name).Where(n => n.Length > 0).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
 
         public static FeatDef FeatById(string id) => FeatDefs.FirstOrDefault(d => d.Id == id);
+        /// <summary>True for a group feat's id (Together's): its gold dot sits on Together, never on Earned (FeatsLedger.UnseenOf).</summary>
+        public static bool IsGroupFeat(string id) => FeatById(id)?.Group == true;
+
+        /// <summary>The panel's feats seen once their page is on screen in your own book: Earned marks your own tiers seen, Together the group's
+        /// (each page answers its own dot; opening Earned leaves a group tier's dot on Together).</summary>
+        public static void FeatsSeen(PanelInput self, PanelState state)
+        {
+            if (self?.Feats == null || !self.IsSelf || state == null || state.ShowAbout || state.Chapter != Chapter.Feats) return;
+            var page = state.PageOf(Chapter.Feats) ?? FeatsPageId;
+            if (page == FeatsPageId) self.Feats.MarkSeenOf(IsGroupFeat, false);
+            else if (page == FeatsTogetherId) self.Feats.MarkSeenOf(IsGroupFeat, true);
+        }
 
         // ---------- the numbers ----------
+
+        /// <summary>
+        /// L6 (review): one render asks a feat's number and veil many times (the card, its detail, the hint, the title, the picture, the rule, the unit,
+        /// the caveat) and a group feat's number walks every member's copy. Build opens this memo for its own run (by reference: the inputs of one
+        /// render), so each is worked out once per feat and the group's lands (GroupFound) once per page. Outside Build nothing is kept.
+        /// </summary>
+        sealed class FeatMemo
+        {
+            public readonly Dictionary<(PanelInput, string), (double? value, bool threw)> Raw = new Dictionary<(PanelInput, string), (double?, bool)>();
+            public readonly Dictionary<(PanelInput, string), bool> Veiled = new Dictionary<(PanelInput, string), bool>();
+            public readonly Dictionary<PanelInput, HashSet<string>> Found = new Dictionary<PanelInput, HashSet<string>>();
+        }
+        [ThreadStatic] static FeatMemo featMemo;
+
+        /// <summary>Runs one render with the feat memo open (nested calls share the outer one).</summary>
+        static T WithFeatMemo<T>(Func<T> render)
+        {
+            if (featMemo != null) return render();
+            featMemo = new FeatMemo();
+            try { return render(); } finally { featMemo = null; }
+        }
+
+        static (double? value, bool threw) FeatRaw(FeatDef d, PanelInput i)
+        {
+            var m = featMemo;
+            if (m != null && i != null && m.Raw.TryGetValue((i, d.Id), out var hit)) return hit;
+            (double?, bool) r;
+            try { r = (d.Value(i), false); } catch { r = (null, true); }
+            if (m != null && i != null) m.Raw[(i, d.Id)] = r;
+            return r;
+        }
 
         /// <summary>The player's number for a feat now (0 when it is not counted yet).</summary>
         public static double FeatValue(FeatDef d, PanelInput i)
         {
-            try { return Math.Max(0, d.Value(i) ?? 0); } catch { return 0; }
+            var r = FeatRaw(d, i);
+            return r.threw ? 0 : Math.Max(0, r.value ?? 0);
         }
 
         /// <summary>True when the feat's data key is not there (a counter another part of Hearthwoven will keep): nothing to show but the rule.</summary>
         public static bool FeatWaiting(FeatDef d, PanelInput i)
         {
-            try { return d.Needs != null && d.Value(i) == null; } catch { return d.Needs != null; }
+            if (d.Needs == null) return false;
+            var r = FeatRaw(d, i);
+            return r.threw || r.value == null;
         }
 
         /// <summary>How many of a feat's tiers a number reaches.</summary>
@@ -283,8 +349,11 @@ namespace Hearthwoven.Panel
             var ledger = self?.Feats;
             if (self == null || ledger == null || !self.IsSelf) return fresh;
             var first = !ledger.Primed;
+            HashSet<string> found = null;
             foreach (var d in FeatDefs)
             {
+                // a group feat of a land the group has not found is not noticed yet (no dot for a feat the page does not show)
+                if (d.Group && d.Biome != null && !GroupVisible(d, self, found = found ?? GroupFound(self))) continue;
                 var tier = FeatTierOf(d, FeatValue(d, self));
                 while (ledger.Tier(d.Id) < tier)
                 {
@@ -311,7 +380,7 @@ namespace Hearthwoven.Panel
         // the year only when it is not this year's (short, Joost 2026-10-09: "Earned 7 Oct")
         static bool OtherYear(PanelInput i, FeatMoment m) => i.NowUtc > DateTime.MinValue && Local(i, m.Utc).Year != Local(i, i.NowUtc).Year;
         /// <summary>The quiet tail of a moment first seen on a day (worked out from fellows' copies, or met at Hearthwoven's first look): it may have happened before.</summary>
-        public const string OrEarlier = "(or earlier)", BeforeInstallNote = "(before install)";
+        public const string OrEarlier = "(or earlier)";
 
         /// <summary>A character's old record first looked at after the install day (the feats came with a later version): it crossed the line before that look,
         /// not necessarily before the install, so it is said as a day first seen ("9 Oct or earlier"), never "before install".</summary>
@@ -319,9 +388,9 @@ namespace Hearthwoven.Panel
             m.Before && m.Utc > DateTime.MinValue && i.InstalledUtc.HasValue && Local(i, m.Utc).Date > Local(i, i.InstalledUtc.Value).Date;
 
         /// <summary>The one small line on a card: "12 Oct · Swamp", "before install", "9 Oct or earlier" ("" when nothing is known).</summary>
-        public static string FeatMomentLine(PanelInput i, FeatMoment m)
+        public static string FeatMomentLine(PanelInput i, FeatMoment m, DateTime? since = null)
         {
-            if (m.Before && !BeforeIsLate(i, m)) return "before install";
+            if (m.Before && !BeforeIsLate(i, m)) return BeforeWhen(i, since ?? StartOf(i, null));
             if (m.Utc <= DateTime.MinValue) return "";
             if (m.Noticed || m.Before) return MomentDay(i, m, false) + " or earlier";
             var biome = string.IsNullOrEmpty(m.Biome) || m.Biome == "None" ? null : BiomeName(m.Biome);
@@ -330,39 +399,60 @@ namespace Hearthwoven.Panel
 
         /// <summary>The detail's moment, short and honest (Joost 2026-10-09): "Earned 12 Oct in the Swamp"; a day first seen: "Earned 7 Oct" with the quiet note
         /// "(or earlier)"; a character's old record: "Earned before 8 Oct" with "(before install)". The year only when it is not this one.</summary>
-        public static (string text, string note) FeatMomentWords(PanelInput i, FeatMoment m)
+        public static (string text, string note) FeatMomentWords(PanelInput i, FeatMoment m, DateTime? since = null)
         {
             if (m.Before && !BeforeIsLate(i, m))
-                return ("Earned before install", i.InstalledUtc.HasValue && i.IsSelf ? "(Hearthwoven counts from " + Local(i, i.InstalledUtc.Value).ToString("d MMM", Inv) + ")" : null);
+            {
+                var from = since ?? StartOf(i, null);
+                return ("Earned " + BeforeWhen(i, from), from.HasValue && i.IsSelf ? "(Hearthwoven counts from " + RecordDate(i, from.Value) + ")" : null);
+            }
             if (m.Utc <= DateTime.MinValue) return ("Earned, date not known", null);
             if (m.Noticed || m.Before) return ("Earned " + MomentDay(i, m, OtherYear(i, m)), OrEarlier);
             var biome = string.IsNullOrEmpty(m.Biome) || m.Biome == "None" ? null : BiomeName(m.Biome);
             return ("Earned " + MomentDay(i, m, OtherYear(i, m)) + (biome != null ? " in the " + biome : "") + (string.IsNullOrEmpty(m.Place) ? "" : ", " + m.Place), null);
         }
+        /// <summary>"before 8 October": a character's old record, before the day its count began; without a date: "before the count began".</summary>
+        static string BeforeWhen(PanelInput i, DateTime? from) => from.HasValue ? "before " + RecordDate(i, from.Value) : "before the count began";
+
         /// <summary>The moment as one line (its text and its quiet note), for tests and plain text.</summary>
         public static string FeatMomentSentence(PanelInput i, FeatMoment m) { var w = FeatMomentWords(i, m); return w.note == null ? w.text : w.text + " " + w.note; }
 
         // ---------- the page ----------
 
         // the source tag of a feat's numbers (ISC-A-2: every number carries one): where the feat is counted
-        static string FeatTag(FeatDef d) => d.Source == CountedCharacter ? TagCharacter : d.Source == CountedFellows ? TagFellows : d.Source == CountedServer ? TagServer : TagMeasured;
+        static string FeatTag(FeatDef d) => d.Source == CountedCharacter ? TagCharacter : d.Source == CountedFellows || d.Source == CountedGroup ? TagFellows : d.Source == CountedServer ? TagServer : TagMeasured;
 
         /// <summary>A rule or a caveat said for whose book it is: "you" and "your" on your own, "they", "their" and "them" on a fellow player's.</summary>
         public static string FeatWords(PanelInput i, string text) =>
             text == null ? null : (i == null || i.IsSelf ? text.Replace("{you}", "you").Replace("{your}", "your").Replace("{them}", "you") : text.Replace("{you}", "they").Replace("{your}", "their").Replace("{them}", "them"));
 
-        /// <summary>How a feat is counted, in the zones' words: "Your character" / "Since install · this PC" on your own page, "Tor's character" / "Since install · Tor's PC" on a fellow's.</summary>
+        /// <summary>How a feat is counted: "Your character" / "Recorded from 1 October · this PC" on your own page, "Tor's character" /
+        /// "Recorded on Tor's PC" on a fellow's.</summary>
         public static string FeatCounted(PanelInput i, FeatDef d) =>
-            i == null || i.IsSelf || d.Source == CountedFellows || d.Source == CountedServer ? d.Source : d.Source == CountedCharacter ? Name(i) + "'s character" : "Since install · " + Name(i) + "'s PC";
+            d.Source == CountedGroup ? FeatWords(i, CountedGroupLine) :
+            i != null && d.Source == CountedPc ? FeatsPcLine(i, CountFrom(i, d.Id)) :
+            i == null || i.IsSelf || d.Source == CountedFellows || d.Source == CountedServer || d.Source == CountedGroup ? d.Source : d.Source == CountedCharacter ? Name(i) + "'s character" : FeatsPcLine(i, null);
+
+        // a fellow's feats ledger travels whole in every copy (not only their last session), so a feat counted on their PC says whose PC,
+        // also on an older sender's copy (RecordedFromLine says "as Tor last shared it" there, which is right for the session's numbers)
+        static string FeatsPcLine(PanelInput i, DateTime? from) => i != null && !i.IsSelf ? FellowWords(Name(i), true) : RecordedFromLine(i, from);
+        static string FeatsPcShort(PanelInput i, DateTime? from) => i != null && !i.IsSelf ? "on " + Name(i) + "'s PC" : FromShort(i, from);
+
+        /// <summary>The 0.6 group's feats (Feats chapter row 132): their counts on this PC began with the feats group's own start (LocalTotals.StartFeats),
+        /// not with the install (0.7 hard case 15). Every other feat counted on this PC began with the install.</summary>
+        static readonly HashSet<string> SinceV06 = new HashSet<string> { "shieldwall", "stoodfast", "unbroken", "forsaken", "oreroad", "heavykeel", "drover", "longlead", "born" };
+
+        /// <summary>When a feat's count on this PC began (0.7 hard case 15): the 0.6 feats from the feats group's start, the others from the install; null for a fellow's book.</summary>
+        public static DateTime? CountFrom(PanelInput i, string featId) => StartOf(i, featId != null && SinceV06.Contains(featId) ? LocalTotals.StartFeats : null);
 
         /// <summary>The block kinds of the Feats system (they carry no number of their own beyond what their items tag).</summary>
         public static bool IsFeatKind(string kind) => kind == "feats" || kind == "featdetail" || kind == "knownfor" || kind == "featband";
 
         /// <summary>"8 750 of 10 000 damage", "1.6 of 5 km": every progress line names its unit; a distance or a duration shows one decimal, cut not rounded (never ahead of the truth).</summary>
-        public static string FeatProgress(FeatDef d, double value, double next)
+        public static string FeatProgress(FeatDef d, double value, double next, PanelInput i = null)
         {
             var have = FeatHave(d, value);
-            var unit = d.Unit ?? "";
+            var unit = (i == null ? d.Unit : FeatUnit(d, i)) ?? "";
             var bar = unit.IndexOf('|');
             if (bar >= 0) unit = Math.Round(next) == 1 ? unit.Substring(0, bar) : unit.Substring(bar + 1);
             return have + " of " + N(next) + (unit.Length > 0 ? " " + unit : "");
@@ -386,14 +476,18 @@ namespace Hearthwoven.Panel
             if (d.Source == CountedServer) return waiting ? NeedsServer : null;
             if (waiting) return null;
             var value = FeatValue(d, i);
+            if (d.Source == CountedGroup) return value > 0 ? FeatHave(d, value) + " so far" : "none yet";   // the group's number, the same on every book
             if (d.Source == CountedFellows)
                 return !i.IsSelf ? null : !FellowsOf(i).Any() ? NeedsFellows : value > 0 ? FeatHave(d, value) + " so far" : "none yet from fellows";
             var have = i.IsSelf && d.Exact && value > 0 ? FeatHave(d, value) + " so far" : null;
             if (d.Source == CountedPc)
             {
                 if (!i.IsSelf) return null;
-                var since = i.InstalledUtc.HasValue ? "since " + Local(i, i.InstalledUtc.Value).ToString("d MMM", Inv) : "since install";
-                return have != null ? have + " · " + since : "counting " + since;
+                // hard case 15: the install, or the 0.6 feats' start; the short month, the card's second line is narrow ("counting from 8 Oct")
+                var from = CountFrom(i, d.Id);
+                if (!from.HasValue) return have ?? "counted on this PC";
+                var since = Local(i, from.Value).ToString("d MMM", Inv);
+                return have != null ? have + " · from " + since : "counting from " + since;
             }
             return have ?? (i.IsSelf ? "0 so far" : null);
         }
@@ -410,13 +504,29 @@ namespace Hearthwoven.Panel
             return "Tier " + Numeral(tier) + " · next: " + Numeral(tier + 1) + " at " + N(d.Tiers[tier]);
         }
 
-        /// <summary>An earned card's second small line when a tier is still ahead: "next: II at 5 000" (only the next one, never the ones beyond it).</summary>
-        public static string FeatNextLine(FeatDef d, int tier) =>
-            d.Tiers.Length > 1 && tier > 0 && tier < d.Tiers.Length ? "next: " + Numeral(tier + 1) + " at " + N(d.Tiers[tier]) : null;
+        /// <summary>An earned card's second small line when a tier is still ahead, with what the number counts (B30, Joost: "next: II at 250" said
+        /// 250 of what?): "next: II at 250 bronze made", in the feat's own few words (its brief; a veiled feat's names no material). Only the next tier.</summary>
+        public static string FeatNextLine(FeatDef d, int tier, PanelInput input = null)
+        {
+            if (d.Tiers.Length <= 1 || tier <= 0 || tier >= d.Tiers.Length) return null;
+            var brief = input != null ? FeatBriefOf(d, input) : d.Brief;
+            return "next: " + Numeral(tier + 1) + " at " + (brief != null ? FeatWords(input, brief(d.Tiers[tier])) : N(d.Tiers[tier]));
+        }
+
+        /// <summary>The same line shorter, for a card too narrow for the feat's own words (FeatsUi.FeatCard measures; one line, never wrapped): the number
+        /// and its unit only, "next: III at 25 000 item-km".</summary>
+        public static string FeatNextShort(FeatDef d, int tier, PanelInput input = null)
+        {
+            if (FeatNextLine(d, tier, input) == null) return null;
+            var unit = (input == null ? d.Unit : FeatUnit(d, input)) ?? "";
+            var bar = unit.IndexOf('|');
+            if (bar >= 0) unit = Math.Round(d.Tiers[tier]) == 1 ? unit.Substring(0, bar) : unit.Substring(bar + 1);
+            return "next: " + Numeral(tier + 1) + " at " + N(d.Tiers[tier]) + (unit.Length > 0 ? " " + unit : "");
+        }
 
         /// <summary>The tile's own line of an unsung feat: the next tier's rule in a few words ("10 000 damage stopped").</summary>
         static string FeatBrief(PanelInput input, FeatDef d, int tier) =>
-            d.Brief == null || tier >= d.Tiers.Length ? null : FeatWords(input, d.Brief(d.Tiers[tier]));
+            FeatBriefOf(d, input) is Func<double, string> brief && tier < d.Tiers.Length ? FeatWords(input, brief(d.Tiers[tier])) : null;
 
         static Block FeatDetail(PanelInput input, FeatDef d, int tier)
         {
@@ -426,23 +536,33 @@ namespace Hearthwoven.Panel
             var value = FeatValue(d, input);
             var detail = new Block
             {
-                Kind = "featdetail", Id = d.Id, Icon = FeatIcon(d), Title = d.Name, Text = FeatWords(input, d.Honours), Tone = earned ? FeatTone : waiting ? FeatWaitingTone : FeatUnsung, Colour = TierColour(tier, d.Tiers.Length), Source = FeatTag(d),
+                Kind = "featdetail", Id = d.Id, Icon = FeatPicture(d, input), Title = FeatTitle(d, input), Text = FeatWords(input, FeatHonours(d, input)), Tone = earned ? FeatTone : waiting ? FeatWaitingTone : FeatUnsung, Colour = TierColour(tier, d.Tiers.Length), Source = FeatTag(d),
                 Value = FeatTierLine(d, tier),
                 Level = tier, Count = d.Tiers.Length, Items = new List<Block>(),
             };
-            // the tiers reached (ticked, in their colours) and only the next one: never the tiers beyond it (Joost 2026-10-09)
-            for (int k = 0; k < Math.Min(d.Tiers.Length, tier + 1); k++)
-                detail.Items.Add(new Block { Kind = "rule", Title = FeatWords(input, d.Rule(d.Tiers[k])), Value = many ? Numeral(k + 1) : "", Selected = k < tier, Source = FeatTag(d), Colour = k < tier ? TierColour(k + 1, d.Tiers.Length) : null });
+            // every tier (B30, Joost wanted to see that tier III exists; the card's marks show them all): the reached ones lit in their colours, the later
+            // ones greyed. A veiled feat keeps its riddle: the tiers reached and only the next one (Joost 2026-10-09)
+            var rule = FeatRule(d, input);   // a veiled feat's rule names no material
+            var shown = FeatVeiled(d, input) ? Math.Min(d.Tiers.Length, tier + 1) : d.Tiers.Length;
+            for (int k = 0; k < shown; k++)
+                detail.Items.Add(new Block { Kind = "rule", Title = FeatWords(input, rule(d.Tiers[k])), Value = many ? Numeral(k + 1) : "", Selected = k < tier, Source = FeatTag(d), Colour = k < tier ? TierColour(k + 1, d.Tiers.Length) : null });
             // your progress: your own page, exact numbers only, and only while a tier is still ahead; a group feat's number is the group's, the same on every book
             if ((input.IsSelf && d.Exact || d.Group) && !waiting && tier < d.Tiers.Length)
             {
                 var next = d.Tiers[tier];
-                detail.Items.Add(new Block { Kind = "progress", Title = FeatProgress(d, value, next), Fraction = (float)Math.Max(0, Math.Min(1, value / next)), Source = FeatTag(d) });
+                detail.Items.Add(new Block { Kind = "progress", Title = FeatProgress(d, value, next, input), Fraction = (float)Math.Max(0, Math.Min(1, value / next)), Source = FeatTag(d) });
             }
             detail.Items.Add(new Block { Kind = "counted", Text = waiting && !earned ? CountedNotYet : FeatCounted(input, d) });
             if (waiting) detail.Items.Add(new Block { Kind = "caveat", Text = d.Source == CountedServer ? NeedsServerCaveat : NotCountedYet });
-            else if (!string.IsNullOrEmpty(d.Caveat)) detail.Items.Add(new Block { Kind = "caveat", Text = FeatWords(input, d.Caveat) });
-            if (d.Group && !waiting)   // who carried for the group: their shields, by name, no number each
+            else if (!string.IsNullOrEmpty(FeatCaveat(d, input))) detail.Items.Add(new Block { Kind = "caveat", Text = FeatWords(input, FeatCaveat(d, input)) });   // a veiled feat's caveat names no material
+            if (d.Group && !waiting && d.Part != null)   // B37: who helped, each with their part and share, largest first, in their own colour
+            {
+                var shares = GroupShares(input, d.Part);
+                var pct = AwayPercents(shares.Select(x => x.share).ToList());   // whole per cents that add up to 100, as the group view's
+                if (shares.Count > 0) detail.Items.Add(new Block { Kind = "crew", Title = d.Helped, Tone = d.Overlaps ? null : "share",
+                    Items = shares.Select((x, k) => new Block { Icon = "person:" + x.name, Title = x.name, Id = x.name, Value = FeatHave(d, x.part), Note = d.Overlaps ? null : PercentText(pct[k], x.share), Fraction = (float)x.share }).ToList() });
+            }
+            else if (d.Group && !waiting)   // who carried (Iron for the Forge): their shields, by name (the server's book keeps no part each)
             {
                 var crew = GroupCrew(input);
                 if (crew.Count > 0) detail.Items.Add(new Block { Kind = "crew", Title = "Carried by", Items = crew.Select(n => new Block { Icon = "person:" + n, Title = n }).ToList() });
@@ -450,7 +570,7 @@ namespace Hearthwoven.Panel
             var moment = input.Feats?.Moment(d.Id);
             if (earned)
             {
-                var (text, note) = moment.HasValue ? FeatMomentWords(input, moment.Value) : ("Earned, date not known", null);
+                var (text, note) = moment.HasValue ? FeatMomentWords(input, moment.Value, CountFrom(input, d.Id)) : ("Earned, date not known", null);
                 // a feat with tiers says which tier the moment is of: "Tier II earned 9 Oct in the Swamp"
                 var of = moment.HasValue && (input.Feats?.Tier(d.Id) ?? 0) > 0 ? input.Feats.Tier(d.Id) : tier;   // the moment is the ledger's last tier's
                 if (many && text.StartsWith("Earned", StringComparison.Ordinal)) text = "Tier " + Numeral(of) + " earned" + text.Substring("Earned".Length);
@@ -466,11 +586,12 @@ namespace Hearthwoven.Panel
             var waiting = tier == 0 && FeatWaiting(d, input);   // its data is not kept yet: the card says so and looks it (never earnable-looking)
             return new Block
             {
-                Kind = "feat", Id = d.Id, Icon = FeatIcon(d), Title = d.Name, Level = tier, Count = d.Tiers.Length, Colour = TierColour(tier, d.Tiers.Length), Source = FeatTag(d),
+                Kind = "feat", Id = d.Id, Icon = FeatPicture(d, input), Title = FeatTitle(d, input), Level = tier, Count = d.Tiers.Length, Colour = TierColour(tier, d.Tiers.Length), Source = FeatTag(d),
                 Tone = tier > 0 ? FeatTone : waiting ? FeatWaitingTone : FeatUnsung,
-                Text = moment.HasValue ? FeatMomentLine(input, moment.Value) : waiting ? (d.Source == CountedServer ? NeedsServer : NotCountedShort) : tier == 0 ? FeatBrief(input, d, 0) : null,
+                Text = moment.HasValue ? FeatMomentLine(input, moment.Value, CountFrom(input, d.Id)) : waiting ? (d.Source == CountedServer ? NeedsServer : NotCountedShort) : tier == 0 ? FeatBrief(input, d, 0) : null,
                 // the second small line: why an Unsung feat reads what it reads, or on an earned one the next tier only
-                Note = tier > 0 ? FeatNextLine(d, tier) : waiting ? null : FeatHint(input, d, waiting),
+                Note = tier > 0 ? FeatNextLine(d, tier, input) : waiting ? null : FeatHint(input, d, waiting),
+                Value = tier > 0 ? FeatNextShort(d, tier, input) : null,   // the next line shorter, where the card is too narrow for it
                 Selected = d.Id == selected, Items = new List<Block> { FeatDetail(input, d, tier) },
             };
         }
@@ -479,7 +600,7 @@ namespace Hearthwoven.Panel
         /// ones, or the group's (earned or not).</summary>
         static List<Block> FeatCards(PanelInput input, string page, string selected)
         {
-            var defs = page == FeatsTogetherId ? FeatDefs.Where(d => d.Group).ToList()
+            var defs = page == FeatsTogetherId ? TogetherFeats(input, out _)
                      : FeatDefs.Where(d => !d.Group && (FeatTier(d, input) > 0) == (page == FeatsPageId)).ToList();
             var pick = defs.Any(d => d.Id == selected) ? selected : defs.FirstOrDefault()?.Id;   // the first card is selected on open: the detail is never empty
             return defs.Select(d => FeatCard(input, d, pick)).ToList();
@@ -505,8 +626,9 @@ namespace Hearthwoven.Panel
                 view.Blocks.Add(cards.First(c => c.Selected).Items[0]);
             }
             var have = FeatDefs.Count(d => !d.Group && FeatTier(d, input) > 0);
-            var line = together ? TogetherDefinition : (earnedPage ? FeatsDefinition : UnsungDefinition) + " " + N(have) + " of " + N(OwnFeatCount) + " earned.";
-            Plate(view, together ? "vocab:list-together" : earnedPage ? FeatsIcon : FeatsUnsungIcon, FellowScope(input) ?? line);
+            var hidden = false; if (together) TogetherFeats(input, out hidden);
+            var line = together ? TogetherDefinition + (hidden ? " " + LandsNotFound : "") : (earnedPage ? FeatsDefinition : UnsungDefinition) + " " + N(have) + " of " + N(OwnFeatCount) + " earned.";
+            Plate(view, together ? "vocab:list-together" : earnedPage ? FeatsIcon : FeatsUnsungIcon, RecordedScope(input) ?? line);   // a fellow's book: "Tor, as of 8 Oct" (rule E), never "since install"
             PlateOf(view).Tone = PlateFull;
         }
         /// <summary>A plate that keeps the whole room even when its blocks are shorter (the Feats chapter: the grid grows into it, the detail area sits at the foot).</summary>
@@ -559,7 +681,7 @@ namespace Hearthwoven.Panel
                 Items = mine.Select(x => new Block
                 {
                     Id = x.d.Id, Icon = FeatIcon(x.d), Title = x.d.Name, Value = x.d.Tiers.Length > 1 ? Numeral(x.tier) : "", Level = x.tier, Count = x.d.Tiers.Length, Colour = TierColour(x.tier, x.d.Tiers.Length),
-                    Text = x.m.HasValue ? FeatMomentLine(input, x.m.Value) : "", Note = FeatLabel,   // the small "Feat" tag the chip carries on an owner page
+                    Text = x.m.HasValue ? FeatMomentLine(input, x.m.Value, CountFrom(input, x.d.Id)) : "", Note = FeatLabel,   // the small "Feat" tag the chip carries on an owner page
                 }).ToList(),
             };
         }
@@ -568,7 +690,7 @@ namespace Hearthwoven.Panel
         static void FeatsFinish(PanelInput input, PanelState state, PanelView view)
         {
             if (view.ShowAbout) return;
-            if (view.Active != Chapter.Feats)
+            if (view.Active != Chapter.Feats && !view.EveryoneOn)   // 0.8: the group's page carries no one player's feats or titles (EveryoneModel.cs)
             {
                 var band = FeatBand(input, view.Active, view.Page);
                 var plate = PlateOf(view);
@@ -585,12 +707,18 @@ namespace Hearthwoven.Panel
                 }
                 if (band != null) { if (plate != null) plate.Items.Insert(0, band); else view.Blocks.Insert(0, band); }
             }
-            // the page that answers the dot carries none (fix4: the Feats page you were reading kept its own "new" dot); opening Earned marks them seen for the next page
-            if (input.IsSelf && input.Feats != null && input.Feats.Unseen > 0 && !(OnFeatsPage(view) && view.Page == FeatsPageId))
+            // the page that answers the dot carries none (fix4: the Feats page you were reading kept its own "new" dot); opening Earned marks your own
+            // tiers seen, opening Together the group's (FeatsSeen): a group tier's dot sits on the tab and on Together, never on Earned
+            if (input.IsSelf && input.Feats != null)
             {
+                var onPage = OnFeatsPage(view) ? view.Page : null;
+                var own = onPage != FeatsPageId && input.Feats.UnseenOf(IsGroupFeat, false) > 0;
+                var group = onPage != FeatsTogetherId && input.Feats.UnseenOf(IsGroupFeat, true) > 0;
                 var tab = view.Chapters.FirstOrDefault(c => c.Id == Chapter.Feats.ToString());
-                if (tab != null && view.Active != Chapter.Feats) tab.Dot = true;
-                if (view.Active == Chapter.Feats) { var entry = view.List.FirstOrDefault(l => l.Id == FeatsPageId); if (entry != null) entry.Dot = true; }
+                if (tab != null && view.Active != Chapter.Feats && (own || group)) tab.Dot = true;
+                if (view.Active == Chapter.Feats)
+                    foreach (var entry in view.List)
+                        if ((own && entry.Id == FeatsPageId) || (group && entry.Id == FeatsTogetherId)) entry.Dot = true;
             }
             if (OnFeatsPage(view))
             {
@@ -599,7 +727,7 @@ namespace Hearthwoven.Panel
                 if (at >= 0) view.Keys[at] = "[Q/E] Chapter";
                 var page = view.Keys.IndexOf("[W/S] Page");
                 view.Keys.Insert(page >= 0 ? page + 1 : view.Keys.Count, view.Page == TitlesPageId ? "[A/D] Title" : "[A/D] Feat");
-                FeatsLabelPc(view.Blocks);
+                FeatsLabelPc(input, view.Blocks);
             }
         }
 
@@ -633,11 +761,12 @@ namespace Hearthwoven.Panel
             return items;
         }
 
-        // how a title's line is counted, in the feats' words ("Your character", "Since install · this PC"; "Tor's character" on Tor's book)
+        // how a title's line is counted, in the feats' words ("Your character", "Recorded from 1 October · this PC"; "Tor's character" on Tor's book)
         static string TitleCounted(PanelInput i, string source)
         {
             var d = source == Profile ? CountedCharacter : source == Fellows ? CountedFellows : CountedPc;
-            return i == null || i.IsSelf || d == CountedFellows ? d : d == CountedCharacter ? Name(i) + "'s character" : "Since install · " + Name(i) + "'s PC";
+            if (d == CountedPc && i != null) return RecordedFromLine(i, StartOf(i, null));
+            return i == null || i.IsSelf || d == CountedFellows ? d : d == CountedCharacter ? Name(i) + "'s character" : RecordedFromLine(i, null);
         }
 
         /// <summary>
@@ -654,7 +783,7 @@ namespace Hearthwoven.Panel
             var cards = order.Select(t => TitleCard(input, t, held.FirstOrDefault(r => r.Id == t.Id), pick)).ToList();
             view.Blocks.Add(new Block { Kind = "feats", Items = cards, Tone = TitlesPageId });
             view.Blocks.Add(cards.First(c => c.Selected).Items[0]);
-            Plate(view, TitlesIcon, FellowScope(input) ?? TitlesDefinition + " " + N(held.Count) + " of " + N(SagaTitles.Length) + " held.");
+            Plate(view, TitlesIcon, RecordedScope(input) ?? TitlesDefinition + " " + N(held.Count) + " of " + N(SagaTitles.Length) + " held.");
             PlateOf(view).Tone = PlateFull;
         }
 
@@ -666,10 +795,19 @@ namespace Hearthwoven.Panel
             {
                 Kind = "feat", Id = t.Id, Icon = "title:" + t.Id, Title = t.Title, Level = row != null ? 1 : 0, Count = 1, Colour = row != null ? TierColour(1, 1) : null,
                 Tone = row != null ? FeatTone : FeatUnsung, Source = tag,
-                // held: why (its first reason; the descriptor when only an earn-only count holds it); not held: the first step that earns it
-                Text = row != null ? first.Key ?? row.Descriptor : Voice(input, FirstStep(t)),
+                // held: why (its first reason; when only an earn-only count holds it, HeldBefore); not held: the first step that earns it
+                Text = row != null ? first.Key ?? HeldBefore(input, row) : Voice(input, FirstStep(t)),
                 Selected = t.Id == selected, Items = new List<Block> { TitleDetail(input, t, row) },
             };
+        }
+
+        /// <summary>The reason of a title only an earn-only count holds (Stonebreaker by the game's own pickaxe count while Hearthwoven counted none: K6
+        /// shows no number from it): the work and when, "Stone and ore broken before 9 October", as the other cards say their count; a fellow's book
+        /// (no date): the work alone.</summary>
+        public static string HeldBefore(PanelInput input, TitleRow row)
+        {
+            var from = StartOf(input, null);
+            return from.HasValue ? row.Descriptor + " before " + RecordDate(input, from.Value) : row.Descriptor;
         }
 
         static Block TitleDetail(PanelInput input, SagaTitle t, TitleRow row)
@@ -680,7 +818,8 @@ namespace Hearthwoven.Panel
                 Kind = "featdetail", Id = t.Id, Icon = "title:" + t.Id, Title = t.Title, Text = row?.Descriptor ?? (input.IsSelf || !t.Descriptor.StartsWith("Your ") ? t.Descriptor : Name(input) + "'s " + t.Descriptor.Substring(5)), Tone = held ? FeatTone : FeatUnsung,
                 Colour = held ? TierColour(1, 1) : null, Value = held ? TitleHeld : TitleNotHeld, Level = held ? 1 : 0, Count = 1, Items = new List<Block>(),
             };
-            if (held) foreach (var l in Reasons(row)) detail.Items.Add(new Block { Kind = "rule", Title = l.Key, Value = "", Selected = true, Source = TagOf(l.Value), Colour = TierColour(1, 1) });
+            if (held && row.Lines.Count == 0) detail.Items.Add(new Block { Kind = "rule", Title = HeldBefore(input, row), Value = "", Selected = true, Colour = TierColour(1, 1) });   // only an earn-only count holds it
+            else if (held) foreach (var l in Reasons(row)) detail.Items.Add(new Block { Kind = "rule", Title = l.Key, Value = "", Selected = true, Source = TagOf(l.Value), Colour = TierColour(1, 1) });
             else detail.Items.Add(new Block { Kind = "rule", Title = Voice(input, FirstStep(t)), Value = "" });
             detail.Items.Add(new Block { Kind = "counted", Text = string.Join(" · ", t.Lines.Select(l => TitleCounted(input, l.Source)).Distinct().ToArray()) });
             var chapter = ChapterRow.First(c => c.id == t.Chapter).label;
@@ -690,12 +829,13 @@ namespace Hearthwoven.Panel
         }
 
         // a number counted on this PC is labelled as such (the data flag the page rules read; the detail also says "Counted by ... this PC" in words)
-        static void FeatsLabelPc(IEnumerable<Block> blocks)
+        static void FeatsLabelPc(PanelInput input, IEnumerable<Block> blocks, string feat = null)
         {
             foreach (var b in blocks ?? Enumerable.Empty<Block>())
             {
-                if (b.Src == SrcPc && (b.Title ?? "").Any(char.IsDigit)) b.SinceInstall = true;
-                FeatsLabelPc(b.Items);
+                var id = (b.Kind == "feat" || b.Kind == "featdetail") && FeatById(b.Id) != null ? b.Id : feat;   // the feat the number belongs to
+                if (b.Src == SrcPc && (b.Title ?? "").Any(char.IsDigit)) { b.RecordedFrom = FeatsPcShort(input, CountFrom(input, id)); }
+                FeatsLabelPc(input, b.Items, id);
             }
         }
     }

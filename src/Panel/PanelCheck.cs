@@ -92,6 +92,7 @@ namespace Hearthwoven.Panel
             {
                 new KeyValuePair<string, ConfigEntryKey>("Hotkey", new ConfigEntryKey(Hotkey)), new KeyValuePair<string, ConfigEntryKey>("InfoKey", new ConfigEntryKey(InfoKey)),
                 new KeyValuePair<string, ConfigEntryKey>("ViewKey", new ConfigEntryKey(ViewKey)), new KeyValuePair<string, ConfigEntryKey>("FilterKey", new ConfigEntryKey(FilterKey)),
+                new KeyValuePair<string, ConfigEntryKey>("NumbersKey", new ConfigEntryKey(NumbersKey)), new KeyValuePair<string, ConfigEntryKey>("BookKey", new ConfigEntryKey(BookKey)),
                 new KeyValuePair<string, ConfigEntryKey>("SnapshotKey", new ConfigEntryKey(SnapshotKey)), new KeyValuePair<string, ConfigEntryKey>("SelfCheckKey", new ConfigEntryKey(DevCheck.Key)),
             };
             foreach (var k in keys)
@@ -226,8 +227,9 @@ namespace Hearthwoven.Panel
                             var shown = t.GetParsedText();
                             if (PanelRich.HasMarkup(shown)) { raw++; if (rawTexts.Count < 3) rawTexts.Add("'" + (shown.Length > 60 ? shown.Substring(0, 60) : shown) + "' in " + (t.transform.parent ? t.transform.parent.name : t.name)); }
                             var px = t.fontSize * t.transform.lossyScale.y / scale;
-                            if (px < PanelLook.MinText - 0.05f) below++;
-                            if (px < least) { least = px; leastText = "'" + (t.text.Length > 24 ? t.text.Substring(0, 24) : t.text) + "' in " + (t.transform.parent ? t.transform.parent.name : t.name); }
+                            var barDigits = t.name == PanelLook.BarDigitsName && PanelLook.BarDigitsText(t.text) && px >= PanelLook.MinBarDigits - 0.05f;   // the one exception (PanelLook.MinText)
+                            if (px < PanelLook.MinText - 0.05f && !barDigits) below++;
+                            if (px < least && !barDigits) { least = px; leastText = "'" + (t.text.Length > 24 ? t.text.Substring(0, 24) : t.text) + "' in " + (t.transform.parent ? t.transform.parent.name : t.name); }
                         }
                         var kinds = view == null ? new List<string>() : Every(PanelModel.Content(view)).Select(b => b.Kind).Where(k => k != null && NewKinds.Contains(k)).Distinct().ToList();
                         hasFilter = view != null && PanelModel.FilterOf(view) != null;

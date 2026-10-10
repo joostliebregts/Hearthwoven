@@ -81,7 +81,6 @@ namespace Hearthwoven.Panel
         static int GearKindIndex(string itemType)
         {
             if (string.IsNullOrEmpty(itemType)) return -1;
-            if (itemType == "Utility") itemType = "Chest";   // belts and the like count with the armour
             for (int k = 0; k < GearKinds.Length; k++) if (GearKinds[k].types.Contains(itemType)) return k;
             return -1;
         }
@@ -91,7 +90,7 @@ namespace Hearthwoven.Panel
         {
             var it = new FacetItem { Key = key, Weight = weight };
             var k = GearKindIndex(Ask(input.ItemType, key));
-            if (k >= 0) it.Values["kind"] = GearKinds[k].title.ToLowerInvariant();
+            if (k >= 0) it.Values["kind"] = GearKinds[k].id;
             it.Values["material"] = Ask(input.MainMaterial, key) ?? MaterialOther;
             return it;
         }
@@ -108,11 +107,11 @@ namespace Hearthwoven.Panel
             if (items.Any(i => i.Values["material"] == MaterialOther)) materials.Add(MaterialOther);
             var defs = new List<FacetDef>
             {
-                new FacetDef { Id = "kind", Title = "Kind", BarTitle = "By kind", Options = GearKinds.Select(g => new FacetOption { Id = g.title.ToLowerInvariant(), Label = g.title, Colour = g.colour }).ToList() },
+                new FacetDef { Id = "kind", Title = "Kind", BarTitle = "By kind", Options = GearKinds.Select(g => new FacetOption { Id = g.id, Label = g.title }).ToList() },
                 new FacetDef { Id = "material", Title = "Main material", Sub = "by main material", BarTitle = "By main material",
                                Options = materials.Select(m => new FacetOption { Id = m, Label = m, Colour = GearMaterialColour(m) }).ToList() },
             };
-            return Facets(state, CraftFilter, defs, items, "crafted", SrcCharacter, "item", "items");
+            return Facets(state, CraftFilter, defs, items, "crafted", input.Window != null ? SrcPc : SrcCharacter, "item", "items", overview: true);   // a day window: the gear you made those days, counted here (DeedsWindow)
         }
     }
 }

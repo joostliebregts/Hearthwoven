@@ -66,7 +66,7 @@ static partial class Program
             }
         }
         var live = plan.Pills.Where(p => !p.Dropped).ToList();
-        var arrows = threads.Select(g => { var t = plan.Geos[g]; var a = t.EndAngleDeg * Math.PI / 180; return FireLayout.Rect.Around(t.P1.x - Math.Cos(a) * 4, t.P1.y - Math.Sin(a) * 4, 9, 9); }).ToList();
+        var arrows = threads.Select(g => FireLayout.ArrowBox(plan.Geos[g])).ToList();   // each arrowhead as drawn (0.7: its size follows the count)
         for (int i = 0; i < live.Count; i++)
         {
             var r = FireLayout.Rect.Around(live[i].At.x, live[i].At.y, live[i].Width / 2, live[i].H / 2);
@@ -105,9 +105,32 @@ static partial class Program
         var heavy = FireBusy(6, 48);
         var hp = FireLayout.Build(heavy, 180, 232); var hb = FireProblems(hp, heavy);
         System.Console.WriteLine("INFO fireside geometry, the busiest six (seed 48, " + hp.Drawn.Count + " threads): " + (hb.Count == 0 ? "clean" : hb.Count + " problems: " + string.Join("; ", hb.Take(4))));
-        // the arrows: each along its arc's true end tangent (the baked arc is a parabola), at most 18 px so the lanes beside keep their own
+        // the arrows: each along its arc's true end tangent (the baked arc is a parabola)
         var sp = FireLayout.Build(cases[0].giving, 180, 232);
         Check(sp.Geos.Values.All(t => Math.Abs(t.EndAngleDeg - t.AngleDeg - (t.BendRight ? 1 : -1) * Math.Atan(4 * (FireLayout.Arcs[t.Arc] - 8) / 240) * 180 / Math.PI) < 1e-9) &&
               sp.Geos.Values.Max(t => t.Arc) <= 1, "fireside: in the sample world no thread needs the deep arc; every arrow follows its arc's end tangent");
+        // 0.7 (Joost: "why is the line so thick and the arrow so small?"): a thin line that grows with the count, 1.5 to 5 px, the arrowhead 3 times its width;
+        // the head stays inside the box PlacePills keeps clear of counts (FireProblems checks no count sits on it)
+        var strokeBad = new List<string>();
+        foreach (var (name, giving) in cases)
+        {
+            if (giving == null) continue;
+            var plan = FireLayout.Build(giving, 180, 232);
+            var drawn = plan.Geos.Select(kv => (gift: kv.Key, geo: kv.Value, st: FireLayout.StrokeOf(kv.Value, kv.Key.Fraction))).OrderBy(x => x.gift.Fraction).ToList();
+            for (int i = 0; i < drawn.Count; i++)
+            {
+                var (gift, geo, st) = drawn[i];
+                if (st.Width < 1.5 - 1e-9 || st.Width > 5 + 1e-9) strokeBad.Add(name + ": width " + st.Width.ToString("0.00"));
+                if (i > 0 && st.Width < drawn[i - 1].st.Width - 1e-9) strokeBad.Add(name + ": a larger count drew a thinner line");
+                if (Math.Abs(st.ArrowLen - 3 * st.Width) > 1e-9) strokeBad.Add(name + ": arrowhead not 3 times the line");
+                var box = FireLayout.ArrowBox(geo);
+                if (new[] { st.Tip, st.Left, st.Right }.Any(p => p.x < box.X0 || p.x > box.X1 || p.y < box.Y0 || p.y > box.Y1)) strokeBad.Add(name + ": " + gift.Title + ">" + gift.Text + " arrowhead outside the box the counts keep clear");
+                var end = st.Line[st.Line.Length - 1]; var mid = ((st.Left.x + st.Right.x) / 2, (st.Left.y + st.Right.y) / 2);
+                if (Math.Abs(end.x - mid.Item1) > 1e-6 || Math.Abs(end.y - mid.Item2) > 1e-6) strokeBad.Add(name + ": the line does not stop at the arrowhead's base");
+            }
+            if (drawn.Count > 0 && drawn[drawn.Count - 1].gift.Fraction >= 1 && Math.Abs(drawn[drawn.Count - 1].st.Width - 5) > 1e-6) strokeBad.Add(name + ": the largest count is not 5 px");
+        }
+        Check(strokeBad.Count == 0, "fireside threads: line 1.5 to 5 px growing with the count (the largest 5), arrowhead 3 times the width, inside the box the counts keep clear, the line stopping at its base" +
+              (strokeBad.Count > 0 ? ": " + string.Join("; ", strokeBad.Distinct().Take(6)) : ""));
     }
 }

@@ -15,7 +15,8 @@ namespace Hearthwoven
     /// Bounded: day rows for the last DayRows days, older days fold into week rows (Monday start), weeks older than WeekRows weeks
     /// into month rows (the month of the week's Monday), months older than MonthRows into one "before" row; a day row keeps at most
     /// MaxRowKeys keys, a week MaxWeekKeys, a month or "before" MaxMonthKeys (the largest, then Clipped). Sums are kept by every fold. Pure C# (no Unity calls), unit-tested.
-    /// JSON (LocalTotals top-level "history"): {"from":"2026-10-09","mark":{..},"rows":[{"p":"2026-10-09","ev":{..},"dmg":{..},"bio":{..},"game":{..}}]}.
+    /// JSON (LocalTotals top-level "history"): {"from":"2026-10-09","began":{..},"mark":{..},"rows":[{"p":"2026-10-09","ev":{..},"dmg":{..},"bio":{..},"game":{..}}]}
+    /// ("began" and the per-token "placed|"/"picked|" game keys since 0.7, additive: an older reader keeps them as game keys it does not read).
     /// </summary>
     public class DayHistory
     {
@@ -34,7 +35,55 @@ namespace Hearthwoven
             "DistanceSail", "DistanceSailHelm", "LeviathanSink", "LavaLeviathanSink", "DistanceWalk", "DistanceRun", "DistanceAir", "Jumps",
             "EnemyKills", "BossKills", "EnemyHits", "PlayerHits", "Deaths", "HitsTakenEnemies", "HitsTakenPlayers", "TrapArmed", "TurretAmmoAdded",
             "Tree", "MineHits", "CraftFood", "CraftGrill", "TimeInBase", "TimeOutOfBase", "PortalsUsed",
+            "CreatureTamed",   // 0.7 (Deeds day windows, Taming): kept from the first save of 0.7 on (Began)
         }.Concat(LocalTotals.StatsTokens).Distinct().ToArray();
+        static readonly HashSet<string> GameStatSet = new HashSet<string>(GameStats);
+
+        /// <summary>
+        /// The game's per-token counters a row keeps (0.7, Deeds day windows), one key per token under its family's prefix: the pieces
+        /// placed (m_piecesPlacedStats: "placed|$piece_woodwall", Building, Groundwork, feasts set out) and the plants and fish picked
+        /// (m_pickableStats: "picked|Carrot", "picked|$animal_fish1", Farming, Fishing). Both only grow. Kept from the first save of
+        /// 0.7 on (Began); a row's key cap still bounds the file.
+        /// </summary>
+        public const string PlacedPrefix = "placed|", PickedPrefix = "picked|";
+        public static readonly string[] GameFamilies = { PlacedPrefix, PickedPrefix };
+        static string FamilyOf(string key) { foreach (var f in GameFamilies) if (key.Length > f.Length && key.StartsWith(f, StringComparison.Ordinal)) return f; return null; }
+        /// <summary>Whether a row keeps this game counter: a whitelisted stat, or a token of a per-token family.</summary>
+        public static bool Kept(string key) => key != null && (GameStatSet.Contains(key) || FamilyOf(key) != null);
+
+        /// <summary>A family's tokens of a row's game counters, without the prefix (PlacedPrefix: piece token -> placed that day).</summary>
+        public static Dictionary<string, float> Family(IDictionary<string, float> game, string prefix)
+        {
+            var d = new Dictionary<string, float>();
+            foreach (var kv in game ?? new Dictionary<string, float>()) if (kv.Key.Length > prefix.Length && kv.Key.StartsWith(prefix, StringComparison.Ordinal)) d[kv.Key.Substring(prefix.Length)] = kv.Value;
+            return d;
+        }
+
+        /// <summary>A counter (stat name) or family (prefix) the history began keeping after it started (a later version added it to
+        /// the rows): the local day of the first save that marked it; its days before that hold none of it. Counters kept from the
+        /// start have no entry. JSON "began": {"placed|":"2026-10-10"}.</summary>
+        public readonly Dictionary<string, DateTime> Began = new Dictionary<string, DateTime>();
+
+        /// <summary>The counters and families a row keeps only since 0.7 (an older Hearthwoven neither books them nor moves their marks).</summary>
+        public static readonly string[] Since07 = { "CreatureTamed", PlacedPrefix, PickedPrefix };
+
+        /// <summary>
+        /// REVIEW-07 #4: an older Hearthwoven saved this history in between (a downgrade and back). It kept the 0.7-only marks frozen while
+        /// the game counted on, so their next growth would land on one day: their marks and Began are dropped, so the next save takes them
+        /// afresh without booking (GameGrowth) and dates them from that day: the windows then say from when, never claim the days between.
+        /// </summary>
+        public void RetakeSince07()
+        {
+            foreach (var k in GameMark.Keys.Where(k => Array.IndexOf(Since07, k) >= 0 || (FamilyOf(k) != null) || Array.IndexOf(GameFamilies, k) >= 0).ToList()) GameMark.Remove(k);
+            foreach (var k in Since07) Began.Remove(k);
+        }
+
+        /// <summary>The first day a window can count this counter or family (prefix) for: FirstDay, or the day it began when later.</summary>
+        public DateTime KeptFrom(string counter, DateTime today)
+        {
+            var first = FirstDay(today);
+            return counter != null && Began.TryGetValue(counter, out var b) && b > first ? b : first;
+        }
 
         /// <summary>The local calendar day the history began (the first save of a version that keeps it); DateTime.MinValue = no row yet.</summary>
         public DateTime From = DateTime.MinValue;
@@ -68,6 +117,7 @@ namespace Hearthwoven
             IEnumerable<(Dictionary<string, float> map, string key, float v)> Entries()
             {
                 foreach (var m in Events.Named()) foreach (var kv in m.Value) yield return (m.Value, kv.Key, kv.Value);
+                foreach (var m in Events.Unknown) foreach (var kv in m.Value) yield return (m.Value, kv.Key, kv.Value);   // kept for a newer version: bounded too
                 foreach (var kv in Damage.Dealt) yield return (Damage.Dealt, kv.Key, kv.Value);
                 foreach (var kv in Damage.Taken) yield return (Damage.Taken, kv.Key, kv.Value);
                 foreach (var kv in Biome.Damage) yield return (Biome.Damage, kv.Key, kv.Value);
@@ -111,17 +161,27 @@ namespace Hearthwoven
         /// The very first save (no mark yet) books nothing: the history starts there. A counter that went down (an older copy of the
         /// character played elsewhere) books nothing; the mark follows it. null (no profile at that moment): nothing, the mark stays.
         /// </summary>
-        public Dictionary<string, float> GameGrowth(IDictionary<string, float> gameNow, bool move)
+        public Dictionary<string, float> GameGrowth(IDictionary<string, float> gameNow, bool move, DateTime? day = null)
         {
             var d = new Dictionary<string, float>();
             if (gameNow == null) return d;
             var started = GameMark.Count > 0;
-            foreach (var s in GameStats)
+            foreach (var kv in gameNow)
             {
-                if (!gameNow.TryGetValue(s, out var v) || !Json.IsFinite(v)) continue;
-                if (started) { GameMark.TryGetValue(s, out var m); if (v > m) d[s] = v - m; }
+                var s = kv.Key; var v = kv.Value;
+                if (!Kept(s) || !Json.IsFinite(v)) continue;
+                if (started)
+                {
+                    // a counter the mark does not know yet was added to the rows by a later version (or, in a family, is a token never
+                    // counted before, which stood at 0): a new stat or family books nothing on its first save, so a lifetime count never
+                    // lands on one day; Began says from when it is kept
+                    var fam = FamilyOf(s);
+                    if (fam != null ? GameMark.ContainsKey(fam) : GameMark.ContainsKey(s)) { GameMark.TryGetValue(s, out var m); if (v > m) d[s] = v - m; }
+                    else if (move && day.HasValue && !Began.ContainsKey(fam ?? s)) Began[fam ?? s] = day.Value.Date;
+                }
                 if (move) GameMark[s] = v;
             }
+            if (move) foreach (var f in GameFamilies) GameMark[f] = 0;   // the family is kept from here: a token new after this stood at 0
             if (move && !started && GameMark.Count == 0) GameMark["_"] = 0;   // all counters still at zero: the history has started all the same
             return d;
         }
@@ -132,7 +192,7 @@ namespace Hearthwoven
         {
             var day = localNow.Date;
             if (From == DateTime.MinValue) From = day;
-            var game = GameGrowth(gameNow, true);
+            var game = GameGrowth(gameNow, true, day);
             var row = RowFor(day);
             row.Events.AddAll(events); row.Damage.AddAll(damage); row.Biome.AddAll(biome);
             foreach (var kv in game) SessionEvents.Add(row.Game, kv.Key, kv.Value);
@@ -207,6 +267,7 @@ namespace Hearthwoven
         {
             j.Key(key).Open();
             if (From > DateTime.MinValue) j.Str("from", DayKey(From));
+            if (Began.Count > 0) { j.Key("began").Open(); foreach (var kv in Began) j.Str(kv.Key, DayKey(kv.Value)); j.Close(); }
             j.Dict("mark", GameMark.Select(kv => new KeyValuePair<string, float>(kv.Key, kv.Value == 0 ? float.Epsilon : kv.Value)));   // a zero mark is still a mark
             j.Key("rows").OpenArr();
             foreach (var r in Rows)
@@ -214,12 +275,13 @@ namespace Hearthwoven
                 j.Open().Str("p", r.Period);
                 if (r.Clipped) j.Num("clipped", 1);
                 var ev = r.Events;
-                if (ev.Blocks != 0 || ev.Parries != 0 || ev.Named().Any(m => m.Value.Count > 0))
+                if (ev.Blocks != 0 || ev.Parries != 0 || ev.Named().Any(m => m.Value.Count > 0) || ev.Unknown.Count > 0)
                 {
                     j.Key("ev").Open();
                     if (ev.Blocks != 0) j.Num("blocks", ev.Blocks);
                     if (ev.Parries != 0) j.Num("parries", ev.Parries);
                     foreach (var m in ev.Named()) Dict(j, m.Key, m.Value);
+                    foreach (var m in ev.Unknown) Dict(j, m.Key, m.Value);   // 0.8: a newer version's families, kept as read
                     j.Close();
                 }
                 if (r.Damage.HitsDealt != 0 || r.Damage.HitsTaken != 0 || r.Damage.Dealt.Count > 0 || r.Damage.Taken.Count > 0)
@@ -244,6 +306,8 @@ namespace Hearthwoven
             var h = new DayHistory();
             if (o == null) return h;
             if (DateTime.TryParseExact(MiniJson.Str(o, "from"), "yyyy-MM-dd", Inv, DateTimeStyles.None, out var from)) h.From = from;
+            var began = MiniJson.Obj(o, "began");
+            if (began != null) foreach (var kv in began) if (kv.Value is string b && DateTime.TryParseExact(b, "yyyy-MM-dd", Inv, DateTimeStyles.None, out var bd)) h.Began[kv.Key] = bd;
             var mark = MiniJson.Obj(o, "mark");
             if (mark != null) foreach (var kv in mark) if (kv.Value is double v && Json.IsFinite(v)) h.GameMark[kv.Key] = v < 1e-30 ? 0f : (float)v;
             if (o.TryGetValue("rows", out var rs) && rs is List<object> rows)

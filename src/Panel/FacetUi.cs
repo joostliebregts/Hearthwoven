@@ -15,16 +15,16 @@ namespace Hearthwoven.Panel
     /// Rects, the kit's meter track and text only; every click is a link target (PanelModel.FacetLink), pressed rather than
     /// clicked (a chip on the scrolling plate lost its click once, see Press). Placed and sized once when the page is filled.
     /// Block Title (optional) is the header's name ("Biome" on Damage and Deaths; default "Filter").
-    /// All text is PanelLook.MinText or larger (the rubric's floor); counts live on the chips, the legends name the colours only.
+    /// All text is PanelLook.MinText or larger (the rubric's floor). The linked bars are the book's one bar form (BarFormUi.cs).
     /// </summary>
     public partial class PanelUi
     {
-        const float FacetLabelW = 128, FacetChipH = 24, FacetBarH = 20, FacetText = PanelLook.MinText;   // fix4: the bar 20 high (was 11) so a wide segment can say its name
-        static readonly Color FacetTrack = new Color(0.047f, 0.035f, 0.024f, 1f), FacetOn = new Color(0.91f, 0.66f, 0.28f, 0.2f);
+        const float FacetLabelW = 128, FacetChipH = 24, FacetText = PanelLook.MinText;
+        static readonly Color FacetOn = new Color(0.91f, 0.66f, 0.28f, 0.2f);
 
         static void FilterBar(RectTransform col, Block b, Func<string, Action> link)
         {
-            var box = VStack(col, 5);
+            var box = VStack(col, IslandInner);
             var items = b.Items ?? new List<Block>();
             var rows = items.Where(x => x.Kind == "facet").ToList();
             var applied = items.FirstOrDefault(x => x.Kind == "applied");
@@ -37,7 +37,7 @@ namespace Hearthwoven.Panel
             }
             else
             {
-                Spacer(box, 4);   // air under the hero above
+                if (!islanded) Spacer(box, 4);   // air under the hero above (in an island its padding is the air: the filter is its head line)
                 if (applied != null) FilterHeader(box, b, applied, link);
                 if (b.Open)
                 {
@@ -48,7 +48,11 @@ namespace Hearthwoven.Panel
             }
             var shownBars = items.Where(x => x.Kind == "facetbar" && x.Tone != "hidden").ToList();
             if (b.Open && !inline && shownBars.Count > 0) Spacer(box, 4);   // air between the chip rows and the linked bars below them
-            foreach (var bar in shownBars) FacetBar(box, b, bar, link);
+            foreach (var bar in shownBars)
+            {
+                var compared = items.FirstOrDefault(x => x.Kind == PanelModel.CompareRowsKind && x.Id == bar.Id);   // 0.8 Compare: the bar's parts now beside the period before (Chapters/CompareUi.cs)
+                if (compared != null) CompareRows(box, compared); else FacetBar(box, b, bar, link);
+            }
         }
 
         // "Kind" and "Main material" (with its honest line under it) on the left, the chips wrapping on the right
@@ -99,13 +103,6 @@ namespace Hearthwoven.Panel
             if (zero) img.gameObject.AddComponent<CanvasGroup>().alpha = 0.35f;   // a disabled option: dimmed on purpose (the rubric asks for it), the live count says 0
             if (click != null) img.gameObject.AddComponent<Press>().Act = click;
             return img.rectTransform;
-        }
-
-        // a second edge one pixel in: the cursor's ring and a chosen bar part's outline are two pixels thick
-        static void Ring(RectTransform box, Color c)
-        {
-            var r = Node("Ring", box); r.Stretch(); r.offsetMin = new Vector2(1, 1); r.offsetMax = new Vector2(-1, -1);
-            Edge(r, c);
         }
 
         // one chosen chip as a removable token (a click unchooses it)
@@ -175,29 +172,6 @@ namespace Hearthwoven.Panel
             if (tokens.Count > 0) FacetButton(line, "Clear all", link?.Invoke(PanelModel.FacetClearTarget + filter.Id));
         }
 
-        const float SwatchW = 18;
-
-        // the part's pattern (PanelModel.FacetPatternOf) tiled over its colour; the solid part has none
-        static void PartPattern(RectTransform on, Block p)
-        {
-            var name = VocabName(p.Pattern);
-            if (name != null && PanelLook.Vocab(name)) VocabImg(on, "Pattern", name, Color.white).rectTransform.Stretch();
-        }
-
-        // zones-wording (Joost 2026-10-09: the white words in black boxes were ugly; the legend names the parts): a segment wide enough
-        // carries its number only, no box, in the ink that reads on its own colour (dark on a light part, light on a dark one); else nothing
-        static void SegmentLabel(RectTransform seg, Block p, float width)
-        {
-            if (string.IsNullOrEmpty(p.Value)) return;
-            var t = Label(seg, p.Value, FacetText, SegmentInk(Hex(p.Colour, PanelLook.Accent)), style: FontStyles.Bold, align: TextAlignmentOptions.Center); t.textWrappingMode = TextWrappingModes.NoWrap; t.raycastTarget = false;
-            var need = Mathf.Ceil(t.preferredWidth) + 10;
-            if (need > width - 4) { UnityEngine.Object.Destroy(t.gameObject); return; }
-            // the pattern stops under the number: a patch of the part's own colour (it reads as the bar, not a box on it)
-            var patch = Img(seg, "NumberGround", null, Hex(p.Colour, PanelLook.Accent));
-            foreach (var r in new[] { patch.rectTransform, t.rectTransform }) { r.anchorMin = r.anchorMax = r.pivot = new Vector2(0.5f, 0.5f); r.anchoredPosition = Vector2.zero; r.sizeDelta = new Vector2(need, 16); }
-            patch.transform.SetSiblingIndex(t.transform.GetSiblingIndex());
-        }
-
         /// <summary>The ink of a number on a bar part: near-black on a light colour, warm cream on a dark one (relative luminance, the WCAG split).</summary>
         internal static Color SegmentInk(Color c)
         {
@@ -206,44 +180,15 @@ namespace Hearthwoven.Panel
             return lum > 0.18f ? new Color(0.08f, 0.06f, 0.04f) : new Color(0.97f, 0.93f, 0.84f);
         }
 
-        // a linked bar (20 px, fix4; was a slim 11): its parts in the row's colours, each with its pattern, the wide ones named, the chosen part outlined in gold;
-        // its legend under it (swatch with the same pattern and the name only: the counts are on the chips; the chosen colour's name is gold)
+        // a linked bar: its head in the island heading style (0.8 layout D+: its title, its total, its honest line after them, "BY CATEGORY 1 576
+        // the hammer's tab"), then the book's one bar form (BarFormUi.cs): the parts in the row's colours, the chosen part outlined in gold, a
+        // click on a part chooses it; its list under it
         static void FacetBar(RectTransform box, Block filter, Block bar, Func<string, Action> link)
         {
-            var parts = bar.Items ?? new List<Block>();
-            var head = Line(box, 8); Size(head, -1, 18);
-            var title = Label(head, bar.Title, FacetText, PanelLook.Muted); title.textWrappingMode = TextWrappingModes.NoWrap;
-            Node("Rest", head).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-            if (!string.IsNullOrEmpty(bar.Note)) { var n = Label(head, bar.Note, FacetText, PanelLook.Faint, align: TextAlignmentOptions.MidlineRight); n.textWrappingMode = TextWrappingModes.NoWrap; }
-            var track = Img(box, "FacetBar", null, FacetTrack); Size(track, -1, FacetBarH + 2);
-            Edge(track.rectTransform, PanelLook.SlotEdge);
-            var inner = Node("Parts", track.transform); inner.Stretch();   // the parts' own row; the edge stays out of its layout
-            var h = inner.gameObject.AddComponent<HorizontalLayoutGroup>();
-            h.padding = new RectOffset(1, 1, 1, 1); h.spacing = 0; h.childControlWidth = h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = true;
-            foreach (var p in parts.Where(x => x.Fraction > 0))
-            {
-                var click = p.Id == PanelModel.FoldId ? null : link?.Invoke(PanelModel.FacetLink(filter.Id, bar.Id, p.Id));   // the folded part: its kinds are chosen by their chips
-                var seg = Img(inner, "Part", null, Hex(p.Colour, PanelLook.Accent), raycast: click != null);
-                var le = seg.gameObject.AddComponent<LayoutElement>(); le.flexibleWidth = p.Fraction; le.minWidth = 3; le.preferredWidth = 0;
-                PartPattern(seg.rectTransform, p);   // a mark of its own on the colour, so the part is told apart without the hue
-                SegmentLabel(seg.rectTransform, p, (Column - 2f) * p.Fraction);   // a segment wide enough says its name (and its count when that fits too)
-                if (p.Selected) { Edge(seg.rectTransform, PanelLook.Gold); Ring(seg.rectTransform, PanelLook.Gold); }
-                if (click != null) seg.gameObject.AddComponent<Press>().Act = click;
-            }
-            // the legend: every part of the bar (at most PanelModel.BarMaxParts, the rest as "Other (n kinds)"), a swatch and its name; a part with nothing under the other rows' choice stays, quiet
-            var lines = VStack(box, 1); lines.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
-            RectTransform cur = null; float used = 0;
-            foreach (var p in parts)
-            {
-                var zero = p.Tone == "zero";
-                var entry = Line(lines, 4, TextAnchor.MiddleLeft);
-                var swatch = Img(entry, "Swatch", null, Hex(p.Colour, PanelLook.Accent)); Size(swatch, SwatchW, 12);   // the segment in small: colour and mark
-                PartPattern(swatch.rectTransform, p);
-                var t = Label(entry, p.Title, FacetText, p.Selected ? PanelLook.Gold : zero ? PanelLook.Faint : PanelLook.Text, style: p.Selected ? FontStyles.Bold : FontStyles.Normal); t.textWrappingMode = TextWrappingModes.NoWrap;
-                var w = SwatchW + 4 + Mathf.Ceil(t.preferredWidth);
-                if (cur == null || used + 12 + w > Column) { cur = Line(lines, 12, TextAnchor.MiddleLeft); Size(cur, -1, 16); used = 0; } else used += 12;
-                entry.SetParent(cur, false); used += w;
-            }
+            var head = Line(box, 8); Size(head, -1, 20);
+            Sect(head, bar.Title, bar.Value);
+            if (!string.IsNullOrEmpty(bar.Note)) { var n = Label(head, bar.Note, FacetText, PanelLook.Faint); n.textWrappingMode = TextWrappingModes.NoWrap; }
+            BarWithList(box, bar.Items ?? new List<Block>(), false, new BarLook { Click = p => link?.Invoke(PanelModel.FacetLink(filter.Id, bar.Id, p.Id)) });   // the folded part has no click: its kinds are chosen by their chips
         }
     }
 }

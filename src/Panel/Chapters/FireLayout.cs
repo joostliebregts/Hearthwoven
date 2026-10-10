@@ -51,6 +51,8 @@ namespace Hearthwoven.Panel
         {
             public (double x, double y) Dir, Right, P0, P1, Mid; public double Len, Scale, AngleDeg, EndAngleDeg, Depth, Lane; public int Arc; public bool BendRight;
             public (double x, double y)[] Pts;
+            /// <summary>The gift's count as a share of the page's largest (Block.Fraction), set once the thread is chosen: it sets the line's width and arrowhead.</summary>
+            public double Fraction;
             /// <summary>The point of the thread at u (0 = where it leaves the sender's shield, 1 = where the arrow lands), on the baked parabola.</summary>
             public (double x, double y) At(double u) { var k = Depth * 4 * u * (1 - u); return (P0.x + (P1.x - P0.x) * u + Right.x * k, P0.y + (P1.y - P0.y) * u + Right.y * k); }
         }
@@ -67,6 +69,31 @@ namespace Hearthwoven.Panel
             g.EndAngleDeg = g.AngleDeg + Math.Atan(4 * (Arcs[arc] - 8) / 240) * 180 / Math.PI * (bendRight ? 1 : -1);   // the parabola's end tangent
             g.Pts = new (double x, double y)[Steps + 1]; for (int k = 0; k <= Steps; k++) g.Pts[k] = g.At(k / (double)Steps);
             return g;
+        }
+
+        /// <summary>
+        /// How a thread is drawn (0.7, Joost: "why is the line so thick and the arrow so small?"; variant A of bar-prototypes/index-v4.html): one thin flat line
+        /// along the arc, its width scaled by the count (LineMin for the smallest, LineMax for the page's largest; square root, so a 2 next to a 40 is still
+        /// seen), and an arrowhead ArrowPerLine times the line's width long, so it grows with the line. The head's tip is where it always was (4 px past P1,
+        /// inside the arrow box PlacePills keeps clear); the line stops at the head's base.
+        /// </summary>
+        public const double LineMin = 1.5, LineMax = 5, ArrowPerLine = 3;
+        public static double LineWidth(double fraction) => LineMin + (LineMax - LineMin) * Math.Sqrt(Math.Max(0, Math.Min(1, fraction)));
+        public class Stroke { public double Width, ArrowLen; public (double x, double y)[] Line; public (double x, double y) Tip, Left, Right; }
+        public static Stroke StrokeOf(Geo g, double fraction)
+        {
+            var w = LineWidth(fraction); var len = ArrowPerLine * w; var half = 1.3 * w + 1;
+            var a = g.EndAngleDeg * Math.PI / 180; double ex = Math.Cos(a), ey = Math.Sin(a);
+            var tip = (x: g.P1.x + g.Dir.x * 4, y: g.P1.y + g.Dir.y * 4); var bas = (x: tip.x - ex * len, y: tip.y - ey * len);
+            var line = g.Pts.Where(p => Hyp(p.x - tip.x, p.y - tip.y) > len + 0.5).ToList(); line.Add(bas);
+            return new Stroke { Width = w, ArrowLen = len, Line = line.ToArray(), Tip = tip, Left = (bas.x - ey * half, bas.y + ex * half), Right = (bas.x + ey * half, bas.y - ex * half) };
+        }
+
+        /// <summary>The box a thread's arrowhead fills (its three points, 1 px around): no count may sit on it (PlacePills).</summary>
+        public static Rect ArrowBox(Geo g)
+        {
+            var s = StrokeOf(g, g.Fraction); var xs = new[] { s.Tip.x, s.Left.x, s.Right.x }; var ys = new[] { s.Tip.y, s.Left.y, s.Right.y };
+            return new Rect(xs.Min() - 1, ys.Min() - 1, xs.Max() + 1, ys.Max() + 1);
         }
 
         static double Cr((double x, double y) o, (double x, double y) p, (double x, double y) q) => (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x);
@@ -286,7 +313,7 @@ namespace Hearthwoven.Panel
             for (int bi = 0; bi < nb; bi++)
             {
                 var B = bundles[bi]; B.Opt = chosen[bi]; var lanes = B.Lanes(B.Opt);
-                for (int k = 0; k < B.Order.Count && k < lanes.Count; k++) plan.Geos[B.Order[k]] = lanes[k];
+                for (int k = 0; k < B.Order.Count && k < lanes.Count; k++) { plan.Geos[B.Order[k]] = lanes[k]; lanes[k].Fraction = B.Order[k].Fraction; }   // the count sets the line and its arrowhead (StrokeOf)
             }
             // the counts of your gifts; where each would like to sit: the counts of one pair spread evenly along it, in lane order, so neighbouring lanes never want the same spot
             foreach (var B in bundles)
@@ -315,7 +342,7 @@ namespace Hearthwoven.Panel
         public static int PlacePills(IList<Pill> pills, IList<Rect> fixedRects, IList<Geo> threads)
         {
             int n = pills.Count; if (n == 0) return 0;
-            var arrows = threads.Select(t => { var a = t.EndAngleDeg * Math.PI / 180; return Rect.Around(t.P1.x - Math.Cos(a) * 4, t.P1.y - Math.Sin(a) * 4, 9, 9); }).ToList();   // the arrow head's own box
+            var arrows = threads.Select(ArrowBox).ToList();   // the arrow head's own box
             var us = Enumerable.Range(0, 41).Select(k => 0.1 + 0.02 * k).ToArray(); var chosen = Enumerable.Repeat(-1, n).ToArray();
             foreach (var p in pills) { p.H = PillH; p.Compact = false; p.Dropped = false; }
             Rect RectAt(int i, double u) { var p = pills[i].Thread.At(u); return Rect.Around(p.x, p.y, pills[i].Width / 2, pills[i].H / 2); }
@@ -361,7 +388,7 @@ namespace Hearthwoven.Panel
             string N(double v) => Math.Round(v, 2).ToString(System.Globalization.CultureInfo.InvariantCulture);
             string Esc(string s) => (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
             var threads = plan.Drawn.Where(g => plan.Geos.ContainsKey(g)).Select(g => { var t = plan.Geos[g];
-                return "{\"gift\":\"" + Esc(g.Title + ">" + g.Text + "/" + g.Tone) + "\",\"arc\":" + t.Arc + ",\"bend\":" + (t.BendRight ? 1 : 0) + ",\"p0\":[" + N(t.P0.x) + "," + N(t.P0.y) + "],\"p1\":[" + N(t.P1.x) + "," + N(t.P1.y) + "]}"; });
+                return "{\"gift\":\"" + Esc(g.Title + ">" + g.Text + "/" + g.Tone) + "\",\"arc\":" + t.Arc + ",\"bend\":" + (t.BendRight ? 1 : 0) + ",\"p0\":[" + N(t.P0.x) + "," + N(t.P0.y) + "],\"p1\":[" + N(t.P1.x) + "," + N(t.P1.y) + "],\"w\":" + N(LineWidth(g.Fraction)) + "}"; });
             var pills = plan.Pills.Select(p => "{\"gift\":\"" + Esc(p.Gift.Title + ">" + p.Gift.Text + "/" + p.Gift.Tone) + "\",\"u\":" + N(p.U) + ",\"compact\":" + (p.Compact ? 1 : 0) + ",\"dropped\":" + (p.Dropped ? 1 : 0) + "}");
             return "{\"threads\":[" + string.Join(",", threads) + "],\"pills\":[" + string.Join(",", pills) + "]}";
         }

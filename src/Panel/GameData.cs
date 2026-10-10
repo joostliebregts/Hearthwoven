@@ -31,6 +31,7 @@ namespace Hearthwoven.Panel
         static readonly Dictionary<string, string> items = new Dictionary<string, string>(), gather = new Dictionary<string, string>(), pieces = new Dictionary<string, string>();
         static readonly Dictionary<string, string> crops = new Dictionary<string, string>(), types = new Dictionary<string, string>();   // Deeds: Farming, Crafting
         static readonly Dictionary<string, string> tokens = new Dictionary<string, string>();   // Deeds: Cooking (item prefab -> token)
+        static readonly Dictionary<string, int> yields = new Dictionary<string, int>();   // Deeds: Cooking's cap (item token -> what one craft makes, the most any recipe gives)
         static readonly HashSet<string> stationDishes = new HashSet<string>();   // Deeds: Cooking (what cooking stations hand out, by item token)
         static readonly HashSet<string> grillDishes = new HashSet<string>(), ovenDishes = new HashSet<string>(), stationInputs = new HashSet<string>(), fermenterInputs = new HashSet<string>(), feastItems = new HashSet<string>();   // Deeds: Cooking's filter (Type)
         static readonly Dictionary<string, string> boosts = new Dictionary<string, string>();   // Deeds: Cooking's filter (Main boost: item token -> its biggest food value)
@@ -168,11 +169,17 @@ namespace Hearthwoven.Panel
         public static string PieceMaterial(string token) { Ensure(); return token != null && pieceMats.TryGetValue(token, out var k) ? k : null; }
         /// <summary>An item prefab's token ("CookedMeat" -> "$item_cookedmeat"): what eaters record against what the craft counter books.</summary>
         public static string ItemToken(string prefab) { Ensure(); return prefab != null && tokens.TryGetValue(prefab, out var k) ? k : null; }
+        /// <summary>How many of an item one craft puts in the bag (Recipe.m_amount: 4 sausages); the most when several recipes make it, 0 = no recipe known.
+        /// The game's craft counter books one per craft, eaters one per serving (DeedsModel.MadeOf, CompanyModel.MakerMade).</summary>
+        public static int RecipeYield(string token) { Ensure(); return token != null && yields.TryGetValue(token, out var n) ? n : 0; }
         /// <summary>The game's own sprite of a piece by its name token ("$piece_woodwall"), as the build menu shows it.</summary>
         public static Sprite PieceIcon(string token) { Ensure(); return token != null && pieceIcons.TryGetValue(token, out var s) ? s : null; }
 
         // the game's own word for a material the panel does not know by name (a mod's bar)
         static string LocalizedName(string token) { try { return Localization.instance != null ? Localization.instance.Localize(token) : token; } catch { return token; } }
+
+        /// <summary>Reads the game data now if it is there and not read yet (PanelWarm: soon after spawn, so the book's first opening does not); true once read.</summary>
+        public static bool Warm() { Ensure(); return ready; }
 
         static void Ensure()
         {
@@ -269,6 +276,7 @@ namespace Hearthwoven.Panel
                     foreach (var r in ObjectDB.instance.m_recipes)
                     {
                         var made = r && r.m_item ? r.m_item.m_itemData?.m_shared?.m_name : null;
+                        if (!string.IsNullOrEmpty(made) && r.m_amount > 1 && (!yields.TryGetValue(made, out var y) || r.m_amount > y)) yields[made] = r.m_amount;
                         if (string.IsNullOrEmpty(made) || materials.ContainsKey(made) || r.m_resources == null) continue;
                         var recipe = new List<Ingredient>();
                         foreach (var req in r.m_resources)

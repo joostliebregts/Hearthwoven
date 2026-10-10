@@ -91,6 +91,18 @@ static class HookGuardTests
             }
             Check(leaked.Count == 0 && called >= methods.Count * 3 / 4, "hooks: " + called + " patch methods called with empty arguments outside the game (where game and Unity calls throw; " + notHere +
                                      " need a game assembly not here), none lets an exception out" + (leaked.Count > 0 ? ": " + string.Join("; ", leaked.Take(5)) : ""));
+
+            // ---------- the book's own net (v08-fix-open) ----------
+            // 0.8 play-test: a page that threw reached Frame's catch, which shut the book in the same frame on every open. Every page is now
+            // built and drawn inside PanelUi.Draw, whose catch shows "This page could not be drawn" (DrawCouldNot); the UI cannot run here, so its IL is read
+            var draw = typeof(Hearthwoven.Panel.PanelUi).GetMethod("Draw", BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { typeof(bool) }, null);
+            var drawBody = draw?.GetMethodBody();
+            var drawIns = drawBody == null ? new List<Ins>() : Read(drawBody.GetILAsByteArray());
+            MethodBase Resolve(int token) { try { return draw.Module.ResolveMethod(token); } catch { return null; } }
+            var netted = drawBody != null && drawBody.ExceptionHandlingClauses.Any(c => c.Flags == ExceptionHandlingClauseOptions.Clause && c.CatchType == typeof(Exception)
+                && drawIns.Any(x => x.At >= c.HandlerOffset && x.At < c.HandlerOffset + c.HandlerLength && (x.Op == OpCodes.Call || x.Op == OpCodes.Callvirt) && Resolve(x.Token)?.Name == "DrawCouldNot")
+                && drawIns.Any(x => x.At >= c.TryOffset && x.At < c.TryOffset + c.TryLength && (x.Op == OpCodes.Call || x.Op == OpCodes.Callvirt) && Resolve(x.Token)?.Name == "DrawPage"));
+            Check(netted, "panel: every page is built and drawn inside one net (PanelUi.Draw: DrawPage in a try, DrawCouldNot in its catch); a page that throws stays open, saying it could not be drawn");
             HookGuard.EndSession();
         }
         finally { HookGuard.Sink = keepSink; }

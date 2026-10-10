@@ -59,7 +59,7 @@ namespace Hearthwoven
             FoldKeys(Damage, cut); FoldKeys(Hits, cut);
         }
 
-        static void FoldKeys(Dictionary<string, float> d, string cut)
+        internal static void FoldKeys(Dictionary<string, float> d, string cut)   // ArmourLog folds its buckets the same way
         {
             List<KeyValuePair<string, float>> move = null;
             foreach (var kv in d)

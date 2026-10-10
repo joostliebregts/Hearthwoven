@@ -15,7 +15,7 @@ static class DeedsTests
 
     static PanelView Show(PanelInput i, string page) => PanelModel.Build(i, new PanelState { Chapter = Chapter.Deeds, Page = { [Chapter.Deeds] = page } });
     static Block Find(PanelView v, string kind, Func<Block, bool> where = null) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == kind && (where == null || where(b)));
-    static Block After(PanelView v, string section) => PanelModel.Content(v).SkipWhile(b => !(b.Kind == "section" && b.Title == section)).Skip(1).FirstOrDefault();
+    static Block After(PanelView v, string section) => PanelModel.Content(v).SkipWhile(b => !(b.Kind == "section" && b.Title == section)).Skip(1).FirstOrDefault(b => b.Kind != "sort");   // the list under a heading, past its sort control (SortModel.cs)
     static Block Head(PanelView v, string section) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == "section" && b.Title == section);
 
     internal static readonly Dictionary<string, string> Names = PanelSample.DeedsNames;   // src/Panel/PanelSample.cs
@@ -121,8 +121,10 @@ static class DeedsTests
               After(Show(many, "cooking"), "Where it was cooked").Items.Single().Items.Count == 30,
               "deeds cooking: the ledger keeps every dish kind (the page scrolls); the bar shows the seven largest and folds the rest into \"Other (23 kinds)\" (0.6.5: at most eight parts the eye can tell apart)");
         var manyHero = Find(Show(many, "cooking"), "hero");
-        Check(hero.Note == null && manyHero.Note != null && manyHero.Note.StartsWith("the dishes add up to ") && manyHero.Note.EndsWith("the headline is your character's own count"),
-              "deeds cooking: the sample's dishes (118 + 28 + 20) add up to the headline (146 + 20 grill = 166) and carry no note; when the game's counters and the per-dish counts differ, the headline says so and names its source (polish-06, on the bar)");
+        // 0.7 rule A.3: no baseline (the sample) puts "Earlier counts may be incomplete." in the hero's own slot; the discrepancy line stands under the bar
+        var manyNote = PanelModel.Content(Show(many, "cooking")).FirstOrDefault(b => b.Kind == "note" && (b.Text ?? "").StartsWith("the dishes add up to "));
+        Check(hero.Note == null && PanelModel.AboutText(cooking).Contains(PanelModel.EarlierIncomplete) && hero.Src == "character" && manyHero.Note == null && manyNote != null && manyNote.Text.EndsWith("the headline is your character's own count"),
+              "deeds cooking: the sample's dishes (118 + 28 + 20) add up to the headline (146 + 20 grill = 166) with the one line on the earlier counts (in About these numbers, 0.8 layout D+); when the game's counters and the per-dish counts differ, a line under the bar says so and names its source (polish-06, rule A.3)");
         var axis = After(cooking, "Who enjoyed your food");
         var row = axis?.Items.Single();
         Check(axis?.Kind == "ranking" && axis.Src == "fellows" && row.Id == "Edda" && row.Icon == "person:Edda" && row.Title == "Edda" && row.Value == "2" && Math.Abs(row.Fraction - 1f) < 1e-6 && row.Colour == null && axis.Items.Count == 1,
@@ -144,12 +146,12 @@ static class DeedsTests
         var cookedIn = Cooked(input, edda);
         var cooked = Show(cookedIn, "cooking");
         var ch = Find(cooked, "hero");
-        Check(ch.Value == "181" && ch.Faded == "160" && ch.Solid == "21" && ch.Title == "dishes cooked",
-              "deeds cooking layered: hero = 160 at first run (faded) + 21 made since (solid: 12 bread, 9 cooked meat off a fellow's grill) = 181; the game counter's later growth (bread 20) is not added: " + ch.Value + " " + ch.Faded + "+" + ch.Solid);
+        Check(ch.Value == "181" && ch.Src == "character" && ch.Note == null && PanelModel.AboutText(cooked).Contains(PanelModel.EarlierIncomplete) && ch.Title == "dishes cooked",
+              "deeds cooking layered: hero = 181 dishes cooked (rule A: 160 the game counted before the first run + 21 made since, 12 bread and 9 cooked meat off a fellow's grill), the character's whole count, \"Earlier counts may be incomplete.\" in About these numbers (0.8 layout D+); the game counter's later growth (bread 20) is not added: " + ch.Value + " " + ch.Note);
         var cg = Find(cooked, "composition");
-        Check(cg.Note == PanelModel.FadedKey && cg.Value == "181" && cg.Items.Select(i => i.Title + " " + i.Value + " " + i.Src).SequenceEqual(new[] { "Carrot Soup 118 character", "Fish Wraps 28 character", "Bread 26 character", "Cooked Meat 9 pc" }) &&
-              cg.Items.Select(i => (float)Math.Round(i.Fraction2, 3)).SequenceEqual(new[] { 1f, 1f, (float)Math.Round(14f / 26, 3), 0f }),
-              "deeds cooking layered: the bar per dish, bread 14 faded + 12 solid (its faded share on Fraction2); cooked meat taken off a fellow's grill counts for you (9, all since install: this PC); no gear; the faded key at the end of the legend: " +
+        Check(cg.Note == null && cg.Value == "181" && cg.Items.Select(i => i.Title + " " + i.Value + " " + i.Src).SequenceEqual(new[] { "Carrot Soup 118 character", "Fish Wraps 28 character", "Bread 26 character", "Cooked Meat 9 character" }) &&
+              cg.Items.All(i => i.Fraction2 == 0),
+              "deeds cooking layered: the bar per dish, each kind its sum (bread 26 = 14 + 12), no faded share and no key (rule A.2); cooked meat taken off a fellow's grill counts for you (9); no gear: " +
               string.Join(" | ", cg.Items.Select(i => i.Title + " " + i.Value + " " + i.Fraction2 + " " + i.Src)));
         var cl = After(cooked, "Where it was cooked");
         Check(cl.Items.Select(r => r.Title + "=" + r.Value + "/" + string.Join(",", r.Items.Select(c => c.Title + " " + c.Value))).SequenceEqual(new[] { "Cauldron and prep table=146/Carrot Soup 118,Fish Wraps 28", "Cooking stations and oven=35/Bread 26,Cooked Meat 9" }),
@@ -160,13 +162,13 @@ static class DeedsTests
         var ccard = Find(PanelModel.Build(cookedIn, new PanelState { Chapter = Chapter.Deeds }), "cards").Items.Single(c => c.Title == "Hearth Cook");
         Check(ccard.Value == "181" && ccard.Items[0].Value == "5", "deeds overview: the Hearth Cook card has the same dishes cooked and enjoyed as the Cooking page");
         var cookCopy = Cooked(input, edda); cookCopy.IsSelf = false;
-        Check(Find(Show(cookCopy, "cooking"), "hero").Value == "166" && Find(Show(cookCopy, "cooking"), "hero").Faded == null && PanelModel.MadeOf(cookCopy) == null,
+        Check(Find(Show(cookCopy, "cooking"), "hero").Value == "166" && PanelModel.MadeOf(cookCopy) == null,
               "deeds cooking layered: a fellow's copy shows the game's counters, no layers, no cap");
         var fresh = Cooked(input, edda); fresh.Baseline[PanelModel.CraftedBaseline] = new Dictionary<string, float>();
         var fh = Find(Show(fresh, "cooking"), "hero");
-        Check(fh.Value == "21" && fh.Faded == null && fh.Src == "pc", "deeds cooking layered: a character that started with Hearthwoven: every dish counted on this PC");
+        Check(fh.Value == "21" && fh.Src == "character" && fh.Note == null, "deeds cooking layered: a character that started with Hearthwoven: its 21 dishes are the sum, no earlier part, no note (rule A)");
         var olderInstall = Cooked(input, edda); olderInstall.ExactAtBaseline = new Dictionary<string, Dictionary<string, float>> { [PanelModel.CraftedBaseline] = new Dictionary<string, float> { ["$item_bread"] = 2 } };
-        Check(Find(Show(olderInstall, "cooking"), "hero").Solid == "19", "deeds cooking layered: what was counted exactly when the baseline was taken is not counted twice");
+        Check(Find(Show(olderInstall, "cooking"), "hero").Value == "179", "deeds cooking layered: what was counted exactly when the baseline was taken is not counted twice (160 + 19 = 179)");
         // the cap shared out in proportion: two eaters of 3 bread each, the maker made 4 (2 + 2) or 5 (3 + 2, the tie by name)
         var two = new List<(string who, Dictionary<string, double> dishes)> { ("Ana", new Dictionary<string, double> { ["Bread"] = 3 }), ("Bo", new Dictionary<string, double> { ["Bread"] = 3, ["Jam"] = 1 }) };
         string Shares(Func<string, double?> m) => string.Join(" ", PanelModel.CapToMade(two, m).Select(e => e.who + ":" + string.Join(",", e.dishes.OrderBy(kv => kv.Key).Select(kv => kv.Key + kv.Value))));
@@ -183,15 +185,24 @@ static class DeedsTests
         Check(ground.Items.All(i => i.Pattern != null && i.Pattern.StartsWith("vocab:grain-ground-")), "deeds building: groundwork with a pattern per kind");
         Check(!PanelModel.AllText(building).Any(t => t.IndexOf("material", StringComparison.OrdinalIgnoreCase) >= 0), "deeds building: no material bar (the mod has no material data)");
         var repairs = After(building, "Pieces repaired"); var repairHead = Head(building, "Pieces repaired");
-        Check(repairs != null && repairHead.Value == "9" && repairs.Src == "pc" && Zoned.Says(building, repairs) && !Zoned.Says(building, pieces) && !pieces.SinceInstall && !Find(building, "hero").SinceInstall, "deeds building: repairs counted on this PC carry since install, the pieces built do not");
+        Check(repairs != null && repairHead.Value == "9" && repairs.Src == "pc" && (repairHead.RecordedFrom ?? "").StartsWith("Recorded") && !PanelModel.AllText(building).Any(t => t.Contains("since install")), "deeds building: repairs counted on this PC are their own section, \"Recorded ...\"; no since install anywhere on the page (rule C)");
+        // 0.8 (v08-salvage): materials picked up from pieces that came down, their own section; Mining's brought in never reads them
+        var hall = PanelSample.Full(input.NowUtc); var hallBuilding = Show(hall, "building");
+        var back = After(hallBuilding, PanelModel.RecoveredTitle); var backHead = Head(hallBuilding, PanelModel.RecoveredTitle);
+        var oneKind = PanelSample.Full(input.NowUtc); oneKind.Events.Recovered.Clear(); oneKind.Events.Recovered["$item_stone"] = 500;
+        var oneBack = After(Show(oneKind, "building"), PanelModel.RecoveredTitle);
+        Check(backHead?.Value == "80" && back?.Kind == "composition" && back.Value == null && back.Items.Select(i => i.Id + "=" + i.Value).SequenceEqual(new[] { "$item_wood=48", "$item_stone=24", "$item_roundlog=8" }) &&
+              (backHead.RecordedFrom ?? "").StartsWith("Recorded from") && oneBack?.Kind == "itemgrid" && oneBack.Items.Single().Value == "500" &&
+              PanelModel.BroughtInTotal(oneKind, "mining") == PanelModel.BroughtInTotal(hall, "mining"),
+              "deeds building: materials recovered are their own section (total, the bar form per item, recorded from their own date); one kind is one tile; Mining's brought in leaves them out");
 
         // ---------- Crafting ----------
         var crafting = Show(rich, "crafting");
         Check(Find(crafting, "hero")?.Value == "20" && Find(crafting, "hero").Title == "gear crafted" && Find(crafting, "hero").Items.Single().Value == "11" && Find(crafting, "hero").Items.Single().Title == "upgrades made",
               "deeds crafting: gear crafted (the game's four gear counters) and upgrades");
         var kinds = PanelModel.FilterOf(crafting).Items.First(b => b.Kind == "facet" && b.Id == "kind");
-        Check(kinds.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Weapons=9", "Armour=6", "Tools=4", "Trinkets=1" }) && Find(crafting, "counts") == null,
-              "deeds crafting: the kind counts are the filter's chips (9 + 6 + 4 + 1), the per-kind tiles are gone");
+        Check(kinds.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Weapons=13", "Armor=2", "Tools=4", "Trinkets=1" }) && Find(crafting, "counts") == null,
+              "deeds crafting: the kind counts are the filter's chips (13 + 2 + 4 + 1, a shield with the weapons as the game counts it), the per-kind tiles are gone");
         var perItem = Find(crafting, "itemgrid");
         Check(perItem?.Kind == "itemgrid" && perItem.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Bronze Axe=6", "Wood Shield=4", "Hammer=2", "Leather Helmet=2", "Iron Sword=2",
               "Crude Bow=1", "Cultivator=1", "Hoe=1", "Bronze Health Trinket=1" }), "deeds crafting: all gear made, per item, as an item grid (no food, no arrows), trinkets included");
@@ -205,7 +216,7 @@ static class DeedsTests
         // ---------- Farming ----------
         var farming = Show(rich, "farming");
         Check(Find(farming, "hero")?.Value == "208" && Find(farming, "hero").Title == "planted" && Find(farming, "hero").Items.Single().Value == "312" && Find(farming, "hero").Items.Single().Title == "picked", "deeds farming: planted and picked, the two big numbers");
-        Check(Find(farming, "hero").Faded == null && Find(farming, "note") == null,
+        Check(Find(farming, "note") == null,
               "deeds farming: no baseline (a fellow's copy, totals not loaded): the game's planted counter alone; no sentence row");
         var crops = After(farming, "Crops");
         Check(crops?.Kind == "cropgrid" && crops.Items.Select(i => i.Title + " " + i.Value + "/" + i.Value2 + " " + i.Text).SequenceEqual(new[] { "Barley 66/72 planted", "Turnip 58/64 planted", "Carrot 41/60 planted", "Other plants 147/ " }),
@@ -222,26 +233,29 @@ static class DeedsTests
         Check(!PanelModel.AllText(farming).Any(t => t.Contains("Flint")), "deeds farming: other pickables (flint) are not crops");
         Check(!PanelModel.AllText(farming).Any(t => t.IndexOf("harvested", StringComparison.OrdinalIgnoreCase) >= 0 && t != PanelModel.AlsoHarvestedTitle), "deeds farming: crops say picked, never harvested");
 
-        // planted in two layers: the game's counter at install (faded) + every plant counted since (solid)
+        // planted in two layers (the game's counter at install + every plant counted since): 0.7 rule A (REDESIGN-RULES.md part 1) says the sum is the number,
+        // one "Earlier counts may be incomplete." in the hero's slot, and the crop tiles carry sums only (no faded share, no key)
         var layeredIn = Layered(input);
         var layered = Show(layeredIn, "farming");
         var lh = Find(layered, "hero");
-        Check(lh.Value == "279" && lh.Faded == null && lh.Note == PanelModel.PartLine("191") && lh.Src == "character" && lh.Title == "planted" && lh.Items.Single().Value == "312" && lh.Items.Single().Title == "picked",
-              "deeds farming layered: hero planted = 88 at install + 191 counted since = 279 (the sum; the tiles carry the layers); the game counter's later growth (72 barley, 64 turnip) is not added: " + lh.Value);
+        Check(lh.Value == "279" && lh.Note == null && PanelModel.AboutText(layered).Contains(PanelModel.EarlierIncomplete) && lh.Src == "character" && lh.Title == "planted" && lh.Items.Single().Value == "312" && lh.Items.Single().Title == "picked",
+              "deeds farming layered (0.7 rule A): hero planted = 88 at install + 191 counted since = 279, one \"Earlier counts may be incomplete.\" in About these numbers (0.8 layout D+); the game counter's later growth (72 barley, 64 turnip) is not added: " + lh.Value);
         var lc = After(layered, "Crops");
-        Check(lc.Note == PanelModel.FadedKey && Math.Abs(lc.Items[0].Items[0].Fraction2 - 16f / 187f) < 1e-4 && lc.Items[1].Items[0].Fraction2 == 0, "deeds farming layered: the faded key in the legend; the planted bar fades the share counted before install"); 
-        Check(lc.Items.Select(i => i.Title + " " + i.Value + "/" + i.Value2 + " " + i.Faded + "+" + i.Solid).SequenceEqual(new[] { "Barley 66/187 16+171", "Turnip 58/20 +", "Carrot 41/60 +", "Other plants 147/ +" }),
-              "deeds farming layered: per crop, the grid of 171 barley counts 171 (16 faded + 171 solid); a crop counted only since (turnip 20) or only before (carrot 60) is a plain number: " +
-              string.Join(" | ", lc.Items.Select(i => i.Title + " " + i.Value + "/" + i.Value2 + " " + i.Faded + "+" + i.Solid)));
+        Check(lc.Note == null && lc.Items.All(i => i.Items.All(p => p.Fraction2 == 0)),
+              "deeds farming layered (0.7 rule A): no faded shares and no legend key on the crop tiles, the sums only");
+        Check(lc.Items.Select(i => i.Title + " " + i.Value + "/" + i.Value2).SequenceEqual(new[] { "Barley 66/187", "Turnip 58/20", "Carrot 41/60", "Other plants 147/" }),
+              "deeds farming layered (0.7 rule A): per crop the planted sum (barley 187 = 16 before install + 171 since), a crop counted only since (turnip 20) or only before (carrot 60) alike: " +
+              string.Join(" | ", lc.Items.Select(i => i.Title + " " + i.Value + "/" + i.Value2)));
         Check(After(layered, "Also planted")?.Items.Single().Value == "12" && !PanelModel.AllText(layered).Any(t => t.Contains("Wood Wall") || t.Contains("woodwall")),
               "deeds farming layered: a tree planted before install stays in Also planted; built pieces in the baseline are not plantings");
         Check(PanelModel.Content(layered).Count(b => b.Kind == "note") == 0, "deeds farming layered: no sentence rows, the legend says it");
         var allSince = Layered(input); allSince.Baseline[PanelModel.PlacedBaseline] = new Dictionary<string, float>();
-        var ashV = Show(allSince, "farming"); var ash = PanelModel.Content(ashV).FirstOrDefault(b => b.Kind == "hero" && b.Value == "191") ?? Find(ashV, "hero");   // zones: the heroes of both zones
-        Check(ash.Value == "191" && ash.Faded == null && ash.Src == "pc" && Zoned.Says(ashV, ash), "deeds farming layered: a character that started with Hearthwoven: every plant counted exactly, since install");
+        var ash = Find(Show(allSince, "farming"), "hero");
+        Check(ash.Value == "191" && ash.Note == null && ash.Src == "character" && ash.Title == "planted",
+              "deeds farming layered (0.7 rule A): a character that started with Hearthwoven: every plant counted exactly, one number with no earlier count, no note");
         var fellowCopy = Layered(input); fellowCopy.IsSelf = false;
-        Check(Find(Show(fellowCopy, "farming"), "hero").Value == "208" && Find(Show(fellowCopy, "farming"), "hero").Faded == null, "deeds farming layered: a fellow's copy shows the game's counter, no layers");
-        Check(PanelModel.ToJson(layered).Contains("\"faded\":\"16\"") && PanelModel.ToJson(layered).Contains("\"solid\":\"171\""), "deeds farming layered: the preview JSON carries faded and solid");
+        Check(Find(Show(fellowCopy, "farming"), "hero").Value == "208", "deeds farming layered: a fellow's copy shows the game's counter, no layers");
+        Check(!System.Text.RegularExpressions.Regex.IsMatch(PanelModel.ToJson(layered), "\"faded\":\"[0-9]"), "deeds farming layered (0.7): the preview JSON carries no faded parts (rule A: sums only)");
         var lcard = Find(PanelModel.Build(layeredIn, new PanelState { Chapter = Chapter.Deeds }), "cards").Items.Single(c => c.Title == "Fieldkeeper");
         Check(lcard.Value == "312" && lcard.Text == "crops picked" && lcard.Items[0].Value == "279", "deeds overview: the Fieldkeeper card says crops picked and the planted total");
 
@@ -303,7 +317,8 @@ static class DeedsTests
         var valid = true;
         foreach (var v in views) try { var d = JsonDocument.Parse(PanelModel.ToJson(v)); if (!PanelModel.ToJson(v).Contains("\"columns\"")) valid = false; } catch { valid = false; }
         Check(valid, "deeds: preview JSON valid, the new fields included");
-        Check(views.SelectMany(PanelModel.Content).All(b => b.Kind == "section" || b.Kind == "note" || PanelModel.IsBox(b) || PanelModel.IsFeatKind(b.Kind) || b.Src != null), "deeds: every block with a number carries its source mark");
+        var unmarkedDeed = views.SelectMany(PanelModel.Content).FirstOrDefault(b => !(b.Kind == "section" || b.Kind == "note" || b.Kind == "sort" || b.Kind == "aboutnumbers" || PanelModel.IsBox(b) || PanelModel.IsFeatKind(b.Kind) || b.Src != null));
+        Check(unmarkedDeed == null, "deeds: every block with a number carries its source mark" + (unmarkedDeed != null ? ": " + unmarkedDeed.Kind + " '" + (unmarkedDeed.Title ?? unmarkedDeed.Text) + "'" : ""));
         Check(views.All(v => PanelModel.PlateOf(v) != null), "deeds: every page sits on the plate");
 
         // ---------- Overview (r4over-deeds-a): a card per deed, short labels, then the other names earned ----------
@@ -329,14 +344,14 @@ static class DeedsTests
               "deeds overview: the Earned/Unsung switch always shows (F flips it); every name earned: Unsung says so");
         Check(over.Heading == "Deeds" && cards.Items.Select(c => c.Title + " " + c.Value + " " + c.Text + " / " + c.Items.FirstOrDefault()?.Value + " " + c.Items.FirstOrDefault()?.Title).SequenceEqual(new[] {
                 "Hearth Cook 166 dishes cooked / 2 enjoyed by fellows", "Hallwright 866 pieces built / 1\u00A0023 groundwork strokes", "Forgekeeper 20 gear crafted / 11 upgrades made",
-                "Woodcutter 410 trees felled / 64 axe hits", "Stonebreaker 2\u00A0134 stone, ore brought in / 120 hits", "Fieldkeeper 312 crops picked / 208 planted",
+                "Woodcutter 410 trees felled /  ", "Stonebreaker 2\u00A0134 stone, ore brought in /  ", "Fieldkeeper 312 crops picked / 208 planted",
                 "Tidecatcher 251 fish caught / 402 hooked", "Beastkeeper 60 petted and commanded / 6 tamed" }),
-              "deeds overview: one card per deed, the big number, a short label and one short second line: " + string.Join(" | ", cards.Items.Select(c => c.Title + " " + c.Value + " " + c.Text + " / " + c.Items?.FirstOrDefault()?.Value + " " + c.Items?.FirstOrDefault()?.Title)));
+              "deeds overview: one card per deed, the big number, a short label and one short second line when it is a class A, B or D number (0.7, hard case 13): " + string.Join(" | ", cards.Items.Select(c => c.Title + " " + c.Value + " " + c.Text + " / " + c.Items?.FirstOrDefault()?.Value + " " + c.Items?.FirstOrDefault()?.Title)));
         Check(cards.Items.All(c => c.Text.Length <= 22 && (c.Items == null || c.Items.Count == 0 || c.Items[0].Title.Length <= 18)) && cards.Items.All(c => c.Id.StartsWith("Deeds/")),
               "deeds overview: card labels short enough to never be cut off, each card opens its deed page");
         var woodCard = cards.Items.Single(c => c.Title == "Woodcutter");
-        Check(woodCard.Items?.FirstOrDefault()?.Title == "axe hits" && woodCard.Items[0].SinceInstall && Zoned.ZoneOf(over, cards) == null,
-              "deeds overview: no zones on the overview (integrate-05); a card keeps its second line, labelled since install where it was counted on this PC");
+        Check((woodCard.Items == null || woodCard.Items.Count == 0) && over.Recorded,
+              "deeds overview 0.7: no zones; the class C axe hits drop off the Woodcutter card (hard case 13)");
         var others = After(over, "Other titles");
         Check(others?.Kind == "strip" && others.Items.All(t => !t.Id.StartsWith("Deeds/") && t.Value == "") && others.Items.Single(t => t.Title == "Shieldbearer").Text == "Battle" && others.Items.Single(t => t.Title == "Helmskeeper").Id == "Voyages/sailing",
               "deeds overview: the other chapters' names earned in one line, each with its chapter, no numbers");

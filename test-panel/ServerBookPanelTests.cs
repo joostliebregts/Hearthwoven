@@ -22,9 +22,9 @@ static class ServerBookPanelTests
         var all = Every(PanelModel.Content(sailing)).ToList();
         var hero = all.FirstOrDefault(b => b.Kind == "hero" && b.Title == "item-km loaded");
         var second = all.FirstOrDefault(b => b.Kind == "hero" && b.Title == "item-km unloaded");   // fix3-rest: each number heads its own column, over its bar
-        Check(all.Any(b => b.Kind == "zone" && b.Id == "server" && b.Title == "Cargo loaded and unloaded") && hero != null && hero.Value == "1 434" && hero.Src == "server" &&
+        Check(all.Any(b => b.Kind == "section" && b.Title == "Cargo loaded and unloaded" && b.RecordedFrom != null) && hero != null && hero.Value == "1 434" && hero.Src == "server" &&
               second != null && second.Title == "item-km unloaded" && second.Value == "133" && second.Src == "server",
-              "server book: Cargo shows Cargo loaded and unloaded, two numbers side by side (1 434 item-km loaded, 133 item-km unloaded), never summed, counted by the server");
+              "server book: Cargo shows Cargo loaded and unloaded (its own section, 0.7), two numbers side by side (1 434 item-km loaded, 133 item-km unloaded), never summed, recorded by the server");
         Check(all.Any(b => b.Kind == "section" && b.Title == "Cargo carried"), "server book: Cargo carried at the helm stays beside it (this PC's own count)");
         var serverBars = all.Where(b => b.Kind == "composition" && b.Src == "server").Distinct().ToList();   // fix3-rest: the hero over each bar says which is which
         var sentBar = serverBars.ElementAtOrDefault(0);
@@ -38,10 +38,12 @@ static class ServerBookPanelTests
         var why = all.FindIndex(b => b.Kind == "note" && b.Text == PanelModel.ServerVersusCarried(me));
         Check(why > all.IndexOf(line) && PanelModel.ServerVersusCarried(me).Contains("whoever steered") && PanelModel.ServerVersusCarried(me).Contains("more than Cargo carried") && PanelModel.ServerVersusCarried(me).EndsWith("only while you steered or pulled."),
               "live-polish server book: one more line under it says why loaded can be more than Cargo carried (wherever it went, whoever steered; carried only at your helm or cart)");
-        var serverZone = Every(PanelModel.Content(sailing)).FirstOrDefault(b => b.Kind == "zone" && b.Id == "server");
-        Check(serverZone != null && serverZone.Text.StartsWith("counted by the server since ") && !Every(PanelModel.Content(sailing)).Where(b => b.Kind == "zone" && b.Id != "server").Any(z => Every(z.Items ?? new List<Block>()).Any(b => b.Src == "server")) &&
-              Every(serverZone.Items).Any(b => b.Src == "server") && InZone(sailing, b => b.Kind == "section" && b.Title == "Cargo carried" || b.Title == "item-km"),
-              "server book: the server's numbers have their own zone whose heading says who counted and since when (" + serverZone?.Text + "), apart from your character's and this PC's");
+        // 0.7 (rule S, G7): the server's book is a section of its own with the server's label; no zone on a 0.7 page
+        var serverSection = Every(PanelModel.Content(sailing)).FirstOrDefault(b => b.Kind == "section" && b.Title == "Cargo loaded and unloaded");
+        var order = Every(PanelModel.Content(sailing)).ToList();
+        Check(serverSection != null && serverSection.RecordedFrom != null && serverSection.RecordedFrom.StartsWith("Recorded by the server from ") && !order.Any(b => b.Kind == "zone") &&
+              order.Any(b => b.Src == "server") && order.FindIndex(b => b.Kind == "section" && b.Title == "Cargo carried") < order.IndexOf(serverSection),
+              "server book: the server's numbers are their own section, labelled \"" + serverSection?.RecordedFrom + "\", after Cargo carried; no zone");
 
         var edda = PanelSample.Fellows(now).First(f => f.PlayerName == "Edda"); edda.ViewerName = "Rowan";
         var eddaAll = Every(PanelModel.Content(Page(edda, Chapter.Voyages, "cargo"))).ToList();

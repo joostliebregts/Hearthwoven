@@ -28,20 +28,20 @@ namespace Hearthwoven.Panel
         /// <summary>The line under "Who enjoyed" while a filter is on: those servings are not narrowed by it.</summary>
         public static string EnjoyedWhole(string whose) => "Shows all " + whose + " food, not the filter above.";
 
-        // id, words, colour in the linked bar, always a chip (the rest join when a dish of them was made). The types keep clear of the
-        // boosts' red, yellow and blue (no colour means two things in one bar pair)
-        static readonly (string id, string label, string colour, bool always)[] DishTypes =
+        // id, words, always a chip (the rest join when a dish of them was made). Types and boosts are abstract categories: their colour
+        // in the linked bar comes from the name (PanelModel.CategoryColour: the boosts in the game's food colours, health red, stamina
+        // yellow, eitr blue, in the bars' muted family; the types clear of them, so no colour means two things on the page)
+        static readonly (string id, string label, bool always)[] DishTypes =
         {
-            ("meal", "Meals", "#8a7a4a", true), ("grilled", "Grilled", "#a0603a", true), ("baked", "Baked", "#c9a46a", true),
-            ("feast", "Feasts", "#8c6e9a", false), ("uncooked", "Uncooked", "#b8ae96", false), ("meadbase", "Mead bases", "#6f8f5a", false),
-            (DishOther, "Other", "#6f6a60", false),
+            ("meal", "Meals", true), ("grilled", "Grilled", true), ("baked", "Baked", true),
+            ("feast", "Feasts", false), ("uncooked", "Uncooked", false), ("meadbase", "Mead bases", false),
+            (DishOther, "Other", false),
         };
 
-        // the game's own food colours: health red, stamina yellow, eitr blue
-        static readonly (string id, string label, string colour, bool always)[] DishBoosts =
+        static readonly (string id, string label, bool always)[] DishBoosts =
         {
-            ("health", "Health", "#b84a44", true), ("stamina", "Stamina", "#d1a73a", true), ("eitr", "Eitr", "#5a78c8", true),
-            ("balanced", "Balanced", "#5f8a8a", false), (DishOther, "Other", "#6f6a60", false),
+            ("health", "Health", true), ("stamina", "Stamina", true), ("eitr", "Eitr", true),
+            ("balanced", "Balanced", false), (DishOther, "Other", false),
         };
 
         /// <summary>
@@ -87,17 +87,17 @@ namespace Hearthwoven.Panel
             var items = dishes.Where(kv => kv.Value > 0).OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal)
                               .Select(kv => DishFacetItem(input, kv.Key, kv.Value)).ToList();
             if (items.Count == 0) return null;
-            FacetDef Row(string id, string title, string sub, string barTitle, (string id, string label, string colour, bool always)[] options) => new FacetDef
+            FacetDef Row(string id, string title, string sub, string barTitle, (string id, string label, bool always)[] options) => new FacetDef
             {
                 Id = id, Title = title, Sub = sub, BarTitle = barTitle,
-                Options = options.Where(o => o.always || items.Any(i => i.Values[id] == o.id)).Select(o => new FacetOption { Id = o.id, Label = o.label, Colour = o.colour }).ToList(),
+                Options = options.Where(o => o.always || items.Any(i => i.Values[id] == o.id)).Select(o => new FacetOption { Id = o.id, Label = o.label }).ToList(),
             };
             var defs = new List<FacetDef>
             {
                 Row("type", "Type", null, "By type", DishTypes),
                 Row("boost", "Main boost", "by food value", "By main boost", DishBoosts),
             };
-            return Facets(state, CookFilter, defs, items, "cooked", src, "dish", "dishes", "No filter: every dish", CookAbove);
+            return Facets(state, CookFilter, defs, items, "cooked", src, "dish", "dishes", "No filter: every dish", CookAbove, overview: true);
         }
     }
 }

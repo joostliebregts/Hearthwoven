@@ -84,6 +84,7 @@ namespace Hearthwoven.Panel
             "itemgrid",    // a layered second line, the quiet "fuel" after a name (DeedsUi)
             "strip",       // a layered number (DeedsUi.Strip)
             "hero",        // a layered hero number with its "before install" and "since install" (PanelUi.HeroNumber)
+            "feed",        // a battle feed entry's damage both ways, each type in its colour, the amounts bold (BattleFeedUi.FeedLine, 0.8)
         };
         static readonly HashSet<string> kinds = new HashSet<string>(Kinds);
 

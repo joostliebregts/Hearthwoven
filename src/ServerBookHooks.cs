@@ -11,7 +11,7 @@ namespace Hearthwoven
     /// Server only (0.6): keeps ServerBook (the arithmetic, tested without the game) and hands each player's part to GroupShare.
     /// Cargo: ChestWatch passes every ship and cart line as it writes it. Births: a ZDO the server sees for the first time (a new
     /// object a player's PC created and sent; its prefab is still 0 before the data arrives, ZDOMan.RPC_ZDOData -> CreateNewZDO)
-    /// that is a young animal (Growup + Character) and tamed. Saved with every world save (BepInEx/Hearthwoven/server-book-&lt;world&gt;.json,
+    /// that is a young animal (Growup + Character) and tamed. Saved with every world save (BepInEx/Hearthwoven/server-book-&lt;world&gt;.&lt;id&gt;.json,
     /// AtomicFile: a flushed temp file moved over the old one, which stays as .bak), loaded at server start (the .bak when the file
     /// is unreadable); a dedicated server without a book rebuilds the cargo once from that world's chest logs (ServerBook.Replay).
     /// Only reads the game, never changes it.
@@ -26,6 +26,13 @@ namespace Hearthwoven
         static readonly Queue<ZDOID> countedOrder = new Queue<ZDOID>();
 
         static bool IsServer => ZNet.instance != null && ZNet.instance.IsServer();
+
+        /// <summary>The running world's id (World.m_uid) as text, the same on the server and every client; null when there is no world.</summary>
+        internal static string WorldUid()
+        {
+            try { var w = ZNet.World; return w != null && w.m_uid != 0 ? w.m_uid.ToString(System.Globalization.CultureInfo.InvariantCulture) : null; }
+            catch { return null; }
+        }
         static string Root => Path.Combine(BepInEx.Paths.BepInExRootPath, "Hearthwoven");
 
         /// <summary>Server start (ChestWatch.Started, after the server-start marker): load this world's book, or begin one.</summary>
@@ -35,10 +42,13 @@ namespace Hearthwoven
             {
                 if (!IsServer) return;
                 var w = ZNet.instance.GetWorldName() ?? "";
-                if (Book != null && w == world) return;
-                world = w;
+                var uid = WorldUid();
+                if (Book != null && w + "|" + uid == world) return;
+                world = w + "|" + uid;
+                Book = null; path = null;   // another world: nothing of the one before is credited or saved, even if what follows fails
                 Directory.CreateDirectory(Root);
-                path = Path.Combine(Root, "server-book-" + (Transport.SafeName(w).Length > 0 ? Transport.SafeName(w) : "world") + ".json");
+                path = ServerBook.BookPath(Root, w, uid, out var adopted);   // 0.8: per world id, so a world made again under the same name starts its own
+                if (adopted != null) Debug.Log("[Hearthwoven] " + adopted);
                 try { Book = ServerBook.Load(path, out var problem); if (problem != null) Debug.LogWarning("[Hearthwoven] " + problem); }
                 catch (Exception e)
                 {
@@ -54,13 +64,13 @@ namespace Hearthwoven
                     Book = new ServerBook { BornFrom = DateTime.UtcNow };
                     if (ZNet.instance.IsDedicated())   // a PC hosting a world starts from now
                     {
-                        var r = Book.ReplayLogs(Root, w, out var files);
+                        var r = Book.ReplayLogs(Root, w, out var files, uid);
                         Debug.Log($"[Hearthwoven] server book of world {w} rebuilt from {files} chest logs: {r.Lines} lines, {r.Applied} ship and cart lines applied, {r.RolledBack} rolled back with the world, {r.OtherWorld} of other worlds left out, {r.Unreadable} unreadable");
                     }
                     Save();
                 }
             }
-            catch (Exception e) { Book = Book ?? new ServerBook { BornFrom = DateTime.UtcNow }; Debug.LogWarning("[Hearthwoven] server book: " + e.Message); }
+            catch (Exception e) { Book = Book ?? new ServerBook { BornFrom = DateTime.UtcNow }; Debug.LogWarning("[Hearthwoven] server book: " + e.Message + (path == null ? "; not saved this run" : "")); }
         }
 
         /// <summary>With every world save (ChestWatch.Saved): the book as it is now, so a restart without a save rolls it back with the world.</summary>

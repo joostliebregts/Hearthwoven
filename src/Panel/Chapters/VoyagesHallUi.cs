@@ -44,7 +44,7 @@ namespace Hearthwoven.Panel
                     // font's line, so the 18/15 px boxes under 17/14 px text showed nothing; each line gets its font's height (LineBox)
                     var name = VStack(row, 0); Size(name, nameW, -1);
                     Size(OneLine(Label(name, r.Title, 17, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold)), nameW, LineBox(17));
-                    if (!string.IsNullOrEmpty(r.Text)) Size(OneLine(Label(name, r.Text, 13, PanelLook.Faint, align: TextAlignmentOptions.TopLeft)), nameW, LineBox(13));
+                    if (!string.IsNullOrEmpty(r.Text)) Size(OneLine(Label(name, r.Text, 14, PanelLook.Faint, align: TextAlignmentOptions.TopLeft)), nameW, LineBox(13));
                 }
                 else
                 {
@@ -63,8 +63,8 @@ namespace Hearthwoven.Panel
                     if (!string.IsNullOrEmpty(c.Icon)) { Pic(chip, c.Icon, pic); w += pic + 5; }
                     var n = Label(chip, c.Value, nSize, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft); n.textWrappingMode = TextWrappingModes.NoWrap; w += n.preferredWidth + 5;
                     var t = Label(chip, c.Title, tSize, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); t.textWrappingMode = TextWrappingModes.NoWrap; w += t.preferredWidth;
-                    if (c.Tone == PanelModel.FuelTone) { var f = Label(chip, PanelModel.FuelTone, 13, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic); f.textWrappingMode = TextWrappingModes.NoWrap; w += 5 + f.preferredWidth; }
-                    if (c.SinceInstall) { var s = Since(chip, 13); w += 5 + s.preferredWidth; }
+                    if (c.Tone == PanelModel.FuelTone) { var f = Label(chip, PanelModel.FuelTone, 14, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic); f.textWrappingMode = TextWrappingModes.NoWrap; w += 5 + f.preferredWidth; }
+                    if (Labelled(c)) { var s = Since(chip, 14, c); w += 5 + s.preferredWidth; }
                     w = Mathf.Min(Mathf.Ceil(w), room);
                     Size(chip, w, chipH);
                     Edge(chip, c.Colour);
@@ -75,11 +75,11 @@ namespace Hearthwoven.Panel
                 {
                     var tot = VStack(row, 0); Size(tot, LedgerTotalW, chipH);
                     Size(Label(tot, r.Value, 24, PanelLook.Text, align: TextAlignmentOptions.MidlineRight, style: FontStyles.Bold), LedgerTotalW, 28);
-                    if (!string.IsNullOrEmpty(r.Note)) Size(Label(tot, r.Note, 13, PanelLook.Faint, align: TextAlignmentOptions.TopRight), LedgerTotalW, 15);
+                    if (!string.IsNullOrEmpty(r.Note)) Size(Label(tot, r.Note, 14, PanelLook.Faint, align: TextAlignmentOptions.TopRight), LedgerTotalW, 15);
                 }
-                var rule = Img(stack, "Rule", null, PanelLook.Rule); Size(rule, -1, 1);
+                if (!islanded) { var rule = Img(stack, "Rule", null, PanelLook.Rule); Size(rule, -1, 1); }   // no divider lines in an island (Joost, part 4)
             }
-            if (b.SinceInstall) Since(col, 13);
+            if (Labelled(b)) Since(col, 14, b);
         }
 
         // ----- journey: how far did I travel? one line, legs by km; the leg's number over it, each segment's under it -----
@@ -122,7 +122,7 @@ namespace Hearthwoven.Panel
                         var lab = VStack(area, 0); lab.Box(sx, lineTop + JourneyLine + 4, 140, SegLabel - 4);
                         var n = Label(lab, s.Value, 18, s.Id == "helm" ? PanelLook.Gold : s.Id == "passenger" ? PassengerInk : PanelLook.Text, style: FontStyles.Bold);
                         n.textWrappingMode = TextWrappingModes.NoWrap; Size(n, -1, 22);
-                        var tt = Label(lab, s.Title, 13, PanelLook.Muted); tt.textWrappingMode = TextWrappingModes.NoWrap; Size(tt, -1, 16);
+                        var tt = Label(lab, s.Title, 14, PanelLook.Muted); tt.textWrappingMode = TextWrappingModes.NoWrap; Size(tt, -1, 16);
                         placed.Add((lab, sx, Mathf.Ceil(Mathf.Max(n.preferredWidth, tt.preferredWidth)) + 4));
                     }
                     sx += sw;
@@ -131,7 +131,7 @@ namespace Hearthwoven.Panel
             }
             var at = PanelModel.LabelPositions(placed.Select(p => p.start).ToArray(), placed.Select(p => p.width).ToArray(), Column, 16);
             for (int i = 0; i < placed.Count; i++) placed[i].box.Box(at[i], lineTop + JourneyLine + 4, placed[i].width, SegLabel - 4);
-            if (b.SinceInstall) Since(col, 13);
+            if (Labelled(b)) Since(col, 14, b);
         }
 
         // the line's texture, placed once: a foot path's ticks, a run's dash, the sea's crests (tiny rects, no curves)
@@ -184,7 +184,7 @@ namespace Hearthwoven.Panel
                     else { float x = 0, all = helm.Sum(h => h.Fraction); foreach (var h in helm) { var r = Fill(fill, "Helm", Hex(h.Colour, PersonTint(h.Title))).rectTransform; r.anchorMin = new Vector2(x, 0); x += h.Fraction / all; r.anchorMax = new Vector2(x, 1); r.offsetMin = r.offsetMax = Vector2.zero; } }
                 }
             }
-            if (b.SinceInstall) Since(col, 13);
+            if (Labelled(b)) Since(col, 14, b);
         }
 
         // ----- compass: time at the far edge. Codex's rose (arm-free ring), four amber arms from home, names outside -----

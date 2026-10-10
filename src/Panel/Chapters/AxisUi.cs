@@ -11,15 +11,16 @@ namespace Hearthwoven.Panel
     /// r4over-foodshared): one person per row on a vertical axis; what flowed one way grows to the left, the other way to
     /// the right, on one zero-based scale (Value). Meal amber, feast serving orchid (Fraction2 = the feast share of a
     /// row). Rows: Kind "row", Id = person (pairs a left and a right row), Tone "left"/"right" (null = right), Value,
-    /// Fraction, Fraction2, Items = chips (Kind "chip": Icon item, Value "× n"). Optional Kind "end" per side (Tone, Value
-    /// = the big total, Title its label); optional column headings Text (left) and Note (right). Rects and the game's
-    /// item sprites only, placed once when the page is filled.
+    /// Fraction, Fraction2, Items = chips (Kind "chip": Icon item, Value "× n"), Note = a teamwork line under the chips (0.8: "Teamwork: 3
+    /// servings from a feast Tor set out", with its mark). Optional Kind "end" per side (Tone, Value = the big total, Title its label);
+    /// optional column headings Text (left) and Note (right); Value2 = the feast key's words (PanelModel.FeastKey; null: FeastServingKey).
+    /// Rects and the game's item sprites only, placed once when the page is filled.
     /// </summary>
     public partial class PanelUi
     {
         public static readonly Color Meal = new Color(0.910f, 0.663f, 0.282f), FeastServing = new Color(0.753f, 0.498f, 0.839f);   // #e8a948, #c07fd6 (orchid: no player colour, Joost chose those)
         /// <summary>The axis key words (VOCABULARY.md word list).</summary>
-        public const string MealKey = "meal", FeastServingKey = "feast serving", DishKey = "servings of one dish, its picture beside";
+        public const string MealKey = "meal", FeastServingKey = "from a feast they set out", DishKey = "servings of one dish, its picture beside";
         const float AxisOneSide = 96, AxisOneGap = 16;   // one-sided (no left rows or ends, Deeds > Cooking): shield column, axis at 96 px
         const float AxisRowH = 92, AxisGap = 46, AxisValueW = 48, AxisBarH = 22, AxisShield = 30;
 
@@ -33,8 +34,8 @@ namespace Hearthwoven.Panel
             if (rows.Count == 0 && ends.Count == 0) return;
             var left = ends.FirstOrDefault(IsLeft); var right = ends.FirstOrDefault(e => !IsLeft(e));
             // "since install" once per side where any number on that side was counted on this PC
-            bool SideSince(bool l) => items.Where(i => IsLeft(i) == l).SelectMany(i => new[] { i }.Concat(i.Items ?? new List<Block>())).Any(i => i.SinceInstall);
-            bool sinceLeft = SideSince(true), sinceRight = SideSince(false);
+            string SideSince(bool l) => items.Where(i => IsLeft(i) == l).SelectMany(i => new[] { i }.Concat(i.Items ?? new List<Block>())).Select(LabelOf).FirstOrDefault(x => x != null);   // the label ("since install", or 0.7's "Recorded from ...")
+            string sinceLeft = SideSince(true), sinceRight = SideSince(false);
 
             // two-sided: the axis in the middle; one-sided: the axis near the left edge, the bars across the rest
             var oneSided = !items.Any(IsLeft);
@@ -44,8 +45,8 @@ namespace Hearthwoven.Panel
                 var head = Node("Ends", col); Size(head, -1, 74);
                 if (left != null) AxisEnd(head, left, 0, mid - 20, TextAlignmentOptions.Left, sinceLeft);
                 if (right != null) AxisEnd(head, right, mid + 20, W - mid - 20, TextAlignmentOptions.Right, sinceRight);
-                if (left != null) sinceLeft = false;   // said beside its end
-                if (right != null) sinceRight = false;
+                if (left != null) sinceLeft = null;   // said beside its end
+                if (right != null) sinceRight = null;
             }
             if (!string.IsNullOrEmpty(b.Text) || !string.IsNullOrEmpty(b.Note))
             {
@@ -72,14 +73,14 @@ namespace Hearthwoven.Panel
                 {
                     var l = IsLeft(r);
                     var labelHere = l ? sinceLeft : sinceRight;
-                    AxisSide(line, r, l, mid, gap, track, labelHere && k == 0);
+                    AxisSide(line, r, l, mid, gap, track, k == 0 ? labelHere : null);
                 }
                 if (k < people.Count - 1) Img(line, "Rule", null, PanelLook.Rule).rectTransform.Box(0, AxisRowH - 1, W, 1);
             }
 
             var key = Line(col, 8);
             Size(Fill(key, "Meal", Meal), 26, 10); Label(key, MealKey, 14, PanelLook.Muted);
-            if (rows.Any(r => r.Fraction2 > 0)) { Size(Node("Gap", key), 14, 1); Size(Fill(key, "Feast", FeastServing), 26, 10); Label(key, FeastServingKey, 14, PanelLook.Muted); }
+            if (rows.Any(r => r.Fraction2 > 0)) { Size(Node("Gap", key), 14, 1); Size(Fill(key, "Feast", FeastServing), 26, 10); Label(key, string.IsNullOrEmpty(b.Value2) ? FeastServingKey : b.Value2, 14, PanelLook.Muted); }
             // fix3-rest: the small "× 3 × 2" under a bar had no key: each is the servings of one dish (its picture, then how many)
             if (rows.Any(r => (r.Items ?? new List<Block>()).Any(c => c.Kind == "chip")))
             {
@@ -87,15 +88,15 @@ namespace Hearthwoven.Panel
             }
         }
 
-        static void AxisEnd(RectTransform head, Block end, float x, float w, TextAlignmentOptions align, bool since)
+        static void AxisEnd(RectTransform head, Block end, float x, float w, TextAlignmentOptions align, string since)
         {
             var v = Label(head, end.Value, 48, PanelLook.Gold, style: FontStyles.Bold, align: align == TextAlignmentOptions.Left ? TextAlignmentOptions.BottomLeft : TextAlignmentOptions.BottomRight);
             v.rectTransform.Box(x, 0, w, 50); v.textWrappingMode = TextWrappingModes.NoWrap;
             var t = Label(head, end.Title, 16, PanelLook.Text, align: align); t.textWrappingMode = TextWrappingModes.NoWrap;
             t.rectTransform.Box(x, 50, w, 22);
-            var scope = since ? PanelModel.SinceInstallLabel : end.Value2;   // whose record: since install (this PC) or their last session
+            var scope = since ?? end.Value2;   // whose record: since install (this PC) or their last session
             if (string.IsNullOrEmpty(scope)) return;
-            var s = Label(head, scope, 13, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic);
+            var s = Label(head, scope, 14, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic);
             s.textWrappingMode = TextWrappingModes.NoWrap;
             var tw = Mathf.Min(t.preferredWidth, w);
             if (align == TextAlignmentOptions.Left) s.rectTransform.Box(x + tw + 10, 50, 120, 22);
@@ -105,13 +106,13 @@ namespace Hearthwoven.Panel
         static void AxisHeading(RectTransform heads, string text, float x, float w, TextAlignmentOptions align)
         {
             if (string.IsNullOrEmpty(text)) return;
-            var h = Label(heads, text, 13, PanelLook.Muted, style: FontStyles.UpperCase, align: align);
+            var h = Label(heads, text, 14, PanelLook.Muted, style: FontStyles.UpperCase, align: align);
             h.characterSpacing = 14; h.textWrappingMode = TextWrappingModes.NoWrap; h.rectTransform.Box(x, 0, w, 20);
         }
 
         // one side of a person's line: the track from the axis outward, the fill (meals, then feast servings, read left to
         // right), the count at the track's outer end, the dishes under it
-        static void AxisSide(RectTransform line, Block r, bool left, float mid, float gap, float track, bool since)
+        static void AxisSide(RectTransform line, Block r, bool left, float mid, float gap, float track, string since)
         {
             const float top = 14;
             var x0 = left ? mid - gap - track : mid + gap;
@@ -130,9 +131,9 @@ namespace Hearthwoven.Panel
             var v = Label(line, r.Value, 20, PanelLook.Text, style: FontStyles.Bold, align: left ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft);
             v.textWrappingMode = TextWrappingModes.NoWrap;
             v.rectTransform.Box(left ? x0 - AxisValueW - 6 : x0 + track + 8, top - 2, AxisValueW, AxisBarH + 4);
-            if (since)
+            if (since != null)
             {
-                var s = Label(line, PanelModel.SinceInstallLabel, 12, PanelLook.Faint, align: left ? TextAlignmentOptions.TopRight : TextAlignmentOptions.TopLeft, style: FontStyles.Italic);
+                var s = Label(line, since, 14, PanelLook.Faint, align: left ? TextAlignmentOptions.TopRight : TextAlignmentOptions.TopLeft, style: FontStyles.Italic);
                 s.textWrappingMode = TextWrappingModes.NoWrap;
                 s.rectTransform.Box(left ? x0 - AxisValueW - 6 - 40 : x0 + track + 8, top + AxisBarH + 2, AxisValueW + 40, 16);
             }
@@ -144,6 +145,14 @@ namespace Hearthwoven.Panel
                 var chip = Line(chips, 4);
                 Marker(chip, c.Icon, 20);
                 var n = Label(chip, c.Value, 14, PanelLook.Text, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap;
+            }
+            // a feast one made and another set out (0.8): one quiet line under the dishes, the teamwork mark first
+            if (!string.IsNullOrEmpty(r.Note))
+            {
+                var tw = Node("Teamwork", line); tw.Box(x0, top + AxisBarH + 34, track, 18);
+                Layout(tw.gameObject.AddComponent<HorizontalLayoutGroup>(), 5, left ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft);
+                TeamworkMark(tw);
+                var said = Label(tw, r.Note, 14, PanelLook.Muted, style: FontStyles.Italic); said.textWrappingMode = TextWrappingModes.NoWrap;
             }
         }
     }

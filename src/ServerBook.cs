@@ -46,6 +46,9 @@ namespace Hearthwoven
         long clock;
         /// <summary>When the cargo book begins (its first ship or cart event) and when births began to be watched; null = not yet.</summary>
         public DateTime? CargoFrom, BornFrom;
+        /// <summary>Top-level keys a newer Hearthwoven wrote (0.8, RESILIENCE item 4): kept as read and written back with every save.</summary>
+        public readonly Dictionary<string, object> Extra = new Dictionary<string, object>();
+        static readonly HashSet<string> KnownKeys = new HashSet<string> { "version", "clock", "cargoFrom", "bornFrom", "carriers", "players" };
         /// <summary>Grows with every credit (not saved): a reader can tell that something changed.</summary>
         public int Version { get; private set; }
 
@@ -217,7 +220,9 @@ namespace Hearthwoven
                 b.Append(",\"born\":"); WriteDict(b, kv.Value.Born);
                 b.Append('}');
             }
-            return b.Append("}}").ToString();
+            b.Append('}');
+            foreach (var kv in Extra) if (!KnownKeys.Contains(kv.Key)) b.Append(',').Append(Json.Q(kv.Key)).Append(':').Append(MiniJson.Write(kv.Value));   // a newer version's data, kept as read
+            return b.Append('}').ToString();
         }
 
         /// <summary>The book a ToJson wrote. null when the text is not one (unreadable, or a newer format this version must not overwrite).</summary>
@@ -248,10 +253,49 @@ namespace Hearthwoven
                 Into("sent", p.Sent); Into("delivered", p.Delivered); Into("born", p.Born);
                 book.players[kv.Key] = p;
             }
+            foreach (var kv in root) if (!KnownKeys.Contains(kv.Key)) book.Extra[kv.Key] = kv.Value;
             return book;
         }
 
-        // ---------- on disk (server-book-<world>.json) ----------
+        // ---------- on disk (server-book-<world>.<id>.json) ----------
+
+        /// <summary>
+        /// The book file of one world (0.8, RESILIENCE item 1): server-book-&lt;name&gt;.&lt;id&gt;.json, <paramref name="uid"/> = the game's
+        /// world id (World.m_uid) as text. A world made again under the same name has a new id, so it gets its own book; a renamed world
+        /// (same id) keeps its book, found by the id under its old name. A book from before 0.8 (server-book-&lt;name&gt;.json, no id) is
+        /// adopted once, by the first world of that name that loads it: copied to that world's file, then renamed to
+        /// "&lt;file&gt;.migrated-&lt;id&gt;" (kept, never deleted), so the next world of that name starts its own. No id: the name-only file,
+        /// as before. <paramref name="note"/> says when a file was adopted.
+        /// </summary>
+        public static string BookPath(string root, string world, string uid, out string note)
+        {
+            note = null;
+            var name = Transport.SafeName(world).Length > 0 ? Transport.SafeName(world) : "world";
+            var legacy = Path.Combine(root, "server-book-" + name + ".json");
+            if (string.IsNullOrEmpty(uid)) return legacy;
+            var path = Path.Combine(root, "server-book-" + name + "." + uid + ".json");
+            if (OnDisk(path) || !Directory.Exists(root)) return path;
+            var tail = "." + uid + ".json";
+            foreach (var f in Directory.GetFiles(root, "server-book-*" + tail + "*"))   // the world was renamed: its id's book under the old name
+            {
+                var main = f.EndsWith(AtomicFile.BackupSuffix, StringComparison.Ordinal) ? f.Substring(0, f.Length - AtomicFile.BackupSuffix.Length) : f;
+                if (main.EndsWith(tail, StringComparison.Ordinal) && Path.GetFileName(main).IndexOf('.') == Path.GetFileName(main).Length - tail.Length) return main;
+            }
+            if (!OnDisk(legacy)) return path;
+            foreach (var from in new[] { legacy + AtomicFile.BackupSuffix, legacy })
+                if (File.Exists(from)) File.Copy(from, from == legacy ? path : path + AtomicFile.BackupSuffix, false);
+            var moved = legacy + ".migrated-" + uid;
+            try
+            {
+                File.Move(legacy, moved);
+                if (File.Exists(legacy + AtomicFile.BackupSuffix)) File.Move(legacy + AtomicFile.BackupSuffix, moved + AtomicFile.BackupSuffix);
+                note = "server book " + Path.GetFileName(legacy) + " (from before 0.8) belongs to world " + world + " (id " + uid + "): copied to " + Path.GetFileName(path) + ", the old file kept as " + Path.GetFileName(moved);
+            }
+            catch (Exception e) { note = "server book " + Path.GetFileName(legacy) + " copied to " + Path.GetFileName(path) + " but could not be renamed (" + e.Message + ")"; }
+            return path;
+        }
+
+        static bool OnDisk(string file) => File.Exists(file) || File.Exists(file + AtomicFile.BackupSuffix);
 
         /// <summary>
         /// The book at <paramref name="file"/>: the file itself, else its .bak (the save before, AtomicFile), else null for a new one.
@@ -276,13 +320,13 @@ namespace Hearthwoven
         }
 
         /// <summary>A dedicated server without a book (ServerBookHooks.Start): the cargo again from this world's chest logs, plain or compressed (C12, I8).</summary>
-        public ReplayResult ReplayLogs(string root, string worldName, out int files)
+        public ReplayResult ReplayLogs(string root, string worldName, out int files, string worldUid = null)
         {
             lock (DailyLogs.Gate)
             {
                 var list = DailyLogs.Files(root, "chests");
                 files = list.Count;
-                return Replay(list.SelectMany(DailyLogs.ReadLines), worldName);
+                return Replay(list.SelectMany(DailyLogs.ReadLines), worldName, worldUid);
             }
         }
 
@@ -299,14 +343,19 @@ namespace Hearthwoven
         /// the one its "server-start" marker names (0.6.1 on); events under markers without a name (written before 0.6.1) belong to
         /// the first world any marker names (the world the server ran when it got 0.6.1), or to <paramref name="world"/> when no marker
         /// names one. <paramref name="lines"/> is read twice in that case (once for the names); null world = every world.
+        /// 0.8 (RESILIENCE item 1): a world made again under the same name is another world. Markers name the world's id too
+        /// ("worldUid"); with <paramref name="worldUid"/> given only events of that id count. Events under markers without an id (before
+        /// 0.8) of this world's name belong to the first id a marker names for that name (the world that ran when the server got 0.8),
+        /// or to <paramref name="worldUid"/> when none does.
         /// </summary>
-        public ReplayResult Replay(IEnumerable<string> lines, string world = null)
+        public ReplayResult Replay(IEnumerable<string> lines, string world = null, string worldUid = null)
         {
             var r = new ReplayResult();
             var held = new List<Dictionary<string, object>>();
             string legacyWorld = world == null ? null : FirstWorld(lines) ?? world;
-            string segment = null;   // the world of the events being read now; null = a marker without a name (before 0.6.1)
-            bool Mine() => world == null || (segment ?? legacyWorld) == world;
+            string legacyUid = world == null || worldUid == null ? null : FirstUid(lines, world) ?? worldUid;
+            string segment = null, segmentUid = null;   // the world of the events being read now; null = a marker without a name (before 0.6.1) or id (before 0.8)
+            bool Mine() => world == null || ((segment ?? legacyWorld) == world && (worldUid == null || (segmentUid ?? legacyUid) == worldUid));
             foreach (var line in lines ?? Enumerable.Empty<string>())
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
@@ -314,13 +363,14 @@ namespace Hearthwoven
                 if (!(MiniJson.Parse(line) is Dictionary<string, object> o)) { r.Unreadable++; continue; }
                 var marker = MiniJson.Str(o, "marker");
                 var named = MiniJson.Str(o, "world", null);
+                var uid = MiniJson.Str(o, "worldUid", null); if (uid == "") uid = null;
                 if (marker == "world-saved")
                 {
-                    if (named != null) segment = named;
+                    if (named != null) { segment = named; segmentUid = uid; }
                     if (Mine()) { foreach (var e in held) Apply(e); r.Applied += held.Count; } else r.OtherWorld += held.Count;
                     held.Clear(); continue;
                 }
-                if (marker == "server-start") { if (Mine()) r.RolledBack += held.Count; else r.OtherWorld += held.Count; held.Clear(); segment = named; continue; }
+                if (marker == "server-start") { if (Mine()) r.RolledBack += held.Count; else r.OtherWorld += held.Count; held.Clear(); segment = named; segmentUid = uid; continue; }
                 if (marker.Length > 0) continue;
                 if (IsCarrier(MiniJson.Str(o, "kind"))) held.Add(o);
             }
@@ -335,6 +385,17 @@ namespace Hearthwoven
             {
                 if (line == null || line.IndexOf("\"marker\"", StringComparison.Ordinal) < 0 || line.IndexOf("\"world\"", StringComparison.Ordinal) < 0) continue;
                 if (MiniJson.Parse(line) is Dictionary<string, object> o && MiniJson.Str(o, "world", null) is string w) return w;
+            }
+            return null;
+        }
+
+        /// <summary>The first world id a marker names for the world <paramref name="name"/>, or null (only marker lines with an id are parsed).</summary>
+        static string FirstUid(IEnumerable<string> lines, string name)
+        {
+            foreach (var line in lines ?? Enumerable.Empty<string>())
+            {
+                if (line == null || line.IndexOf("\"worldUid\"", StringComparison.Ordinal) < 0 || line.IndexOf("\"marker\"", StringComparison.Ordinal) < 0) continue;
+                if (MiniJson.Parse(line) is Dictionary<string, object> o && MiniJson.Str(o, "world", null) == name && MiniJson.Str(o, "worldUid", null) is string u) return u;
             }
             return null;
         }

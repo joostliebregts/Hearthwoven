@@ -58,16 +58,11 @@ static class BuildingFacetTests
         var bar = Bar(all);
         Check(bar != null && bar.Id == PanelModel.BuildFilter && bar.Src == "character" && bar.KeyCap == "K" && bar.Items.Count(b => b.Kind == "facet") == 2 && bar.Items.Count(b => b.Kind == "facetbar") == 2,
               "building filter: a filter bar with a Category row and a Main material row, a bar for each, the filter key as its keycap");
-        // fix4 (rubric 4): no part of a linked bar is told by colour alone: each part has a pattern of its own (the first solid), the same on every state of the bar
-        foreach (var id in new[] { "tab", "material" })
-        {
-            var parts = Parts(all, id).Items;
-            Check(parts.Select(p => p.Pattern).Distinct().Count() == parts.Count && parts[0].Pattern == null && parts.Skip(1).All(p => p.Pattern != null && p.Pattern.StartsWith("vocab:grain-hatch-")),
-                  "building filter: the " + id + " bar's parts (" + parts.Count + ") each carry a pattern of their own (the first solid), so colour is not the only cue");
-        }
         Check(Row(all, "tab").Title == "Category" && Row(all, "material").Title == "Main material" && Row(all, "material").Note == "by main material" && Parts(all, "material").Note == null && Parts(all, "tab").Note == "the hammer's tab",
               "building filter: the rows are named Category and Main material, with the honest line \"by main material\"");
-        Check(!Bar(all).Open && Parts(all, "tab").Tone == null && Parts(all, "material").Tone == null && Bar(Show(full, new PanelState { OpenFilters = { PanelModel.BuildFilter } })).Open, "building filter: collapsed by default with its slim bars (they fit), open after a click on the header");
+        var opened = Show(full, new PanelState { OpenFilters = { PanelModel.BuildFilter } });
+        Check(!Bar(all).Open && Parts(all, "tab").Tone == null && Parts(all, "material").Tone == "hidden" && Bar(opened).Open && Parts(opened, "tab").Tone == null && Parts(opened, "material").Tone == null,
+              "building filter: collapsed by default with the Category bar and its list (the page's overview), open with both bars after a click on the header");
         Check(Chips(all, "tab") == "Misc=38,Crafting=4,Building=1 213,Stonecutter=272,Furniture=49", "building filter: the Category chips count the pieces built per hammer tab: " + Chips(all, "tab"));
         Check(Chips(all, "material") == "Wood=1 081,Stone=272,Core wood=194,Fine wood=7,Bronze=1,Iron=21", "building filter: the Main material chips (zero ones stay, dimmed): " + Chips(all, "material"));
         var hero = PanelModel.Content(all).First(b => b.Kind == "hero");
@@ -76,7 +71,6 @@ static class BuildingFacetTests
         Check(Grid(all).StartsWith("Wood Wall=520,Wood Floor 2x2=310,Stone Wall 1x1=140,Wood Beam=96,Stone Floor 2x2=90") && PanelModel.Content(all).First(b => b.Kind == "itemgrid").Items.Count == 27,
               "building filter: with nothing chosen the grid shows every piece, most first: " + Grid(all));
         Check(Math.Abs(Parts(all, "tab").Items.Sum(p => p.Fraction) - 1) < 1e-5 && Math.Abs(Parts(all, "material").Items.Sum(p => p.Fraction) - 1) < 1e-5, "building filter: each bar adds up to its whole");
-        Check(Parts(all, "tab").Items.Select(p => p.Colour).Intersect(Parts(all, "material").Items.Select(p => p.Colour)).Count() == 0, "building filter: the tabs' bar and the materials' bar share no colour (no colour means two things)");
 
         // ---------- Furniture and Fine wood: OR within a row, AND across rows, the other row's counts follow ----------
         var fw = Show(full, Chosen(("tab", "Furniture"), ("material", "Fine wood")));
@@ -104,12 +98,12 @@ static class BuildingFacetTests
         Check(PanelModel.FilterKeyPressed(f, v) && f.FilterRow == 0 && Show(full, f).Keys.Contains("[A/D] Move") && Row(Show(full, f), "tab").Items[f.FilterCursor].Title == "Misc", "building focus: the filter key enters on the first row, the cursor on its first chip");
         Check(Show(full).Keys.Any(k => k == "[K] Filter"), "building focus: the footer says [K] Filter on this page");
 
-        // ---------- where it sits ----------
-        var z = Zoned.ZoneOf(all, Bar(all));
-        Check(z != null && z.Id == "character" && !Zoned.Says(all, Bar(all)) && !Bar(all).SinceInstall, "building filter: the bar sits in your character's zone with the pieces it filters, no \"since install\" on it");
-        Check(PanelModel.Content(all).Count(b => b.Kind == "filterbar") == 1 && PanelModel.Content(all).Any(b => b.Kind == "ranking" && b.Src == "pc"), "building filter: the since-install zone (pieces built since, repaired) stays as it was, unfiltered");
+        // ---------- where it sits (0.7 rule B: no zones; the bar is on the plate, the tiles are the game's whole count) ----------
+        Check(PanelModel.Content(all).Count(b => b.Kind == "filterbar") == 1 && !Zoned.Says(all, Bar(all)),
+              "building filter: the bar sits on the plate with the pieces it filters, no \"since install\" on it");
+        Check(PanelModel.Content(all).Any(b => b.Kind == "section" && b.Title == "Pieces repaired" && b.Src == "pc"), "building filter: the repairs stay their own section, unfiltered (rule C)");
         var tile = PanelModel.Content(all).First(b => b.Kind == "itemgrid").Items.First(i => i.Title == "Wood Wall");
-        Check(tile.Value2 != null && tile.Text == PanelModel.SinceWord, "building filter: the tiles keep their part since install, said in words under the whole");
+        Check(tile.Value == "520" && tile.Value2 == null && tile.Text == null, "building filter: a tile is the game's whole count (520), no part line under it (rule B)");
 
         // ---------- a mod's tab, a piece the game data cannot place, no data at all ----------
         var modded = PanelSample.Full(now); var tab0 = modded.PieceTab;
@@ -156,28 +150,21 @@ static class BuildingFacetTests
         Check(Bar(bareView) == null && PanelModel.Content(bareView).Any(b => b.Kind == "itemgrid") && PanelModel.Content(bareView).Any(b => b.Kind == "section" && b.Title == "Every piece") && !bareView.Keys.Any(k => k.Contains("Filter")),
               "building filter: without tabs or materials from the game data (a copy without it) the page stays the plain grid, no filter bar, no key hint");
         var onlyTabs = PanelSample.Full(now); onlyTabs.PieceMaterial = null;
-        // ---------- fix3: the since-install block follows the filter ----------
-        var built = PanelModel.Placed(full, "built");
-        var layers = PanelModel.CounterLayers(full, PanelModel.PlacedBaseline, full.PiecesPlaced, k => built.ContainsKey(k));
-        Block PcHero(PanelView v) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == "hero" && b.Src == "pc");
-        var sinceAll = layers.Values.Sum(l => l.since);
-        Check(PcHero(all) != null && PanelModel.ParseCount(PcHero(all).Value) == sinceAll && PcHero(all).Note == null, "building filter: nothing chosen, the since-install hero counts every piece built since install (" + sinceAll + ")");
+        // ---------- 0.7 rule B: the hero is the game's whole count and does not follow the filter (the bar and the grid do) ----------
         var bs = Show(full, Chosen(("tab", "Building"), ("tab", "Stonecutter")));
-        var sinceBs = layers.Where(kv => new[] { "Building", "Stonecutter" }.Contains(full.PieceTab(kv.Key))).Sum(kv => kv.Value.since);
-        Check(PcHero(bs) != null && PanelModel.ParseCount(PcHero(bs).Value) == sinceBs && sinceBs < sinceAll && PcHero(bs).Note == PanelModel.FollowsFilter,
-              "building filter: Building and Stonecutter chosen, the since-install hero follows (" + sinceBs + " of " + sinceAll + ") and says so");
-        Check(PcHero(fw) == null && PanelModel.Content(fw).Any(b => b.Kind == "note" && b.Src == "pc" && b.Text == "Nothing for this choice since install."),
-              "building filter: a choice with nothing since install says so in the since-install block, which is not the empty zone (its line carries no fill-up clause)");
-        Check(PanelModel.Content(fw).Single(b => b.Kind == "zone" && b.Id == "pc").Tone != PanelModel.ZoneEmpty, "building filter: that zone keeps its place and its date, it is not the empty zone");
+        Check(PanelModel.Content(bs).First(b => b.Kind == "hero").Value == PanelModel.Content(all).First(b => b.Kind == "hero").Value,
+              "building filter: Building and Stonecutter chosen, the hero still counts every piece built (rule B: the grid follows the filter, the number does not)");
+        Check(PanelModel.Content(fw).First(b => b.Kind == "hero").Value == PanelModel.Content(all).First(b => b.Kind == "hero").Value,
+              "building filter: Furniture and Fine wood chosen, the hero stays the whole count");
         // the same on Crafting: the gear follows the filter, upgrades are not counted by kind and the note says so
         PanelView Craft(params (string facet, string option)[] picks) { var s = new PanelState { Chapter = Chapter.Deeds }; s.Page[Chapter.Deeds] = "crafting"; foreach (var p in picks) PanelModel.ToggleFacet(s, PanelModel.CraftFilter, p.facet, p.option); return PanelModel.Build(full, s); }
         var cAll = Craft(); var cLeather = Craft(("kind", "armour"), ("material", "Leather"));
-        Check(PcHero(cAll) != null && PcHero(cAll).Items != null && PcHero(cAll).Items.Any(n => n.Title.StartsWith("upgrade")) && PcHero(cAll).Note == null, "crafting filter: nothing chosen, the since-install hero says gear crafted and upgrades made");
-        Check(PcHero(cLeather) != null && PcHero(cLeather).Items == null && PcHero(cLeather).Note.StartsWith(PanelModel.FollowsFilter) && PcHero(cLeather).Note.Contains("Upgrades are not counted by kind") &&
-              PanelModel.ParseCount(PcHero(cLeather).Value) < PanelModel.ParseCount(PcHero(cAll).Value),
-              "crafting filter: armour and leather chosen, the since-install hero counts only that gear and leaves the upgrades out, saying so");
-        Check(!PanelModel.Content(cAll).Any(b => b.Kind == "note" && b.Text == PanelModel.FadedKeyTwin) && PanelModel.Content(cAll).First(b => b.Kind == "itemgrid").Items.Any(i => i.Text == PanelModel.SinceWord),
-              "crafting: the tiles say \"since install\" themselves, so no key above the grid");
+        Check(PanelModel.Content(cAll).First(b => b.Kind == "hero").Items.Any(n => n.Title.StartsWith("upgrade")) && PanelModel.Content(cAll).First(b => b.Kind == "hero").Note == null,
+              "crafting filter: nothing chosen, the hero says gear crafted and upgrades made");
+        Check(PanelModel.Content(cLeather).First(b => b.Kind == "hero").Value == PanelModel.Content(cAll).First(b => b.Kind == "hero").Value,
+              "crafting filter: armour and leather chosen, the hero stays the whole count (rule B); the gear grid follows the filter");
+        Check(!PanelModel.Content(cAll).Any(b => b.Kind == "note" && b.Text == PanelModel.FadedKeyTwin) && PanelModel.Content(cAll).First(b => b.Kind == "itemgrid").Items.All(i => i.Text == null),
+              "crafting: the tiles are the game's whole count, no since-install line under them, no key above the grid (rule B)");
         Check(Chips(Show(onlyTabs), "material") == "Wood=0(0),Stone=0(0),Core wood=0(0),Fine wood=0(0),Bronze=0(0),Iron=0(0),Other=1 576" && Grid(Show(onlyTabs)).StartsWith("Wood Wall=520"),
               "building filter: tabs without materials: every piece is Other for the material, the grid still lists it all");
 
@@ -195,9 +182,8 @@ static class BuildingFacetTests
         }
         var tabBar = Parts(hall065, "tab"); var tabs065 = Row(hall065, "tab").Items;
         Check(tabBar.Items.Last().Id == PanelModel.FoldId && tabBar.Items.Last().Title == "Other (" + (tabs065.Count(c => c.Tone != "zero") - (PanelModel.BarMaxParts - 1)) + " kinds)" &&
-              tabs065.Count(c => c.Title.StartsWith("Misc")) == 1 && tabs065.Single(c => c.Title.StartsWith("Misc")).Title == "Misc" && tabs065.Single(c => c.Title == "Misc").Value == "64" && tabs065.Count == 19 &&
-              Parts(hall065, "tab").Items.Select(p => p.Colour).Intersect(Parts(hall065, "material").Items.Where(p => p.Colour != PanelModel.BarOtherColour).Select(p => p.Colour)).Count() == 0,
-              "0.6.5 bars: the tabs fold into \"Other (n kinds)\", \"Misc.\" counts under the game's Misc (38 + 26), the chips still list every tab, and the two bars share no colour but the rest's: " + Chips(hall065, "tab"));
+              tabs065.Count(c => c.Title.StartsWith("Misc")) == 1 && tabs065.Single(c => c.Title.StartsWith("Misc")).Title == "Misc" && tabs065.Single(c => c.Title == "Misc").Value == "64" && tabs065.Count == 19,
+              "0.6.5 bars: the tabs fold into \"Other (n kinds)\", \"Misc.\" counts under the game's Misc (38 + 26), the chips still list every tab: " + Chips(hall065, "tab"));
         // plantings never leak into building: the cultivator's table (it plants and works the ground) makes a pickable without a Plant component (PlantEverything's dandelion) planted too
         var cultivator = PanelModel.PieceKindsOfTable(new[] { (true, false, false, false), (false, true, false, false), (false, false, false, true) });
         var hammer = PanelModel.PieceKindsOfTable(new[] { (false, false, false, false), (false, true, false, false), (false, false, true, false) });

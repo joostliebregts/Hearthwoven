@@ -160,13 +160,41 @@ namespace Hearthwoven
             if (start > 0) Perf.AddHook(PerfMeter.Now - start);
         }
 
+        // ---------- sync bytes (0.7, SYNC-DESIGN.md item 4): what went out and came in per minute, full copies vs live updates ----------
+
+        static int fullOut, liveOut, fullIn, liveIn; static long fullOutBytes, liveOutBytes, fullInBytes, liveInBytes;
+        static float nextSync;
+
+        /// <summary>One full copy (packed bytes) or live update sent.</summary>
+        internal static void SyncOut(bool live, int bytes) { if (live) { liveOut++; liveOutBytes += bytes; } else { fullOut++; fullOutBytes += bytes; } }
+        /// <summary>One fellow's full copy (packed bytes, once whole) or live update received.</summary>
+        internal static void SyncIn(bool live, int bytes) { if (live) { liveIn++; liveInBytes += bytes; } else { fullIn++; fullInBytes += bytes; } }
+
+        static string KB(long b) => (b / 1024.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " KB";
+
+        /// <summary>Once a minute, when anything moved: one line with the counts and packed bytes of each kind.</summary>
+        internal static void SyncTick()
+        {
+            try
+            {
+                var now = Time.realtimeSinceStartup;
+                if (now < nextSync) return;
+                nextSync = now + 60f;
+                if (fullOut + liveOut + fullIn + liveIn > 0)
+                    Book.Say("INFO", "sync", $"last minute sent {fullOut} full copies ({KB(fullOutBytes)} packed) and {liveOut} live updates ({KB(liveOutBytes)}); " +
+                                             $"received {fullIn} fellow copies ({KB(fullInBytes)}) and {liveIn} live updates ({KB(liveInBytes)})" + (GroupShare.ServerLive ? "" : "; this server keeps no live updates"));
+                fullOut = liveOut = fullIn = liveIn = 0; fullOutBytes = liveOutBytes = fullInBytes = liveInBytes = 0;
+            }
+            catch (Exception e) { try { log?.LogWarning("self-check sync: " + e.Message); } catch { } }
+        }
+
         /// <summary>Every frame from Plugin.Update (only when On): closes the frame and, once a minute of real time, logs the window.</summary>
         internal static void PerfTick()
         {
             try
             {
                 var ui = Panel.PanelUi.Instance;
-                if (!Perf.EndFrame(Time.unscaledDeltaTime, ui != null && ui.IsOpen)) return;
+                if (!Perf.EndFrame(Time.unscaledDeltaTime, ui != null && ui.IsOpen, AllocClock.Collections())) return;   // 0.8: with the garbage collections
                 Book.Say("INFO", "perf", Perf.Line());
                 Perf.Reset();
             }

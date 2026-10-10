@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Hearthwoven.Panel
@@ -28,16 +29,20 @@ namespace Hearthwoven.Panel
             switch (b.Kind)
             {
                 case "damagegrid": BattleGrid(col, b); break;
-                case "dmgmix": BattleMix(col, b); break;
-                case "foetable": BattleFoeTable(col, b); break;
+                case "dmgmix": DamageRunRow(col, b); break;   // 0.8: a weapon's damage row; the page's weapons make one list (DamageRowsUi.cs)
+                case "foetable": BattleFoeTable(col, b, link); break;
                 case "foetypes": BattleFoeTypes(col, b); break;
-                case "guard": BattleGuard(col, b); break;
-                case "sources": BattleSources(col, b); break;
+                case "guard": BattleGuard(col, b, link); break;
+                case "sources": case "dealtfoes": BattleSources(col, b); break;   // dealtfoes: Damage > By foe (0.8), the same form with the "×N" and the marks
+                case "feed": BattleFeed(col, b); break;   // 0.8 (Chapters/BattleFeedUi.cs)
+                case "fightfoes": FightFoes(col, b); break;
+                case "fightreceived": FightReceived(col, b); break;
+                case "armour": BattleArmour(col, b); break;   // 0.7: Defence > Your armour
                 case "deathstrip": BattleDeathStrip(col, b); break;
                 case "deaths": BattleDeathList(col, b); break;
                 case "deathrows": BattleDeathRows(col, b); break;
             }
-            if (b.SinceInstall) Since(col, 13);   // a page without a time window: counted on this PC since install
+            if (Labelled(b) && b.Kind != "dmgmix") Since(col, 14, b);   // a page without a time window: counted on this PC since install (the weapons' list says it once, after its last row)
         }
 
         // ----- small absolute-layout helpers: a row of fixed height in the column, its children placed by Box -----
@@ -89,54 +94,10 @@ namespace Hearthwoven.Panel
             if (!string.IsNullOrEmpty(qualifier)) { var q = Label(head, qualifier, PanelLook.MinText, PanelLook.Muted); q.textWrappingMode = TextWrappingModes.NoWrap; }
         }
 
-        // ----- Damage, by type: types down, weapon kinds across, one bar per cell on one scale, totals right and under -----
+        // ----- Damage, by type (0.8, Joost: one grammar with By weapon and By foe): a damage row per type, its bar split by weapon kind (or by
+        // player with Everyone), one scale for the types (PanelModel.DamageTypeRows, Chapters/DamageRowsUi.cs) -----
 
-        const float BtTypeW = 130, BtTotalW = 80, BtGridRow = 26, BtCellBar = 150;
-
-        static void BattleGrid(RectTransform col, Block b)
-        {
-            var items = b.Items ?? new List<Block>();
-            var head = items.FirstOrDefault(i => i.Kind == "weapons");
-            var weapons = head?.Items ?? new List<Block>();
-            var types = items.Where(i => i.Kind == "dmgtype").ToList();
-            if (weapons.Count == 0 || types.Count == 0) return;
-            var cw = (Column - BtTypeW - BtTotalW) / weapons.Count;
-
-            var h = BtRow(col, BtGridRow);
-            for (int k = 0; k < weapons.Count; k++)
-            {
-                var x = BtTypeW + k * cw; var idle = weapons[k].Tone == "idle";   // a weapon with nothing in this window keeps its column, dim
-                var ink = idle ? PanelLook.Faint : PanelLook.Muted;
-                BtIcon(h, weapons[k].Icon, ink, x, 4, 20);
-                BtText(h, weapons[k].Title, x + 26, 0, cw - 26, BtGridRow, 14, ink);
-            }
-            BtText(h, head.Title, Column - BtTotalW, 0, BtTotalW, BtGridRow, 17, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
-            BtRect(h, "Rule", PanelLook.Rule, 0, BtGridRow - 1, Column, 1);
-
-            foreach (var t in types)
-            {
-                var colour = BtColour(t);
-                var r = BtRow(col, BtGridRow);
-                BtIcon(r, t.Icon, colour, 0, 5, 18);
-                BtText(r, t.Title, 26, 0, BtTypeW - 26, BtGridRow, 17, Legible(colour));
-                var cells = t.Items ?? new List<Block>();
-                for (int k = 0; k < weapons.Count && k < cells.Count; k++)
-                {
-                    if (string.IsNullOrEmpty(cells[k].Value)) continue;
-                    float x = BtTypeW + k * cw, w = Mathf.Max(3f, Mathf.Clamp01(cells[k].Fraction) * Mathf.Min(BtCellBar, cw - 56));
-                    Fill(r, "Bar", colour).rectTransform.Box(x, 8, w, 12);
-                    BtText(r, cells[k].Value, x + w + 8, 0, Mathf.Max(40, cw - w - 8), BtGridRow, 16, PanelLook.Text, style: FontStyles.Bold);
-                }
-                BtText(r, t.Value, Column - BtTotalW, 0, BtTotalW, BtGridRow, 17, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
-                BtRect(r, "Rule", BtLine, 0, BtGridRow - 1, Column, 1);
-            }
-
-            var f = BtRow(col, BtGridRow + 4);
-            BtRect(f, "Rule", PanelLook.Rule, 0, 0, Column, 1);
-            BtText(f, b.Title, 0, 2, BtTypeW, BtGridRow, 17, PanelLook.Text, style: FontStyles.Bold);
-            for (int k = 0; k < weapons.Count; k++) BtText(f, weapons[k].Tone == "idle" ? "\u2013" : weapons[k].Value, BtTypeW + k * cw, 2, cw, BtGridRow, 17, weapons[k].Tone == "idle" ? PanelLook.Faint : PanelLook.Text, style: FontStyles.Bold);
-            BtText(f, b.Value, Column - BtTotalW, 2, BtTotalW, BtGridRow, 17, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
-        }
+        static void BattleGrid(RectTransform col, Block b) => DamageRows(col, PanelModel.DamageTypeRows(b), true);
 
         // a damage colour as text on the plate: lifted toward white until it reads at 5:1 (the palette stays on the bars and icons)
         static Color Legible(Color c)
@@ -147,92 +108,70 @@ namespace Hearthwoven.Panel
             return c;
         }
 
-        // ----- Damage, by weapon: a composition bar per weapon kind; the legend carries each type's tinted icon -----
+        // the "one item" tint (B41, Joost 2026-10-10: "a visual indicator that it is one item, without explicitly making it look like a card"): a very
+        // faint warm tint with rounded corners, no edge; the open foe on Foes and the feed's cards. Its padding: the ranking's
+        const int BtBandPadX = 12, BtBandPadBottom = 12;
+        static readonly Color BtBand = new Color(0.95f, 0.91f, 0.84f, 0.045f);
 
-        static void BattleMix(RectTransform col, Block b)
+        // ----- Foes, by foe: trophy and name, the dealt bar, the best arrow, one meter per damage type (0.7); a click opens the foe's ranking -----
+
+        const float BtFoeName = 176, BtFoeDealt = 100, BtFoeArrow = 134, BtFoeRow = 40, BtFoeHead = 84, BtCellW = 44, BtFoeTilt = 40;   // live-polish: a wider foe column ("Greydwarf Brute" kept clear of its bar), one header row with tilted type names
+        const float BtMeterW = 38, BtMeterH = 8, BtMeterGap = 2;   // four whole 8 px parts
+        static readonly Color BtMeterTrack = new Color(0.20f, 0.155f, 0.115f, 1f), BtRowHover = new Color(0.95f, 0.91f, 0.84f, 0.035f);
+
+        // a part of the meter: square, or rounded on its outer side only (the meter is one thing split into four; VOCABULARY.md): the rounded
+        // sprite, its inner half covered square in the same colour
+        static void MeterPart(RectTransform parent, Color c, float x, float top, float w, float h, bool roundLeft, bool roundRight)
         {
-            var head = Line(col, 8);
-            Size(VocabImg(head, "Weapon", VocabName(b.Icon) ?? "", PanelLook.Gold), 22, 22);
-            var name = Label(head, (b.Title ?? "").ToUpperInvariant(), 14, PanelLook.Muted); name.characterSpacing = 8; name.textWrappingMode = TextWrappingModes.NoWrap;
-            Label(head, b.Value, 15, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
-            var parts = (b.Items ?? new List<Block>()).Where(p => p.Fraction > 0).ToList();
-            if (parts.Count == 0) return;
-            var shares = parts.Select(p => Mathf.Max(p.Fraction, 4f / Column)).ToList(); var sum = shares.Sum();
-            var bar = Kit(col, "Bar", "meter-track"); Size(bar, -1, 26);
-            if (b.Fraction > 0 && b.Fraction < 1) { var le = bar.GetComponent<LayoutElement>(); le.flexibleWidth = 0; le.preferredWidth = le.minWidth = Mathf.Max(40f, Column * b.Fraction); }   // one scale for the three weapons: the bar is as long as its total against the largest
-            float x = 0;
-            for (int k = 0; k < parts.Count; k++)
-            {
-                var r = Fill(bar.transform, "Part", BtColour(parts[k])).rectTransform; var w = shares[k] / sum;
-                r.anchorMin = new Vector2(x, 0); r.anchorMax = new Vector2(x + w, 1); r.pivot = new Vector2(0, 0.5f);
-                r.offsetMin = new Vector2(k == 0 ? 3 : 1, 3); r.offsetMax = new Vector2(k == parts.Count - 1 ? -3 : -1, -3);
-                x += w;
-            }
-            // legend: swatch, the type's icon in its colour, number, name; entries wrap at the column's edge
-            var lines = VStack(col, 4); lines.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
-            RectTransform line = null; float used = 0;
-            foreach (var p in parts)
-            {
-                var c = BtColour(p);
-                var entry = Line(lines, 6);
-                var w = 0f;   // the type's icon in its colour is the swatch: one mark per entry, so the legend fits one line
-                if (!string.IsNullOrEmpty(p.Icon)) { Size(VocabImg(entry, "Type", VocabName(p.Icon), c), 16, 16); w += 16; }
-                else { Size(Fill(entry, "Swatch", c), 10, 10); w += 10; }
-                var n = Label(entry, p.Value, 18, PanelLook.Text, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap;
-                var t = Label(entry, p.Title, 15, PanelLook.Muted); t.textWrappingMode = TextWrappingModes.NoWrap;
-                w += 6 + n.preferredWidth + 6 + t.preferredWidth;
-                if (line == null || used + 16 + w > Column) { line = Line(lines, 16); used = 0; } else used += 16;
-                entry.SetParent(line, false); used += w;
-                Size(entry, w, 28);
-            }
-            Spacer(col, 6);
+            if (w <= 0) return;
+            if (!roundLeft && !roundRight || !PanelLook.Rounded) { BtRect(parent, "Part", c, x, top, w, h); return; }
+            var img = RoundedPart(parent, "Part", c); img.pixelsPerUnitMultiplier = 2f; img.rectTransform.Box(x, top, w, h);
+            if (!roundRight) BtRect(parent, "Square", c, x + w / 2, top, w - w / 2, h);
+            if (!roundLeft) BtRect(parent, "Square", c, x, top, w / 2, h);
         }
 
-        // ----- Foes, by foe: trophy and name, the dealt bar, the best arrow, one effectiveness cell per damage type -----
-
-        const float BtFoeName = 176, BtFoeDealt = 100, BtFoeArrow = 134, BtFoeRow = 36, BtFoeHead = 84, BtCellW = 42, BtCellH = 30, BtFoeTilt = 40;   // live-polish: a wider foe column ("Greydwarf Brute" kept clear of its bar), one header row with tilted type names
-
-        // one effectiveness cell: weakness = light warm fill, dark icon; resistance = dark cell, dimmed icon; immunity = the
-        // type's icon under Codex's stamp; normal = dark cell, the icon in its colour
-        static void BattleCell(RectTransform parent, float x, float top, float w, float h, string icon, Color colour, string tone, float iconSize)
+        /// <summary>The weakness meter (VOCABULARY.md "How weak is this foe to that type?"): four parts with small gaps, only the outer corners
+        /// rounded, filled by the game's factor, one part per x0.5 (x1 half full, x2 full); x0 empty with a small cross.</summary>
+        static void BattleMeter(RectTransform parent, float x, float top, float factor)
         {
-            var weak = tone == PanelModel.Weakness; var resist = tone == PanelModel.Resistance;
-            BtRect(parent, "Cell", weak ? BtWeak : BtCell, x, top, w, h);
-            var ink = weak ? BtWeakInk : resist ? new Color(BtResist.r, BtResist.g, BtResist.b, 0.55f) : colour;
-            // the mark leads, the icon follows: "+" more, "-" less (a shape as well as a fill, never colour alone)
-            var mark = weak || resist;
-            var ix = mark ? x + w / 2 - 2 : x + (w - iconSize) / 2;
-            BtIcon(parent, icon, ink, ix, top + (h - iconSize) / 2, iconSize);
-            if (mark) BtText(parent, weak ? "+" : "–", x + 1, top, w / 2 - 2, h, PanelLook.MinText, weak ? BtWeakInk : BtResist, TextAlignmentOptions.Center, FontStyles.Bold);
-            if (tone == PanelModel.Immunity) BtIcon(parent, "immunity-stamp", Color.white, x + (w - h + 2) / 2, top + 1, h - 2);
+            var seg = (BtMeterW - 3 * BtMeterGap) / 4; var units = Mathf.Clamp(factor / 0.5f, 0, 4);
+            for (int i = 0; i < 4; i++)
+            {
+                var sx = x + i * (seg + BtMeterGap);
+                MeterPart(parent, BtMeterTrack, sx, top, seg, BtMeterH, i == 0, i == 3);
+                var fill = Mathf.Clamp01(units - i);
+                if (fill > 0) MeterPart(parent, PanelLook.Gold, sx, top, seg * fill, BtMeterH, i == 0, i == 3 && fill >= 1);
+            }
+            if (units <= 0) BtText(parent, "\u00D7", x, top - 8, BtMeterW, BtMeterH + 16, PanelLook.MinText, BtImmune, TextAlignmentOptions.Center, FontStyles.Bold);
         }
 
-        static void BattleFoeTable(RectTransform col, Block b)
+        // one cell: the type's icon (dimmed for an immunity) over its meter; pointing at it swaps the icon for the exact factor ("×1.5"); on the keys'
+        // cursor row (0.8) the factor shows while the focus ring does (FocusMark), so the keys read what the pointer reads
+        static void BattleMeterCell(RectTransform row, float x, Block mod, bool cursor = false)
+        {
+            var cell = Node("Cell", row); cell.Box(x, 0, BtCellW, BtFoeRow);
+            var hit = Img(cell, "Hit", null, Color.clear, raycast: true); hit.rectTransform.Stretch();
+            var c = BtColour(mod); if (mod.Tone == PanelModel.Immunity) c = new Color(c.r, c.g, c.b, 0.4f);
+            var icon = BtIcon(cell, mod.Icon, c, (BtCellW - 16) / 2, 6, 16);
+            var factor = BtText(cell, mod.Value, 0, 4, BtCellW, 20, PanelLook.MinText, PanelLook.Text, TextAlignmentOptions.Center, FontStyles.Bold);
+            factor.gameObject.SetActive(false);
+            BattleMeter(cell, (BtCellW - BtMeterW) / 2, 27, mod.Fraction);
+            var show = cell.gameObject.AddComponent<SwapOnHover>(); show.Off = icon.gameObject; show.On = factor.gameObject;
+            if (cursor) { var fm = factor.gameObject.AddComponent<FocusMark>(); fm.Focused = true; fm.Hide = icon.gameObject; factor.gameObject.SetActive(KeyFocus); icon.gameObject.SetActive(!KeyFocus); }
+        }
+
+        static void BattleFoeTable(RectTransform col, Block b, Func<string, Action> link)
         {
             var rows = (b.Items ?? new List<Block>()).Where(i => i.Kind == "foe").ToList();
+            foeCursorRow = null;
             if (rows.Count == 0) return;
             var arrows = rows.Any(r => (r.Items ?? new List<Block>()).Any(i => i.Kind == "arrow"));
             var types = rows.Select(r => (r.Items ?? new List<Block>()).Where(i => i.Kind == "mod").ToList()).FirstOrDefault(m => m.Count > 0) ?? new List<Block>();
             float x0 = BtFoeName + BtFoeDealt + (arrows ? BtFoeArrow : 0), tw = types.Count > 0 ? (Column - x0) / types.Count : 0;
 
-            // the key leads (what the three looks of a cell mean, in the foe's terms), drawn on the fire icon as in the prototype
-            if (types.Count > 0)
-            {
-                var key = Line(col, 6);
-                var fire = types.FirstOrDefault(t => t.Id == "fire") ?? types[0];
-                Label(key, PanelModel.FoeHead, 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;   // "Foe [+] takes more dmg from" (Joost's words)
-                foreach (var (tone, says) in new[] { (PanelModel.Weakness, PanelModel.WeaknessKey), (PanelModel.Resistance, PanelModel.ResistanceKey), (PanelModel.Immunity, PanelModel.ImmunityKey) })
-                {
-                    var box = Node("Key", key); Size(box, 40, 24);
-                    BattleCell(box, 0, 0, 40, 24, fire.Icon, BtColour(fire), tone, 14);
-                    Label(key, says, 14, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
-                    Size(Node("Gap", key), 10, 1);
-                }
-            }
-
             // live-polish (review 5: the type names sat on two staggered rows): one header row. Every heading stands on the line just over the
             // rule, each type's icon there over its column, its name above the icon tilted 40 degrees (no abbreviations: "Lightning" is wider
-            // than a column); tilted names run parallel, 32 px apart, so none touches the next
+            // than a column); tilted names run parallel, 32 px apart, so none touches the next. No key: the meter carries its meaning (About, Y)
             var h = BtRow(col, BtFoeHead); float iconTop = BtFoeHead - 26, baseY = BtFoeHead - 15;
             BtText(h, PanelModel.FoeHead, 0, baseY - 12, BtFoeName, 24, PanelLook.MinText, PanelLook.Muted);
             BtText(h, PanelModel.DealtHead, BtFoeName, baseY - 12, BtFoeDealt, 24, PanelLook.MinText, PanelLook.Muted);
@@ -251,25 +190,83 @@ namespace Hearthwoven.Panel
 
             foreach (var row in rows)
             {
-                var r = BtRow(col, BtFoeRow);
-                BtMarker(r, row.Icon, 0, 7, 22);
+                var cells = row.Items ?? new List<Block>();
+                var ranking = cells.FirstOrDefault(i => i.Kind == "ranking");
+                // the open foe and its ranking are one item: one quiet band behind both (BtBand's tint), no padding, so the columns stay put
+                var holder = col;
+                if (row.Selected)
+                {
+                    holder = VStack(col, 0);
+                    var fill = RoundedPart(holder, "Band", BtBand); fill.gameObject.AddComponent<LayoutElement>().ignoreLayout = true; fill.rectTransform.Stretch();
+                }
+                var r = BtRow(holder, BtFoeRow);
+                if (row.Tone == "opens" && link != null)
+                {
+                    // the whole row opens (or closes) its ranking; pointing at it lights it (hover is new in the panel: pointer enter)
+                    var ground = RoundedPart(r, "Ground", Color.clear, raycast: true); ground.rectTransform.Stretch();
+                    if (!row.Selected) { var lit = r.gameObject.AddComponent<TintOnHover>(); lit.Ground = ground; lit.Lit = BtRowHover; }
+                    r.gameObject.AddComponent<Press>().Act = link(PanelModel.FoeOpenLink(row));
+                }
+                var cursor = row.Note == PanelModel.CursorNote;   // 0.8: the keys' cursor (Chapters/FoesKeys.cs): the focus ring, the factors shown
+                if (cursor) { FocusRing(r, 0); foeCursorRow = holder == col ? r : holder; }
+                BtMarker(r, row.Icon, 0, 9, 22);
                 BtText(r, row.Title, 30, 0, BtFoeName - 34, BtFoeRow, 16, PanelLook.Text);
                 var w = Mathf.Max(2f, Mathf.Clamp01(row.Fraction) * 44f);
-                Fill(r, "Dealt", PanelLook.Dealt).rectTransform.Box(BtFoeName, 13, w, 10);   // gold = dealt, as on every Battle page (weakness is the cream "+" cell)
+                Fill(r, "Dealt", PanelLook.Dealt).rectTransform.Box(BtFoeName, 15, w, 10);   // gold = dealt, as on every Battle page
                 BtText(r, row.Value, BtFoeName + w + 8, 0, BtFoeDealt - w - 8, BtFoeRow, 16, PanelLook.Text, style: FontStyles.Bold);
-                var cells = row.Items ?? new List<Block>();
                 var arrow = cells.FirstOrDefault(i => i.Kind == "arrow");
                 if (arrow != null)
                 {
-                    BtMarker(r, arrow.Icon, BtFoeName + BtFoeDealt, 9, 18);
+                    BtMarker(r, arrow.Icon, BtFoeName + BtFoeDealt, 11, 18);
                     BtText(r, arrow.Title, BtFoeName + BtFoeDealt + 22, 0, BtFoeArrow - 26, BtFoeRow, PanelLook.MinText, PanelLook.Text);
                 }
                 var mods = cells.Where(i => i.Kind == "mod").ToList();
-                for (int k = 0; k < mods.Count && k < types.Count; k++)
-                    BattleCell(r, x0 + k * tw + (tw - BtCellW) / 2, (BtFoeRow - BtCellH) / 2, BtCellW, BtCellH, mods[k].Icon, BtColour(mods[k]), mods[k].Tone, 18);
-                BtRect(r, "Rule", BtLine, 0, BtFoeRow - 1, Column, 1);
+                for (int k = 0; k < mods.Count && k < types.Count; k++) BattleMeterCell(r, x0 + k * tw + (tw - BtCellW) / 2, mods[k], cursor);
+                if (ranking != null) BattleRanking(holder, ranking);
+                else BtRect(r, "Rule", BtLine, 0, BtFoeRow - 1, Column, 1);
             }
+        }
 
+        // ----- the ranking under an open foe: Arrows · Bolts · Weapons side by side, best and worst by expected damage, a status per line -----
+
+        const float BtRankGap = 24, BtRankLine = 42, BtRankName = 22, BtRankHead = 22, BtRankValue = 44;   // a line: the name and its number, then its status and base damage under it
+
+        static void BattleRanking(RectTransform parent, Block rk)
+        {
+            var groups = (rk.Items ?? new List<Block>()).Where(g => g.Kind == "rankgroup").ToList();
+            if (groups.Count == 0) return;
+            var box = VStack(parent, 6);
+            box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(BtBandPadX, BtBandPadX, 4, BtBandPadBottom);
+            var inner = Column - 2 * BtBandPadX; var gw = (inner - BtRankGap * (groups.Count - 1)) / groups.Count;
+            float height = groups.Max(g => 28 + (g.Items ?? new List<Block>()).Sum(i => i.Kind == "rankhead" ? BtRankHead : BtRankLine));
+            var area = BtRow(box, height + 2);
+            for (int k = 0; k < groups.Count; k++)
+            {
+                var g = groups[k]; float gx = k * (gw + BtRankGap), y = 0;
+                BtText(area, g.Title, gx, y, gw / 2, 22, 15, PanelLook.Text, style: FontStyles.Bold);
+                BtText(area, g.Text, gx + gw / 2, y, gw / 2, 22, PanelLook.MinText, PanelLook.Faint, TextAlignmentOptions.MidlineRight);
+                BtRect(area, "Rule", PanelLook.Rule, gx, 23, gw, 1);
+                y = 28;
+                foreach (var it in g.Items ?? new List<Block>())
+                {
+                    if (it.Kind == "rankhead") { BtText(area, it.Title, gx, y, gw, BtRankHead, PanelLook.MinText, PanelLook.Muted, style: FontStyles.Italic); y += BtRankHead; continue; }
+                    var line = Node("Line", area); line.Box(gx, y, gw, BtRankLine);
+                    if (it.Tone == "unknown") line.gameObject.AddComponent<CanvasGroup>().alpha = 0.5f;   // not known yet: quieter
+                    // the name and its expected damage against this foe; under it the status (quiet italics) and the base damage per type (icon, amount)
+                    BtText(line, it.Value, gw - BtRankValue, 0, BtRankValue, BtRankName, 15, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
+                    BtText(line, it.Title, 0, 0, gw - BtRankValue - 8, BtRankName, 15, PanelLook.Text);
+                    float cx = gw - BtRankValue, sub = BtRankName, subH = BtRankLine - BtRankName - 2;
+                    foreach (var p in (it.Items ?? new List<Block>()).AsEnumerable().Reverse())
+                    {
+                        var t = BtText(line, p.Value, 0, sub, 60, subH, PanelLook.MinText, PanelLook.Muted);
+                        var tw = Mathf.Ceil(t.preferredWidth) + 1; cx -= tw; t.rectTransform.Box(cx, t.rectTransform.anchoredPosition.y * -1, tw, t.rectTransform.sizeDelta.y);
+                        cx -= 3 + 14; BtIcon(line, p.Icon, BtColour(p), cx, sub + (subH - 14) / 2, 14); cx -= 9;
+                    }
+                    BtText(line, it.Text, 0, sub, Mathf.Max(0, cx - 4), subH, PanelLook.MinText, PanelLook.Faint, style: FontStyles.Italic);
+                    y += BtRankLine;
+                }
+            }
+            var small = Label(box, rk.Note ?? "", PanelLook.MinText, PanelLook.Faint); small.textWrappingMode = TextWrappingModes.Normal;
         }
 
         // ----- Foes, by damage type: per type the foes it is strong against, weak against and has no effect on -----
@@ -280,7 +277,7 @@ namespace Hearthwoven.Panel
         // warm tone, resistance: grey, immunity: struck through). Returns its width.
         static float BattleChip(RectTransform parent, string text, string tone, float x, float top)
         {
-            var edge = tone == "strong" ? BtWeak : tone == "weak" ? BtResist : BtImmune;
+            var edge = tone == "strong" ? BtWeak : tone == "normal" ? PanelLook.Faint : tone == "weak" ? BtResist : BtImmune;
             var t = Label(parent, text, PanelLook.MinText, tone == "strong" ? BtWeak : BtWeakChip, align: TextAlignmentOptions.MidlineLeft);
             t.textWrappingMode = TextWrappingModes.NoWrap;
             var w = Mathf.Ceil(t.preferredWidth) + BtChipPad;
@@ -296,7 +293,7 @@ namespace Hearthwoven.Panel
             if (rows.Count == 0) return;
             if (!string.IsNullOrEmpty(b.Note)) Label(col, b.Note, 14, PanelLook.Muted);   // where the classification comes from
             // a column nobody fills is dropped; the others take the width their tags need (one line per row where it fits), the rest is shared
-            var all = new[] { ("strong", PanelModel.StrongAgainst, BtWeak), ("weak", PanelModel.WeakAgainst, BtWeakChip), ("none", PanelModel.NoEffectOn, BtImmune) };
+            var all = new[] { ("strong", PanelModel.StrongAgainst, BtWeak), ("normal", PanelModel.NormalOn, PanelLook.Muted), ("weak", PanelModel.WeakAgainst, BtWeakChip), ("none", PanelModel.NoEffectOn, BtImmune) };   // 0.7: from the type's side, "normal" its own column
             var shown = all.Where(a => rows.Any(r => (r.Items ?? new List<Block>()).Any(i => i.Kind == "foe" && i.Tone == a.Item1))).ToArray();
             var tones = shown.Select(a => a.Item1).ToArray();
             var measure = Label(col, "", PanelLook.MinText, BtNormal); measure.textWrappingMode = TextWrappingModes.NoWrap;
@@ -315,16 +312,11 @@ namespace Hearthwoven.Panel
             if (sum <= avail) for (int c = 0; c < colW.Length; c++) colW[c] += (avail - sum) / colW.Length;   // room to spare: shared
             else
             {
-                // too wide for one line everywhere: the column with the most to give gives way first (down to its widest tag), so only the rare long row wraps
-                var over = sum - avail;
-                for (int guard = 0; guard < 8 && over > 0.5f; guard++)
-                {
-                    int big = 0; for (int c = 1; c < colW.Length; c++) if (colW[c] - widest[c] > colW[big] - widest[big]) big = c;
-                    var cut = Mathf.Min(over, colW[big] - widest[big]);
-                    if (cut <= 0.01f) break;
-                    colW[big] -= cut; over -= cut;
-                }
-                if (over > 0.5f) { var scale = avail / colW.Sum(); for (int c = 0; c < colW.Length; c++) colW[c] = Mathf.Max(widest[c], colW[c] * scale); }
+                // too wide for one line everywhere (0.7: four columns, "Normal on" the longest): each column its share of the width by what it
+                // holds, never narrower than its widest tag; what the floors take comes off the others by what they have to give
+                for (int c = 0; c < colW.Length; c++) colW[c] = Mathf.Max(widest[c], natural[c] * avail / sum);
+                var over = colW.Sum() - avail; var give = 0f; for (int c = 0; c < colW.Length; c++) give += colW[c] - widest[c];
+                if (over > 0.5f && give > 0.5f) for (int c = 0; c < colW.Length; c++) colW[c] -= over * (colW[c] - widest[c]) / give;
             }
             var xs = new float[tones.Length]; var at = BtFtType;
             for (int c = 0; c < tones.Length; c++) { at += BtFtGap; xs[c] = at; at += colW[c]; }
@@ -363,7 +355,7 @@ namespace Hearthwoven.Panel
 
         // ----- Defense: blocks and parries as two big numbers, the parries' share of the blocks under them -----
 
-        static void BattleGuard(RectTransform col, Block b)
+        static void BattleGuard(RectTransform col, Block b, Func<string, Action> link = null)
         {
             var row = Line(col, 12, TextAnchor.LowerLeft);
             Label(row, b.Value, 50, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
@@ -373,32 +365,115 @@ namespace Hearthwoven.Panel
             Label(row, b.Value2, 50, PanelLook.Gold, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
             Size(VocabImg(row, "Parry", "parry-spark", PanelLook.Gold), 24, 24);
             Label(row, b.Text, 20, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
+            HeadSkills(row, PanelModel.SkillsOf(b), link, 28, 10);   // 0.8: the Blocking skill at the row's right end, as a hero's skill (SkillsBesideUi.cs)
         }
 
-        // ----- Defense: damage received per source, stacked by type, the used types' key under it -----
+        // ----- Defense: damage received per source (ISC-22): per source its trophy, name and total, then the shared bar with its list
+        // (PanelUi.Composition, BAR-FORM.md: the amount per damage type), so Defence has the granularity Damage has -----
 
-        const float BtSrcName = 170, BtSrcVal = 60, BtSrcRow = 30;
+        // 0.8: one row per foe in the damage rows (DamageRowsUi.cs), which replace B40-B41's band per foe: the picture, name, "×N" and
+        // total on the bar's line, every foe's bar on one scale with its zero at a quarter of the track
 
         static void BattleSources(RectTransform col, Block b)
         {
             var rows = (b.Items ?? new List<Block>()).Where(i => i.Kind == "source").ToList();
             if (rows.Count == 0) return;
+            // 0.8 (Damage > By foe, dealtfoes): the one-line key of the marks at the caption's right end
+            var key = (b.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "pipkey");
+            if (key == null) BtCaption(col, b.Title, b.Text);
+            else
+            {
+                var head = Line(col, 8);
+                var t = Label(head, (b.Title ?? "").ToUpperInvariant(), 14, PanelLook.Muted); t.characterSpacing = 8; t.textWrappingMode = TextWrappingModes.NoWrap;
+                if (!string.IsNullOrEmpty(b.Text)) { var q = Label(head, b.Text, PanelLook.MinText, PanelLook.Muted); q.textWrappingMode = TextWrappingModes.NoWrap; }
+                Node("Rest", head).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                PipKeyLine(head, key);
+            }
+            // 0.8 (Joost's damage bars, density-feedback/DAMAGE-BARS.md): one row per foe, its bar's zero at a quarter of the track, the true
+            // length under it, the types' shares on one line under that (Chapters/DamageRowsUi.cs); dealt on By foe, received on Defence
+            DamageRows(col, rows, b.Kind == "dealtfoes");
+        }
+
+        // a source's picture (B25): a creature's trophy or the foe mark; a cause that is no creature (smoke, a fall) the swatch of the type it
+        // did most, with that type's icon in dark ink (as Your armour's type rows); the summed rest none
+        static void BattleSourcePicture(RectTransform who, Block row)
+        {
+            if (row.Tone == "type")
+            {
+                BtRect(who, "Swatch", Hex(row.Colour, PanelLook.Muted), 0, 1, 22, 22);
+                if (!string.IsNullOrEmpty(row.Icon)) BtIcon(who, row.Icon, DarkInk, 3, 4, 16);
+            }
+            else BtMarker(who, row.Icon, 0, 1, 22);
+        }
+
+        // ----- Defence > Your armour (0.7, Chapters/ArmourModel.cs): one bar per damage type or foe on one scale, solid = what reached
+        // you, hollow (an outline in the type's colour, never faded: faded means "before install") = what your armour stopped -----
+
+        const float BtArmName = 170, BtArmVal = 118, BtArmRow = 30, BtArmLine = 2;
+
+        static void BattleArmour(RectTransform col, Block b)
+        {
+            var rows = (b.Items ?? new List<Block>()).Where(i => i.Kind == "armourrow").ToList();
+            if (rows.Count == 0) return;
             BtCaption(col, b.Title, b.Text);
-            BattleTypeKey(col, rows.SelectMany(r => r.Items ?? new List<Block>()), true);   // the key leads, under the caption
-            var track = Column - BtSrcName - BtSrcVal - 12;
+            if (b.Tone == "key")
+            {
+                var key = Line(col, 6);
+                var solid = Node("Swatch", key); Size(solid, 22, 14); BtRect(solid, "Fill", PanelLook.Muted, 0, 0, 22, 14);
+                Label(key, PanelModel.ArmourKeyReached, 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+                Size(Node("Gap", key), 10, 1);
+                var hollow = Node("Swatch", key); Size(hollow, 22, 14); BtHollow(hollow, PanelLook.Muted, 0, 0, 22, 14);
+                Label(key, PanelModel.ArmourKeyStopped, 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            }
+            var track = Column - BtArmName - BtArmVal - 12;
             foreach (var row in rows)
             {
-                var r = BtRow(col, BtSrcRow);
-                BtMarker(r, row.Icon, 0, 4, 22);
-                BtText(r, row.Title, 30, 0, BtSrcName - 34, BtSrcRow, 16, PanelLook.Text);
-                var width = Mathf.Max(2f, Mathf.Clamp01(row.Fraction) * track); float x = 0;
+                var r = BtRow(col, BtArmRow);
+                if ((row.Icon ?? "").StartsWith("vocab:dmg-", StringComparison.Ordinal)) { BtRect(r, "Swatch", Hex(row.Colour, PanelLook.Muted), 0, 4, 22, 22); BtIcon(r, row.Icon, DarkInk, 3, 7, 16); }   // a type: its swatch with the icon in dark ink, as the key
+                else BtMarker(r, row.Icon, 0, 4, 22);
+                BtText(r, row.Title, 30, 0, BtArmName - 34, BtArmRow, 16, PanelLook.Text);
+                var reached = Mathf.Clamp01(row.Fraction) * track; var whole = Mathf.Max(2f, Mathf.Clamp01(row.Fraction2) * track); float x = 0;
                 foreach (var p in row.Items ?? new List<Block>())
                 {
-                    var w = Mathf.Clamp01(p.Fraction) * width; if (w <= 0) continue;
-                    BtRect(r, "Part", BtColour(p), BtSrcName + x, 8, w, 14); x += w;
+                    var w = Mathf.Clamp01(p.Fraction) * reached; if (w <= 0) continue;
+                    BtRect(r, "Part", BtColour(p), BtArmName + x, 8, w, 14); x += w;
                 }
-                BtText(r, row.Value, Column - BtSrcVal, 0, BtSrcVal, BtSrcRow, 17, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
+                if (whole - reached >= 1f) BtHollow(r, Hex(row.Colour, PanelLook.Muted), BtArmName + reached, 8, whole - reached, 14);
+                BtText(r, row.Value, Column - BtArmVal, 0, 50, BtArmRow, 17, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
+                BtText(r, "of " + row.Value2, Column - BtArmVal + 56, 0, BtArmVal - 56, BtArmRow, 14, PanelLook.Muted);
+                ArmourTypes(col, row);
             }
+        }
+
+        // a foe's row: under its bar, per damage type what reached you of what hit your armour ("91 of 120 Slash"), on one line that wraps,
+        // under the name (ISC-22); a type row (one part, no amounts) has none
+        static void ArmourTypes(RectTransform col, Block row)
+        {
+            var parts = (row.Items ?? new List<Block>()).Where(p => !string.IsNullOrEmpty(p.Value)).ToList();
+            if (parts.Count == 0) return;
+            var lines = VStack(col, 2); lines.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
+            RectTransform line = null; float used = 0;
+            foreach (var p in parts)
+            {
+                var entry = Line(lines, 5);
+                var sw = Node("Swatch", entry); Size(sw, 18, 18); BtRect(sw, "Fill", BtColour(p), 0, 0, 18, 18); BtIcon(sw, p.Icon, DarkInk, 2, 2, 14);
+                var n = Label(entry, p.Value, 15, PanelLook.Text, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap;
+                var of = Label(entry, "of " + p.Value2, 14, PanelLook.Muted); of.textWrappingMode = TextWrappingModes.NoWrap;
+                var t = Label(entry, p.Title, 14, PanelLook.Muted); t.textWrappingMode = TextWrappingModes.NoWrap;
+                var w = 18 + 5 + n.preferredWidth + 5 + of.preferredWidth + 5 + t.preferredWidth;
+                if (line == null || used + 18 + w > Column - 30) { line = Line(lines, 18); Size(Node("Indent", line), 12, 1); used = 0; } else used += 18;
+                entry.SetParent(line, false); used += w;
+                Size(entry, w, 24);
+            }
+            Spacer(col, 4);
+        }
+
+        // an outlined box: four thin edges, the inside left open
+        static void BtHollow(RectTransform parent, Color colour, float x, float top, float w, float h)
+        {
+            var line = Mathf.Min(BtArmLine, w / 2);
+            BtRect(parent, "Edge", colour, x, top, w, BtArmLine); BtRect(parent, "Edge", colour, x, top + h - BtArmLine, w, BtArmLine);
+            BtRect(parent, "Edge", colour, x, top, line, h); BtRect(parent, "Edge", colour, x + w - line, top, line, h);
         }
 
         // the types used, in the palette's order: a swatch (with the type's icon in dark ink when boxed) and the name
@@ -416,7 +491,7 @@ namespace Hearthwoven.Panel
                     if (!string.IsNullOrEmpty(p.Icon)) BtIcon(box, p.Icon, DarkInk, 3, 3, 16);
                 }
                 else Size(Fill(key, "Swatch", BtColour(p)), 10, 10);
-                Label(key, p.Title, boxed ? 14 : 13, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+                Label(key, p.Title, PanelLook.MinText, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;   // the floor: Label lifted 13 to 14 anyway, and its box was laid out for 13
                 Size(Node("Gap", key), 8, 1);
             }
         }
@@ -587,6 +662,39 @@ namespace Hearthwoven.Panel
             return f;
         }
 
+        static List<PanelModel.ArrowData> gear;
+
+        /// <summary>Every bolt (ammo "$ammo_bolts") and weapon (one- and two-handed, bows; not pickaxes) in ObjectDB with battle damage, its
+        /// base damage (quality 1), for the Foes ranking (0.7). Read once; null before ObjectDB loads.</summary>
+        public static IList<PanelModel.ArrowData> Gear()
+        {
+            if (gear != null) return gear;
+            if (!ObjectDB.instance || ObjectDB.instance.m_items == null || ObjectDB.instance.m_items.Count == 0) return null;
+            var list = new List<PanelModel.ArrowData>();
+            try
+            {
+                foreach (var go in ObjectDB.instance.m_items)
+                {
+                    var shared = go ? go.GetComponent<ItemDrop>()?.m_itemData?.m_shared : null;
+                    if (shared == null) continue;
+                    var type = shared.m_itemType; string kind = null;
+                    if (type == ItemDrop.ItemData.ItemType.Ammo && shared.m_ammoType == "$ammo_bolts") kind = "bolt";
+                    else if ((type == ItemDrop.ItemData.ItemType.OneHandedWeapon || type == ItemDrop.ItemData.ItemType.TwoHandedWeapon || type == ItemDrop.ItemData.ItemType.TwoHandedWeaponLeft || type == ItemDrop.ItemData.ItemType.Bow)
+                             && shared.m_skillType != Skills.SkillType.Pickaxes) kind = "weapon";
+                    if (kind == null) continue;
+                    var a = new PanelModel.ArrowData { Prefab = go.name, Token = shared.m_name, Kind = kind };
+                    var dt = shared.m_damages;
+                    void Put(string k, float v) { if (v > 0) a.Damage[k] = v; }
+                    Put("blunt", dt.m_blunt); Put("slash", dt.m_slash); Put("pierce", dt.m_pierce); Put("fire", dt.m_fire); Put("frost", dt.m_frost);
+                    Put("lightning", dt.m_lightning); Put("poison", dt.m_poison); Put("spirit", dt.m_spirit);
+                    if (a.Damage.Count > 0) list.Add(a);
+                }
+            }
+            catch (Exception e) { Debug.LogWarning("[Hearthwoven] gear data: " + e.Message); return null; }
+            gear = list;
+            return gear;
+        }
+
         public static IList<PanelModel.ArrowData> Arrows()
         {
             if (arrows != null) return arrows;
@@ -610,5 +718,21 @@ namespace Hearthwoven.Panel
             arrows = list;
             return arrows;
         }
+    }
+
+    /// <summary>Pointing at a meter cell swaps its icon for the exact factor (Foes, 0.7); built once with the page, nothing per frame.</summary>
+    sealed class SwapOnHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public GameObject On, Off;
+        public void OnPointerEnter(PointerEventData e) { if (On) On.SetActive(true); if (Off) Off.SetActive(false); }
+        public void OnPointerExit(PointerEventData e) { if (On) On.SetActive(false); if (Off) Off.SetActive(true); }
+    }
+
+    /// <summary>A foe row that opens: pointing at it lights its ground (Foes, 0.7).</summary>
+    sealed class TintOnHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public Image Ground; public Color Lit;
+        public void OnPointerEnter(PointerEventData e) { if (Ground) Ground.color = Lit; }
+        public void OnPointerExit(PointerEventData e) { if (Ground) Ground.color = Color.clear; }
     }
 }

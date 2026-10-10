@@ -32,6 +32,8 @@ namespace Hearthwoven.Panel
     {
         public const string Rowan = "Rowan", Edda = "Edda", Finch = "Finch", Tor = "Tor";
         public const long RowanId = 11, EddaId = 77, TorId = 88, FinchId = 99;
+        /// <summary>The one teamwork feast (0.8, B22): Rowan made it, Tor set it out, Edda enjoyed three servings. Its ZDO id, as the game writes one.</summary>
+        public const string TeamworkFeast = "880001:41";
         public static readonly string[] Everyone = { Rowan, Edda, Finch, Tor };
 
         // ---------- the clock ----------
@@ -148,6 +150,7 @@ namespace Hearthwoven.Panel
             p.DishBoost = t => t != null && Dishes.TryGetValue(t, out var d) ? d.boost : null;
             p.Foe = PanelSample.SampleFoe; p.Arrows = PanelSample.SampleArrows;
             p.RecipeKnown = self ? (Func<string, bool>)(t => PanelSample.SampleRecipes.Contains(t)) : null;
+            if (self) { p.Gear = PanelSample.SampleGear; p.Owned = t => PanelSample.SampleOwned.Contains(t); }   // the Foes ranking (0.7)
             p.ToLocal = t => t.AddHours(2);
         }
 
@@ -205,13 +208,17 @@ namespace Hearthwoven.Panel
             {
                 [Rowan] = RowanOwn(now), [Edda] = EddaOwn(now), [Finch] = FinchOwn(now), [Tor] = TorOwn(now),
             };
+            foreach (var kv in owns) BattleSample.Session(kv.Value, now, (kv.Key == Rowan ? new[] { Edda, Tor } : Everyone.Where(n => n != kv.Key)).ToArray(), kv.Key == Rowan ? new[] { Edda, Tor, Finch } : null);   // 0.8: the battle record, from each one's own log (PanelSampleBattle.cs)
             // the feats come from the counters (and from what the others shared), so every book is first sent without them
             Dictionary<string, PanelInput> Copies() => owns.ToDictionary(kv => kv.Key, kv => Share(kv.Value, now));
             var copies = Copies();
             foreach (var kv in owns) kv.Value.Fellows = Everyone.Where(k => k != kv.Key).Select(k => copies[k]).ToList();
             foreach (var kv in owns) History(kv.Value, now);   // the day history (HISTORY-06.md), worked out from the same lists as the totals
+            foreach (var kv in owns) RecentSample.Session(kv.Value);   // 0.7 Deeds > Recent: this session's minute log, today's row spread over the session (PanelSampleRecent.cs)
+            foreach (var kv in owns) ArmourSample(kv.Value, now);   // 0.7: the armour ledger, from what each of them received (never shared: the copies have none)
+            foreach (var kv in owns) DeedsSample(kv.Value, now);   // 0.7: this session's deeds per minute (the Deeds pages' short windows), from the same day rows
             foreach (var kv in owns) Derive(kv.Value, now);
-            foreach (var kv in owns) kv.Value.Feats.Seen = kv.Key == Rowan ? Math.Max(0, kv.Value.Feats.TiersEarned - 2) : kv.Value.Feats.TiersEarned;   // two earned tiers Rowan has not opened yet: the gold dots
+            foreach (var kv in owns) { kv.Value.Feats.MarkSeen(PanelModel.IsGroupFeat); if (kv.Key == Rowan) kv.Value.Feats.Seen = Math.Max(0, kv.Value.Feats.Seen - 2); }   // two earned tiers of Rowan's own not opened yet: the gold dots
             copies = Copies();   // now with the feats they earned
             foreach (var kv in owns)
             {
@@ -219,6 +226,7 @@ namespace Hearthwoven.Panel
                 kv.Value.Fellows = others.Select(n => copies[n]).ToList();
             }
             foreach (var f in copies.Values) { f.ViewerName = Rowan; f.PlayerNames = owns[Rowan].PlayerNames; }
+            RecentSample.Fellows(owns[Rowan]);   // B33: what reached Rowan's PC from each fellow this session (PanelSampleRecent.cs)
             return (owns, copies);
         }
 
@@ -243,7 +251,7 @@ namespace Hearthwoven.Panel
             }).ToList();
             var json = Snapshot.Build("0.6.0", own.PlayerId, own.PlayerName, stats, skills, "Midgard", own.Session, "s1", own.Events, own.Log, true,
                                       own.Events, own.DamageSinceInstall, own.BiomeSinceInstall, own.BiomeFromUtc, own.Feats,
-                                      own.History?.DealtByDay(PanelModel.LocalToday(own), 30));   // their damage dealt per day, as the game sends it
+                                      own.History?.DealtByDay(PanelModel.LocalToday(own), 30), own.KnownBiomes, foes: BattleSample.ShareOf(own));   // their damage dealt per day, the lands they found and the foes they fought (0.8), as the game sends them
             var copy = PanelInput.FromSnapshot(GroupShare.SharedCopy(json));
             copy.NowUtc = now; copy.ViewerName = Rowan; copy.PlayerNames = own.PlayerNames;
             copy.Book = own.Book;   // the server's book for them comes with the group list, not through their snapshot (GroupShare.BookOf)
@@ -397,9 +405,153 @@ namespace Hearthwoven.Panel
                 SplitInt((int)since, (r, n) => Add(r.Game, stat, n));
             }
 
+            // 0.7: the gear made since install (the item-craft counter minus its baseline) is in Made too, as in game (ClientHooks.MadeByYou counts the
+            // crafting window), one piece a play day from the latest back; the game's craft counter of its kind grows on the same day
+            Dictionary<string, float> craftedAt = null; p.Baseline?.TryGetValue(PanelModel.CraftedBaseline, out craftedAt);
+            if (craftedAt != null && p.ItemsCrafted != null && p.ItemKind != null)
+            {
+                string StatOf(string type) =>
+                    new[] { "OneHandedWeapon", "TwoHandedWeapon", "TwoHandedWeaponLeft", "Bow", "Shield", "Hands" }.Contains(type) ? "CraftWeapon" :
+                    new[] { "Chest", "Helmet", "Legs", "Shoulder" }.Contains(type) ? "CraftArmor" : type == "Tool" || type == "Utility" ? "CraftTool" : type == "Trinket" ? "CraftTrinket" : null;
+                var gearStats = new[] { "CraftWeapon", "CraftArmor", "CraftTool", "CraftTrinket" };
+                foreach (var r in rows.Values) foreach (var gs in gearStats) r.Game.Remove(gs);
+                int slot = 0;
+                foreach (var kv in p.ItemsCrafted.OrderBy(kv => kv.Key, StringComparer.Ordinal).ToList())
+                {
+                    if (p.ItemKind(kv.Key) != "gear") continue;
+                    var since = (int)Math.Max(0, kv.Value - (craftedAt.TryGetValue(kv.Key, out var b0) ? b0 : 0));
+                    var stat = StatOf(p.ItemType?.Invoke(kv.Key));
+                    for (int k = 0; k < since; k++)
+                    {
+                        var r = Ago(PlayDays[PlayDays.Length - 1 - (slot++ % PlayDays.Length)].day);
+                        Add(r.Events.Made, kv.Key, 1); if (stat != null) Add(r.Game, stat, 1);
+                    }
+                    if (since > 0) Add(p.Events.Made, kv.Key, since);
+                }
+            }
+
+            // 0.7: the per-token counters (pieces placed, plants and fish picked), each token's part since install split the same way
+            void Family(IDictionary<string, float> counter, string kind, string prefix)
+            {
+                Dictionary<string, float> at = null; p.Baseline?.TryGetValue(kind, out at);
+                foreach (var kv in (counter ?? new Dictionary<string, float>()).OrderBy(kv => kv.Key, StringComparer.Ordinal).ToList())
+                {
+                    if (kv.Value <= 0) continue;
+                    var since = at != null ? Math.Max(0, kv.Value - (at.TryGetValue(kv.Key, out var b) ? b : 0)) : Math.Floor(kv.Value / 12.0);
+                    SplitInt((int)since, (r, n) => Add(r.Game, prefix + kv.Key, n));
+                }
+            }
+            Family(p.PiecesPlaced, PanelModel.PlacedBaseline, DayHistory.PlacedPrefix);
+            Family(p.Harvested, LocalTotals.PickablesKind, DayHistory.PickedPrefix);
+
             h.Rows.AddRange(rows.Values);
             h.GameMark["DistanceSail"] = p.Character != null && p.Character.TryGetValue("DistanceSail", out var ds) ? ds : 0f;
             p.History = h;
+        }
+
+        /// <summary>
+        /// A book's DeedLog (0.7, the Deeds pages' short windows), recorded the way the game records it: minute by minute through DeedLog.Tick, the
+        /// session tallies growing by what that minute did. What the session did comes from the day rows, so the windows nest: all of today's row
+        /// (the session is today's play), and of a day before midnight the share its minutes of the session hold (four hours = the whole row). Each
+        /// count is spread evenly over that day's minutes of the session, each kind a little apart, so the last 10 minutes hold a little of most.
+        /// </summary>
+        /// <summary>A hash of a name that is the same in every run (FNV-1a over its UTF-16 units), for the sample's spreads.</summary>
+        static uint StableHash(string s) { uint h = 2166136261; foreach (var c in s ?? "") { h ^= c; h *= 16777619; } return h; }
+
+        static void DeedsSample(PanelInput p, DateTime now)
+        {
+            if (p.History == null || !p.SessionStartUtc.HasValue || !p.IsSelf) return;
+            Func<DateTime, DateTime> local = t => p.ToLocal != null ? p.ToLocal(t) : t.ToLocalTime();
+            var start = p.SessionStartUtc.Value; var today = local(now).Date;
+            var total = (int)Math.Floor((now - start).TotalMinutes);
+            var booked = new List<(int minute, string family, string token, float amount)>();
+            foreach (var g in Enumerable.Range(0, total).GroupBy(m => local(start.AddMinutes(m)).Date))
+            {
+                var row = p.History.Rows.FirstOrDefault(r => r.IsDay && r.Start == g.Key); if (row == null) continue;
+                var mins = g.ToList(); var share = g.Key == today ? 1.0 : Math.Min(1.0, mins.Count / 240.0);
+                void Spread(string family, string token, double amount, bool whole)
+                {
+                    var phase = (StableHash(token) % 97 + 0.5) / 97.0;   // not string.GetHashCode: .NET randomizes it per process, so two dumps differed
+                    if (!whole) { foreach (var m in mins) booked.Add((m, family, token, (float)(amount / mins.Count))); return; }
+                    var n = (int)Math.Floor(amount);
+                    for (int k = 0; k < n; k++) booked.Add((mins[(int)((k + phase) * mins.Count / n) % mins.Count], family, token, 1f));
+                }
+                foreach (var fam in row.Events.Named())
+                    if (Array.IndexOf(DeedLog.EventFamilies, fam.Key) >= 0)
+                        foreach (var kv in fam.Value) if (kv.Value > 0) Spread(fam.Key, kv.Key, kv.Value * share, fam.Key != DeedLog.Skills);
+                foreach (var kv in row.Game)
+                {
+                    if (kv.Value <= 0) continue;
+                    if (kv.Key.StartsWith(DayHistory.PlacedPrefix)) Spread(DeedLog.Placed, kv.Key.Substring(DayHistory.PlacedPrefix.Length), kv.Value * share, true);
+                    else if (kv.Key.StartsWith(DayHistory.PickedPrefix)) Spread(DeedLog.Picked, kv.Key.Substring(DayHistory.PickedPrefix.Length), kv.Value * share, true);
+                    else if (Array.IndexOf(DeedLog.CounterStats, kv.Key) >= 0) Spread(DeedLog.Counters, kv.Key, kv.Value * share, true);
+                }
+            }
+            var ev = new SessionEvents(); var game = new Dictionary<string, float>(); var log = new DeedLog();
+            var families = ev.Named().ToDictionary(n => n.Key, n => n.Value);
+            log.Tick(start, ev, () => game);   // the session's first frame: the game's mark
+            var byMinute = booked.ToLookup(b => b.minute);
+            for (int m = 0; m <= total; m++)
+            {
+                log.Tick(start.AddMinutes(m), ev, () => game);   // every minute's first frame: what the minute before did is booked into it
+                foreach (var b in byMinute[m])
+                {
+                    if (families.TryGetValue(b.family, out var d)) Add(d, b.token, b.amount);
+                    else { var k = b.family + "|" + b.token; game[k] = (game.TryGetValue(k, out var v) ? v : 0f) + b.amount; }
+                }
+            }
+            log.Flush(now, ev, game);   // the panel reads: the running minute is in
+            p.Deeds = log;
+        }
+
+        /// <summary>The share of each damage type that got through the sample's armour (fictional, the order of a bronze-to-iron kit).</summary>
+        static readonly Dictionary<string, float> ArmourKeeps = new Dictionary<string, float>
+            { ["blunt"] = 0.58f, ["slash"] = 0.62f, ["pierce"] = 0.66f, ["fire"] = 0.7f, ["frost"] = 0.72f, ["lightning"] = 0.75f, ["poison"] = 0.8f, ["spirit"] = 0.8f };
+
+        /// <summary>A received tally turned into the armour step: after armour = what was received (fire, spirit and poison a little more: their
+        /// ticks come to less), before armour = after / the kit's share, before resistances = before armour (poison twice: a poison mead).</summary>
+        static ArmourTally ArmourOf(Dictionary<string, float> taken, int hits)
+        {
+            var t = new ArmourTally { Hits = hits };
+            foreach (var kv in taken)
+            {
+                var type = kv.Key.Substring(kv.Key.LastIndexOf('|') + 1);
+                if (!ArmourKeeps.TryGetValue(type, out var keep) || kv.Value <= 0) continue;
+                var after = (float)Math.Round(kv.Value * (type == "fire" || type == "spirit" || type == "poison" ? 1.15 : 1.0));
+                var before = (float)Math.Round(after / keep);
+                t.After[kv.Key] = after; t.Before[kv.Key] = before; t.Incoming[kv.Key] = type == "poison" ? before * 2 : before;
+            }
+            return t;
+        }
+
+        /// <summary>
+        /// A book's armour ledger (0.7), from the very rows its Received from comes from, so Received and Your armour tell one story: recorded from
+        /// an evening two days ago (later than the install: the 7-day window shows the "Recorded from" line doing its work), the day rows from then on,
+        /// this session from its own tally, the short windows from the session's log by minute. Saved up to now (nothing pending).
+        /// </summary>
+        static void ArmourSample(PanelInput p, DateTime now)
+        {
+            if (p.History == null || p.Session == null || p.Log == null) return;
+            Func<DateTime, DateTime> local = t => p.ToLocal != null ? p.ToLocal(t) : t.ToLocalTime();
+            var today = local(now).Date; var fromDay = today.AddDays(-2);
+            var from = DateTime.SpecifyKind(fromDay.AddHours(19) - (local(now) - now), DateTimeKind.Utc);
+            var book = new ArmourBook { FromUtc = from, LastSession = "s1" };
+            foreach (var r in p.History.Rows.Where(r => r.IsDay && r.Start >= fromDay)) { var t = ArmourOf(r.Damage.Taken, r.Damage.HitsTaken); if (!t.Empty) book.Days.Add((r.Period, t)); }
+            p.ArmourSession = ArmourOf(p.Session.Taken, p.Session.HitsTaken);
+            book.Last = ArmourTally.Sum(p.ArmourSession);
+            p.ArmourBook = book; p.ArmourFromUtc = from;
+            p.ArmourSince = book.Sum(fromDay, today);
+            var minutes = new ArmourLog();
+            foreach (var kv in p.Log.Damage)
+            {
+                var k = kv.Key.Split('|');   // time|biome|dir|foe|cause|type
+                if (k.Length < 6 || k[2] != "taken" || !ArmourKeeps.ContainsKey(k[5])) continue;
+                var one = ArmourOf(new Dictionary<string, float> { [k[3] + "|" + k[4] + "|" + k[5]] = kv.Value }, 0);
+                foreach (var (stage, map) in new[] { ("incoming", one.Incoming), ("before", one.Before), ("after", one.After) })
+                    foreach (var v in map.Values) { var key = k[0] + "|" + stage + "|" + k[5]; minutes.Damage.TryGetValue(key, out var o); minutes.Damage[key] = o + v; }
+            }
+            foreach (var kv in p.Log.Hits) { var k = kv.Key.Split('|'); if (k.Length >= 3 && k[2] == "taken") { minutes.Hits.TryGetValue(k[0], out var o); minutes.Hits[k[0]] = o + kv.Value; } }
+            p.ArmourMinutes = minutes;
         }
 
         static void Skill(PanelInput p, string skill, float level, float progress) { p.SkillLevels[skill] = level; p.SkillProgress[skill] = progress; }
@@ -476,6 +628,7 @@ namespace Hearthwoven.Panel
                 ["$item_sword_iron"] = 2, ["$item_shield_wood"] = 4, ["$item_axe_bronze"] = 6, ["$item_bow"] = 1, ["$item_helmet_leather"] = 2,
                 ["$item_hammer"] = 2, ["$item_hoe"] = 1, ["$item_cultivator"] = 1, ["$item_trinketbronzehealth"] = 1,
                 ["$item_arrow_wood"] = 12, ["$item_arrow_fire"] = 4, ["$item_arrow_frost"] = 3, ["$item_arrow_needle"] = 2,
+                ["$item_bronze"] = 95, ["$item_meadbasehealth"] = 10,   // bronze and healing mead bases: 15 and 4 before install
             }) p.ItemsCrafted[kv.Key] = kv.Value;
             foreach (var kv in new Dictionary<string, float>
             {
@@ -490,6 +643,8 @@ namespace Hearthwoven.Panel
                 ["$item_wood"] = 2040, ["$item_finewood"] = 272, ["$item_roundlog"] = 510, ["$item_elderbark"] = 60,
                 ["$item_stone"] = 1720, ["$item_copperore"] = 218, ["$item_tinore"] = 99, ["$item_raspberries"] = 40, ["$item_arrow_poison"] = 20,
                 ["$item_witheredbone"] = 6, ["$item_chitin"] = 3, ["$item_leatherscraps"] = 64,   // 0.6.5: scrap piles, a Leviathan, boars
+                ["$item_bronze"] = 110, ["$item_iron"] = 160,   // the group feats (0.7): bronze he made (30 before install, 80 since) and the iron bars he took off the furnace
+                ["$item_coal"] = 260,   // coal taken out of the kilns, from before install (The Charcoal Burners counts coal first held)
             }) p.ItemsPickedUp[kv.Key] = kv.Value;
             foreach (var kv in new Dictionary<string, float>
             {
@@ -515,7 +670,10 @@ namespace Hearthwoven.Panel
             Add(ev.Planted, "$piece_sapling_barley", 171); Add(ev.Planted, "$piece_sapling_turnip", 20);
             Add(ev.Made, "$item_carrotsoup", 16); Add(ev.Made, "$item_fishwraps", 14); Add(ev.Made, "$item_sausages", 6); Add(ev.Made, "$item_turnipstew", 4);
             Add(ev.Made, "$item_bread", 6); Add(ev.Made, "$item_cookedmeat", 6);   // 52 dishes since install on top of the 114 before
+            Add(ev.Made, "$item_bronze", 80); Add(ev.Made, "$item_meadbasehealth", 6); Add(ev.PickedUp, "$item_iron", 120);   // the smelters' work since install (the group feats)
             Add(ev.Repairs, "woodwall", 9); Add(ev.MapShared, "piece_cartographytable", 2); Add(ev.CartMeters, "Cart", 2700);
+            // 0.8: the old wood walls and a stone corner he took down while rebuilding the hall, picked up again (never brought in)
+            Add(ev.Recovered, "$item_wood", 48); Add(ev.Recovered, "$item_stone", 24); Add(ev.Recovered, "$item_roundlog", 8);
             // the trader and the smelters (Hall)
             Add(ev.Spent, "Haldor", 350); Add(ev.Spent, "Hildir", 300);
             Add(ev.Bought, "Haldor|FishingBait", 20); Add(ev.Bought, "Haldor|YmirRemains", 3); Add(ev.Bought, "Hildir|HelmetHat1", 1);   // 24 items for 650 coins: nothing dear
@@ -523,6 +681,11 @@ namespace Hearthwoven.Panel
             Add(ev.SmelterAdded, "blastfurnace|IronScrap", 640); Add(ev.SmelterAdded, "blastfurnace|fuel", 280); Add(ev.SmelterAdded, "charcoal_kiln|Wood", 60);
             // the table: what he ate that others made, what others' hands put on
             Add(ev.AteFoodMadeBy, "Edda|Bread", 3); Add(ev.AteFoodMadeBy, "Edda|FishWraps", 2); Add(ev.AteFoodMadeBy, "Tor|CookedMeat", 2);
+            // 0.8.1 Deeds > Meals: his own cooking, food with no cook on it (the bush, the hive), and two servings of the Meadows feast he made and Tor set out
+            Add(ev.AteFoodMadeBy, "Rowan|CarrotSoup", 9); Add(ev.AteFoodMadeBy, "Rowan|QueensJam", 4); Add(ev.AteFoodMadeBy, "Rowan|CookedMeat", 3);
+            Add(ev.AteFoodMadeBy, "Rowan|Sausages", 3); Add(ev.AteFoodMadeBy, "Rowan|FishWraps", 2); Add(ev.AteFoodMadeBy, "Rowan|Bread", 2);
+            Add(ev.AteFoodMadeBy, "unknown|Raspberry", 6); Add(ev.AteFoodMadeBy, "unknown|Honey", 3);
+            Add(ev.AteFromFeastOf, TorId + "|FeastMeadows", 2); Add(ev.AteFromFeastAt, TorId + "|FeastMeadows|" + TeamworkFeast, 2);
             Add(ev.EquippedGearMadeBy, "Tor|SwordIron", 1); Add(ev.EquippedGearMadeBy, "Tor|ArmorIronChest", 1);
             // cargo at the helm or by cart: wood and stone for the hall, a little coal (item-metres, and the metres with it aboard)
             ev.CargoMeters["$item_wood"] = 410000f; ev.CargoStretch["$item_wood"] = 4100f; ev.CargoMeters["$item_stone"] = 170000f; ev.CargoStretch["$item_stone"] = 1700f;
@@ -562,12 +725,13 @@ namespace Hearthwoven.Panel
                     ["$item_carrotsoup"] = 44, ["$item_fishwraps"] = 14, ["$item_queensjam"] = 20, ["$item_sausages"] = 12, ["$item_turnipstew"] = 8, ["$item_mod_spicedcider"] = 8,
                     ["$item_bread"] = 6, ["$item_cookedmeat"] = 2,
                     ["$item_sword_iron"] = 1, ["$item_shield_wood"] = 3, ["$item_axe_bronze"] = 5, ["$item_bow"] = 1, ["$item_helmet_leather"] = 1,
-                    ["$item_hammer"] = 2, ["$item_hoe"] = 1, ["$item_arrow_wood"] = 12,
+                    ["$item_hammer"] = 2, ["$item_hoe"] = 1, ["$item_arrow_wood"] = 12, ["$item_bronze"] = 15, ["$item_meadbasehealth"] = 4,
                 },
                 ["pickedUp"] = new Dictionary<string, float>
                 {
                     ["$item_wood"] = 1900, ["$item_finewood"] = 260, ["$item_roundlog"] = 480, ["$item_elderbark"] = 60, ["$item_stone"] = 1500, ["$item_copperore"] = 200, ["$item_tinore"] = 90,
                     ["$item_witheredbone"] = 4, ["$item_chitin"] = 3, ["$item_leatherscraps"] = 54,
+                    ["$item_bronze"] = 30, ["$item_iron"] = 40,
                 },
                 [PanelModel.TreesBaseline] = new Dictionary<string, float> { ["Tree"] = 380 },   // 380 before + 30 felled since = the 410
                 ["battle"] = new Dictionary<string, float> { ["EnemyHits"] = 2600, ["Deaths"] = 11 },
@@ -579,6 +743,8 @@ namespace Hearthwoven.Panel
             };
             var installed = InstalledAt(now);
             p.BaselineAt = new Dictionary<string, DateTime> { [LocalTotals.StatsKind] = installed, [LocalTotals.PickablesKind] = installed, [LocalTotals.PlacedKind] = installed, [LocalTotals.CraftedKind] = installed };
+            // the 0.6 counter groups began two days after the install (an older install: 0.6 came later), so the previews show a group's own date
+            p.Starts = LocalTotals.StartGroups.Concat(LocalTotals.LaterStartGroups).ToDictionary(g => g, g => installed.AddDays(2));
 
             // ---- skills (levels now, progress to the next) ----
             Skill(p, "Swords", 21, 0.4f); Skill(p, "Knives", 9, 0.5f); Skill(p, "Clubs", 16, 0.1f); Skill(p, "Spears", 27, 0.8f); Skill(p, "Axes", 38.4f, 0.62f);
@@ -623,8 +789,9 @@ namespace Hearthwoven.Panel
             };
             Sea(p, ch); p.Character = ch;
             foreach (var kv in new Dictionary<string, float> { ["$item_bread"] = 21, ["$item_fishwraps"] = 10, ["$item_chest_leather"] = 1, ["$item_hammer"] = 1, ["$item_pickaxe_antler"] = 1 }) p.ItemsCrafted[kv.Key] = kv.Value;
-            foreach (var kv in new Dictionary<string, float> { ["$piece_woodwall"] = 52, ["$piece_woodfloor2x2"] = 38, ["$piece_levelground"] = 30 }) p.PiecesPlaced[kv.Key] = kv.Value;
-            foreach (var kv in new Dictionary<string, float> { ["$item_wood"] = 640, ["$item_stone"] = 410, ["$item_ironscrap"] = 1880, ["$item_copperore"] = 120 }) p.ItemsPickedUp[kv.Key] = kv.Value;
+            foreach (var kv in new Dictionary<string, float> { ["$piece_woodwall"] = 52, ["$piece_woodfloor2x2"] = 38, ["$piece_levelground"] = 30,
+                                                                ["$piece_workbench_ext1"] = 1, ["$piece_workbench_ext2"] = 1, ["$piece_cauldron_ext1_spice"] = 1 }) p.PiecesPlaced[kv.Key] = kv.Value;   // her workbench and cauldron grew (The Workshop Grows)
+            foreach (var kv in new Dictionary<string, float> { ["$item_wood"] = 640, ["$item_stone"] = 410, ["$item_ironscrap"] = 1880, ["$item_copperore"] = 120, ["$item_coal"] = 420 }) p.ItemsPickedUp[kv.Key] = kv.Value;
             foreach (var kv in new Dictionary<string, float> { ["$enemy_greydwarf"] = 41, ["$enemy_draugr"] = 55 }) p.EnemyKills[kv.Key] = kv.Value;
             var ev = p.Events;
             ev.Blocks = 46; ev.Parries = 9;
@@ -635,6 +802,8 @@ namespace Hearthwoven.Panel
             Add(ev.Spent, "Haldor", 150); Add(ev.Bought, "Haldor|FishingBait", 15);
             Add(ev.AteFoodMadeBy, "Rowan|CarrotSoup", 4); Add(ev.AteFoodMadeBy, "Rowan|FishWraps", 2); Add(ev.AteFoodMadeBy, "Tor|CookedMeat", 3);
             Add(ev.AteFromFeastOf, RowanId + "|FeastMeadows", 5); Add(ev.AteFromFeastOf, RowanId + "|FeastBlackforest", 3);
+            // teamwork (0.8, B22): three servings from the Meadows feast Rowan made and Tor set out at the shore camp (Tor's record says who made it)
+            Add(ev.AteFromFeastOf, TorId + "|FeastMeadows", 3); Add(ev.AteFromFeastAt, TorId + "|FeastMeadows|" + TeamworkFeast, 3);
             Add(ev.EquippedGearMadeBy, "Rowan|AxeBronze", 2);
             // the iron run: scrap by ship (about 520 aboard over 7.5 km), coal, a little wood; the helm and a cart
             ev.CargoMeters["$item_ironscrap"] = 3900000f; ev.CargoStretch["$item_ironscrap"] = 7500f;
@@ -650,6 +819,10 @@ namespace Hearthwoven.Panel
             p.Log.AddDamage(now.AddMinutes(-150), "Swamp", true, "Draugr", "Axes", DT(("slash", 100)));
             p.Log.AddDamage(now.AddMinutes(-6), "Swamp", true, "Draugr", "Axes", DT(("slash", 200)));
             p.Log.AddDamage(now.AddMinutes(-6), "Swamp", false, "Draugr", "EnemyHit", DT(("slash", 40)));
+            // 0.8 Last fight: by Rowan in his last fight (four to two minutes ago)
+            p.Log.AddDamage(now.AddMinutes(-4), "Swamp", true, "Draugr", "Axes", DT(("slash", 110)));
+            p.Log.AddDamage(now.AddMinutes(-3), "Swamp", false, "Draugr", "EnemyHit", DT(("slash", 25)));
+            p.Log.AddDamage(now.AddMinutes(-2), "Swamp", true, "Leech", "Axes", DT(("slash", 40)));
             Since(p, now, (s, b) => { Earlier(s, b, "BlackForest", true, "Greydwarf", "Axes", ("slash", 340)); Earlier(s, b, "BlackForest", false, "Greydwarf", "EnemyHit", ("slash", 60)); });
             p.Feats.NoteBest(CargoVoyage.BestKey, 500, now.AddDays(-3), "Ocean", null);
             return p;
@@ -726,8 +899,10 @@ namespace Hearthwoven.Panel
             {
                 ["$item_cookedmeat"] = 61, ["$item_boarjerky"] = 14, ["$item_sword_iron"] = 1, ["$item_chest_iron"] = 1, ["$item_shield_banded"] = 1, ["$item_helmet_iron"] = 1,
             }) p.ItemsCrafted[kv.Key] = kv.Value;
-            foreach (var kv in new Dictionary<string, float> { ["$piece_woodwall"] = 86, ["$piece_woodfloor2x2"] = 30, ["$piece_sharpstakes"] = 64, ["$piece_raise"] = 55 }) p.PiecesPlaced[kv.Key] = kv.Value;
-            foreach (var kv in new Dictionary<string, float> { ["$item_wood"] = 420, ["$item_stone"] = 150 }) p.ItemsPickedUp[kv.Key] = kv.Value;
+            foreach (var kv in new Dictionary<string, float> { ["$piece_woodwall"] = 86, ["$piece_woodfloor2x2"] = 30, ["$piece_sharpstakes"] = 64, ["$piece_raise"] = 55,
+                                                                ["$piece_workbench_ext1"] = 1, ["$piece_forge_ext1"] = 1, ["$piece_forge_ext2"] = 1,
+                                                                ["$piece_feast_meadows"] = 1 }) p.PiecesPlaced[kv.Key] = kv.Value;   // the feast Rowan made, set out by Tor   // his forge (a chopping block like Edda's: the group counts it once)
+            foreach (var kv in new Dictionary<string, float> { ["$item_wood"] = 420, ["$item_stone"] = 150, ["$item_coal"] = 180 }) p.ItemsPickedUp[kv.Key] = kv.Value;
             foreach (var kv in new Dictionary<string, float> { ["$enemy_greydwarf"] = 150, ["$enemy_troll"] = 9, ["$enemy_draugr"] = 160, ["$enemy_boar"] = 60, ["$enemy_neck"] = 31 }) p.EnemyKills[kv.Key] = kv.Value;
             var ev = p.Events;
             ev.Blocks = 1940; ev.Parries = 560;
@@ -735,6 +910,7 @@ namespace Hearthwoven.Panel
             Add(ev.Made, "$item_cookedmeat", 20); Add(ev.Made, "$item_boarjerky", 9);   // 29 dishes since install
             Add(ev.AteFoodMadeBy, "Rowan|CarrotSoup", 6); Add(ev.AteFoodMadeBy, "Rowan|Bread", 2);
             Add(ev.AteFromFeastOf, RowanId + "|FeastMeadows", 4); Add(ev.AteFromFeastOf, RowanId + "|FeastBlackforest", 3);
+            Add(ev.SetOutFeastMadeBy, Rowan + "|FeastMeadows|" + TeamworkFeast, 1);   // he set out a Meadows feast Rowan made (teamwork, 0.8)
             Add(ev.EquippedGearMadeBy, "Rowan|ShieldWood", 1);
             ev.CargoMeters["$item_wood"] = 150000f; ev.CargoStretch["$item_wood"] = 1500f; ev.CargoMeters["$item_stone"] = 90000f; ev.CargoStretch["$item_stone"] = 900f;
             Add(ev.CartMeters, "Cart", 900);
@@ -751,6 +927,9 @@ namespace Hearthwoven.Panel
             p.Log.AddDamage(now.AddMinutes(-54), "Swamp", false, "Draugr", "EnemyHit", DT(("slash", 60)));
             p.Log.AddDamage(now.AddMinutes(-20).AddSeconds(-6), "Swamp", false, "Blob", "EnemyHit", DT(("poison", 45)));
             p.Log.AddDeath(now.AddMinutes(-20), "Swamp", 10, 20);
+            // 0.8 Last fight: back by Rowan's side in his last fight (four to two minutes ago)
+            p.Log.AddDamage(now.AddMinutes(-3), "Swamp", true, "Draugr", "Clubs", DT(("blunt", 150)));
+            p.Log.AddDamage(now.AddMinutes(-3), "Swamp", false, "Draugr", "EnemyHit", DT(("slash", 45)));
             Since(p, now, (s, b) =>
             {
                 Earlier(s, b, "Meadows", true, "Boar", "Clubs", ("blunt", 400)); Earlier(s, b, "BlackForest", true, "Greydwarf", "Clubs", ("blunt", 700)); Earlier(s, b, "Meadows", true, "Neck", "Clubs", ("blunt", 500));

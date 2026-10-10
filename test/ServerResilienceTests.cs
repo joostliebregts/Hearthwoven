@@ -173,8 +173,10 @@ static class ServerResilienceTests
             // ---------- B2 / decision d: old daily logs compressed in place, never deleted ----------
             var logDir = Path.Combine(tmpRoot, "Hearthwoven"); var playersDir = Path.Combine(logDir, "players");
             Directory.CreateDirectory(playersDir);
-            var realChests = Directory.Exists(real) ? Directory.GetFiles(real, "chests-*.jsonl").OrderBy(f => f, StringComparer.Ordinal).ToList() : new List<string>();
-            var realRouted = Directory.Exists(real) ? Directory.GetFiles(real, "damage-routed-*.jsonl").ToList() : new List<string>();
+            // the real 8 Oct log, the day the haul below was measured on: from 9 Oct the server names its world in the log ("Dedicated",
+            // the 0.6 server-start marker), which rightly keeps this "Test" replay from counting the unnamed lines before it
+            var realChests = Directory.Exists(real) ? Directory.GetFiles(real, "chests-20261008.jsonl").ToList() : new List<string>();   // by name: the folder gains a day each day
+            var realRouted = Directory.Exists(real) ? Directory.GetFiles(real, "damage-routed-20261008.jsonl").ToList() : new List<string>();
             // the real logs moved to old days (and synthetic ones when the fixtures are absent), plus today's and yesterday's
             if (realChests.Count > 0) { for (int i = 0; i < realChests.Count; i++) File.Copy(realChests[i], Path.Combine(logDir, "chests-2026080" + (1 + i) + ".jsonl")); }
             else File.WriteAllLines(Path.Combine(logDir, "chests-20260801.jsonl"), mixed.Take(4));

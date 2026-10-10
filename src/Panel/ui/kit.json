@@ -442,5 +442,20 @@
   "ppu": 100,
   "type": "simple",
   "tint": "Keep white. Joost logo (flame mark + wordmark), drawn 188 x 60 in the header; a 2x texture with a 2 px clear margin, straight alpha with the edge colour bled into transparent texels."
+ },
+ "title-manycrafts.png": {
+  "size": [
+   128,
+   128
+  ],
+  "border": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "ppu": 100,
+  "type": "simple",
+  "tint": "Keep Color.white to preserve the existing gold gradient."
  }
 }

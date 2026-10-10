@@ -133,9 +133,9 @@ static class LocalFileTests
         lower.Record("D", null, Ev(1)); lower.Save(lowerPath, T0);
         Check(Chops(lower.EventsBefore("E")) == 1 && Chops(LocalTotals.LoadFor(dir4, Id, "Rowan", Counters(0), null, out _, out _).EventsBefore("E")) == 30,
               "R4 names equal but for case (one file on a case-insensitive disk) still get separate counts");
-        Check(LocalTotals.SafeName("Bjørn") != LocalTotals.SafeName("Bjärn") && LocalTotals.SafeName("Rowan") == "Rowan" && LocalTotals.SafeName("").StartsWith("unnamed~") &&
+        Check(LocalTotals.SafeName("Åsa") != LocalTotals.SafeName("Äsa") && LocalTotals.SafeName("Rowan") == "Rowan" && LocalTotals.SafeName("").StartsWith("unnamed~") &&
               !LocalTotals.SafeName("../x\\y:z").Contains("/") && !LocalTotals.SafeName("../x\\y:z").Contains("\\") && LocalTotals.SafeName(new string('a', 80)).Length < 52,
-              "R4 file-safe names: non-ASCII names get a hash (Bjørn and Bjärn differ), no path characters, bounded length");
+              "R4 file-safe names: non-ASCII names get a hash (Åsa and Äsa differ), no path characters, bounded length");
 
         // legacy file (keyed by the id only), exactly one plausible character: migrated
         var dir5 = NewDir(); var legacy5 = LegacyFile(dir5);
@@ -196,6 +196,20 @@ static class LocalFileTests
         var r3 = LocalTotals.LoadFor(dir11, Id, "Rowan", Counters(0), null, out _, out var r3p);
         Check(r3 != null && Chops(r3.EventsBefore("A")) == 0 && r3p.Contains("newer") && File.ReadAllText(legacy11) == newer,
               "R7 a newer-format file under the old id-only key is not migrated or touched");
+
+        // ---------- schema 4 "starts" (0.7 redesign): the counter groups' start dates, filled once from the 0.6 stats baseline ----------
+        var oct8 = new DateTime(2026, 10, 8, 15, 0, 0, DateTimeKind.Utc); var oct9 = oct8.AddDays(1);
+        var s3 = new LocalTotals { PlayerId = Id, Name = "Rowan", FirstRunUtc = oct8 }; s3.BaselineAt[LocalTotals.StatsKind] = oct9;
+        var s3json = s3.ToJson(T0).Replace("\"schema\":" + LocalTotals.Schema, "\"schema\":3").Replace("{\"version\":1,", "{\"version\":1,\"later\":[7],");
+        var s3in = LocalTotals.FromJson(s3json);
+        var filled = s3in != null && s3in.Starts.Count == 0 && s3in.FillStarts(T0.AddDays(5));
+        var s3back = LocalTotals.FromJson(s3in.ToJson(T0));
+        Check(filled && LocalTotals.StartGroups.All(g => s3in.Starts[g] == oct9) && !s3in.FillStarts(T0.AddDays(6)) &&
+              s3back != null && LocalTotals.StartGroups.All(g => s3back.Starts[g] == oct9) && s3back.Extra.ContainsKey("later") && MiniJson.Write(s3back.Extra["later"]) == "[7]",
+              "starts: a schema 3 file (stats baseline 9 Oct, install 8 Oct) gets every counter group from 9 Oct, once; saved and read back the same; an unknown key still survives");
+        var noStats = new LocalTotals { PlayerId = Id, FirstRunUtc = oct8 };
+        Check(noStats.FillStarts(T0) && LocalTotals.StartGroups.All(g => noStats.Starts[g] == T0) && !LocalTotals.FromJson(new LocalTotals { PlayerId = Id }.ToJson(T0)).ToJson(T0).Contains("\"starts\""),
+              "starts: a file without a stats baseline starts its groups now; an empty one writes no \"starts\" key");
 
         foreach (var d in new[] { nanDir, aDir, dir3, dir4, dir5, dir6, dir7, dir8, dir9, dir10, dir11 }) try { Directory.Delete(d, true); } catch { }
         return fails;

@@ -25,8 +25,9 @@ static class FellowTests
         Check(FellowIds.KeyOf(rowanSteam) == "Steam_76561198000000001#501" && FellowIds.KeyOf(rowanXbox) == "Xbox_2535400000000001#502",
               "ID a 0.6 server's copy is keyed by platform id (Steam or Xbox, crossplay) plus the character's profile id");
         Check(MiniJson.Parse(rowanSteam) is Dictionary<string, object> parsed && MiniJson.Str(parsed, "name") == "Rowan" && rowanSteam.StartsWith("{\"platformId\":") &&
-              FellowIds.WithPlatform(rowanSteam, "Xbox_9") == rowanSteam && FellowIds.WithPlatform(Copy("Rowan", 501), "") == Copy("Rowan", 501),
-              "ID the platform id goes in front of the copy, which still reads as JSON; added once; without a platform id the copy is unchanged");
+              FellowIds.WithPlatform(rowanSteam, "76561198000000001") == rowanSteam && FellowIds.KeyOf(FellowIds.WithPlatform(rowanSteam, "Xbox_9")) == "Xbox_9#501" &&
+              FellowIds.WithPlatform(Copy("Rowan", 501), "") == Copy("Rowan", 501),
+              "ID the platform id goes in front of the copy, which still reads as JSON; added once; one the client wrote itself is replaced by the server's; without a platform id the copy is unchanged");
         Check(FellowIds.KeyOf(Copy("Edda", 7)) == "id:7" && FellowIds.KeyOf("{\"name\":\"Edda\"}") == "name:Edda" && FellowIds.ByName("name:Edda") && !FellowIds.ByName("id:7") && FellowIds.KeyOf("{}") == "",
               "ID an older server's copy (no platform id) is keyed by profile id; a copy with only a name falls back to the name, marked");
         var twoChars = FellowIds.WithPlatform(Copy("Tor", 601), "76561198000000002"); var alt = FellowIds.WithPlatform(Copy("Torvald", 602), "76561198000000002");
@@ -128,6 +129,40 @@ static class FellowTests
             Check(GroupShare.HostSources(Path.Combine(dir, "missing"), "111", now) == null, "HOST no players folder yet (nobody joined): nothing, no error");
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
+
+        // ---------- B23: the fellows' last copies on this PC, shown at once after logging in, replaced by the server's fresh ones ----------
+        var mod = Path.Combine(Path.GetTempPath(), "hw-cache-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        try
+        {
+            GroupShare.Clear();
+            var t0 = new DateTime(2026, 10, 9, 21, 40, 0, DateTimeKind.Utc); var t1 = t0.AddHours(20);
+            var world = Path.Combine(FellowCache.Root(mod), FellowCache.ScopeKey("Midgard", 4242)); var otherWorld = Path.Combine(FellowCache.Root(mod), FellowCache.ScopeKey("Midgard", 4343));
+            var last = FellowIds.WithPlatform(Copy("Edda", 7), "76561198000000007"); var edda = FellowIds.KeyOf(last);
+            FellowCache.Save(world, edda, last, t0);   // the full copy that came last evening
+            var shownAtLogin = GroupShare.ShowCached(FellowCache.Load(world, t1));   // spawn: the server has not answered yet
+            var cachedOk = shownAtLogin == 1 && GroupShare.Group[edda] == last && GroupShare.IsCached(edda) && GroupShare.ReceivedAt(edda) == t0 && GroupShare.Trails.Of(edda) == null &&
+                           FellowCache.Load(otherWorld, t1).Count == 0 && Directory.GetFiles(mod, "*.json", SearchOption.AllDirectories).All(f => f.StartsWith(FellowCache.Root(mod)));
+            var fresh = FellowIds.WithPlatform(GroupShare.SharedCopy(Snapshot.Build("0.7.0", 7, "Edda", new PlayerProfile.PlayerStats[0], new Snapshot.SkillInfo[0], "w", new DamageTally(), "s-new")), "76561198000000007");
+            var key = GroupShare.TakeFull(fresh, t1.AddSeconds(12));   // the server's copy arrives
+            GroupShare.ShowCached(FellowCache.Load(world, t1));          // a respawn never puts the old copy back over it
+            Check(cachedOk && key == edda && GroupShare.Group[edda] == fresh && !GroupShare.IsCached(edda) && GroupShare.ReceivedAt(edda) == t1.AddSeconds(12) && GroupShare.Trails.Of(edda) != null,
+                  "CACHE (B23) a fellow's last copy on this PC shows at once after logging in (its date kept, its world only, inside the mod's folder, never timed as this session), the server's fresh copy replaces it");
+            FellowCache.Save(world, edda, fresh, t1.AddSeconds(12));   // a second save: the first copy is now the .bak
+            var file = Path.Combine(world, FellowCache.FileName(edda)); var whole = File.ReadAllText(file);
+            File.WriteAllText(file, whole.Substring(0, whole.IndexOf('\n') + 1 + (whole.Length - whole.IndexOf('\n')) / 2));   // cut after the header, mid copy
+            var afterCut = FellowCache.Load(world, t1.AddMinutes(1));
+            Check(afterCut.Count == 1 && afterCut[0].Json == last && afterCut[0].ReceivedUtc == t0, "CACHE a copy cut after its header line (a crash mid save) is not shown: the one saved before it comes back");
+            // REVIEW-07 #5: another world's copy ages out at the next spawn too, not only when that world loads again
+            var later = t0.AddDays(FellowCache.MaxAgeDays + 1);
+            FellowCache.Save(otherWorld, edda, last, t0); FellowCache.Save(world, edda, last, later.AddHours(-1));   // this world's copy is recent
+            FellowCache.SweepAll(FellowCache.Root(mod), later);
+            var swept = !Directory.Exists(otherWorld) && FellowCache.Load(world, later).Count == 1;
+            var marks = Path.Combine(mod, "local", "7-Rowan.fellows.json"); File.WriteAllText(marks, "{}"); File.WriteAllText(marks + ".bak", "{}");
+            FellowCache.ForgetAll(FellowCache.Root(mod));
+            Check(swept && !Directory.Exists(FellowCache.Root(mod)) && FellowCache.Load(world, t1).Count == 0 && !File.Exists(marks) && !File.Exists(marks + ".bak"),
+                  "CACHE (B23) sharing switched off: every cached fellow and the fellow marks are deleted; an unvisited world's old copies age out at spawn");
+        }
+        finally { GroupShare.Clear(); try { Directory.Delete(mod, true); } catch { } }
         return fails;
     }
 }

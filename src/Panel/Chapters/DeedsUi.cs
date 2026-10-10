@@ -56,7 +56,7 @@ namespace Hearthwoven.Panel
             var head = Line(col, 8);
             if (!string.IsNullOrEmpty(b.Title)) Label(head, b.Title, 18, PanelLook.Gold);
             if (!string.IsNullOrEmpty(b.Value)) Label(head, b.Value, 18, PanelLook.Text, style: FontStyles.Bold);
-            if (b.SinceInstall) Since(head, 14);
+            if (Labelled(b)) Since(head, 14, b);
         }
 
         static TextMeshProUGUI OneLine(TextMeshProUGUI t) { t.textWrappingMode = TextWrappingModes.NoWrap; t.overflowMode = TextOverflowModes.Ellipsis; return t; }
@@ -71,13 +71,13 @@ namespace Hearthwoven.Panel
             Head(col, b);
             var items = b.Items ?? new List<Block>();
             if (items.Count == 0) return;
-            var columns = Math.Max(1, Math.Min(b.Columns, items.Count));
+            var columns = Column < NarrowColumn ? 1 : Math.Max(1, Math.Min(b.Columns, items.Count));   // 0.8 layout D+: a half island holds one column
             var pictures = items.Any(i => !string.IsNullOrEmpty(i.Icon));
-            var since = items.Any(i => i.SinceInstall);
-            var tightRows = b.Tone == PanelModel.ZoneTight; float gap = tightRows ? 44 : 28;   // three across in Woodcutting: a wider gap so a number never leans on the next picture
+            var since = items.Any(Labelled);
+            var tightRows = b.Tone == PanelModel.TightTone; float gap = tightRows ? 44 : 28;   // three across in Woodcutting: a wider gap so a number never leans on the next picture
             var colW = (Column - gap * (columns - 1)) / columns;
-            var valueW = NumberWidth(items.Select(i => i.Value), 10.5f, b.Tone == PanelModel.ZoneTight ? 30f : RankValueW);
-            var tight = b.Tone == PanelModel.ZoneTight;   // Woodcutting's rows: three across, a narrower name, closer rows
+            var valueW = NumberWidth(items.Select(i => i.Value), 10.5f, b.Tone == PanelModel.TightTone ? 30f : RankValueW);
+            var tight = b.Tone == PanelModel.TightTone;   // Woodcutting's rows: three across, a narrower name, closer rows
             var nameW = tight ? Mathf.Clamp(colW * 0.4f, 64f, columns < 3 ? 170f : 110f) : Mathf.Clamp(colW * 0.5f, 120f, 220f);   // a name column that leaves the bar room in a narrow column
             var holder = columns > 1 ? Line(col, gap, TextAnchor.UpperLeft) : col;
             var per = (items.Count + columns - 1) / columns;
@@ -92,8 +92,8 @@ namespace Hearthwoven.Panel
                     if (pictures) Pic(row, i.Icon, RankPic);
                     var nm = OneLine(Label(row, i.Title, 17, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft)); Size(nm, nameW, -1); names.Add(nm);
                     bars.Add(Meter(row, i.Fraction, string.IsNullOrEmpty(i.Colour) && (i.Icon ?? "").StartsWith("person:") ? PanelLook.PersonColor(personColors.TryGetValue(i.Id ?? "", out var personSlot) ? personSlot : 0) : Hex(i.Colour, PanelLook.Dealt), 16));   // a fellow's bar in their player colour (Cooking: who enjoyed your food)
-                    var v = Label(row, i.Value, 17, PanelLook.Text, align: columns > 1 ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.MidlineRight, style: FontStyles.Bold); Size(v, valueW, -1); values.Add(v);
-                    if (since) { var slot = Node("Since", row); Size(slot, 84, 20); if (i.SinceInstall) Since(slot, 13).rectTransform.Stretch(); }
+                    var v = Unrecorded(Label(row, i.Value, 17, PanelLook.Text, align: columns > 1 ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.MidlineRight, style: FontStyles.Bold), i, 15); Size(v, valueW, -1); values.Add(v);
+                    if (since) { var slot = Node("Since", row); Size(slot, 84, 20); if (Labelled(i)) Since(slot, 14, i).rectTransform.Stretch(); }
                 }
                 // live-polish (Joost in game: "Hooked [bar] 20   Got away [bar] 8" spread over the plate): side by side, a row is one unit,
                 // name, bar and number close together (the name and number as wide as this column's longest), the room left over is the
@@ -143,7 +143,7 @@ namespace Hearthwoven.Panel
                     }
                     var words = VStack(one, 0); words.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
                     var fn = Label(words, i.Value, 38, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold); Size(fn, -1, 42);
-                    if (i.SinceInstall) Size(Since(words, 13), -1, 16);
+                    if (Labelled(i)) Size(Since(words, 14, i), -1, 16);
                     Size(OneLine(Label(words, i.Title, 18, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft)), -1, 24);
                     if (!string.IsNullOrEmpty(i.Note)) Size(OneLine(Label(words, i.Note, PanelLook.MinText, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft)), -1, LineBox(PanelLook.MinText));   // zones-wording: "in all · 7 of them since install"
                 }
@@ -153,7 +153,7 @@ namespace Hearthwoven.Panel
                     var v = stack.GetComponent<VerticalLayoutGroup>(); v.childAlignment = TextAnchor.MiddleCenter; v.padding = new RectOffset(6, 6, 10, 10);
                     if (pictures) Pic(stack, i.Icon, pic);
                     var n = Label(stack, i.Value, number, PanelLook.Text, align: TextAlignmentOptions.Center, style: FontStyles.Bold); Size(n, -1, number + 4);
-                    if (i.SinceInstall) Size(Since(stack, 13), -1, 16).GetComponent<TextMeshProUGUI>().alignment = TextAlignmentOptions.Center;
+                    if (Labelled(i)) Size(Since(stack, 14, i), -1, 16).GetComponent<TextMeshProUGUI>().alignment = TextAlignmentOptions.Center;
                     Size(OneLine(Label(stack, i.Title, large ? 19 : 16, large ? PanelLook.Text : PanelLook.Muted, align: TextAlignmentOptions.Center)), -1, 24);
                 }
                 if (!string.IsNullOrEmpty(i.Colour))   // the kind's colour as the tile's bottom edge
@@ -190,7 +190,7 @@ namespace Hearthwoven.Panel
             var items = b.Items ?? new List<Block>();
             if (items.Count == 0) return;
             var second = items.Any(i => !string.IsNullOrEmpty(i.Value2));
-            var since = items.Any(i => i.SinceInstall);
+            var since = items.Any(Labelled);
             var per = PanelModel.ItemTilesPerLine(Column);
             var w = Mathf.Floor((Column - GridGap * (per - 1)) / per);
             var textW = w - (8 + GridPic + 8) - 6;
@@ -207,19 +207,19 @@ namespace Hearthwoven.Panel
                 box.anchorMin = Vector2.zero; box.anchorMax = Vector2.one; box.offsetMin = new Vector2(8 + GridPic + 8, 3); box.offsetMax = new Vector2(-6, -3);
                 box.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
                 var n = Label(box, i.Value, 19, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap;
-                var name = Label(box, i.Title, 12, PanelLook.Muted, align: TextAlignmentOptions.TopLeft);
+                var name = Label(box, i.Title, 14, PanelLook.Muted, align: TextAlignmentOptions.TopLeft);
                 name.lineSpacing = -12; name.maxVisibleLines = 2; name.overflowMode = TextOverflowModes.Ellipsis;   // two short lines at most
                 if (name.preferredWidth > textW) wraps = true;
                 if (i.Tone == PanelModel.FuelTone) FuelMark(name, i.Title);   // Hall: a fuel item says so (fix2 7)
                 Edge(tile, i.Colour);   // its trader's or its part's colour, a thin edge on the left (fix2 7)
                 if (!string.IsNullOrEmpty(i.Value2))
                 {
-                    OneLine(RichLabel(box, "itemgrid", (Layered(i) ? LayeredText(i, PanelLook.Faint, PanelLook.Text) : Rich.Plain(i.Value2)) + " " + i.Text, 11, PanelLook.Faint));
+                    OneLine(RichLabel(box, "itemgrid", Rich.Plain(i.Value2) + " " + i.Text, 14, PanelLook.Faint));
                 }
-                if (i.SinceInstall) Since(box, 10);
+                if (Labelled(i)) Since(box, 14, i);
             }
             g.cellSize = new Vector2(w, GridTileH + (wraps ? GridLine : 0) + (second ? GridLine : 0) + (since ? GridLine : 0));
-            if (b.SinceInstall) Since(col, 13);
+            if (Labelled(b)) Since(col, 14, b);
         }
 
         // a thin edge in a colour down the left of a tile or chip (Hall: an item's trader, a smelted good's part of the bar)
@@ -249,12 +249,12 @@ namespace Hearthwoven.Panel
             {
                 var entry = Line(lines, 7); float w = 0;
                 if (!string.IsNullOrEmpty(i.Icon)) { Pic(entry, i.Icon, 28); w += 28 + 7; }
-                if (!string.IsNullOrEmpty(i.Value)) { var n = RichLabel(entry, "strip", Layered(i) ? LayeredText(i, PanelLook.Faint, null, 19) : Rich.Plain(i.Value), 19, PanelLook.Text, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap; w += n.preferredWidth + 7; }
+                if (!string.IsNullOrEmpty(i.Value)) { var n = RichLabel(entry, "strip", Rich.Plain(i.Value), 19, PanelLook.Text, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap; w += n.preferredWidth + 7; }
                 var named = string.IsNullOrEmpty(i.Value);   // a name without a number (a title earned): the name speaks, its place (Text) quiet after it
                 var t = Label(entry, i.Title, named ? 18 : 15, named ? PanelLook.Text : PanelLook.Muted); t.textWrappingMode = TextWrappingModes.NoWrap;
                 w += t.preferredWidth;
-                if (!string.IsNullOrEmpty(i.Text)) { var x = Label(entry, i.Text, 13, PanelLook.Muted); x.textWrappingMode = TextWrappingModes.NoWrap; w += 7 + x.preferredWidth; }
-                if (i.SinceInstall) { var s = Since(entry, 13); w += 7 + s.preferredWidth; }
+                if (!string.IsNullOrEmpty(i.Text)) { var x = Label(entry, i.Text, 14, PanelLook.Muted); x.textWrappingMode = TextWrappingModes.NoWrap; w += 7 + x.preferredWidth; }
+                if (Labelled(i)) { var s = Since(entry, 14, i); w += 7 + s.preferredWidth; }
                 if (line == null || used + 26 + w > Column) { line = Line(lines, 26); used = 0; } else used += 26;
                 entry.SetParent(line, false); used += w;
                 Size(entry, w, 32);
@@ -282,7 +282,7 @@ namespace Hearthwoven.Panel
                 Pic(cell, i.Icon, 22 + k * 6);
                 Size(Label(cell, i.Title, 15, PanelLook.Muted, align: TextAlignmentOptions.Center), 60, 20);
             }
-            var rule = Img(col, "Rule", null, PanelLook.Rule); Size(rule, -1, 1);
+            if (!islanded) { var rule = Img(col, "Rule", null, PanelLook.Rule); Size(rule, -1, 1); }   // no divider lines in an island (Joost, part 4)
         }
 
         // ----- band: a title earned on this page, its name and its line -----
@@ -295,27 +295,32 @@ namespace Hearthwoven.Panel
             Label(bg.transform, b.Title, 21, PanelLook.Gold, align: TextAlignmentOptions.MidlineLeft);
             Node("Rest", bg.transform).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
             Label(bg.transform, b.Value, 17, PanelLook.Text, align: TextAlignmentOptions.MidlineRight);
-            if (b.SinceInstall) Since((RectTransform)bg.transform, 13);
+            if (Labelled(b)) Since((RectTransform)bg.transform, 14, b);
         }
 
         // ----- people: a fellow's shield and name, then the things they put to good use, by picture and name -----
 
         static void People(RectTransform col, Block b)
         {
+            if (b.Tone == PanelModel.IslandPersonTone && b.Items?.Count == 1) { PersonIsland(col, b.Items[0]); return; }   // 0.8 layout D+: Recent's group, a player per island (IslandsUi.cs)
+            if (b.Tone == PanelModel.RecentGroupTone) { RecentPeople(col, b); return; }   // 0.8: Recent with Everyone on, a grid per player (Chapters/RecentUi.cs), where the list is kept whole
             foreach (var p in b.Items ?? new List<Block>())
             {
-                var row = Line(col, 14); Size(row, -1, 60);
+                var row = Line(col, 14); Size(row, -1, islanded ? 52 : 60);
                 Marker(row, p.Icon, 38);
                 Size(OneLine(Label(row, p.Title, 20, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft)), 120, -1);
                 foreach (var i in p.Items ?? new List<Block>())
                 {
                     var item = Line(row, 8);
-                    Pic(item, i.Icon, 34);
-                    OneLine(Label(item, i.Title, 17, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft));
-                    if (i.SinceInstall) Since(item, 13);
+                    if (!string.IsNullOrEmpty(i.Icon)) Pic(item, i.Icon, 34);
+                    // 0.7 Recent: a gain carries its number ("+40", bold) before the name (muted); "Not recorded" (Unrecorded) and a quiet line muted
+                    if (!string.IsNullOrEmpty(i.Value)) OneLine(Label(item, i.Value, 18, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold));
+                    var quiet = !string.IsNullOrEmpty(i.Value) || i.Unrecorded || i.Tone == "quiet";
+                    Unrecorded(OneLine(Label(item, i.Title, quiet ? 15 : 17, quiet ? PanelLook.Muted : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: i.Tone == "quiet" ? FontStyles.Italic : FontStyles.Normal)), i, 15);
+                    if (Labelled(i)) Since(item, 14, i);
                 }
                 Node("Rest", row).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-                var rule = Img(col, "Rule", null, PanelLook.Rule); Size(rule, -1, 1);
+                if (!islanded) { var rule = Img(col, "Rule", null, PanelLook.Rule); Size(rule, -1, 1); }
             }
         }
     }

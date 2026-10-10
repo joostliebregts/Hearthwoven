@@ -207,12 +207,12 @@ static partial class CoherenceTests
                 // B17 (Joost 2026-10-09): never a standing "Day history since ..." line on a page whose chosen window works
                 var thirty = In(b, Chapter.Voyages, "sailing", TimeWindow.ThirtyDays);
                 var seven = In(b, Chapter.Voyages, "sailing", TimeWindow.SevenDays);
-                var opens = PanelModel.ZoneDate(b.History.FirstDay(PanelModel.LocalToday(b)).AddDays(29), PanelModel.LocalToday(b));
+                var opens = PanelModel.ShortDate(b.History.FirstDay(PanelModel.LocalToday(b)).AddDays(29), PanelModel.LocalToday(b));
                 Is(thirty.ShownWindow == TimeWindow.SinceInstall && thirty.Windows.Single(c => c.Id == "ThirtyDays").Disabled && thirty.Windows.Single(c => c.Id == "ThirtyDays").Waits &&
                    !thirty.Windows.Single(c => c.Id == "SevenDays").Disabled && !thirty.Windows.Single(c => c.Id == "SevenDays").Waits &&
-                   (PanelModel.PlateOf(thirty)?.Text ?? "").StartsWith("30 days works from " + opens + ": ") &&
+                   (thirty.Windows.Single(c => c.Id == "ThirtyDays").Why ?? "").StartsWith("30 days works from " + opens + ": ") && thirty.WindowTip == "ThirtyDays" &&
                    !PanelModel.AllText(seven).Any(t => t.Contains("works from") || t.Contains("Day history")),
-                   n + ": 30 days before the history is not greyed and pressable with its one line, or a line stands on a page whose window works (" + PanelModel.PlateOf(thirty)?.Text + ")");
+                   n + ": 30 days before the history is not greyed and pressable with its one line, or a line stands on a page whose window works (" + thirty.Windows.Single(c => c.Id == "ThirtyDays").Why + ")");
             }
             // Together's window chips: a day window before the history is greyed the same way, with the same line, and shows All
             foreach (var n in names)
@@ -232,6 +232,118 @@ static partial class CoherenceTests
                 var v = Show(copy, Chapter.Battle, "foes", st => st.Window = TimeWindow.SevenDays);
                 Is(v.Windows.Where(c => PanelModel.IsDayWindow((TimeWindow)Enum.Parse(typeof(TimeWindow), c.Id))).All(c => c.Disabled) && v.ShownWindow != TimeWindow.SevenDays, n + ": a fellow's copy offers day windows it cannot show");
             }
+        });
+        G("0.7: every Deeds page but the Overview has the day windows, and they nest (today <= 7 days <= All) for its windowed numbers", Is =>
+        {
+            var days = new[] { TimeWindow.Today, TimeWindow.SevenDays, TimeWindow.SinceInstall };
+            PanelView In(PanelInput b, string page, TimeWindow w) => Show(b, Chapter.Deeds, page, st => st.Window = w);
+            double Num(PanelView v, string title) => ValueOf(v, x => (x.Kind == "hero" || x.Kind == "number") && x.Title == title);
+            double Item(PanelView v, string kind, string title) => All(v).Where(x => x.Kind == kind).SelectMany(x => x.Items ?? new List<Block>()).Where(i => i.Title == title).Select(i => Lead(i.Value)).FirstOrDefault();
+            var metrics = new (string page, string what, Func<PanelView, double> f)[]
+            {
+                ("cooking", "dishes cooked", v => Num(v, "dishes cooked")), ("building", "pieces built", v => Num(v, "pieces built")),
+                ("groundwork", "groundwork strokes", v => Num(v, "groundwork strokes")), ("crafting", "gear crafted", v => Num(v, "gear crafted")),
+                ("farming", "planted", v => Num(v, "planted")), ("farming", "picked", v => Num(v, "picked")),
+                ("fishing", "caught", v => Item(v, "ranking", "Caught")), ("fishing", "hooked", v => Item(v, "ranking", "Hooked")), ("taming", "petted", v => Item(v, "counts", "Petted")),
+            };
+            foreach (var n in names)
+            {
+                var b = owns[n];
+                foreach (var page in new[] { "cooking", "building", "groundwork", "crafting", "woodcutting", "mining", "farming", "fishing", "taming" })
+                {
+                    var v = In(b, page, TimeWindow.SevenDays);
+                    var chips = (page == "taming" ? PanelModel.DayAndAll : PanelModel.AllWindows).Select(x => x.ToString());   // 0.7: the short windows too where the DeedLog has the page's numbers
+                    Is(v.ShownWindow == TimeWindow.SevenDays && v.Windows.Select(c => c.Id).SequenceEqual(chips), n + ": Deeds > " + page + " does not show 7 days with its chips");
+                    // a day window has no "before install" layer: nothing faded on the page
+                    Is(!All(v).Any(x => x.Fraction2 > 0 || x.Note == PanelModel.FadedKey), n + ": Deeds > " + page + " in 7 days still shows a faded layer");
+                }
+                Is(In(b, "overview", TimeWindow.SevenDays).Windows.Count == 0, n + ": the Deeds overview has window chips (its cards are the titles, earned by lifetime counts)");
+                foreach (var (page, what, f) in metrics)
+                {
+                    var v = days.Select(w => f(In(b, page, w))).ToList();
+                    Is(v[0] <= v[1] + 0.5 && v[1] <= v[2] + 0.5, n + ": Deeds > " + page + " " + what + " today " + v[0] + ", 7 days " + v[1] + ", All " + v[2] + " do not nest");
+                }
+            }
+            // the filters work on the window's pieces and gear: a choice narrows the week's grid, never to the all-time list
+            int Tiles(PanelView v) => All(v).Where(x => x.Kind == "itemgrid").Sum(x => x.Items?.Count ?? 0);
+            var rw = owns[SampleWorld.Rowan];
+            var weekAll = Show(rw, Chapter.Deeds, "building", st => st.Window = TimeWindow.SevenDays);
+            var weekStone = Show(rw, Chapter.Deeds, "building", st => { st.Window = TimeWindow.SevenDays; st.Facets["Deeds/building/pieces|tab"] = new List<string> { "Stonecutter" }; });
+            var gearWeek = Show(rw, Chapter.Deeds, "crafting", st => st.Window = TimeWindow.SevenDays);
+            var gearArmour = Show(rw, Chapter.Deeds, "crafting", st => { st.Window = TimeWindow.SevenDays; st.Facets["Deeds/crafting/gear|kind"] = new List<string> { "armour" }; });
+            Is(Tiles(weekStone) > 0 && Tiles(weekStone) < Tiles(weekAll) && Tiles(weekAll) < Tiles(Show(rw, Chapter.Deeds, "building")) && Tiles(gearArmour) > 0 && Tiles(gearArmour) < Tiles(gearWeek),
+               "Rowan: a filter in 7 days does not narrow the week's pieces or gear (" + Tiles(weekStone) + " of " + Tiles(weekAll) + " pieces, " + Tiles(gearArmour) + " of " + Tiles(gearWeek) + " gear)");
+            // not empty by accident: Rowan's week holds something on every page
+            foreach (var (page, what, f) in metrics.Where(m => m.what != "petted")) Is(f(In(owns[SampleWorld.Rowan], page, TimeWindow.SevenDays)) > 0, "Rowan: Deeds > " + page + " " + what + " is empty in 7 days");
+        });
+        G("0.7: a Deeds page in a day window leaves out what has no days (fellows' records, the server's book, a record) with one line, never its all-time value", Is =>
+        {
+            var b = owns[SampleWorld.Rowan];
+            PanelView In(string page, TimeWindow w) => Show(b, Chapter.Deeds, page, st => st.Window = w);
+            bool Line(PanelView v, string text) => All(v).Any(x => x.Kind == "note" && x.Text == text);
+            var cookAll = In("cooking", TimeWindow.SinceInstall); var cookWeek = In("cooking", TimeWindow.SevenDays);
+            Is(All(cookAll).Any(x => (x.Title ?? "").StartsWith("Who enjoyed")) && !All(cookWeek).Any(x => x.Src == PanelModel.SrcFellows || (x.Title ?? "").StartsWith("Who enjoyed")) && Line(cookWeek, PanelModel.NoDaysFood) && !Line(cookAll, PanelModel.NoDaysFood),
+               "Cooking: who enjoyed your food is on All, left out of 7 days with its one line");
+            var craftAll = In("crafting", TimeWindow.SinceInstall); var craftWeek = In("crafting", TimeWindow.SevenDays);
+            Is(All(craftAll).Any(x => x.Kind == "people") && !All(craftWeek).Any(x => x.Kind == "people" || x.Src == PanelModel.SrcFellows) && Line(craftWeek, PanelModel.NoDaysGear), "Crafting: put to good use by is on All, left out of 7 days with its one line");
+            var tameAll = In("taming", TimeWindow.SinceInstall); var tameWeek = In("taming", TimeWindow.SevenDays);
+            Is(All(tameAll).Any(x => x.Title == PanelModel.LongestLead) && !All(tameWeek).Any(x => x.Title == PanelModel.LongestLead || x.Src == PanelModel.SrcServer) && Line(tameWeek, PanelModel.NoDaysTaming),
+               "Taming: the longest lead and born near you are on All, left out of 7 days with one line");
+            // a counter the history began keeping later (0.7's pieces placed on a 0.6 history): a window that reaches before it says from when
+            var later = b.ShallowCopy(); later.History = new DayHistory { From = b.History.From }; later.History.Rows.AddRange(b.History.Rows);
+            later.History.Began[DayHistory.PlacedPrefix] = PanelModel.LocalToday(b);
+            var built = Show(later, Chapter.Deeds, "building", st => st.Window = TimeWindow.SevenDays);
+            var today = Show(later, Chapter.Deeds, "building", st => st.Window = TimeWindow.Today);
+            Is(All(built).Any(x => x.Kind == "note" && (x.Text ?? "").StartsWith("Pieces built are counted per day from ")) && !All(today).Any(x => x.Kind == "note" && (x.Text ?? "").StartsWith("Pieces built are counted per day")),
+               "Building: 7 days reaching before the pieces were kept per day says from when; Today does not");
+        });
+        G("0.7: the short windows on the Deeds pages (this session's DeedLog) nest: 10 min <= 30 min <= 1 h <= Session <= Today; what has no minutes is absent with one line; a filter narrows them", Is =>
+        {
+            var shorts = new[] { TimeWindow.LastTenMinutes, TimeWindow.LastThirtyMinutes, TimeWindow.LastHour, TimeWindow.Session, TimeWindow.Today };
+            PanelView In(PanelInput b, string page, TimeWindow w, Action<PanelState> more = null) => Show(b, Chapter.Deeds, page, st => { st.Window = w; st.WindowPicked = true; more?.Invoke(st); });
+            double Num(PanelView v, params string[] titles) => ValueOf(v, x => (x.Kind == "hero" || x.Kind == "number") && titles.Contains(x.Title));
+            double Bar(PanelView v, string title) => ValueOf(v, x => x.Kind == "composition" && x.Title == title);
+            double Item(PanelView v, string kind, string title) => All(v).Where(x => x.Kind == kind).SelectMany(x => x.Items ?? new List<Block>()).Where(i => i.Title == title).Select(i => Lead(i.Value)).FirstOrDefault();
+            bool Line(PanelView v, string text) => All(v).Any(x => x.Kind == "note" && x.Text == text);
+            var metrics = new (string page, string what, Func<PanelView, double> f)[]
+            {
+                ("woodcutting", "trees felled", v => Num(v, "trees felled", "tree felled")), ("woodcutting", "axe hits", v => Num(v, "axe hits", "axe hit")), ("woodcutting", "wood", v => Bar(v, "Wood brought in")),
+                ("mining", "stone and ore", v => Num(v, "stone and ore brought in")), ("cooking", "dishes cooked", v => Num(v, "dishes cooked", "dish cooked")),
+                ("cooking", "feasts set out", v => Num(v, "feasts set out", "feast set out")), ("building", "pieces built", v => Num(v, "pieces built", "piece built")),
+                ("groundwork", "groundwork strokes", v => Num(v, "groundwork strokes")), ("crafting", "gear crafted", v => Num(v, "gear crafted")),
+                ("farming", "planted", v => Num(v, "planted")), ("fishing", "caught", v => Item(v, "ranking", "Caught")),
+            };
+            foreach (var n in names)
+            {
+                var b = owns[n];
+                foreach (var (page, what, f) in metrics)
+                {
+                    var v = shorts.Select(w => f(In(b, page, w))).ToList();
+                    Is(v.Zip(v.Skip(1), (a, c) => a <= c + 0.5).All(x => x), n + ": Deeds > " + page + " " + what + " 10 min " + v[0] + ", 30 min " + v[1] + ", 1 h " + v[2] + ", Session " + v[3] + ", Today " + v[4] + " do not nest");
+                    if (n == SampleWorld.Rowan && v[4] > 0) Is(v[3] > 0, "Rowan: Deeds > " + page + " " + what + " is empty this session, though today has " + v[4]);
+                }
+                Is(In(b, "taming", TimeWindow.LastTenMinutes).ShownWindow == TimeWindow.SinceInstall, n + ": Deeds > Taming offers a short window (petted, commands, led and born have no minutes)");
+            }
+            var rw = owns[SampleWorld.Rowan];
+            // a number without minutes: absent (never its all-time value, never 0) and one line says where it shows
+            var farmAll = In(rw, "farming", TimeWindow.SinceInstall); var farm10 = In(rw, "farming", TimeWindow.LastTenMinutes);
+            Is(Num(farmAll, "picked") > 0 && !All(farm10).Any(x => (x.Kind == "hero" || x.Kind == "number") && x.Title == "picked") && !All(farm10).Any(x => x.Title == PanelModel.AlsoHarvestedTitle) && Line(farm10, PanelModel.NoMinutesPicked) && !Line(farmAll, PanelModel.NoMinutesPicked),
+               "Farming: picked and also harvested are on All, absent from 10 min with their one line");
+            var buildAll = In(rw, "building", TimeWindow.SinceInstall); var build1h = In(rw, "building", TimeWindow.LastHour);
+            Is(All(buildAll).Any(x => x.Title == "Pieces repaired") && !All(build1h).Any(x => x.Title == "Pieces repaired") && Line(build1h, PanelModel.NoMinutesRepairs), "Building: repairs are on All, absent from 1 h with their one line");
+            var fishAll = In(rw, "fishing", TimeWindow.SinceInstall); var fishS = In(rw, "fishing", TimeWindow.Session);
+            Is(Item(fishAll, "ranking", "Hooked") > 0 && !All(fishS).Any(x => x.Title == "Hooked" || x.Kind == "grades") && Line(fishS, PanelModel.NoMinutesHooked), "Fishing: hooked and caught by quality are on All, absent from Session with their one line");
+            var cookS = In(rw, "cooking", TimeWindow.Session);
+            Is(!All(cookS).Any(x => x.Src == PanelModel.SrcFellows) && Line(cookS, PanelModel.NoDaysFood), "Cooking: who enjoyed your food is left out of Session with its one line");
+            // the filters work inside a short window: a choice narrows the session's pieces and gear, and the session's list is not the all-time one
+            int Tiles(PanelView v) => All(v).Where(x => x.Kind == "itemgrid").Sum(x => x.Items?.Count ?? 0);
+            var sAll = In(rw, "building", TimeWindow.Session);
+            var sStone = In(rw, "building", TimeWindow.Session, st => st.Facets["Deeds/building/pieces|tab"] = new List<string> { "Stonecutter" });
+            Is(Tiles(sStone) > 0 && Tiles(sStone) < Tiles(sAll) && Tiles(sAll) < Tiles(In(rw, "building", TimeWindow.SinceInstall)),
+               "Rowan: a filter in Session does not narrow the session's pieces (" + Tiles(sStone) + " of " + Tiles(sAll) + " pieces; All has " + Tiles(In(rw, "building", TimeWindow.SinceInstall)) + ")");
+            // the book opens a Deeds page on All (the default Session is Battle's); a chosen Session shows Session
+            var opened = Show(rw, Chapter.Deeds, "building", st => st.Window = TimeWindow.Session);
+            Is(opened.ShownWindow == TimeWindow.SinceInstall && sAll.ShownWindow == TimeWindow.Session, "Deeds > Building opens on " + opened.ShownWindow + " before a window is chosen (All expected)");
         });
         G("a session is part of since install: damage per foe, skill and type, per biome, the falls and the hits", Is =>
         {
@@ -527,13 +639,14 @@ static partial class CoherenceTests
                 var wood = Show(b, Chapter.Deeds, "woodcutting"); var felled = ValueOf(wood, x => x.Kind == "hero" && x.Title == "trees felled");
                 Is(Math.Abs(felled - Cn("Tree")) < 0.01 || (b.Baseline != null && Math.Abs(felled - (b.Baseline[PanelModel.TreesBaseline]["Tree"] + b.Events.Felled.Values.Sum())) < 0.01), n + ": trees felled " + felled + " is not the game's counter nor the install counter + felled since");
                 var perTree = First(wood, x => x.Kind == "ranking" && x.Items.Any() && x.Items.All(i => i.Value != null));
-                Is(Math.Abs(ValueOf(wood, x => x.Kind == "hero" && x.Title == "axe hits") - b.Events.ChopHits.Values.Sum()) < 0.01, n + ": the axe hits are not the counted ones");
-                Is(Math.Abs(ValueOf(Show(b, Chapter.Deeds, "mining"), x => x.Kind == "hero" && x.Title == "pickaxe hits") - b.Events.PickaxeHits.Values.Sum()) < 0.01 || b.Events.PickaxeHits.Count == 0, n + ": the pickaxe hits are not the counted ones");
+                Is(Math.Abs(ValueOf(wood, x => (x.Kind == "hero" || x.Kind == "number") && x.Title == "axe hits") - b.Events.ChopHits.Values.Sum()) < 0.01, n + ": the axe hits are not the counted ones");
+                Is(Math.Abs(ValueOf(Show(b, Chapter.Deeds, "mining"), x => (x.Kind == "hero" || x.Kind == "number") && x.Title == "pickaxe hits") - b.Events.PickaxeHits.Values.Sum()) < 0.01 || b.Events.PickaxeHits.Count == 0, n + ": the pickaxe hits are not the counted ones");
                 Is(b.Events.Felled.Values.Sum() <= Math.Max(Cn("Tree"), b.Baseline == null ? 0 : b.Baseline[PanelModel.TreesBaseline]["Tree"] + b.Events.Felled.Values.Sum()), n + ": more trees felled since install than in the character's record");
                 // brought in: the game's counter now sits between the install counter and the install counter plus what Hearthwoven counted since; a fellow has no install counter
                 foreach (var kv in b.ItemsPickedUp)
                 {
                     b.Events.PickedUp.TryGetValue(kv.Key, out var exact);
+                    b.Events.Made.TryGetValue(kv.Key, out var made); exact += made;   // "first held" also grows with what you made yourself (bronze from the forge: the group feats, 0.7)
                     if (b.Baseline != null && b.Baseline.TryGetValue("pickedUp", out var atInstall) && atInstall.ContainsKey(kv.Key)) { atInstall.TryGetValue(kv.Key, out var was); Is(kv.Value >= was - 0.01 && kv.Value <= was + exact + 0.01 || kv.Value == was, n + ": " + kv.Key + " counter " + kv.Value + " is outside [" + was + ", " + (was + exact) + "]"); }
                     else Is(kv.Value >= exact, n + ": " + kv.Key + " counted " + exact + " since install, the game's counter says " + kv.Value);
                 }
@@ -583,7 +696,15 @@ static partial class CoherenceTests
                 var card = First(Show(b, Chapter.Deeds, "overview"), x => x.Kind == "number" && x.Title == "enjoyed by fellows");
                 Is((card == null ? 0 : Lead(card.Value)) == right, n + ": the Hearth Cook card says " + card?.Value + ", Food shared " + right);
                 // what the others' own records say they ate of n's, summed from outside
-                var ate = names.Where(o => o != n).Sum(o => owns[o].Events.AteFoodMadeBy.Where(kv => kv.Key.StartsWith(n + "|")).Sum(kv => kv.Value) + owns[o].Events.AteFromFeastOf.Where(kv => kv.Key.StartsWith(b.PlayerId + "|")).Sum(kv => kv.Value));
+                // feast servings (0.8, B22), worked out here from the raw records: a feast whose setter-out's record names its crafter counts for
+                // the crafter (one of the group), every other serving for the one who set the feast out
+                var madeBy = names.SelectMany(s => owns[s].Events.SetOutFeastMadeBy.Keys.Select(k => (setter: s, key: k)))
+                                  .ToDictionary(x => x.key.Substring(x.key.LastIndexOf('|') + 1), x => names.Contains(x.key.Split('|')[0]) ? x.key.Split('|')[0] : x.setter);
+                string FeastId(string key) => key.Substring(key.LastIndexOf('|') + 1);
+                double FeastsOf(SessionEvents ev) =>
+                    ev.AteFromFeastAt.Where(kv => madeBy.TryGetValue(FeastId(kv.Key), out var m) && m == n).Sum(kv => (double)kv.Value) +
+                    ev.AteFromFeastOf.Where(kv => kv.Key.StartsWith(b.PlayerId + "|")).Sum(kv => kv.Value - ev.AteFromFeastAt.Where(a => a.Key.StartsWith(kv.Key + "|") && madeBy.ContainsKey(FeastId(a.Key))).Sum(a => (double)a.Value));
+                var ate = names.Where(o => o != n).Sum(o => owns[o].Events.AteFoodMadeBy.Where(kv => kv.Key.StartsWith(n + "|")).Sum(kv => kv.Value) + FeastsOf(owns[o].Events));
                 Is(ate == right, n + ": the others' records say " + ate + " servings enjoyed, Food shared " + right);
                 // gear
                 var gear = Show(b, Chapter.Company, "gear");
@@ -655,7 +776,7 @@ static partial class CoherenceTests
                             if (z.Id == "character") Is(line.Contains(PanelModel.MadeLine(b)) && line.Contains(madeOn), n + " " + ch + "/" + l.Id + ": the character zone says \"" + line + "\", made " + madeOn);
                             if (z.Id == "pc") Is(line.Contains("since " + installedOn) || !line.Contains("since 1") && !Regex.IsMatch(line, @"since \d"), n + " " + ch + "/" + l.Id + ": the install zone says \"" + line + "\", installed " + installedOn);
                         }
-                        foreach (var x in All(v).Where(x => x.Src == PanelModel.SrcCharacter)) Is(!x.SinceInstall, n + " " + ch + "/" + l.Id + ": a number from the character's record (" + x.Title + " " + x.Value + ") is marked since install");
+                        foreach (var x in All(v).Where(x => x.Src == PanelModel.SrcCharacter)) Is(string.IsNullOrEmpty(x.RecordedFrom), n + " " + ch + "/" + l.Id + ": a number from the character's record (" + x.Title + " " + x.Value + ") is marked since install");
                     }
             }
         });

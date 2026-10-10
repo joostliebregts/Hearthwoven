@@ -20,8 +20,8 @@ static class CargoTests
         }
 
         // ---------- units ----------
-        Check(PanelModel.CargoUnit(840) == "item-metres" && PanelModel.CargoUnit(2070000) == "item-km" && PanelModel.CargoText(2070000, 2070000) == "2 070 item-km" &&
-              PanelModel.CargoText(1430000, 2070000) == "1 430 item-km" && PanelModel.CargoText(60000, 2070000) == "60 item-km" && PanelModel.CargoText(3000, 2070000) == "3 item-km" && PanelModel.CargoText(3000, 40000) == "3.0 item-km" && PanelModel.CargoText(400, 2070000) == "0.4 item-km" && PanelModel.CargoText(840, 840) == "840 item-metres" &&
+        Check(PanelModel.CargoUnit(840) == "item-meters" && PanelModel.CargoUnit(2070000) == "item-km" && PanelModel.CargoText(2070000, 2070000) == "2 070 item-km" &&
+              PanelModel.CargoText(1430000, 2070000) == "1 430 item-km" && PanelModel.CargoText(60000, 2070000) == "60 item-km" && PanelModel.CargoText(3000, 2070000) == "3 item-km" && PanelModel.CargoText(3000, 40000) == "3.0 item-km" && PanelModel.CargoText(400, 2070000) == "0.4 item-km" && PanelModel.CargoText(840, 840) == "840 item-meters" &&
               PanelModel.CargoNumber(260, 840) == "260",
               "cargo: item-metres up to 1 000, item-km above (no k or M, the word list keeps km as the one abbreviation); parts in the unit of the total, whole km once the total is 100 or more (\"4\" beside \"1 430\", not \"4.0\")");
 
@@ -46,8 +46,8 @@ static class CargoTests
               "cargo: one line says first what an item-km is (1 item carried 1 km), then at the helm or pulling a cart, and straight line (in the panel's words: no \"at least\")");
         // fix2-rest: the cargo sits above the crew (above the fold), its hero one modest line and its bar thin, the honest line under the bar it qualifies, Coal legible on the plate
         Check(all.FindIndex(b => b.Kind == "section" && b.Title == "Cargo carried") >= 0 && !Every(PanelModel.Content(sailing)).Any(b => b.Title == "Cargo carried" || b.Title == "Usually aboard" || b.Title == PanelModel.ServerCargoTitle) && !all.Any(b => b.Title == PanelModel.SailedWithTitle) &&
-              hero.Tone == PanelModel.Compact && bar.Tone == PanelModel.Thin && all.FindIndex(b => b.Text == PanelModel.CargoNote(2070000)) > all.IndexOf(bar) && all.FindIndex(b => b.Text == PanelModel.CargoNote(2070000)) < all.FindIndex(b => b.Kind == "section" && b.Title == "Usually aboard"),
-              "cargo: Cargo carried is on its own page (Sailing has none of it), a compact hero, a thin bar, the honest line right under the bar");
+              hero.Tone == null && bar.Tone == PanelModel.Thin && all.FindIndex(b => b.Text == PanelModel.CargoNote(2070000)) > all.IndexOf(bar) && all.FindIndex(b => b.Text == PanelModel.CargoNote(2070000)) < all.FindIndex(b => b.Kind == "section" && b.Title == "Usually aboard"),
+              "cargo: Cargo carried is on its own page (Sailing has none of it), the one hero form (0.8 layout D+), a thin bar, the honest line right under the bar");
         var coal = bar.Items.First(i => i.Id == "$item_coal");
         Check(PanelModel.Legible(coal.Colour) == coal.Colour && PanelModel.Legible("#1c1a18") != "#1c1a18" && PanelModel.Legible("#a04a2a") == "#a04a2a" && PanelModel.Legible("#d6ccb3") == "#d6ccb3" && PanelModel.Legible(null) == null,
               "cargo: a near-black item colour (Coal) is lifted so it reads on the plate; rust, birch and other colours stay as they are: Coal " + coal.Colour);
@@ -65,8 +65,8 @@ static class CargoTests
         var small = new PanelInput { PlayerName = "Rowan", IsSelf = true, Character = new Dictionary<string, float> { ["DistanceSail"] = 900 }, Events = new SessionEvents(), DisplayName = _ => null };
         small.Events.CargoMeters["$item_wood"] = 600f; small.Events.CargoStretch["$item_wood"] = 40f;
         var sm = Every(PanelModel.Content(Page(small, Chapter.Voyages, "cargo"))).ToList();
-        Check(sm.Any(b => b.Kind == "hero" && b.Value == "600" && b.Title == "item-metres") && sm.First(b => b.Kind == "item" && b.Id == "$item_wood").Value == "15" && sm.First(b => b.Kind == "item").Value2 == "carried 40 m",
-              "cargo: 600 item-metres over 40 m reads \"600 item-metres\" and \"15, over 40 m in all\"");
+        Check(sm.Any(b => b.Kind == "hero" && b.Value == "600" && b.Title == "item-meters") && sm.First(b => b.Kind == "item" && b.Id == "$item_wood").Value == "15" && sm.First(b => b.Kind == "item").Value2 == "carried 40 m",
+              "cargo: 600 item-meters over 40 m reads \"600 item-meters\" and \"15, over 40 m in all\"");
 
         // ---------- Company > Together ----------
         var group = PanelSample.Evening(now); group.PlayerId = 11; PanelSample.Voyager(group); group.Fellows = PanelSample.Fellows(now);
@@ -77,9 +77,10 @@ static class CargoTests
         Check(cat != null && string.Join(",", cat.Items.Select(p => p.Id + "=" + p.Value)) == "Rowan=2 070 item-km,Edda=2 200 item-km,Finch=,Tor=240 item-km" &&
               Math.Abs(cat.Items.Sum(p => p.Fraction) - 1) < 1e-4 && cat.Items.Single(p => p.Id == "Finch").Fraction == 0,
               "cargo: one part per player in the fire's order, Finch (no haul) with no number; the shares sum to 1; no ranking");
-        Check(cat.Value2.StartsWith("since install") && cat.Value2.Contains("item-km: 1 item carried 1 km") && cat.Value2.EndsWith("straight line, so the real figure is higher") && together.Items.Where(c => c.Kind == "category" && c.Id != "cargo" && c.Id != "dealt").All(c => c.Value2 == "since each character was made") &&
+        Check(cat.Value2.StartsWith("Recorded from ") && cat.Value2.Contains("item-km: 1 item carried 1 km") && cat.Value2.EndsWith("straight line, so the real figure is higher") && cat.From == PanelModel.StartOf(group, "cargo") &&
+              together.Items.Where(c => c.Kind == "category" && c.Id != "cargo" && c.Id != "dealt" && c.Id != "built" && c.Id != "sailed").All(c => c.Value2 == null || c.Value2 == PanelModel.EarlierIncomplete) &&
               together.Items.Single(c => c.Id == "dealt").Value2 == null && PanelModel.CargoUnitWords(840) == "1 item carried 1 m" && PanelModel.CargoUnitWords(2070000) == "1 item carried 1 km",
-              "cargo: Together says on every chip since when it counts, and on the cargo chip what an item-km is (1 item carried 1 km) and that the straight line is a floor");
+              "cargo 0.7: the cargo chip says from when Hearthwoven counts it (its own counter's start), and what an item-km is (1 item carried 1 km) and that the straight line is a floor; the class A chips say at most \"Earlier counts may be incomplete.\"");
         var aloneT = PanelModel.Content(Page(voyager, Chapter.Company, "together")).FirstOrDefault(b => b.Kind == "together");
         Check(aloneT != null && aloneT.Items.Any(c => c.Id == "cargo" && c.Items.Count == 1 && c.Src == "pc"), "cargo: alone, your own row (Together keeps your row; the others join once they share)");
         var edda = group.Fellows.First(f => f.PlayerName == "Edda"); edda.ViewerName = "Rowan"; edda.PlayerNames = group.PlayerNames; edda.Fellows = group.Fellows.Where(f => f != edda).Concat(new[] { group }).ToList();

@@ -19,9 +19,12 @@ namespace Hearthwoven.Panel
     {
         internal static PanelUi Instance;
         internal static ConfigEntry<bool> Enabled;
-        internal static ConfigEntry<KeyCode> Hotkey, InfoKey, ViewKey, FilterKey;
+        internal static ConfigEntry<KeyCode> Hotkey, InfoKey, ViewKey, FilterKey, NumbersKey, BookKey;
         internal static ConfigEntry<int> KeyLayout;
         internal static ConfigEntry<float> Scale;
+        /// <summary>Since you were away (Chapters/AwayModel.cs): the book opens there by itself after a long break, and how long that is.</summary>
+        internal static ConfigEntry<bool> ShowWhileAway;
+        internal static ConfigEntry<float> WhileAwayHours;
         internal static DateTime? SessionStart;
         static int hiddenFrames = 99;
         // Like the game's own windows: still "visible" for a frame after closing, so the Escape that closed it does not
@@ -50,12 +53,18 @@ namespace Hearthwoven.Panel
             InfoKey = config.Bind("Panel", "InfoKey", KeyCode.T, "Key that opens and closes the About Hearthwoven page while the panel is open. T: I opens the AdventureBackpacks backpack.");
             ViewKey = config.Bind("Panel", "ViewKey", KeyCode.F, "Key that flips to the next view on pages with a view switch (the chips top right) while the panel is open. F: no mod in the group binds it.");
             FilterKey = config.Bind("Panel", "FilterKey", KeyCode.K, "Key that enters and leaves the filter focus on pages with a filter bar (Deeds > Crafting and Building; Battle: Overview, Damage, Foes) while the panel is open; inside it A/D move along a row, W/S between rows, Enter or Space chooses, Delete clears all. K: Valheim and the other mods on our server do not use it. Tab closes the book while it is open, and then does not open the inventory (with the book shut Tab opens the inventory as always). Set this to Tab to keep Tab for the filters; then Tab does not close the book. Not G: ZenDragon Zen.ModLib binds G to its radial menu.");
+            BookKey = config.Bind("Panel", "BookKey", KeyCode.B, "Key that steps whose book the panel shows while it is open: you, each fellow player, then Everyone, as the player row's chips do (the controller's Y does the same). B: the game binds no default to it.");
+            NumbersKey = config.Bind("Panel", "NumbersKey", KeyCode.Y, "Key that shows and hides 'About these numbers' on a page while the panel is open (the button on the page does the same). Y: the game binds no default to it, nor do the group's other mods.");
+            ShowWhileAway = config.Bind("Panel", "ShowWhileAway", true, "After a long break (WhileAwayHours), the first time you open the book it opens on Company > While away: a short story of what your fellow players did while you were away. Once per session; the page is always there under Company.");
+            WhileAwayHours = config.Bind("Panel", "WhileAwayHours", 24f, new ConfigDescription("How many hours you must have been away (from the end of your last session on this PC) before the book opens on 'Since you were away' by itself.", new AcceptableValueRange<float>(0f, 720f)));
             KeyLayout = config.Bind("Panel", "KeyLayout", 0, "Internal: which key layout this config was migrated to (1: Tab closes the book, filter key K). Do not edit.");
             var migrated = MigrateFilterKey(KeyLayout.Value, FilterKey.Value);   // once per config; before KeyClashCheck reads the key
             if (migrated.layout != KeyLayout.Value || migrated.filterKey != FilterKey.Value) { FilterKey.Value = migrated.filterKey; KeyLayout.Value = migrated.layout; }
             BindSnapshotConfig(config);   // Dev: panel snapshots (PanelSnapshot.cs)
             WatchConfig(config);          // live settings: a change in Gale applies while the game runs (ConfigWatch.cs)
             BindSampleConfig(config);     // Dev: the fictional sample for screenshots (PanelSampleUi.cs)
+            BindReuseConfig(config);      // Dev: the book's objects kept between drawings (PanelReuse.cs)
+            BindBenchConfig(config);      // Dev: the in-game page bench (PanelBench.cs)
             KeyClashCheck();              // once: is the filter key bound by another mod too? (PanelCheck.cs)
         }
 
@@ -92,7 +101,7 @@ namespace Hearthwoven.Panel
             if (KeyFocus == on) return;
             KeyFocus = on;
             var root = Instance ? Instance.root : null;
-            if (root) foreach (var m in root.GetComponentsInChildren<FocusMark>(true)) m.gameObject.SetActive(on && m.Focused);
+            if (root) foreach (var m in root.GetComponentsInChildren<FocusMark>(true)) { m.gameObject.SetActive(on && m.Focused); if (m.Hide) m.Hide.SetActive(!(on && m.Focused)); }
         }
 
         /// <summary>Moves a focus ring on or off its box (a feat chosen by hover or A/D): drawn only while KeyFocus holds.</summary>
@@ -137,12 +146,14 @@ namespace Hearthwoven.Panel
             var field = selected.GetComponent<InputField>(); return field && field.isFocused;
         }
 
-        // Dev.SelfCheck: the panel's per-frame cost (DevCheck.Perf, PerfMeter.cs); with it off no clock is read
+        // Dev.SelfCheck: the panel's per-frame cost and bytes (DevCheck.Perf, PerfMeter.cs; Dev.Bench's own meter while it sits idle,
+        // PanelBench.cs); with both off no clock is read
         void Update()
         {
-            if (!DevCheck.On || snapping) { Frame(); return; }   // a snapshot run renders every page on purpose: left out
-            var start = PerfMeter.Now;
-            try { Frame(); } finally { DevCheck.Perf.AddPanel(PerfMeter.Now - start); }
+            var meter = FrameMeter();
+            if (meter == null) { Frame(); return; }   // off, or a snapshot run that renders every page on purpose: left out
+            var start = PerfMeter.Now; var bytes = AllocClock.Span.Start();
+            try { Frame(); } finally { meter.AddPanel(PerfMeter.Now - start, bytes.Bytes()); }
         }
 
         void Frame()
@@ -151,26 +162,28 @@ namespace Hearthwoven.Panel
             {
                 LiveConfig();   // a changed .cfg (Gale): reload and apply (ConfigWatch.cs)
                 if (SnapshotTick()) return;   // Dev: a panel snapshot run owns the panel (PanelSnapshot.cs)
+                BenchTick();                  // Dev.Bench: the bench key starts a run (PanelBench.cs); nothing when off
                 CheckTick();                  // Dev.SelfCheck: the report key and the filter-key watch (PanelCheck.cs); nothing when off
                 if (!open)
                 {
                     if (hiddenFrames < 99) hiddenFrames++;
                     if (Enabled.Value && !Typing() && Pressed() && CanOpen()) Open();
+                    else if (Enabled.Value) PanelWarm.Step();   // 0.8.1: what a first opening would load, a little per frame beforehand (PanelWarm.cs)
                     return;
                 }
+                if (GameOnTop()) { Close(); return; }   // the book draws over everything, so a window of the game's own closes it (the console and a text input too)
                 if (Typing()) return;
                 PointerWatch();   // focus-visible: the mouse hides the focus ring, a key shows it (Key, Button)
                 // on the About page, Esc (or B) goes back to the page it was opened from; the hotkey still closes the panel
                 if (state.ShowAbout && !Pressed() && (Key(KeyCode.Escape) || Button("JoyButtonB"))) { state.ShowAbout = false; Render(true); return; }
                 // in the filter focus Esc leaves it (the page stays), as on the About page; Tab does the same first (unless Tab is the filter key)
-                if (PanelModel.FilterAnyOpen(state, view) && !state.ShowAbout && !Pressed() && (Key(KeyCode.Escape) || Button("JoyButtonB") || (TabCloses && Key(KeyCode.Tab)))) { PanelModel.FilterLeave(state, view); Render(true); return; }
-                if (Pressed() || Key(KeyCode.Escape) || (TabCloses && Key(KeyCode.Tab)) || Button("JoyButtonB") || !Player.m_localPlayer ||
-                    InventoryGui.IsVisible() || Minimap.IsOpen() || Menu.IsVisible() || Player.m_localPlayer.IsDead())
-                { Close(); return; }
+                if (PanelModel.FilterAnyOpen(state, FilterNow()) && !state.ShowAbout && !Pressed() && (Key(KeyCode.Escape) || Button("JoyButtonB") || (TabCloses && Key(KeyCode.Tab)))) { PanelModel.FilterLeave(state, view); Render(true); return; }
+                if (Pressed() || Key(KeyCode.Escape) || (TabCloses && Key(KeyCode.Tab)) || Button("JoyButtonB")) { Close(); return; }
                 if (state.FilterRow >= 0 && !state.ShowAbout && FilterKeys()) { }   // the filter focus: A/D, W/S, Enter, Delete and the filter key are its own (FacetModel.cs)
                 else if (FilterKey.Value != KeyCode.None && !state.ShowAbout && view != null && Key(FilterKey.Value) && PanelModel.FilterKeyPressed(state, view)) Render(true);
                 else if (Key(KeyCode.Backspace)) { if (PanelModel.Back(state)) Render(true); }   // back to the page you came from
                 else if (FeatsKeys()) { }   // on the Feats chapter A/D (and the D-pad) choose the feat; Q/E still turn the chapters (Chapters/FeatsUi.cs)
+                else if (FoesKeys()) { }    // 0.8: on Foes A/D move between the foes, Enter opens one; Q/E still turn the chapters (Chapters/FoesKeysUi.cs)
                 else if (Button("TabLeft") || Button("JoyTabLeft") || Key(KeyCode.LeftArrow) || Key(KeyCode.A)) { state.ShowAbout = false; PanelModel.StepChapter(state, -1); Render(true); }
                 else if (Button("TabRight") || Button("JoyTabRight") || Key(KeyCode.RightArrow) || Key(KeyCode.D)) { state.ShowAbout = false; PanelModel.StepChapter(state, 1); Render(true); }
                 else if (Key(KeyCode.W) || Key(KeyCode.UpArrow) || Button("JoyDPadUp")) { PanelModel.StepList(state, view, -1); Render(true); }   // on About: its own list
@@ -178,21 +191,51 @@ namespace Hearthwoven.Panel
                 else if (view != null && view.Toggle.Count > 0 && Button("JoyDPadLeft")) { state.TheyReceived = true; Render(true); }
                 else if (view != null && view.Toggle.Count > 0 && Button("JoyDPadRight")) { state.TheyReceived = false; Render(true); }
                 else if (InfoKey.Value != KeyCode.None && Key(InfoKey.Value)) { state.ShowAbout = !state.ShowAbout; Render(true); }
+                else if (NumbersKey != null && NumbersKey.Value != KeyCode.None && !state.ShowAbout && Key(NumbersKey.Value)) { state.ShowNumbers = !state.ShowNumbers; Render(true); }   // About these numbers (RecordedModel.cs)
                 else if (view != null && !state.ShowAbout && ViewKey.Value != KeyCode.None && Key(ViewKey.Value)) ViewKeyPressed();
+                else if (view != null && !state.ShowAbout && ((BookKey != null && BookKey.Value != KeyCode.None && Key(BookKey.Value)) || Button("JoyButtonY"))) { if (PanelModel.StepBook(state, view)) Render(true); }   // 0.8: the player row by keys and pad
                 Wheel();
+                PageKeys();   // 0.8: Page Up / Page Down and the pad's right stick scroll the page (0.7 scrolled by the wheel only; Chapters/FoesKeysUi.cs)
                 if (Time.unscaledTime >= nextRefresh) Render(false);
             }
-            catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel: " + e.Message); Close(); }
+            catch (Exception e) { Failed("panel", e); PanelModel.ToSafePage(state); Close(); }   // a page that throws never gets here (Draw): this is the keys or the frame itself; the next opening starts on a page that cannot repeat it
         }
 
-        string baseKeys = "";
-        public const string ScrollKey = "[Wheel] Scroll";   // shown in the key line only while a page has more below it (the soft fade says where; this says how)
+        // what went wrong, in the game's log: the first time with its stack (one per place and cause this session), after that one short line,
+        // so a book that closes is never silent and the log is not flooded
+        readonly HashSet<string> failedOnce = new HashSet<string>();
+        void Failed(string what, Exception e)
+        {
+            try
+            {
+                if (FirstFailure(what, e)) Debug.LogWarning("[Hearthwoven] " + what + " failed (logged once with its stack): " + e);
+                else Debug.LogWarning("[Hearthwoven] " + what + ": " + e.Message);
+            }
+            catch { }   // the log itself never throws
+        }
+
+        // the first time this place fails for this cause (its type and the first Hearthwoven line of its stack) this session
+        bool FirstFailure(string what, Exception e)
+        {
+            try
+            {
+                var at = (e?.StackTrace ?? "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Contains("Hearthwoven")) ?? "";
+                return failedOnce.Add(what + "|" + e?.GetType().FullName + "|" + at);
+            }
+            catch { return false; }
+        }
+
+        List<string> baseKeys = new List<string>();
+        public const string ScrollKey = PanelModel.ScrollKey;
+        // the key line as wide as it is drawn (PanelModel.KeyLine leaves out the least needed keys when it is not): never wrapped, never cut
+        bool KeysFit(string line) => !keys || keys.GetPreferredValues(line).x <= keys.rectTransform.rect.width;
 
         void LateUpdate()
         {
-            if (!DevCheck.On || snapping) { LateFrame(); return; }
-            var start = PerfMeter.Now;
-            try { LateFrame(); } finally { DevCheck.Perf.AddPanel(PerfMeter.Now - start); }
+            var meter = FrameMeter();
+            if (meter == null) { if (!BenchLate()) LateFrame(); return; }   // Dev.Bench times the late work after each page it draws (PanelBench.cs)
+            var start = PerfMeter.Now; var bytes = AllocClock.Span.Start();
+            try { LateFrame(); } finally { meter.AddPanel(PerfMeter.Now - start, bytes.Bytes()); }
         }
 
         void LateFrame()
@@ -201,22 +244,25 @@ namespace Hearthwoven.Panel
             if (open && ZInput.IsMouseActive()) { ZCursor.LockState = CursorLockMode.None; ZCursor.Show(); }
             if (root && root.activeSelf && plateRefits > 0 && plateFill && plateFill.enabled) { plateRefits--; CutPlate(); }   // the plate measured again while the page settles
             if (open) foreach (var s in scrollers) { Ease(s); Fades(s); }
-            if (open && keys)
-            {
-                var more = scrollers.Any(s => s.Rect && s.Rect.content && Room(s) > 0f);
-                var want = more ? baseKeys + "      " + ScrollKey : baseKeys;
-                if (keys.text != want) keys.text = want;
-            }
+            if (open && keys) KeyLineNow();   // the key line with the wheel key while a list has more below: worked out only when that changes (PanelIdle.cs)
         }
 
         static bool Pressed() => Hotkey.Value != KeyCode.None && Key(Hotkey.Value);
 
-        static bool CanOpen()
+        static bool CanOpen() => !GameOnTop() && (!Chat.instance || !Chat.instance.HasFocus()) && !Hud.IsPieceSelectionVisible() && !Hud.InRadial();
+
+        // 0.8.1: the book sits over the game's HUD (BookOrder), so it gives way to every window of the game's own that must be seen, by the game's
+        // own calls: the loading and black screen (Hud.UpdateBlackScreen's own test: no player, dead, teleporting, shutting down, sleeping), a
+        // popup (connection lost, an error, a question), the pause menu, a text input (a sign, a portal), the console, the inventory, the map, a
+        // trader, a rune stone, a cutscene. Never through a method this mod patches: PanelHooks.CountAsWindow makes the trader's IsVisible true
+        // while the book is open, so the book took itself for a trader and closed on the next frame; the trader's window is read off its panel
+        static bool GameOnTop()
         {
             var p = Player.m_localPlayer;
-            return p && !p.IsDead() && !p.InCutscene() && (!Chat.instance || !Chat.instance.HasFocus()) && !global::Console.IsVisible() && !TextInput.IsVisible() &&
-                   !Menu.IsVisible() && !InventoryGui.IsVisible() && !Minimap.IsOpen() && !StoreGui.IsVisible() && !Hud.IsPieceSelectionVisible() && !Hud.InRadial() &&
-                   (!TextViewer.instance || !TextViewer.instance.IsVisible());
+            var store = StoreGui.instance;
+            return !p || p.IsDead() || p.IsTeleporting() || (Game.instance && Game.instance.IsShuttingDown()) || p.IsSleeping() || p.InCutscene() ||
+                   UnifiedPopup.IsVisible() || Menu.IsVisible() || TextInput.IsVisible() || global::Console.IsVisible() || InventoryGui.IsVisible() || Minimap.IsOpen() ||
+                   (store && store.m_rootPanel && store.m_rootPanel.activeSelf) || (TextViewer.instance && TextViewer.instance.IsVisible());
         }
 
         CursorLockMode lockBefore; bool cursorBefore;
@@ -224,9 +270,11 @@ namespace Hearthwoven.Panel
         void Open()
         {
             state.ShowAbout = false;   // always reopen on the page, not on About
+            state.ShowNumbers = false;   // and with "About these numbers" shut
             KeyFocus = false; pointerKnown = false;   // the hotkey that opened the panel is not a move inside it: no focus ring yet
             PanelLook.Resolve();
             PanelLook.RetryMissing();
+            ForgetChrome();   // each opening draws the tabs, list and player row once anew (an icon missing last time may load now; PanelReuse.cs)
             LoadPrefs();   // this character's filter choices (PanelPrefs.cs)
             if (!root) Build();
             ApplyScale();   // Panel.Scale, read each time the panel opens
@@ -234,6 +282,9 @@ namespace Hearthwoven.Panel
             lockBefore = ZCursor.LockState; cursorBefore = ZCursor.IsRequested;
             open = true; hiddenFrames = 0; shown = null;
             PanelModel.ForgetHistory(state);   // Backspace stays within this opening
+            if (!SampleMode.On)   // Since you were away: the first opening of a session after a long break turns to it (Chapters/AwayModel.cs)
+                try { PanelModel.OpenAway(state, new PanelInput { SessionStartUtc = SessionStart, PreviousSessionEndUtc = Plugin.PreviousSessionEndUtc }, ShowWhileAway == null || ShowWhileAway.Value, WhileAwayHours?.Value ?? 24f, Plugin.CurrentSession); }
+                catch (Exception e) { Debug.LogWarning("[Hearthwoven] while away (open): " + e.Message); }
             GroupShare.Request();   // fellow players' stats, if you share; rate-limited inside
             Render(true);
         }
@@ -244,6 +295,7 @@ namespace Hearthwoven.Panel
             var wasOpen = open;
             open = false; hiddenFrames = 0;
             if (root) root.SetActive(false);
+            if (wasOpen) PanelModel.LeaveAway(state);   // opened by itself on Since you were away and still there: the next opening is the usual one
             SavePrefs();
             if (!wasOpen) return;
             ZCursor.LockState = lockBefore;
@@ -255,7 +307,7 @@ namespace Hearthwoven.Panel
         // the filter focus (the filter key entered it): along a row, between rows, choose, clear all, leave. false when no key of it was pressed.
         bool FilterKeys()
         {
-            if (view == null || PanelModel.FilterOf(view) == null) { state.FilterRow = -1; return false; }   // leaves the focus; every page keeps its own bar open or shut
+            if (view == null || FilterNow() == null) { state.FilterRow = -1; return false; }   // leaves the focus; every page keeps its own bar open or shut
             bool done;
             if (FilterKey.Value != KeyCode.None && Key(FilterKey.Value)) done = PanelModel.FilterKeyPressed(state, view);   // leaves
             else if (Key(KeyCode.A) || Key(KeyCode.LeftArrow) || Button("JoyDPadLeft")) done = PanelModel.FilterMove(state, view, -1);
@@ -324,7 +376,7 @@ namespace Hearthwoven.Panel
             // a 1 px gold edge of four thin rects, the letter gold at 60 %
             var cap = Img(parent, "Key " + key, null, new Color(0f, 0f, 0f, 0.35f));
             Edge(cap.rectTransform, new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.35f));
-            var t = Label(cap.transform, key, 13, new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.6f), style: FontStyles.Bold, align: TextAlignmentOptions.Center);
+            var t = Label(cap.transform, key, 14, new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.6f), style: FontStyles.Bold, align: TextAlignmentOptions.Center);
             t.rectTransform.Stretch(); t.textWrappingMode = TextWrappingModes.NoWrap; t.name = "Letter";
             return cap;
         }
@@ -363,7 +415,7 @@ namespace Hearthwoven.Panel
         }
 
         // a click runs outside Update: same safety net
-        Action Safe(Action a) => () => { try { a(); } catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel click: " + e.Message); Close(); } };
+        Action Safe(Action a) => () => { try { a(); } catch (Exception e) { Failed("panel click", e); PanelModel.ToSafePage(state); Close(); } };
 
         // ---------- data ----------
 
@@ -402,8 +454,7 @@ namespace Hearthwoven.Panel
             return n;
         }
 
-        // fellow players' snapshots, parsed once per received copy
-        static readonly Dictionary<string, KeyValuePair<string, PanelInput>> parsed = new Dictionary<string, KeyValuePair<string, PanelInput>>();
+        // fellow players' snapshots, parsed once per received copy: shared with the trail and the live-update worker (FellowCopies.cs, 0.8)
 
         // name = the fellow's shown label (GroupShare.Fellows): the name, or "Rowan (2)" when two people share it; the copy is found by key
         PanelInput Fellow(string name, PanelInput self)
@@ -411,17 +462,35 @@ namespace Hearthwoven.Panel
             if (SampleMode.On) return SampleFellow(name, self);   // Dev.SampleData (PanelSampleUi.cs)
             var key = string.IsNullOrEmpty(name) || !GroupShare.Sharing() ? null : GroupShare.Fellows.KeyOfLabel(name, self.PlayerName);
             if (key == null || !GroupShare.Group.TryGetValue(key, out var json)) return null;
-            if (!parsed.TryGetValue(key, out var hit) || !string.Equals(hit.Key, json, StringComparison.Ordinal))   // the server resends unchanged copies
-                parsed[key] = hit = new KeyValuePair<string, PanelInput>(json, PanelInput.FromSnapshot(json));
-            var other = hit.Value;
+            var other = FellowCopies.Of(key, json);   // the server resends unchanged copies: read once
             if (other == null) return null;
             other.PlayerName = name;   // the label: chips, colours and pages follow this person, not whoever else has the name
             other.NowUtc = self.NowUtc; other.DisplayName = Localized; other.PlayerNames = self.PlayerNames; other.ViewerName = self.PlayerName;
-            other.ItemKind = GameData.ItemKind; other.GatherKind = GameData.GatherKind; other.PieceKind = GameData.PieceKind; other.ItemToken = GameData.ItemToken; other.StationDish = GameData.StationDish; other.DishType = GameData.DishType; other.DishBoost = GameData.DishBoost;
+            other.ItemKind = GameData.ItemKind; other.GatherKind = GameData.GatherKind; other.PieceKind = GameData.PieceKind; other.ItemToken = GameData.ItemToken; other.RecipeYield = GameData.RecipeYield; other.StationDish = GameData.StationDish; other.DishType = GameData.DishType; other.DishBoost = GameData.DishBoost;
             other.Foe = BattleGame.Foe; other.Arrows = BattleGame.Arrows;
             other.CropOf = GameData.CropOf; other.ItemType = GameData.ItemType; other.MainMaterial = GameData.MainMaterial; other.PieceTab = GameData.PieceTab; other.PieceMaterial = GameData.PieceMaterial;
             other.Book = GroupShare.BookOf(key, GroupShare.Fellows.NameOf(key));   // 0.6: their part of the server's book, which came with the group list
+            other.ReceivedUtc = GroupShare.ReceivedAt(key); other.SeenBefore = Plugin.Marks?.BeforeOf(key);   // 0.7 Recent: when this copy came, and how your PC saw them before this session
+            other.Trail = GroupShare.Trails.Of(key); other.Timed = GroupShare.ServerLive && LiveFellows.CopyIdOf(json).Length > 0; other.ServerLive = GroupShare.ServerLive;   // B33: their numbers inside your session
+            other.OnThisSession = GroupShare.Joins.SeenThisConnection(GroupShare.Fellows.NameOf(key)); other.ViewerSessionStartUtc = self.SessionStartUtc;
+            other.Cached = GroupShare.IsCached(key);   // B23: shown from this PC until the server's copy comes
             return other;
+        }
+
+        // what your inventory holds now, read once per page build and only when a page asks (the Foes ranking): item tokens
+        static Func<string, bool> OwnedNow()
+        {
+            HashSet<string> held = null;
+            return t =>
+            {
+                if (held == null)
+                {
+                    held = new HashSet<string>();
+                    var inv = Player.m_localPlayer ? Player.m_localPlayer.GetInventory() : null;
+                    if (inv != null) foreach (var it in inv.GetAllItems()) if (it?.m_shared?.m_name != null) held.Add(it.m_shared.m_name);
+                }
+                return t != null && held.Contains(t);
+            };
         }
 
         static PanelInput Gather()
@@ -432,9 +501,10 @@ namespace Hearthwoven.Panel
                 NowUtc = DateTime.UtcNow, SessionStartUtc = SessionStart,
                 Session = Plugin.Session, Events = Plugin.EventsSinceInstall, Log = Plugin.Log, DamageSinceInstall = Plugin.DamageSinceInstall, BiomeSinceInstall = Plugin.BiomeSinceInstall, BiomeFromUtc = Plugin.BiomeFromUtc, DisplayName = Localized,
                 SessionOnly = Plugin.Events, History = Plugin.History, Pending = Plugin.PendingDay(),   // the day windows (HISTORY-06.md): the saved days plus what this session counted since the last save
+                ArmourSession = Plugin.Armour, ArmourMinutes = Plugin.ArmourMinutes, ArmourSince = Plugin.ArmourSince, ArmourBook = Plugin.ArmourBook, ArmourPending = Plugin.ArmourPending(), ArmourFromUtc = Plugin.ArmourFromUtc,   // Defence's armour view (0.7)
                 ItemKind = GameData.ItemKind, GatherKind = GameData.GatherKind, PieceKind = GameData.PieceKind, ItemColour = PanelLook.IconColour,
-                Foe = BattleGame.Foe, Arrows = BattleGame.Arrows,
-                CropOf = GameData.CropOf, ItemType = GameData.ItemType, MainMaterial = GameData.MainMaterial, PieceTab = GameData.PieceTab, PieceMaterial = GameData.PieceMaterial, ItemToken = GameData.ItemToken, StationDish = GameData.StationDish, DishType = GameData.DishType, DishBoost = GameData.DishBoost,
+                Foe = BattleGame.Foe, Arrows = BattleGame.Arrows, Gear = BattleGame.Gear, Owned = OwnedNow(),   // Foes' ranking (0.7): bolts and weapons, what you carry
+                CropOf = GameData.CropOf, ItemType = GameData.ItemType, MainMaterial = GameData.MainMaterial, PieceTab = GameData.PieceTab, PieceMaterial = GameData.PieceMaterial, ItemToken = GameData.ItemToken, RecipeYield = GameData.RecipeYield, StationDish = GameData.StationDish, DishType = GameData.DishType, DishBoost = GameData.DishBoost,
                 PlayerNames = new Dictionary<long, string>(),
                 Book = GroupShare.Sharing() ? GroupShare.OwnBook : null,   // 0.6: your part of the server's book (cargo loaded and unloaded, born near), while you share
                 Solo = ZNet.IsSinglePlayer,   // singleplayer: one line where fellow players would be (PanelModel.SoloNote)
@@ -444,18 +514,19 @@ namespace Hearthwoven.Panel
             {
                 input.PlayerName = profile.GetName();
                 input.PlayerId = profile.GetPlayerID();
-                input.CharacterMade = profile.m_dateCreated; input.InstalledUtc = Plugin.InstalledUtc;   // the zones' two dates (ZonesModel.cs)
+                input.CharacterMade = profile.m_dateCreated; input.InstalledUtc = Plugin.InstalledUtc;   // the character's and the install's dates (About, RecordedModel)
                 var stats = profile.m_playerStats;
                 // slot 0 only: the raw totals (the other slots overlap, see Snapshot.cs)
                 if (stats != null && stats.Length > 0 && stats[0] != null)
                 {
-                    input.Character = stats[0].m_stats.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value);
+                    input.Character = stats[0].m_stats.ToDictionary(kv => GameNames.Of(kv.Key), kv => kv.Value);   // names worked out once (GameNames: Mono's Enum.ToString reflects per call)
                     input.ItemsCrafted = stats[0].m_itemCraftStats;
                     input.PiecesPlaced = stats[0].m_piecesPlacedStats;
                     input.ItemsPickedUp = stats[0].m_itemPickupStats;
                     input.Baseline = Plugin.Baseline;
                     input.ExactAtBaseline = Plugin.ExactAtBaseline;
                     input.BaselineAt = Plugin.BaselineAt;
+                    input.Starts = Plugin.Starts;   // the counter groups' start dates (0.7 "Recorded from", RecordedModel.StartOf)
                     input.Harvested = stats[0].m_pickableStats;
                     if (stats[0].m_enemyStats != null && stats[0].m_enemyStats.Length > 0) input.EnemyKills = stats[0].m_enemyStats[0];
                 }
@@ -463,14 +534,16 @@ namespace Hearthwoven.Panel
             var skills = Player.m_localPlayer ? Player.m_localPlayer.GetSkills()?.GetSkillList() : null;
             if (skills != null)
             {
-                input.SkillLevels = skills.ToDictionary(s => s.m_info.m_skill.ToString(), s => s.m_level);
-                input.SkillProgress = skills.ToDictionary(s => s.m_info.m_skill.ToString(), s => s.GetLevelPercentage());
+                input.SkillLevels = skills.ToDictionary(s => GameNames.Of(s.m_info.m_skill), s => s.m_level);
+                input.SkillProgress = skills.ToDictionary(s => GameNames.Of(s.m_info.m_skill), s => s.GetLevelPercentage());
             }
             foreach (var p in Player.GetAllPlayers())
                 if (p) input.PlayerNames[p.GetPlayerID()] = p.GetPlayerName();
             input.KnownBiomes = KnownBiomes(Player.m_localPlayer);
             input.RecipeKnown = t => Player.m_localPlayer && !string.IsNullOrEmpty(t) && Player.m_localPlayer.IsRecipeKnown(t);   // Best arrow: the recipes your character knows
             input.Feats = Plugin.FeatsLedger;   // the feats earned on this PC and their counters (FeatsLedger); null until the local totals load
+            input.Deeds = Plugin.DeedsNow(); input.PreviousSessionEndUtc = Plugin.PreviousSessionEndUtc;   // Deeds > Recent and Since you were away (0.7, RecentModel.cs)
+            BattleHooks.Into(input);   // 0.8: the battle record (foes per creature, the feed, the foes kept on this PC)
             return input;
         }
 
@@ -481,11 +554,17 @@ namespace Hearthwoven.Panel
         // the biomes this character found, from the game's own record (Player.m_knownBiome, the set behind "new biome
         // discovered"). The game keeps names there: "$biome_meadows" in older characters, the shown name (with a variant's
         // prefix or suffix) in newer ones; each maps back to its Heightmap.Biome. Reads only; null when it cannot be read.
-        static List<string> KnownBiomes(Player p)
+        // Worked out again only when the set grows, the character changes or the language does (0.8.1: every refresh matched
+        // each name against each biome, a few hundred strings): each caller gets its own copy of the list.
+        static Player knownFor; static int knownCount = -1; static string knownLanguage; static List<string> knownFound;
+        internal static List<string> KnownBiomes(Player p)   // also sent in the snapshot (Plugin, "knownBiomes"): the group feats' gate
         {
             try
             {
                 if (!p || knownBiome == null || !(knownBiome.GetValue(p) is IEnumerable<string> names)) return null;
+                var count = names is ICollection<string> c ? c.Count : -1;
+                var language = Localization.instance != null ? Localization.instance.Localize("$biome_meadows") : "";
+                if (count >= 0 && knownFound != null && ReferenceEquals(knownFor, p) && count == knownCount && language == knownLanguage) return new List<string>(knownFound);
                 var list = names.Where(n => !string.IsNullOrEmpty(n)).ToList();
                 var found = new List<string>();
                 foreach (var b in journey)
@@ -497,7 +576,8 @@ namespace Hearthwoven.Panel
                                       (!string.IsNullOrEmpty(sector) && n.Split(' ').Contains(sector))))
                         found.Add(b.ToString());
                 }
-                return found;
+                knownFor = p; knownCount = count; knownLanguage = language; knownFound = found;
+                return new List<string>(found);
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] known biomes: " + e.Message); return null; }
         }
@@ -510,10 +590,11 @@ namespace Hearthwoven.Panel
             try
             {
                 var profile = Game.instance?.GetPlayerProfile(); if (profile == null) return;
-                var path = PanelPrefs.PathFor(System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "Hearthwoven"), profile.GetPlayerID());
+                var dir = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "Hearthwoven");
+                var path = PanelPrefs.PathFor(dir, profile.GetPlayerID(), profile.GetName());   // 0.8: per character (id + name), as the local totals
                 if (path == prefsPath) return;
                 state.FilterRow = -1;
-                prefsSaved = PanelPrefs.Load(path, state); prefsPath = path;
+                prefsSaved = PanelPrefs.Load(path, state, PanelPrefs.PathFor(dir, profile.GetPlayerID()), m => Debug.LogWarning("[Hearthwoven] " + m)); prefsPath = path;
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel filter choices not loaded: " + e.Message); }
         }
@@ -524,20 +605,51 @@ namespace Hearthwoven.Panel
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel filter choices not saved: " + e.Message); prefsPath = null; }
         }
 
-        // Dev.SelfCheck: one refresh's cost (model build + UI draw; DevCheck.Perf). The self-check's page walk and the snapshot
-        // runs (snapping) render every page on purpose and are left out.
+        // Dev.SelfCheck: one refresh's cost (model build + UI draw, its bytes, and a rebuild's phases with the canvas after it;
+        // DevCheck.Perf), and Dev.Bench's pages (PanelBench.cs). The self-check's page walk and the snapshot runs (snapping) render
+        // every page on purpose and are left out.
         void Render(bool force)
         {
-            if (!DevCheck.On || snapping) { Draw(force); return; }
-            var start = PerfMeter.Now;
-            try { Draw(force); } finally { DevCheck.Perf.AddRefresh(PerfMeter.Now - start); }
+            var meter = FrameMeter(); var bench = benchRender;
+            var parity = ParityBefore(force);   // Dev.SelfCheck: the first drawings with Dev.UiReuse are compared with a fresh drawing (PanelReuse.cs)
+            if (meter == null && bench == null) Draw(force);
+            else MeasuredRender(force, meter, bench);
+            if (parity) ReuseParity();
         }
 
+        // every page is built and drawn inside this net: a page that throws (its model or its drawing) shows "This page could not be drawn"
+        // with the tabs, the list and the player row (CouldNotDraw.cs), and its reason goes to the log once with the stack. Before, the
+        // throw reached Frame's catch, which shut the book in the same frame, on every open (0.8 play-test, Deeds > Crafting with Everyone)
         void Draw(bool force)
+        {
+            try { drawing = null; DrawPage(force); }
+            catch (Exception e) { DrawCouldNot(force, e); }
+        }
+
+        string drawing, broken;   // the page JSON being drawn now; the last one whose drawing threw
+
+        void DrawCouldNot(bool force, Exception e)
+        {
+            broken = drawing; drawing = null;   // null: the model threw, before any drawing
+            var page = (state.ShowAbout ? "About/" + state.AboutPage : state.Chapter + "/" + (state.PageOf(state.Chapter) ?? "")) + (string.IsNullOrEmpty(state.Player) ? "" : ", " + state.Player + "'s book") + (state.Everyone ? ", Everyone on" : "");
+            if (FirstFailure("page " + page, e)) Debug.LogWarning("[Hearthwoven] page " + page + " could not be drawn; the book shows that instead (logged once with its stack): " + e);   // the refresh every 2 s tries again, quietly
+            EndPlate();   // a plate left half drawn leaves its column and switches set
+            PanelInput self = null;
+            try { self = Gather(); } catch { }
+            var v = PanelModel.CouldNotDraw(self, state);
+            try { PanelModel.AddPlayers(v, self?.PlayerName ?? "", GroupNames(self?.PlayerName ?? ""), state.Player, SharingShown(), self?.Solo ?? false, null, state.BookKey); } catch { }   // the row: a name or Everyone leads away from the page
+            view = v;
+            var json = PanelModel.ToJson(v);
+            if (!force && json == shown) return;
+            shown = json;
+            Fill(v);   // this failing too goes to Frame's catch: the book closes, logged
+        }
+
+        void DrawPage(bool force)
         {
             if (force) SavePrefs();
             nextRefresh = Time.unscaledTime + 2f;
-            if (GroupShare.Sharing()) GroupShare.Request();   // keeps the group fresh while open (at most every 30 s)
+            if (GroupShare.Sharing()) { GroupShare.Request(); GroupShare.LiveRequest(); }   // keeps the group fresh while open: full copies at most every 30 s, live updates every 10 s (0.7)
             var self = Gather();
             self.Fellows = new List<PanelInput>();
             var subject = Fellow(state.Player, self);
@@ -547,18 +659,27 @@ namespace Hearthwoven.Panel
             self.Fellows = fellows;
             FeatsRender(self, subject == null);   // note the feats earned so far; opening the Feats page marks them seen (Chapters/FeatsUi.cs)
             if (subject != null) subject.Fellows = fellows.Where(f => f != subject).Concat(new[] { self }).ToList();
-            state.Hotkey = Hotkey.Value == KeyCode.None ? "" : Hotkey.Value.ToString();
-            state.InfoKey = InfoKey.Value == KeyCode.None ? "" : InfoKey.Value.ToString();
-            state.ViewKey = ViewKey.Value == KeyCode.None ? "" : ViewKey.Value.ToString();
-            state.FilterKey = FilterKey.Value == KeyCode.None ? "" : FilterKey.Value.ToString();
+            state.Hotkey = Hotkey.Value == KeyCode.None ? "" : GameNames.Of(Hotkey.Value);
+            state.InfoKey = InfoKey.Value == KeyCode.None ? "" : GameNames.Of(InfoKey.Value);
+            state.ViewKey = ViewKey.Value == KeyCode.None ? "" : GameNames.Of(ViewKey.Value);
+            state.FilterKey = FilterKey.Value == KeyCode.None ? "" : GameNames.Of(FilterKey.Value);
+            state.NumbersKey = NumbersKey == null || NumbersKey.Value == KeyCode.None ? "" : GameNames.Of(NumbersKey.Value);
+            state.BookKey = BookKey == null || BookKey.Value == KeyCode.None ? "" : GameNames.Of(BookKey.Value);
+            MarkPhase(1);   // measured renders only (PanelBench.cs): the input gathered
             var v = PanelModel.Build(subject ?? self, state);
-            PanelModel.AddPlayers(v, self.PlayerName, GroupNames(self.PlayerName), state.Player, SharingShown(), self.Solo);
+            PanelModel.AddPlayers(v, self.PlayerName, GroupNames(self.PlayerName), state.Player, SharingShown(), self.Solo, SampleMode.On ? null : GroupShare.Joining(self.PlayerName), state.BookKey);   // 0.7: who just joined, dimmed; 0.8: the book key in the key line
             view = v;
             PanelModel.Visited(state, v.Active, v.Page);   // the back stack (Backspace)
+            MarkPhase(2);   // the model built
             var json = PanelModel.ToJson(v);
             if (!force && json == shown) return;   // nothing new: keep what is on screen
-            shown = json;
+            if (!force && json == broken) return;   // the page whose drawing threw, unchanged: its could-not-draw page stays, no redraw every 2 s
+            shown = drawing = json;
+            MarkPhase(3); if (marks != null) marks.Drew = true;
             Fill(v);
+            drawing = null;
+            MarkPhase(4);   // the UI objects made; the canvas and text meshes follow (MeasuredRender)
+            FollowFoe();   // 0.8: a foe the keys moved to is brought into view (Chapters/FoesKeysUi.cs)
         }
 
         // ---------- building the frame (once) ----------
@@ -568,21 +689,24 @@ namespace Hearthwoven.Panel
         // chrome A2 (Joost 2026-10-08, proto/chrome-A2.png + chromeA*.css): 52 px tabs inset for the Q/E keycaps, a 190 px list of
         // 40 px rows from y 180, the page heading and the list title at y 144, the content right after the list
         const float W = 1180, H = 760, Inset = 32, ListW = 190, HeadTop = 144, ListTop = 180, Foot = 72, TabTop = 77, TabH = 52, TabInset = 70, RowH = 40;
+        /// <summary>The book's canvas order: on top of everything (a 16-bit value; its tags sit a few above it, CompareUi.ReasonTag, EveryoneWhyTag).</summary>
+        const int BookOrder = 30000;
         static readonly Color Amber = new Color(1f, 0.81f, 0.5f);
 
         void Build()
         {
+            ForgetChrome();   // the tabs, list and player row of an earlier frame are gone with it (PanelReuse.cs)
             root = new GameObject("Hearthwoven", typeof(RectTransform));
             DontDestroyOnLoad(root);
             var canvas = root.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 30;
+            canvas.sortingOrder = BookOrder;   // over the game's HUD and other mods' (at 30 the ship's rudder and wind, the hotbar and a clock drew over the book); it gives way in GameOnTop
             var scaler = root.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = 1f;
             scaler.referencePixelsPerUnit = 100;   // kit sprites are 100 px per unit, borders in source pixels
-            root.AddComponent<GraphicRaycaster>();
+            root.AddComponent<PanelRaycaster>();
 
             // the panel only: the world stays visible around it (the frame's centre is translucent)
             var bg = Kit(root.transform, "Panel", "frame", raycast: true);
@@ -637,9 +761,10 @@ namespace Hearthwoven.Panel
             plateEdge = Kit(right, "PlateEdge", "meter-track"); PlateBox(plateEdge.rectTransform, 0);
             content = Scroller("Blocks", right, 0, 76, -1, 0, 12);
 
-            keys = Label(frame, "", 15, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
+            keys = Label(frame, "", 15, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); keys.textWrappingMode = TextWrappingModes.NoWrap;
             keys.rectTransform.Bottom(64, 22, W - 128, 30);
             BuildSampleTag();   // "Sample data" in the footer while Dev.SampleData is on (PanelSampleUi.cs)
+            SpareHolder(root.transform);   // where cleared labels wait for the next drawing (PanelReuse.cs)
             root.SetActive(false);
         }
 
@@ -667,8 +792,27 @@ namespace Hearthwoven.Panel
 
         // ---------- scrolling: one wheel notch moves at least one row; a soft fade where more lies beyond the edge ----------
 
-        class Scroll { public ScrollRect Rect; public Image Top, Bottom; public GameObject Cue; public bool ByRow, Easing; public float Target, Velocity; }
+        // Key: an area inside the page, by its path under the content column (B31: kept across a rebuild of the same page); Placed: its block set its own position
+        class Scroll { public ScrollRect Rect; public Image Top, Bottom; public GameObject Cue; public bool ByRow, Easing, Placed; public float Target, Velocity; public string Key; }
         readonly List<Scroll> scrollers = new List<Scroll>();
+
+        // B31 (Joost in game 0.7: on Titles, after scrolling down, a hover near the top threw the list back to the top). A scroll area inside the page is
+        // made anew each time the page is drawn, and the page is drawn again on the same page too: every refresh whose model changed (a hover chooses
+        // a feat, PanelState.FeatSel; a fellow's update arrives). So where the player left each such area is noted before the page is cleared and given
+        // back to the new one; only a new page (another chapter, page or book) starts at the top.
+        readonly Dictionary<string, float> keptScroll = new Dictionary<string, float>();
+        static float ScrollAt(Scroll s) => s.Easing ? s.Target : s.Rect.content.anchoredPosition.y;   // where the wheel is taking it, if it is still gliding
+        string ScrollPath(Transform t)
+        {
+            var parts = new List<string>();
+            for (var x = t; x && x != content; x = x.parent) parts.Add(x.name);
+            parts.Reverse(); return string.Join("/", parts);
+        }
+        internal float? KeptScroll(string key) => key != null && keptScroll.TryGetValue(key, out var y) ? y : (float?)null;
+        void KeepScroll(Transform under)
+        {
+            foreach (var s in scrollers) if (s.Rect && s.Rect.content && s.Key != null && s.Rect.transform.IsChildOf(under)) keptScroll[s.Key] = ScrollAt(s);
+        }
         const float WheelStep = 64f, FadeHeight = 40f, FadeInset = 12f, EaseTime = 0.04f;   // SmoothDamp 0.04 s: settled in about 0.12 s
         static float Room(Scroll s) => PanelModel.ScrollRoom(s.Rect.content.rect.height, s.Rect.viewport.rect.height);
 
@@ -762,6 +906,7 @@ namespace Hearthwoven.Panel
             personColors = v.PersonColors;
             var pageKey = v.Active + "/" + v.Page + "/" + state.Player;
             var newPage = pageKey != lastPage; lastPage = pageKey;
+            lastFillNew = newPage; chromeKept = false; fills++;   // the parity check's notes (PanelReuse.cs)
 
             owner.text = v.Players.Count > 0 ? "" : v.Owner;
             listTitle.text = v.ListTitle ?? "";
@@ -769,72 +914,117 @@ namespace Hearthwoven.Panel
             plateFull = plate != null && plate.Tone == PanelModel.PlateFull;   // the Feats chapter: the plate keeps the whole room (Chapters/FeatsUi.cs)
             Plated(plate != null);
             // the heading row: on a plate the page icon leads and the pill or the window choices sit on the right
-            Clear(headIcon); Clear(headRight); if (bookChip) Destroy(bookChip.gameObject);
+            Clear(headIcon); Clear(headRight);
+            if (bookChip) { bookChip.SetParent(null, false); Destroy(bookChip.gameObject); }   // out of the heading row now, not only at the frame's end (a second drawing
+            if (everyoneHead) { everyoneHead.SetParent(null, false); Destroy(everyoneHead.gameObject); }   // in the same frame, the parity check's, finds one chip)
             var headX = 0f;
             if (plate != null && !string.IsNullOrEmpty(plate.Icon)) { Marker(headIcon, plate.Icon, 26, layout: false).Stretch(); headX = 36; }
             // another player's book: a chip in their colour left of the title says whose book this is (nothing on your own)
             if (!string.IsNullOrEmpty(state.Player)) headX += BookChip(headIcon.parent as RectTransform, state.Player, headX) + 10;
+            else if (v.EveryoneOn) headX += EveryoneTag(headIcon.parent as RectTransform, headX) + 10;   // 0.8: the group's page (Chapters/EveryoneUi.cs)
             var rightW = plate != null ? HeadRight(v, plate) : 0f;
             heading.text = (v.Heading ?? "") + (string.IsNullOrEmpty(v.HeadingWindow) ? "" : ", " + v.HeadingWindow);
             heading.fontSize = plate != null ? 24 : 26;
             // "since install" just after the heading when the page's numbers were counted on this PC (no icons, Joost 2026-10-08)
-            headingSince.enabled = v.HeadingSinceInstall && heading.text.Length > 0;
-            var headW = Wide - headX - (rightW > 0 ? rightW + 16 : 0) - (headingSince.enabled ? 140 : 0);
+            headingSince.text = !string.IsNullOrEmpty(v.HeadingRecordedFrom) ? v.HeadingRecordedFrom : PanelModel.SinceInstallLabel;   // 0.7: "Recorded from 8 October · this PC"
+            headingSince.enabled = !string.IsNullOrEmpty(v.HeadingRecordedFrom) && heading.text.Length > 0;
+            var sinceW = headingSince.enabled ? Mathf.Ceil(headingSince.preferredWidth) + 10 : 0;   // "Recorded from 8 October · this PC" is wider than "since install"
+            var headW = Wide - headX - (rightW > 0 ? rightW + 16 : 0) - (headingSince.enabled ? sinceW + 12 : 0);
             if (headW > 0 && heading.preferredWidth > headW) heading.fontSize = Mathf.Max(17f, heading.fontSize * headW / heading.preferredWidth);   // six window chips take room: the longer heading shrinks to fit
             heading.rectTransform.Box(headX, 0, headW, 36);
-            if (headingSince.enabled) headingSince.rectTransform.Box(headX + Mathf.Min(heading.preferredWidth, headW) + 12, 3, 130, 32);
+            if (headingSince.enabled) headingSince.rectTransform.Box(headX + Mathf.Min(heading.preferredWidth, headW) + 12, 3, sinceW, 32);
             scope.text = plate != null ? "" : v.Scope ?? "";   // on a plate the scope is the heading row's choices, or a line on the plate
-            baseKeys = string.Join("      ", v.Keys.ToArray()); keys.text = baseKeys;
+            if (!ReuseOn) { baseKeys = v.Keys.ToList(); keys.text = PanelModel.KeyLine(baseKeys, KeysFit); }
+            else { if (!SameKeys(baseKeys, v.Keys)) baseKeys = v.Keys.ToList(); KeyLineNow(); }   // 0.8.1: the same keys keep their list, so the line is not measured again (KeyLineCache)
             ShowSampleTag();
 
-            Clear(players);
-            if (!string.IsNullOrEmpty(v.ShareNote) && v.Players.Count == 0)   // sharing off (fix4-rest): a framed notice in the chip row: what off means, and where to read how to turn it on
-            {
-                var lines = v.ShareNote.Split('\n');
-                var box = Kit(players, "ShareOff", "meter-track"); box.color = new Color(0.03f, 0.025f, 0.02f, 0.85f);
-                var bl = box.gameObject.AddComponent<LayoutElement>(); bl.preferredWidth = bl.minWidth = 572; bl.preferredHeight = bl.minHeight = 48;
-                var glyph = VocabImg(box.rectTransform, "Glyph", "src-fellows", Color.white); glyph.rectTransform.Box(10, 14, 20, 20);
-                var first = Label(box.transform, lines[0], 15, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft); first.textWrappingMode = TextWrappingModes.NoWrap; first.rectTransform.Box(40, 3, 524, 22);
-                if (lines.Length > 1) { var how = Label(box.transform, lines[1], 15, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); how.textWrappingMode = TextWrappingModes.NoWrap; how.rectTransform.Box(40, 25, 524, 20); }
-            }
-            else if (!string.IsNullOrEmpty(v.ShareNote))   // the line that waits for fellow players sits in the header, left of the chips
-            {
-                var note = Label(players, v.ShareNote, 15, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight);
-                var nl = note.gameObject.AddComponent<LayoutElement>(); nl.preferredWidth = nl.minWidth = 330;
-            }
-            const int perPage = 5;
+            // the player row, the chapter tabs and the left list: drawn again only when what they show changed; a new choice restyles a tab or a
+            // row (Dev.UiReuse, PanelReuse.cs). 0.8: with the Everyone chip at the row's end the fellows go three at a time (PICKS: you + 3 + More +
+            // Everyone fit with long names)
+            var reuse = ReuseOn;
+            var perPage = v.EveryoneChip ? 3 : 5;
+            players.sizeDelta = new Vector2(v.EveryoneChip ? 810 : 620, 48);
             var others = v.Players.Skip(1).ToList();
             if (playerPage * perPage >= others.Count) playerPage = 0;
-            if (v.Players.Count > 0) Entry(players, v.Players[0].Label, v.Players[0].Icon, v.Players[0].Selected, PlayerClick(v.Players[0]), 48);
-            foreach (var c in others.Skip(playerPage * perPage).Take(perPage))
+            var rowKey = reuse ? ChromeKeys.Players(v, playerPage, perPage) : null;
+            if (rowKey == null || rowKey != playersKey)
             {
-                var chip = Entry(players, c.Label, c.Icon, c.Selected, PlayerClick(c), 48);
-                if (c.Selected) Glow(chip, PersonTint(c.Id ?? c.Label));   // the fellow whose book is open glows in their colour
+                playersKey = null;   // set again once the row is whole: a drawing that breaks off draws it new next time
+                Clear(players);
+                if (!string.IsNullOrEmpty(v.ShareNote) && v.Players.Count == 0)   // sharing off (fix4-rest): a framed notice in the chip row: what off means, and where to read how to turn it on
+                {
+                    var lines = v.ShareNote.Split('\n');
+                    var box = Kit(players, "ShareOff", "meter-track"); box.color = new Color(0.03f, 0.025f, 0.02f, 0.85f);
+                    var bl = box.gameObject.AddComponent<LayoutElement>(); bl.preferredWidth = bl.minWidth = 572; bl.preferredHeight = bl.minHeight = 48;
+                    var glyph = VocabImg(box.rectTransform, "Glyph", "src-fellows", Color.white); glyph.rectTransform.Box(10, 14, 20, 20);
+                    var first = Label(box.transform, lines[0], 15, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft); first.textWrappingMode = TextWrappingModes.NoWrap; first.rectTransform.Box(40, 3, 524, 22);
+                    if (lines.Length > 1) { var how = Label(box.transform, lines[1], 15, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); how.textWrappingMode = TextWrappingModes.NoWrap; how.rectTransform.Box(40, 25, 524, 20); }
+                }
+                else if (!string.IsNullOrEmpty(v.ShareNote))   // the line that waits for fellow players sits in the header, left of the chips
+                {
+                    var note = Label(players, v.ShareNote, 15, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight);
+                    var nl = note.gameObject.AddComponent<LayoutElement>(); nl.preferredWidth = nl.minWidth = 330;
+                }
+                if (v.Players.Count > 0) { var me = Entry(players, v.Players[0].Label, v.Players[0].Icon, v.Players[0].Selected, PlayerClick(v.Players[0]), 48); if (v.EveryoneOn) NameKey(me, ChromeKeys.KeyName(v.Players[0])); }
+                foreach (var c in others.Skip(playerPage * perPage).Take(perPage))
+                {
+                    var chip = Entry(players, c.Label, c.Icon, c.Selected, c.Disabled ? null : PlayerClick(c), 48, sub: c.Disabled ? PanelModel.JoinedLine : null);
+                    if (c.Disabled) chip.AddComponent<CanvasGroup>().alpha = 0.6f;   // just joined (0.7): dimmed, no book yet, so no click
+                    if (c.Selected) Glow(chip, PersonTint(c.Id ?? c.Label));   // the fellow whose book is open glows in their colour
+                    if (v.EveryoneOn && !c.Disabled) NameKey(chip, ChromeKeys.KeyName(c));   // the row is the colour key of the group's bars
+                }
+                if (others.Count > perPage) Entry(players, "More", "", false, () => { playerPage++; Render(true); }, 48);
+                if (v.EveryoneChip) EveryoneChip(v);   // always the row's last entry, so its place never moves (Chapters/EveryoneUi.cs)
+                playersKey = rowKey;   // kept as it is: a greyed Everyone chip's reason tag stays as the pointer left it (the same reason: it is in the key)
             }
-            if (others.Count > perPage) Entry(players, "More", "", false, () => { playerPage++; Render(true); }, 48);
+            else chromeKept = true;
 
-            Clear(chapters);
-            foreach (var c in v.Chapters)
+            var tabKey = reuse ? ChromeKeys.Tabs(v) : null;
+            if (tabKey == null || tabKey != tabsKey || tabParts.Count != v.Chapters.Count)
             {
-                var id = (Chapter)Enum.Parse(typeof(Chapter), c.Id);
-                Tab(c, () => { state.ShowAbout = false; state.Chapter = id; Render(true); });
+                tabsKey = null; tabParts.Clear();
+                Clear(chapters);
+                foreach (var c in v.Chapters)
+                {
+                    var id = (Chapter)Enum.Parse(typeof(Chapter), c.Id);
+                    tabParts.Add(Tab(c, () => { state.ShowAbout = false; state.Chapter = id; Render(true); }));
+                }
+                tabsKey = tabKey;
             }
+            else { for (int i = 0; i < tabParts.Count; i++) TabLook(tabParts[i], v.Chapters[i].Selected); chromeKept = true; }
 
-            Clear(list);
             // A2: 40 px rows 8 apart; a long list (Deeds has ten) first closes the gaps to 4 px, then rows go to 36 px, so up to
             // ten entries fit without scrolling with the S keycap under the last row (PanelModel.ListRows)
             var (rowH, gap) = PanelModel.ListRows(v.List.Count, H - Foot - ListTop - KeyRoom);
-            list.GetComponent<VerticalLayoutGroup>().spacing = gap; listRow = rowH; listGap = gap;
-            foreach (var c in v.List)
+            listRow = rowH; listGap = gap;
+            var rowsKey = reuse ? ChromeKeys.List(v, rowH, gap) : null;
+            if (rowsKey == null || rowsKey != listKey || rowParts.Count != v.List.Count)
             {
-                var id = c.Id; var chapter = v.Active;
-                var about = v.ShowAbout;   // About's own list (How it counts, What it reads, Sharing) keeps About open
-                var entry = Entry(list, c.Label, c.Icon, c.Selected, () => { if (about) state.AboutPage = id; else { state.ShowAbout = false; state.Page[chapter] = id; } Render(true); }, rowH, stretch: true);
-                if (c.Dot) FeatDot((RectTransform)entry.transform);   // earned feats not seen yet
+                listKey = null; rowParts.Clear();
+                Clear(list);
+                list.GetComponent<VerticalLayoutGroup>().spacing = gap;
+                foreach (var c in v.List)
+                {
+                    var id = c.Id; var chapter = v.Active;
+                    var about = v.ShowAbout;   // About's own list (How it counts, What it reads, Sharing) keeps About open
+                    var entry = Entry(list, c.Label, c.Icon, c.Selected, () => { if (about) state.AboutPage = id; else { state.ShowAbout = false; state.Page[chapter] = id; } Render(true); }, rowH, stretch: true);
+                    rowParts.Add(new RowParts { Ground = entry.GetComponent<Image>(), Label = entry.GetComponentInChildren<TextMeshProUGUI>() });
+                    if (c.Dot) FeatDot((RectTransform)entry.transform);   // earned feats not seen yet
+                    if (c.Disabled) entry.AddComponent<CanvasGroup>().alpha = 0.55f;   // 0.8: a page a fellow's copy cannot fill (the feed): greyed, its page says why
+                }
+                listKey = rowsKey;
             }
+            else { for (int i = 0; i < rowParts.Count; i++) RowLook(rowParts[i], v.List[i].Selected); chromeKept = true; }
             PlaceListKeys(v);
+            MarkFill(0);   // measured renders (PanelBench.cs): the heading row, the player row, the tabs and the list done
 
-            scrollers.RemoveAll(x => !x.Rect);   // the grids of the page just left
+            // B31: the same page drawn again keeps where its inner scroll areas stood (a new page forgets them); the old areas leave the list now,
+            // as the page is cleared (they are destroyed only at the frame's end)
+            keptScroll.Clear();
+            if (!newPage) KeepScroll(content);
+            featFollow = newPage || followChoice; followChoice = false;   // the chosen feat must be on screen: a new page, or A/D moved it (FeatsUi.FeatsBlock)
+            scrollers.RemoveAll(x => !x.Rect || x.Rect.transform.IsChildOf(content));   // the grids of the page just left, or of this page's last drawing
+            featCards.Clear(); featDetail = null; featsArea = null;   // 0.8.1: nothing outlives the page it points into (Clear may keep a plain object for reuse: PanelReuse.cs)
             Clear(content);
             if (plate != null)
             {
@@ -842,8 +1032,17 @@ namespace Hearthwoven.Panel
                 if (!string.IsNullOrEmpty(plate.Text)) Label(content, plate.Text, 15, PanelLook.Muted, style: FontStyles.Italic);
                 // the page's own skill: its chip in the heading row, but that row holds the window chips here, so one line at the top of the plate
                 if (PanelModel.HeadSkillsOnPlate(v)) { var skills = Line(content, 4); foreach (var s in HeadSkills(plate)) SkillChip(skills, s); }
-                foreach (var b in plate.Items ?? new List<Block>()) Draw(content, b);
-                plated = false; Column = Wide;
+                stripAbout = PanelModel.StripAbout(plate); aboutInStrip = false; aboutRow = null;   // the strip may carry the About button (RecordedUi.cs)
+                // B38: the page's view switch shares the top row: in the title strip when there is one, else the About button joins its row
+                var band = (plate.Items ?? new List<Block>()).Any(x => x.Kind == "featband"); var topSwitch = PanelModel.TopSwitch(plate);
+                stripSwitch = band ? topSwitch : null; switchInStrip = false;
+                switchAbout = !band && topSwitch != null ? (plate.Items ?? new List<Block>()).FirstOrDefault(x => x.Kind == "aboutnumbers") : null;
+                // no title strip: the switch's row (with the About button) is the plate's first row, above the hero; its views stay in place
+                PanelUi.topSwitch = band ? null : topSwitch; switchOnTop = false;
+                if (PanelUi.topSwitch != null) { SwitchRow(content, PanelUi.topSwitch, switchAbout, LinkTo); switchOnTop = true; }
+                stripNote = v.StripNote;   // 0.8 layout D+: a fellow's book says whose copy and when at the strip's right end (PageHead.cs)
+                PlateIslands(content, plate);   // 0.8 layout D+: the strip, then the islands (IslandsUi.cs)
+                EndPlate();
             }
             if (plate == null && v.Badges.Count > 0)
             {
@@ -861,20 +1060,37 @@ namespace Hearthwoven.Panel
                 foreach (var t in v.Toggle) { var they = t.Id == "they"; Toggle(row, t, () => { state.TheyReceived = they; Render(true); }); }
             }
             if (plate == null) foreach (var b in v.Blocks) Draw(content, b);
+            foreach (var x in scrollers)   // an inner area that does not place itself is given back where it stood (the feats grid places itself: FeatsBlock)
+                if (x.Rect && x.Rect.content && !x.Placed && KeptScroll(x.Key) is float at) x.Rect.content.anchoredPosition = new Vector2(x.Rect.content.anchoredPosition.x, at);
+            MarkFill(1);   // the page's own blocks made
             FitPlate(plate != null);
             if (newPage)
             {
                 foreach (var s in scrollers) if (s.Rect && s.Rect.content == content) { s.Easing = false; s.Velocity = 0f; }   // a new page starts at the top, no glide
-                Canvas.ForceUpdateCanvases(); content.parent.GetComponent<ScrollRect>().verticalNormalizedPosition = 1f;
+                if (!ReuseOn) { Canvas.ForceUpdateCanvases(); content.parent.GetComponent<ScrollRect>().verticalNormalizedPosition = 1f; }
+                else
+                {
+                    // 0.8.1 (UI-PLAN step 2): the top is anchoredPosition 0 (the content hangs from the viewport's top edge), so no update of every
+                    // canvas of the game first; a page off the plate has its layout done here (a plate's was, measuring it), so its fades and the
+                    // key line's wheel key are right in this frame
+                    if (plate == null) LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+                    content.parent.GetComponent<ScrollRect>().StopMovement();
+                    content.anchoredPosition = new Vector2(content.anchoredPosition.x, 0f);
+                }
             }
+            MarkFill(2);   // the plate fitted, a new page at its top
         }
 
-        Action PlayerClick(Choice c) { var id = c.Id; return () => { state.Player = id; Render(true); }; }
+        // the plate's drawing done (or broken off: DrawCouldNot): its column, strip and switches back to the open page's
+        static void EndPlate() { plated = false; Column = Wide; stripAbout = null; aboutRow = null; stripSwitch = null; switchAbout = null; switchInStrip = false; PanelUi.topSwitch = null; switchOnTop = false; stripNote = null; islanded = false; legendsLater = false; legends.Clear(); }
+
+        Action PlayerClick(Choice c) { var id = c.Id; return () => { state.Player = id; state.Everyone = false; Render(true); }; }   // a name chosen: that one book, Everyone off
 
         // ---------- the plate (slice 3: vocab.css .hrow and .plate) ----------
 
         const float Wide = 889f, PlateColumn = 840f, PlateTop = 36, PlateInset = 4;   // A2: the content 99 px wider; the plate from the list's top line
-        const int PlatePadX = 24, PlatePadTop = 12, PlatePadBottom = 10;   // denser (Joost 2026-10-08: pages fit without scrolling)
+        const int PlatePadX = 24, PlatePadTop = 8, PlatePadBottom = 10;   // denser (Joost 2026-10-08: pages fit without scrolling; 0.8 layout D+: less headroom, FEEDBACK 12)
+        const int FullPadTop = 12; const float PlateGap = 14, FullGap = 10;   // the islands 14 apart; the Feats chapter's full plate keeps its own measures (FeatsUi.FeatsRoom)
         static readonly Color PlateColour = new Color(0.058f, 0.045f, 0.032f, 0.95f);
         static float Column = Wide;   // the width of what is being drawn: the content column, the plate's inside or one column
         static bool plated;           // drawing on a plate: section headings in the plate's small capitals (vocab.css .sect)
@@ -893,8 +1109,8 @@ namespace Hearthwoven.Panel
             var box = (RectTransform)content.parent;
             if (on) PlateBox(box, PlateInset); else { box.offsetMin = Vector2.zero; box.offsetMax = new Vector2(0, -76); }
             var vlg = content.GetComponent<VerticalLayoutGroup>();
-            vlg.padding = on ? new RectOffset(PlatePadX, PlatePadX, PlatePadTop, PlatePadBottom) : new RectOffset(2, 2, 2, 2);
-            vlg.spacing = on ? 10 : 10;
+            vlg.padding = on ? new RectOffset(PlatePadX, PlatePadX, plateFull ? FullPadTop : PlatePadTop, PlatePadBottom) : new RectOffset(2, 2, 2, 2);
+            vlg.spacing = on && !plateFull ? PlateGap : FullGap;
             var tone = on ? PlateColour : PanelLook.Panel;
             foreach (var s in scrollers.Where(s => s.Rect && s.Rect.content == content)) s.Top.color = s.Bottom.color = new Color(tone.r, tone.g, tone.b, on ? 0.9f : 0.65f);
             plated = on; Column = on ? PlateColumn : Wide;
@@ -918,7 +1134,7 @@ namespace Hearthwoven.Panel
             PlateBox(plateFill.rectTransform, 0); PlateBox(plateEdge.rectTransform, 0);
             var box = (RectTransform)content.parent;
             PlateBox(box, PlateInset);
-            if (plateFull) return;   // a full plate keeps the whole room (its grid grows into it)
+            if (plateFull) { FeatsSettle(box); return; }   // a full plate keeps the whole room (its grid grows into it, measured again here)
             var cut = PanelModel.PlateCut(box.rect.height, ContentNeed());
             if (cut <= 0) return;
             box.offsetMin += new Vector2(0, cut);
@@ -947,17 +1163,25 @@ namespace Hearthwoven.Panel
 
         // how far below the content's top edge its lowest drawn picture or text ends
         static readonly Vector3[] corners = new Vector3[4];
+        static readonly List<Graphic> reachGraphics = new List<Graphic>();
+        static readonly List<RectMask2D> reachMasks = new List<RectMask2D>();
         static float Reach(RectTransform c)
         {
             float top = c.rect.yMax, low = top;
-            foreach (var g in c.GetComponentsInChildren<Graphic>(false))
+            // inside a nested scroll area (the feats grid) what its mask hides is not the page's height. The masks under the content are found
+            // once (0.8.1: each graphic looked up its nearest mask, four times per page turn); a graphic under one of them is left out, as before
+            c.GetComponentsInChildren(false, reachMasks);
+            c.GetComponentsInChildren(false, reachGraphics);
+            foreach (var g in reachGraphics)
             {
                 if (!g.enabled || g.rectTransform.rect.height <= 0f) continue;
                 if (g is TMP_Text t && string.IsNullOrEmpty(t.text)) continue;
-                var mask = g.GetComponentInParent<RectMask2D>(); if (mask && mask.transform != c.parent) continue;   // inside a nested scroll area (the feats grid): what its mask hides is not the page's height
+                var nested = false; foreach (var m in reachMasks) if (m && g.transform.IsChildOf(m.transform)) { nested = true; break; }
+                if (nested) continue;
                 g.rectTransform.GetWorldCorners(corners);
                 low = Mathf.Min(low, c.InverseTransformPoint(corners[0]).y);
             }
+            reachGraphics.Clear(); reachMasks.Clear();
             return top - low;
         }
 
@@ -972,14 +1196,22 @@ namespace Hearthwoven.Panel
                     var id = (TimeWindow)Enum.Parse(typeof(TimeWindow), c.Id);
                     // a window a fellow's copy cannot show stays in the row, greyed and inert (the plate says why); a day window your own day history
                     // does not reach yet is greyed too, but pressing it chooses it: All shows and one line says from when it works (B17, PanelModel.WaitLine)
-                    w += Chip(headRight, c.Label, null, c.Selected, c.Disabled && !c.Waits ? null : Safe(() => { state.Window = id; Render(true); }), off: c.Disabled, pad: WindowPad) + 4;
+                    w += WindowChip(headRight, c, v, c.Disabled && !c.Waits ? null : Safe(() => { state.Window = id; state.WindowPicked = true; Render(true); })) + 4;
                 }
+                // 0.8: Compare, 8 px after the windows (Chapters/CompareUi.cs); greyed, its reason shows under it while the pointer is on it
+                if (v.Compare != null) { Size(Node("Gap", headRight), 0, 1); w += 4 + CompareChip(headRight, v.Compare.Label, v.Compare.Selected, v.Compare.Disabled, v.CompareWhy, v.CompareTip, LinkTo(PanelModel.CompareTarget)) + 4; }
             }
             else
             {
                 // zones-wording: the page's own skill (Woodcutting's Wood Cutting) as a small chip left of the pill, not a band across the plate
                 foreach (var s in HeadSkills(plate)) w += SkillChip(headRight, s) + 4;
                 if (!string.IsNullOrEmpty(plate.Pill)) w += Chip(headRight, plate.Pill, plate.PillIcon, false, null);
+                // 0.8: a chip that opens a page (Last fight's "Earlier fights", the feed), after the pill
+                foreach (var hl in (plate.Items ?? new List<Block>()).Where(x => x.Kind == "headlink"))
+                {
+                    var target = hl.Id;
+                    w += 4 + Chip(headRight, hl.Title, hl.Icon, false, Safe(() => { PanelModel.Jump(state, target); Render(true); }));
+                }
             }
             return w;
         }
@@ -996,32 +1228,34 @@ namespace Hearthwoven.Panel
             if (target.StartsWith(PanelModel.ViewTarget, StringComparison.Ordinal)) Debug.Log("[Hearthwoven] view chip: " + target.Substring(PanelModel.ViewTarget.Length));
         });
 
-        static bool zoneTight;   // a tight zone (Woodcutting) is being drawn: its section headings sit closer
 
         void Draw(RectTransform col, Block b)
         {
             // composition and hero write their note in their own line; the layout boxes hold blocks, not a note
-            if (DrawVocab(col, b, LinkTo, Draw)) { if (b.Kind != "composition" && b.Kind != "hero" && b.Kind != "cropgrid" && b.Kind != "featband" && !PanelModel.IsBox(b)) Note(col, b.Note); return; }   // the strip says its own words (B18: its titles were drawn twice)
+            if (DrawVocab(col, b, LinkTo, Draw)) { if (b.Kind != "composition" && b.Kind != PanelModel.CompareRowsKind && b.Kind != "hero" && b.Kind != "cropgrid" && b.Kind != "featband" && !PanelModel.IsBox(b)) Note(col, b.Note); return; }   // the strip says its own words (B18: its titles were drawn twice)
             switch (b.Kind)
             {
                 case "section":
                     {
-                        Spacer(col, zoneTight ? 3 : plated ? 8 : 4);
+                        if (!islanded) Spacer(col, plated ? 8 : 4);   // in an island its padding is the air
                         var row = Row(col, 8); row.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
                         if (!string.IsNullOrEmpty(b.Icon)) Marker(row, b.Icon, 22);
+                        if (!string.IsNullOrEmpty(b.Colour)) Size(Fill(row, "Swatch", Hex(b.Colour, PanelLook.Muted)), 12, 12);   // a sort group's heading: its category's colour (SortModel.cs)
                         if (plated) Sect(row, b.Title, b.Value); else Label(row, b.Title, 20, PanelLook.Gold);
-                        if (b.SinceInstall) Since(row, plated ? 13 : 14);
-                        else if (!string.IsNullOrEmpty(b.Text)) Label(row, b.Text, 13, PanelLook.Faint, style: FontStyles.Italic).textWrappingMode = TextWrappingModes.NoWrap;   // whose record (their last session)
+                        CompareQualifier(row, b);   // 0.8 Compare: "▼ 30 %, 910 the 7 days before" after the total
+                        var labelAt = Labelled(b) && Column < NarrowColumn ? Line(col, 0) : row;   // a half island: the dated label under the heading (0.8 layout D+)
+                        if (Labelled(b)) Since(labelAt, 14, b);
+                        else if (!string.IsNullOrEmpty(b.Text)) Label(row, b.Text, 14, PanelLook.Faint, style: FontStyles.Italic).textWrappingMode = TextWrappingModes.NoWrap;   // whose record (their last session)
                         break;
                     }
                 case "divider": Divider(col); break;
                 case "stat": Stat(col, b); break;
                 // a whole list or grid counted on this PC, outside a section that says so: the label once, under it
-                case "tiles": Tiles(col, b.Items, 6); if (b.SinceInstall || (b.Items?.Any(i => i.SinceInstall) ?? false)) Since(col, 13); Note(col, b.Note); break;
-                case "bars": Bars(col, b); if (b.SinceInstall) Since(col, 13); Note(col, b.Note); break;
-                case "rows": Rows(col, b); if (b.SinceInstall) Since(col, 13); Note(col, b.Note); break;
+                case "tiles": Tiles(col, b.Items, 6); if (Labelled(b) || (b.Items?.Any(Labelled) ?? false)) Since(col, 14, Labelled(b) ? b : b.Items.First(Labelled)); Note(col, b.Note); break;
+                case "bars": Bars(col, b); if (Labelled(b)) Since(col, 14, b); Note(col, b.Note); break;
+                case "rows": Rows(col, b); if (Labelled(b)) Since(col, 14, b); Note(col, b.Note); break;
                 case "titles": Titles(col, b); break;
-                case "thread": Thread(col, b); if (b.SinceInstall) Since(col, 13); Note(col, b.Note); break;
+                case "thread": Thread(col, b); if (Labelled(b)) Since(col, 14, b); Note(col, b.Note); break;
                 case "link":
                     {
                         var target = b.Id;
@@ -1054,14 +1288,14 @@ namespace Hearthwoven.Panel
         {
             if (string.IsNullOrEmpty(note)) return;
             if (note == PanelModel.FadedKey || note == PanelModel.FadedKeyTwin) { FadedChip(Line(col, 0), note); return; }   // the faded key: a chip, not a sentence
-            Label(col, note, 13, PanelLook.Faint);
+            Label(col, note, 14, PanelLook.Faint);
         }
 
         // "faded = before install": a small quiet chip (the kit's dark track), where a legend ends; returns its width
         static float FadedChip(RectTransform row, string text = null)
         {
             var img = Kit(row, "FadedKey", "meter-track");
-            var t = Label(img.transform, text ?? PanelModel.FadedKey, 13, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic);
+            var t = Label(img.transform, text ?? PanelModel.FadedKey, 14, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic);
             t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Stretch(); t.rectTransform.offsetMin = new Vector2(9, 0); t.rectTransform.offsetMax = new Vector2(-9, 0);
             var w = Mathf.Ceil(t.preferredWidth) + 18; Size(img, w, 22);
             return w;
@@ -1082,7 +1316,7 @@ namespace Hearthwoven.Panel
                 if (!string.IsNullOrEmpty(b.Value)) Label(one, b.Value, 22, PanelLook.Text);
                 Label(one, b.Title, 16, PanelLook.Text);
                 if (!string.IsNullOrEmpty(b.Text)) Label(one, b.Text, 14, PanelLook.Muted);
-                if (b.SinceInstall) Since(one, 13);
+                if (Labelled(b)) Since(one, 14, b);
                 return;
             }
             var row = Row(col, 16);
@@ -1091,12 +1325,12 @@ namespace Hearthwoven.Panel
             var texts = VStack(row, 0); texts.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
             var line = Row(texts, 10);
             line.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.LowerLeft;
-            if (!string.IsNullOrEmpty(b.Value)) Label(line, b.Value, 30, PanelLook.Text);
+            if (!string.IsNullOrEmpty(b.Value)) Unrecorded(Label(line, b.Value, 30, PanelLook.Text), b, 22);
             Label(line, b.Title, 22, PanelLook.Text);
-            if (b.SinceInstall) Since(line, 15);
+            if (Labelled(b)) Since(line, 15, b);
             Node("Rest", line).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
             if (!string.IsNullOrEmpty(b.Text)) Label(texts, b.Text, 18, PanelLook.Muted);
-            if (!string.IsNullOrEmpty(b.Note)) Label(texts, b.Note, 13, PanelLook.Faint);
+            if (!string.IsNullOrEmpty(b.Note)) Label(texts, b.Note, 14, PanelLook.Faint);
         }
 
         // the kit's slot with the game's own sprite inside (about 14 px of 128 inset, as the kit asks), its name beneath
@@ -1153,8 +1387,8 @@ namespace Hearthwoven.Panel
             {
                 var axis = Row(col, 0);
                 var pad = Node("Pad", axis).gameObject.AddComponent<LayoutElement>(); pad.minWidth = pad.preferredWidth = 26 + 14 + 120 + 14;
-                Label(axis, "0", 13, PanelLook.Faint).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-                Label(axis, b.Value, 13, PanelLook.Faint, align: TextAlignmentOptions.TopRight);
+                Label(axis, "0", 14, PanelLook.Faint).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                Label(axis, b.Value, 14, PanelLook.Faint, align: TextAlignmentOptions.TopRight);
                 var end = Node("End", axis).gameObject.AddComponent<LayoutElement>(); end.minWidth = end.preferredWidth = 14 + 80;
             }
         }
@@ -1164,7 +1398,7 @@ namespace Hearthwoven.Panel
         {
             // single rows counted on this PC in a list that also holds other counts: the label after their number, in a
             // column of its own so the values stay aligned
-            var labelled = (b.Items ?? new List<Block>()).Any(i => i.SinceInstall);
+            var labelled = (b.Items ?? new List<Block>()).Any(Labelled);
             var marked = (b.Items ?? new List<Block>()).Any(i => !string.IsNullOrEmpty(i.Icon));
             col = VStack(col, 0);   // the rows and their rules close together, not spaced like blocks
             foreach (var i in b.Items ?? new List<Block>())
@@ -1181,9 +1415,9 @@ namespace Hearthwoven.Panel
                     var names = VStack(row, 0); names.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
                     Label(names, i.Title, 19, PanelLook.Text); Label(names, i.Text, 14, PanelLook.Muted);
                 }
-                var value = Label(row, i.Value, 19, PanelLook.Text, align: TextAlignmentOptions.MidlineRight); var vl = value.gameObject.AddComponent<LayoutElement>(); vl.minWidth = vl.preferredWidth = Mathf.Min(170f, Column * 0.24f);   // narrower in a column
-                if (labelled) { var slot = Node("Since", row); Size(slot, 92, 20); if (i.SinceInstall) Since(slot, 13).rectTransform.Stretch(); }
-                var rule = Img(col, "Rule", null, PanelLook.Rule); var rl = rule.gameObject.AddComponent<LayoutElement>(); rl.minHeight = rl.preferredHeight = 1;
+                var value = Unrecorded(Label(row, i.Value, 19, PanelLook.Text, align: TextAlignmentOptions.MidlineRight), i, 16); var vl = value.gameObject.AddComponent<LayoutElement>(); vl.minWidth = vl.preferredWidth = Mathf.Min(170f, Column * 0.24f);   // narrower in a column
+                if (labelled) { var slot = Node("Since", row); Size(slot, 92, 20); if (Labelled(i)) Since(slot, 14, i).rectTransform.Stretch(); }
+                if (!islanded) { var rule = Img(col, "Rule", null, PanelLook.Rule); var rl = rule.gameObject.AddComponent<LayoutElement>(); rl.minHeight = rl.preferredHeight = 1; }   // no divider lines in an island
             }
         }
 
@@ -1202,7 +1436,7 @@ namespace Hearthwoven.Panel
                 button.onClick.AddListener(() => Safe(() => { PanelModel.Jump(state, target); Render(true); })());
                 var m = Marker(cell.rectTransform, t.Icon, 40, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0, 0.5f); m.anchoredPosition = new Vector2(12, 0);
                 var name = Label(cell.transform, t.Title, 17, PanelLook.Gold); name.rectTransform.Box(60, 6, 190, 22);
-                var value = Label(cell.transform, t.Value, 12.5f, PanelLook.Muted, style: FontStyles.Italic); value.rectTransform.Box(60, 27, 190, 32);
+                var value = Label(cell.transform, t.Value, 14, PanelLook.Muted, style: FontStyles.Italic); value.rectTransform.Box(60, 27, 190, 32);
             }
         }
 
@@ -1225,7 +1459,7 @@ namespace Hearthwoven.Panel
                 mid.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
                 var said = Row(mid, 8); said.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
                 Label(said, t.Value + " " + t.Title.ToLowerInvariant(), 24, PanelLook.Text, align: TextAlignmentOptions.Center);
-                if (t.SinceInstall) Since(said, 14);
+                if (Labelled(t)) Since(said, 14, t);
                 var threadBox = Node("ThreadBox", mid); var tb = threadBox.gameObject.AddComponent<LayoutElement>(); tb.minHeight = tb.preferredHeight = 40;
                 var thread = Kit(threadBox, "Thread", "thread").rectTransform;   // decorative direction only, uniform scale
                 thread.anchorMin = thread.anchorMax = thread.pivot = new Vector2(0.5f, 0.5f); thread.sizeDelta = new Vector2(320, 40);
@@ -1252,6 +1486,7 @@ namespace Hearthwoven.Panel
             switch (b.Kind)
             {
                 case "composition": Composition(col, b); return true;
+                case PanelModel.CompareRowsKind: CompareRows(col, b); return true;   // 0.8 Compare: the bar form in compare mode (Chapters/CompareUi.cs)
                 case "biomes": BiomeStrip(col, b, link); return true;
                 case "ladders": Ladders(col, b); return true;
                 case "ladder": Ladder(col, b, link); return true;
@@ -1272,15 +1507,18 @@ namespace Hearthwoven.Panel
                 case "grades": Grades(col, b); return true;
                 case "band": Band(col, b); return true;
                 case "people": People(col, b); return true;
-                case "hero": Hero(col, b); return true;
+                case "hero": Hero(col, b, link); return true;
+                case "aboutnumbers": AboutNumbersBox(col, b, link); return true;   // 0.7: the page's button and box (RecordedUi.cs)
                 case "cards": Cards(col, b, link); return true;
                 case "columns": Columns(col, b, child); return true;
                 case "switch": Switch(col, b, link, child); return true;
+                case "sort": SortRow(col, b, link); return true;   // SortUi.cs
                 case "plate": PlateBlock(col, b, child); return true;
-                case "zone": Zone(col, b, child); return true;   // ZonesUi.cs
-                case "bosses": Bosses(col, b); return true;
                 case "origins": Origins(col, b); return true;   // Chapters/AboutUi.cs
                 case "readrows": ReadRows(col, b); return true;
+                case PanelModel.AwayTotalsKind: AwayTotals(col, b); return true;   // Chapters/AwayUi.cs
+                case PanelModel.AwayRowsKind: AwayRows(col, b); return true;
+                case PanelModel.GroupRowsKind: GroupRows(col, b); return true;   // 0.8: the Everyone chip's rows, also Battle > Last fight's (Chapters/EveryoneUi.cs)
                 case "sincewhen": SinceWhen(col, b); return true;
                 case "promises": Promises(col, b); return true;
                 case "cropgrid": CropGrid(col, b); return true;   // Chapters/CropsUi.cs
@@ -1288,7 +1526,9 @@ namespace Hearthwoven.Panel
                 case "featdetail": FeatDetailBlock(col, b); return true;
                 case "knownfor": KnownForBlock(col, b, link); return true;
                 case "featband": FeatBandBlock(col, b, link); return true;
-                case "damagegrid": case "dmgmix": case "foetable": case "foetypes": case "guard": case "sources": case "deathstrip": case "deaths": case "deathrows": BattleBlock(col, b, link); return true;   // ch-battle
+                case "damagegrid": case "dmgmix": case "foetable": case "foetypes": case "guard": case "sources": case "armour": case "deathstrip": case "deaths": case "deathrows": BattleBlock(col, b, link); return true;   // ch-battle
+                case "dealtfoes": case "feed": case "fightfoes": case "fightreceived": BattleBlock(col, b, link); return true;   // 0.8 Battle (Chapters/BattleFeedUi.cs)
+                case "headlink": return true;   // drawn in the heading row (HeadRight)
                 default: return false;
             }
         }
@@ -1323,24 +1563,14 @@ namespace Hearthwoven.Panel
             return img;
         }
 
-        // a layered number (Block.Faded/Solid, Farming's planted): the game's count before Hearthwoven faint, "+", then what
-        // Hearthwoven counted since in the number's own colour (or <paramref name="solid"/>). Both are formatted numbers only,
-        // so rich text is safe on that one label.
-        internal static bool Layered(Block n) => n != null && !string.IsNullOrEmpty(n.Faded) && !string.IsNullOrEmpty(n.Solid);
-        // zones-wording (Joost 2026-10-09: "114 + 52" did not say which part is which): with a size, each part says it at the number, small and
-        // quiet: "114 before install + 52 since install", the words at a third of the number (never under the floor)
-        internal static Rich LayeredText(Block n, Color faded, Color? solid = null, float size = 0)
-        {
-            Rich Word(string w) => size > 0 ? (Rich.Empty.Bold() + Rich.Plain(" " + w).Italic()).Sized(Mathf.Max(PanelLook.MinText, Mathf.Round(size * 0.32f))) : Rich.Empty;
-            var since = Rich.Plain(n.Solid) + Word(PanelModel.SinceWord);
-            return (Rich.Plain(n.Faded) + Word(PanelModel.BeforeWord) + " +").Ink(Hex(faded)) + " " + (solid.HasValue ? since.Ink(Hex(solid.Value)) : since);
-        }
-
         // "since install" after a number Hearthwoven counted on this PC (Block.SinceInstall): small, italic, faint. No icons
         // beside numbers (Joost 2026-10-08): your character's and fellow players' counts carry nothing
-        static TextMeshProUGUI Since(RectTransform row, float size)
+        static TextMeshProUGUI Since(RectTransform row, float size) => Since(row, size, PanelModel.SinceInstallLabel);
+        /// <summary>The label of this block (LabelOf: 0.7's "Recorded from ..." or "since install") after it.</summary>
+        static TextMeshProUGUI Since(RectTransform row, float size, Block of) => Since(row, size, LabelOf(of) ?? PanelModel.SinceInstallLabel);
+        static TextMeshProUGUI Since(RectTransform row, float size, string text)
         {
-            var t = Label(row, PanelModel.SinceInstallLabel, size, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic);
+            var t = Label(row, text, size, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic);
             t.textWrappingMode = TextWrappingModes.NoWrap;
             return t;
         }
@@ -1351,7 +1581,7 @@ namespace Hearthwoven.Panel
             var img = Kit(parent, name, "meter-fill"); img.color = colour; img.preserveAspect = false; return img;
         }
 
-        // ----- composition: what is it made of? one proportional bar; the legend under it, left-aligned -----
+        // ----- composition: what is it made of? the head, then the one bar form (BarFormUi.cs) -----
 
         static void Composition(RectTransform col, Block b)
         {
@@ -1364,55 +1594,20 @@ namespace Hearthwoven.Panel
                     if (!string.IsNullOrEmpty(b.Title)) Label(head, b.Title, 18, PanelLook.Gold);
                     if (!string.IsNullOrEmpty(b.Value)) Label(head, b.Value, 18, PanelLook.Text, style: FontStyles.Bold);
                 }
-                if (!string.IsNullOrEmpty(b.Note) && b.Note != PanelModel.FadedKey) Label(head, b.Note, 13, PanelLook.Faint);   // its qualifier beside the total ("after your armour"); the faded key ends the legend
-                if (!string.IsNullOrEmpty(b.Text)) { var q = Label(head, b.Text, 13, PanelLook.Faint, style: FontStyles.Italic); q.textWrappingMode = TextWrappingModes.NoWrap; q.rectTransform.pivot = new Vector2(0, 0.5f); }   // a caveat beside the total (the pickup gap)
-                if (b.SinceInstall) Since(head, 14);
+                // in a narrow column (a half of the plate) the qualifier and the dated label go on their own line under the title (G7: "Under the
+                // helm of" wrapped to three lines beside "Recorded from 1 October · this PC"); mirrored in the preview
+                var hasQuals = (!string.IsNullOrEmpty(b.Note) && b.Note != PanelModel.FadedKey) || !string.IsNullOrEmpty(b.Text) || Labelled(b);
+                var quals = hasQuals && Column < NarrowColumn ? Line(col, 8) : head;   // 0.8 layout D+: a half island (a wide one keeps them on the title's line)
+                if (!string.IsNullOrEmpty(b.Note) && b.Note != PanelModel.FadedKey) Label(quals, b.Note, 14, PanelLook.Faint);   // its qualifier beside the total ("after your armour"); the faded key ends the legend
+                if (!string.IsNullOrEmpty(b.Text)) { var q = Label(quals, b.Text, 14, PanelLook.Faint, style: FontStyles.Italic); q.textWrappingMode = TextWrappingModes.NoWrap; q.rectTransform.pivot = new Vector2(0, 0.5f); }   // a caveat beside the total (the pickup gap)
+                if (Labelled(b)) Since(quals, 14, b);
             }
-            var parts = (b.Items ?? new List<Block>()).Where(p => p.Fraction > 0).ToList();
-            if (parts.Count == 0) return;
-            var bar = Kit(col, "Composition", "meter-track"); Size(bar, -1, b.Tone == PanelModel.Thin ? 20 : 38); if (b.Tone == "single") bar.gameObject.SetActive(false);   // 32 px of fill (the grain's native height), inset 3; thin: 14 px (fix2 7)
-            // one fill per kind (PanelModel.BarParts: the smallest kind keeps at least 4 px, as in the proto), 2 px of the dark
-            // track between kinds and nowhere else. A layered kind (K1) is that one fill with its part counted before
-            // Hearthwoven veiled first (a flat quad, no edge of its own), the exact count since install bright after it: the
-            // faded to solid change inside a kind draws no line (fix2 3: in game the faded and solid pieces each brought their
-            // fill's edges, so lines stood inside kinds and read as misplaced separators)
-            var spans = PanelModel.BarParts(parts.Select(p => p.Fraction).ToArray(), parts.Select(p => p.Fraction2).ToArray(), 4f / Column);
-            for (int k = 0; k < parts.Count; k++)
+            // the book's one bar form (BarFormUi.cs): the bar and its list; numbers inside the parts only on a damage-type bar
+            BarWithList(col, b.Items ?? new List<Block>(), PanelModel.NumbersOnBar(b), new BarLook { Thin = b.Tone == PanelModel.Thin, NoBar = b.Tone == "single", Length = PanelModel.BarLength(b), Pairs = PanelModel.NumbersOnBar(b) });   // rows of one kind (a bar per foe) on one scale; a damage-type list in two columns from three rows (B34)
+            if (b.Note == PanelModel.FadedKey)   // what the faded parts are, under the list
             {
-                float left = k == 0 ? 3 : 1, right = k == parts.Count - 1 ? -3 : -1;   // 2 px between kinds
-                var f = PartFill(bar.transform, parts[k]);
-                PlacePart(f.rectTransform, spans[k].from, spans[k].to, left, right);
-                if (spans[k].fadedTo <= spans[k].from) continue;
-                var veil = Img(f.transform, "Faded", null, FadedVeil).rectTransform;
-                veil.anchorMin = Vector2.zero; veil.anchorMax = new Vector2((spans[k].fadedTo - spans[k].from) / (spans[k].to - spans[k].from), 1);
-                veil.offsetMin = veil.offsetMax = Vector2.zero;
-            }
-            // legend (round 3): swatch = a small copy of its segment, number, label; entries wrap at the column's edge. The item
-            // picture only when every part has one and no part has a pattern (a grain swatch already is the picture), so one
-            // legend never mixes parts with and without
-            var pictures = parts.Where(p => p.Id != PanelModel.FoldId).All(p => p.Pattern == null && PanelLook.Icon(p.Icon) != null);   // the folded "Other (n kinds)" has no picture of its own
-            var lines = VStack(col, 6); lines.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
-            RectTransform line = null; float used = 0;
-            foreach (var p in parts)
-            {
-                var entry = Line(lines, 7);
-                var w = Swatch(entry, p);
-                if (pictures && p.Id != PanelModel.FoldId) { Marker(entry, p.Icon, 22); w += 7 + 22; }
-                else if (p.Icon != null && p.Icon.StartsWith("vocab:")) { Size(VocabImg(entry, "Mark", VocabName(p.Icon), PanelLook.Muted), 20, 20); w += 7 + 20; }   // a part the game has no picture for
-                var n = Label(entry, p.Value, 22, PanelLook.Text, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap;
-                var t = Label(entry, p.Title, 15, PanelLook.Muted); t.textWrappingMode = TextWrappingModes.NoWrap;
-                w += 7 + n.preferredWidth + 7 + t.preferredWidth;
-                if (p.SinceInstall) { var s = Since(entry, 13); w += 7 + s.preferredWidth; }   // a part counted on this PC in a bar of other counts
-                if (line == null || used + 22 + w > Column) { line = Line(lines, 22); used = 0; } else used += 22;
-                entry.SetParent(line, false); used += w;
-                Size(entry, w, 28);
-            }
-            if (b.Note == PanelModel.FadedKey)   // what the faded parts are, as the legend's last entry
-            {
-                var chip = Line(lines, 0); var w = FadedChip(chip);
-                if (line == null || used + 22 + w > Column) { line = Line(lines, 22); used = 0; } else used += 22;
-                chip.SetParent(line, false); used += w;
-                Size(chip, w, 28);
+                var chip = Line(col, 0); FadedChip(chip);
+                Node("Rest", chip).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
             }
         }
 
@@ -1421,43 +1616,6 @@ namespace Hearthwoven.Panel
         // at 55 % over the track
         const float FadedAlpha = 0.55f;
         static readonly Color FadedVeil = new Color(0.035f, 0.027f, 0.02f, 1f - FadedAlpha);
-        static void PlacePart(RectTransform r, float from, float to, float left, float right)
-        {
-            r.anchorMin = new Vector2(from, 0); r.anchorMax = new Vector2(to, 1); r.pivot = new Vector2(0, 0.5f);
-            r.offsetMin = new Vector2(left, 3); r.offsetMax = new Vector2(right, -3);
-        }
-
-        // a neutral grain ("grain-wood-n", base ~0.85 grey) is multiplied by the part's colour, lifted by 1 / 0.85 so the grain
-        // averages to the approved colour instead of darkening it; an authored grain stays white
-        const float GrainBase = 0.85f;
-        static Color GrainTint(string grain, Block part)
-        {
-            if (!grain.EndsWith("-n")) return Color.white;
-            var c = Hex(part.Colour, Color.white);
-            return new Color(Mathf.Clamp01(c.r / GrainBase), Mathf.Clamp01(c.g / GrainBase), Mathf.Clamp01(c.b / GrainBase), c.a);
-        }
-
-        // a part's fill: its grain tiled at native height, or the kit's meter fill in its colour
-        static Image PartFill(Transform parent, Block part)
-        {
-            var grain = VocabName(part.Pattern);
-            return grain != null && PanelLook.Vocab(grain) ? VocabImg(parent, "Grain", grain, GrainTint(grain, part)) : Fill(parent, "Part", Hex(part.Colour, PanelLook.Accent));
-        }
-
-        static float Swatch(RectTransform row, Block part)
-        {
-            var grain = VocabName(part.Pattern);
-            if (grain != null && PanelLook.Vocab(grain))
-            {
-                // the segment's own grain at half size (placed at native 60 x 32, scaled uniformly), so it reads as the same wood
-                var box = Node("Swatch", row); Size(box, 30, 16);
-                var g = VocabImg(box, "Grain", grain, GrainTint(grain, part)).rectTransform;
-                g.anchorMin = g.anchorMax = g.pivot = Vector2.zero; g.anchoredPosition = Vector2.zero; g.sizeDelta = new Vector2(60, 32); g.localScale = Vector3.one * 0.5f;
-                return 30;
-            }
-            Size(Fill(row, "Swatch", Hex(part.Colour, PanelLook.Accent)), 14, 14);
-            return 14;
-        }
 
         // ----- biomes: where? the journey as an axis; dealt rises, received hangs; deaths under, bosses on the tile -----
 
@@ -1475,6 +1633,7 @@ namespace Hearthwoven.Panel
                 // narrowed to one biome (b.Title: "in the Swamp"): the totals are that biome's, and say so
                 var scope = string.IsNullOrEmpty(b.Title) ? "" : " " + b.Title;
                 Key(legend, PanelLook.Dealt, PanelModel.DealtLabel + scope, PanelModel.DealtQualifier, b.Value);
+                if (PanelModel.SparkOf(b) is Block spark) { Size(Node("Gap", legend), 12, 1); Spark(legend, spark, false); }   // 0.8: damage dealt per day (Chapters/GrowthLinesUi.cs)
                 Size(Node("Gap", legend), 18, 1);
                 Key(legend, PanelLook.Received, PanelModel.ReceivedLabel + scope, string.IsNullOrEmpty(b.Text) ? PanelModel.ReceivedQualifier : b.Text, b.Value2);
             }
@@ -1516,7 +1675,7 @@ namespace Hearthwoven.Panel
             Size(Fill(row, "Swatch", colour), 14, 14);
             if (!string.IsNullOrEmpty(total)) Label(row, total, 15, PanelLook.Text, style: FontStyles.Bold);   // the window's total (slice 3)
             Label(row, label, 15, PanelLook.Text);
-            if (!string.IsNullOrEmpty(qualifier)) Label(row, qualifier, 13, PanelLook.Muted);   // 13 px reads at 4.5:1 on the plate only in the muted tone
+            if (!string.IsNullOrEmpty(qualifier)) Label(row, qualifier, 14, PanelLook.Muted);   // 13 px reads at 4.5:1 on the plate only in the muted tone
         }
 
         static void BiomeTile(RectTransform strip, Block t, float x, float w, bool idle = false, Action pick = null)
@@ -1550,7 +1709,7 @@ namespace Hearthwoven.Panel
             var emblemX = (w - 30) / 2; if (bosses.Count > 0) emblemX = Mathf.Max(emblemX, 2 + bosses.Count * (BossRing - 2) + 2);
             VocabImg(tile.transform, "Emblem", VocabName(t.Icon) ?? PanelLook.BiomeEmblem(t.Id), Color.white).rectTransform.Box(emblemX, 5, 30, 30);
             var ink = t.Tone == "dark-text" ? DarkInk : t.Tone == "light-text" ? LightInk : PanelLook.BiomeInk(t.Id);
-            var name = Label(tile.transform, t.Title ?? PanelLook.BiomeName(t.Id), 13, ink, style: FontStyles.Bold, align: TextAlignmentOptions.Top);
+            var name = Label(tile.transform, t.Title ?? PanelLook.BiomeName(t.Id), 14, ink, style: FontStyles.Bold, align: TextAlignmentOptions.Top);
             name.rectTransform.Box(2, 37, w - 4, 18); name.textWrappingMode = TextWrappingModes.NoWrap; name.overflowMode = TextOverflowModes.Ellipsis;
 
             var y = below;
@@ -1598,11 +1757,11 @@ namespace Hearthwoven.Panel
             // key stays, and only when some skill glows
             if (skills.Any(s => s.Practised))
             {
-                // the halo behind the climber and the hearth's flame under the level say "practised since install"; the key counts them
+                // the halo behind the climber and the hearth's flame under the level say "practised from <date>"; the key counts them
                 var key = Line(col, 6);
                 Size(VocabImg(key, "Glow", "glow-soft", Color.white), 22, 22);
                 Size(VocabImg(key, "Flame", "src-hearth", Color.white), 16, 16);
-                Label(key, PanelModel.PractisedKey + ": " + skills.Count(s => s.Practised) + " of " + skills.Count + " skills", 15, PanelLook.Text);   // the key itself says "since install"
+                Label(key, (string.IsNullOrEmpty(b.Text) ? PanelModel.PractisedKey : b.Text) + ": " + skills.Count(s => s.Practised) + " of " + skills.Count + " skills", 15, PanelLook.Text);   // the block's dated key ("practised from 1 October", PractisedKeyText)
             }
             // every column the same width; a group longer than a line wraps, and groups share a line while they fit
             var perLine = Mathf.FloorToInt(Column / LadderCol);
@@ -1614,9 +1773,9 @@ namespace Hearthwoven.Panel
                     if (line == null || used + GroupGap + w > Column) { Spacer(col, 6); line = Row(col, GroupGap); used = 0; } else used += GroupGap;
                     used += w;
                     var group = VStack(line, 6); Size(group, w, -1);
-                    var head = Label(group, i == 0 ? g.Title : "", 13, PanelLook.Muted, style: FontStyles.UpperCase);
+                    var head = Label(group, i == 0 ? g.Title : "", 14, PanelLook.Muted, style: FontStyles.UpperCase);
                     head.characterSpacing = 14; head.textWrappingMode = TextWrappingModes.NoWrap; Size(head, -1, 18);
-                    Size(Img(group, "Rule", null, PanelLook.Rule), -1, 1);
+                    if (!islanded) Size(Img(group, "Rule", null, PanelLook.Rule), -1, 1);   // no divider lines in an island (Joost, part 4)
                     var cols = Row(group, 0);
                     foreach (var s in chunk) SkillColumn(cols, s);
                 }
@@ -1633,13 +1792,13 @@ namespace Hearthwoven.Panel
                 // scope (Battle: "your character, now") has its heading and scope on a line of their own, the entries a full width under it
                 var wide = !string.IsNullOrEmpty(g.Text);
                 var stack = wide ? VStack(col, 4) : Row(col, 14);
-                var head = Label(stack, g.Title, 13, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.TopLeft);
+                var head = Label(stack, g.Title, 14, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.TopLeft);
                 head.characterSpacing = 14; head.textWrappingMode = TextWrappingModes.NoWrap;
                 float headW = 0;
                 if (wide)
                 {
                     var top = Line(stack, 10); head.transform.SetParent(top, false);
-                    var scope = Label(top, g.Text, 13, PanelLook.Faint); scope.textWrappingMode = TextWrappingModes.NoWrap;
+                    var scope = Label(top, g.Text, 14, PanelLook.Faint); scope.textWrappingMode = TextWrappingModes.NoWrap;
                 }
                 else { headW = Mathf.Ceil(head.preferredWidth) + 4; var hl = head.gameObject.AddComponent<LayoutElement>(); hl.minWidth = hl.preferredWidth = headW; hl.minHeight = hl.preferredHeight = 22; }
                 var lines = VStack(stack, 8); lines.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
@@ -1708,7 +1867,7 @@ namespace Hearthwoven.Panel
             var ladder = LadderPicture(left, 80, 280, b); ladder.Box(62, 4, 80, 280);
             foreach (var v in new[] { 0, 50, 100 })
             {
-                var l = Label(left, v.ToString(), 13, PanelLook.Faint, align: TextAlignmentOptions.MidlineRight);
+                var l = Label(left, v.ToString(), 14, PanelLook.Faint, align: TextAlignmentOptions.MidlineRight);
                 l.rectTransform.Box(0, 4 + 280 - v / 100f * 280 - 8, 22, 16);
             }
 
@@ -1717,7 +1876,7 @@ namespace Hearthwoven.Panel
             var right = VStack(row, 12); right.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
             var hero = Line(right, 12, TextAnchor.LowerLeft);
             Label(hero, b.Value, HeroSize, PanelLook.Gold, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
-            Label(hero, PanelModel.LevelWord, HeroLabel, PanelLook.Text); if (b.SinceInstall) Since(hero, 15);
+            Label(hero, PanelModel.LevelWord, HeroLabel, PanelLook.Text); if (Labelled(b)) Since(hero, 15, b);
             if (b.Progress >= 0)
             {
                 var head = Line(right, 10);
@@ -1741,7 +1900,7 @@ namespace Hearthwoven.Panel
                     var p = Line(right, 12);
                     Size(VocabImg(p, "Glow", "glow-soft", Color.white), 30, 30);
                     Label(p, c.Value, 28, PanelLook.Gold, style: FontStyles.Bold);
-                    Label(p, c.Title, 15, PanelLook.Muted); if (!string.IsNullOrEmpty(c.Note)) Label(p, c.Note, 13, PanelLook.Faint); if (c.SinceInstall) Since(p, 14);
+                    Label(p, c.Title, 15, PanelLook.Muted); if (!string.IsNullOrEmpty(c.Note)) Label(p, c.Note, 14, PanelLook.Faint); if (Labelled(c)) Since(p, 14, c);
                 }
                 else if (c.Kind == "link") LinkChip(right, c, link);
             }
@@ -1774,7 +1933,7 @@ namespace Hearthwoven.Panel
         {
             if (!string.IsNullOrEmpty(title))
             {
-                var t = Label(row, title, 13, PanelLook.Muted, style: FontStyles.UpperCase);
+                var t = Label(row, title, 14, PanelLook.Muted, style: FontStyles.UpperCase);
                 t.characterSpacing = 14; t.textWrappingMode = TextWrappingModes.NoWrap;
             }
             if (!string.IsNullOrEmpty(total)) Label(row, total, 15, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
@@ -1804,35 +1963,63 @@ namespace Hearthwoven.Panel
 
         // ----- hero: how much? the big number and its label; further numbers on the right, smaller, after a thin rule -----
 
-        const float HeroSize = 84, HeroLabel = 26, HeroSecond = 54, HeroSecondLabel = 20;
+        const float HeroSize = 67, HeroLabel = 26, HeroSecond = 43, HeroSecondLabel = 20, HeroGap = 34;   // 0.8 layout D+: the big number about 20 % smaller (84, 54; FEEDBACK 12); one hero form on every page
 
-        static void Hero(RectTransform col, Block b)
+        static void Hero(RectTransform col, Block b, Func<string, Action> link = null)
         {
-            var compact = b.Tone == PanelModel.Compact;   // one modest line (Hall > Trader, Smelters; fix2 7)
-            float size = compact ? 40 : HeroSize, label = compact ? 18 : HeroLabel, second = compact ? 28 : HeroSecond, secondLabel = compact ? 15 : HeroSecondLabel, gap = compact ? 20 : 34;
-            var row = Line(col, 0, TextAnchor.LowerLeft);
-            HeroNumber(row, b, size, label);
-            foreach (var n in b.Items ?? new List<Block>())
+            // 0.8 layout D+ (Joost: "one visual grammar"): one hero form on every page, Woodcutting's; the compact one is gone
+            float size = HeroSize, label = HeroLabel, second = HeroSecond, secondLabel = HeroSecondLabel, gap = HeroGap;
+            // 0.7: one wrap rule (PanelModel.HeroLines, mirrored in the preview): every part is drawn on the first line and measured, then a
+            // second number or the skill that does not fit the column moves to the next line; nothing is clipped at the plate's edge
+            var rows = new List<RectTransform> { Line(col, 0, TextAnchor.LowerLeft) };
+            var parts = new List<RectTransform> { HeroNumber(rows[0], b, size, label) };
+            var rules = new List<RectTransform>();
+            foreach (var n in (b.Items ?? new List<Block>()).Where(n => n.Kind != "skill" && n.Kind != PanelModel.SparkKind))
             {
-                Size(Node("Gap", row), gap, 1);
-                Size(Img(row, "Rule", null, PanelLook.Rule), 1, second * 0.8f);
-                Size(Node("Gap", row), gap, 1);
-                HeroNumber(row, n, second, secondLabel);
+                var rule = Line(rows[0], 0, TextAnchor.LowerLeft);
+                Size(Node("Gap", rule), gap, 1);
+                Size(Img(rule, "Rule", null, PanelLook.Rule), 1, second * 0.8f);
+                Size(Node("Gap", rule), gap, 1);
+                rules.Add(rule);
+                parts.Add(HeroNumber(rows[0], n, second, secondLabel));
+            }
+            // 0.7 rule K: the deed's skill at the right end of the hero's row (Joost 2026-10-09); 0.8 layout D+: the growth line over it, right of the numbers
+            var skill = PanelModel.SkillOf(b) != null || PanelModel.SparkOf(b) != null ? HeroRight(rows[0], PanelModel.SparkOf(b), PanelModel.SkillOf(b), link) : default;   // (rest, skill column, spark)
+            float Width(RectTransform r) { LayoutRebuilder.ForceRebuildLayoutImmediate(r); return LayoutUtility.GetPreferredWidth(r); }
+            var lines = PanelModel.HeroLines(parts.Select(Width).ToList(), 2 * gap + 1, skill.skill ? Width(skill.skill) : 0, Column);
+            RectTransform On(int line) { while (rows.Count <= line) rows.Add(Line(col, 0, TextAnchor.LowerLeft)); return rows[line]; }
+            for (int i = 1; i < parts.Count; i++)
+            {
+                if (lines[i] == 0) continue;
+                if (lines[i] > lines[i - 1]) rules[i - 1].gameObject.SetActive(false);   // a number that starts a line has no rule before it
+                rules[i - 1].SetParent(On(lines[i]), false); parts[i].SetParent(On(lines[i]), false);
+            }
+            if (skill.skill && lines[parts.Count] > 0) { var to = On(lines[parts.Count]); skill.rest.SetParent(to, false); skill.skill.SetParent(to, false); }
+            // the growth line never adds a row of height (Joost on the board): it stays only where the hero is as tall without it
+            if (skill.spark)
+            {
+                float Tall() { LayoutRebuilder.ForceRebuildLayoutImmediate(col); return rows.Sum(r => LayoutUtility.GetPreferredHeight(r)); }
+                var with = Tall(); skill.spark.gameObject.SetActive(false);
+                if (Tall() < with - 0.5f) return;   // taller with it: left out on this page
+                skill.spark.gameObject.SetActive(true);
             }
         }
 
         // the number in gold and bold, its label on the number's baseline (lifted by the bigger font's descent), then a
         // quiet qualifier and the "since install" label when this number was counted on this PC
-        static void HeroNumber(RectTransform row, Block n, float size, float labelSize)
+        static RectTransform HeroNumber(RectTransform row, Block n, float size, float labelSize)
         {
             var group = Line(row, 14, TextAnchor.LowerLeft);
-            var num = RichLabel(group, "hero", Layered(n) ? LayeredText(n, PanelLook.Faint, null, size) : Rich.Plain(n.Value), size, PanelLook.Gold, style: FontStyles.Bold); num.textWrappingMode = TextWrappingModes.NoWrap;
+            var num = RichLabel(group, "hero", Rich.Plain(n.Value), size, PanelLook.Gold, style: FontStyles.Bold); num.textWrappingMode = TextWrappingModes.NoWrap;
+            Unrecorded(num, n, labelSize);   // "Not recorded": at the label's size, muted (RecordedUi.cs)
             var words = Line(group, 8, TextAnchor.LowerLeft);
             words.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, 0, 0, Mathf.RoundToInt((size - labelSize) * 0.22f));
             Label(words, n.Title, labelSize, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
-            if (!string.IsNullOrEmpty(n.Note)) Label(words, n.Note, 13, PanelLook.Faint).textWrappingMode = TextWrappingModes.NoWrap;
-            if (n.SinceInstall) Since(words, 14);
+            if (!string.IsNullOrEmpty(n.Note)) Label(words, n.Note, 14, PanelLook.Faint).textWrappingMode = TextWrappingModes.NoWrap;
+            if (Labelled(n)) Since(words, 14, n);
             // zones-wording: a layered number says "before install" and "since install" at its parts (LayeredText), so the fix4 chip under it is gone
+            if (n.Before != null) HeroBefore(group, n, size);   // 0.8 Compare: the period before beside it (Chapters/CompareUi.cs)
+            return group;
         }
 
         // ----- columns: stretches of blocks side by side, equal widths, 34 px apart (vocab.css .cols2) -----
@@ -1862,10 +2049,43 @@ namespace Hearthwoven.Panel
         static void Switch(RectTransform col, Block b, Func<string, Action> link, Action<RectTransform, Block> child)
         {
             var views = b.Items ?? new List<Block>();
+            if (b == stripSwitch && switchInStrip)   // B38: its key and chips ride at the title strip's right end, its caption on the strip's left (0.8 layout D+)
+            {
+                foreach (var v in views.Where(v => v.Selected)) foreach (var x in v.Items ?? new List<Block>()) child(col, x);
+                return;
+            }
+            if (!(b == topSwitch && switchOnTop)) SwitchRow(col, b, null, link);   // the plate's top switch drew its row first (B38, SwitchRow)
+            foreach (var v in views.Where(v => v.Selected)) foreach (var x in v.Items ?? new List<Block>()) child(col, x);
+        }
+
+        // a switch's row: its caption on the left, its key and chips, and (B38) the page's About button with its key at the right end. The plate's
+        // top switch draws this row at the very top of the plate (Render: one top row, Joost B38), its views stay where the switch is
+        static void SwitchRow(RectTransform col, Block b, Block about, Func<string, Action> link)
+        {
             var top = Line(col, 12); Size(top, -1, 28);
             var caption = Label(top, b.Title ?? "", 15, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
             caption.textWrappingMode = TextWrappingModes.NoWrap; caption.overflowMode = TextOverflowModes.Ellipsis;
             caption.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            SwitchChips(top, b, link);
+            if (about != null)
+            {
+                Size(Node("Gap", top), 8, 1);
+                var at = Line(top, 8); AboutButton(at, about, link);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(top);
+                // too wide: "Numbers" first; the caption then gives way (it ends in "..."), never a second row
+                if (LayoutUtility.GetPreferredWidth(top) > Column)
+                {
+                    at.gameObject.SetActive(false); Destroy(at.gameObject);
+                    AboutButton(Line(top, 8), about, link, PanelModel.AboutShort);
+                }
+                AboutBox(col, about);
+            }
+        }
+
+        // a switch's key and chips (its own row, or the top row's right end, B38)
+        static void SwitchChips(RectTransform top, Block b, Func<string, Action> link)
+        {
+            var views = b.Items ?? new List<Block>();
             if (!string.IsNullOrEmpty(b.KeyCap)) Size(Keycap(top, b.KeyCap), 22, 22);   // the key that turns the view (fix4: Earned / Unsung on Deeds), as quiet as the other caps
             var chips = Line(top, 2, TextAnchor.MiddleRight);
             var chosen = Math.Max(0, views.FindIndex(x => x.Selected));
@@ -1876,7 +2096,11 @@ namespace Hearthwoven.Panel
                 // inert, or, when it works later (Waits), pressing it chooses it and one line says from when (B17)
                 Chip(chips, v.Title, null, v.Selected, off ? (v.Waits ? link?.Invoke(PanelModel.ViewLink(b, v)) : null) : link?.Invoke(PanelModel.ViewLink(b, v.Selected ? Step(1) : v)), back: off ? null : link?.Invoke(PanelModel.ViewLink(b, Step(-1))), off: off);
             }
-            foreach (var v in views.Where(v => v.Selected)) foreach (var x in v.Items ?? new List<Block>()) child(col, x);
+            if (b.Chip != null)   // 0.8: a chip after the views, not one of them (Compare beside Together's windows), 8 px apart
+            {
+                Size(Node("Gap", chips), 4, 1);
+                CompareChip(chips, b.Chip.Title, b.Chip.Selected, b.Chip.Tone == PanelModel.OffTone, b.Chip.Text, b.Chip.Open, link?.Invoke(PanelModel.CompareTarget));
+            }
         }
 
         // ----- cards: a shelf of deeds (r4over deeds A); title with its icon, the big number, its label, one small line -----
@@ -1916,14 +2140,14 @@ namespace Hearthwoven.Panel
                 num.rectTransform.Box(12, 34, w - 24, 42); num.textWrappingMode = TextWrappingModes.NoWrap;
                 var lab = Line(card.rectTransform, 6); lab.Box(12, 78, w - 24, 20);
                 Shrinks(Label(lab, c.Text, 15, PanelLook.Text));
-                if (c.SinceInstall) Keeps(Since(lab, 12));
+                if (Labelled(c)) Keeps(Since(lab, 14, c));
                 var sub = (c.Items ?? new List<Block>()).FirstOrDefault();
                 if (sub != null)
                 {
                     var s = Line(card.rectTransform, 6); s.Box(12, 100, w - 24, 20);
                     Keeps(Label(s, sub.Value, 14, PanelLook.Text, style: FontStyles.Bold));
-                    Shrinks(Label(s, sub.Title, 13, PanelLook.Muted));
-                    if (sub.SinceInstall) Keeps(Since(s, 12));
+                    Shrinks(Label(s, sub.Title, 14, PanelLook.Muted));
+                    if (Labelled(sub)) Keeps(Since(s, 14, sub));
                 }
                 if (click == null) continue;
                 var button = card.gameObject.AddComponent<UnityEngine.UI.Button>();
@@ -1963,7 +2187,7 @@ namespace Hearthwoven.Panel
         // ---------- kit controls ----------
 
         // a chapter tab: the kit's tab with its chapter icon above the name, amber when chosen
-        void Tab(Choice c, Action click)
+        TabParts Tab(Choice c, Action click)
         {
             var img = Kit(chapters, c.Label, c.Selected ? "tab-selected" : "tab", raycast: true);
             var le = img.gameObject.AddComponent<LayoutElement>(); le.minHeight = le.preferredHeight = TabH; le.flexibleWidth = 1;
@@ -1972,11 +2196,13 @@ namespace Hearthwoven.Panel
             Layout(line.gameObject.AddComponent<HorizontalLayoutGroup>(), 8, TextAnchor.MiddleCenter);
             var icon = PanelLook.Icon(c.Icon);
             var ivory = (c.Icon ?? "").StartsWith("vocab:") ? new Color(0.86f, 0.82f, 0.75f) : Color.white;   // a white line mask (the Feats tab) in the kit icons' ivory
-            if (icon) Size(Img(line, "Icon", icon, c.Selected ? Amber : ivory), 26, 26);
+            var iconImg = icon ? Img(line, "Icon", icon, c.Selected ? Amber : ivory) : null;
+            if (iconImg) Size(iconImg, 26, 26);
             var label = Label(line, c.Label, 18, c.Selected ? PanelLook.Gold : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
             label.textWrappingMode = TextWrappingModes.NoWrap;
             if (c.Dot) FeatDot(img.rectTransform);   // earned feats not seen yet (Chapters/FeatsUi.cs)
             Clickable(img, click);
+            return new TabParts { Ground = img, Icon = iconImg, Label = label, Ivory = ivory };   // kept for a restyle (PanelReuse.cs)
         }
 
         // the kit's toggle: radio baked into its fixed 60 px left strip, height kept at 72
@@ -1990,7 +2216,7 @@ namespace Hearthwoven.Panel
         }
 
         // a list row, player chip, filter or button: the kit's row, lit when chosen; icon (or a person's shield) left of the text
-        GameObject Entry(RectTransform parent, string text, string icon, bool selected, Action click, float height, bool stretch = false)
+        GameObject Entry(RectTransform parent, string text, string icon, bool selected, Action click, float height, bool stretch = false, string sub = null)
         {
             var img = Kit(parent, text, selected ? "row-selected" : "row", raycast: true);
             var le = img.gameObject.AddComponent<LayoutElement>(); le.minHeight = le.preferredHeight = height;
@@ -2001,6 +2227,14 @@ namespace Hearthwoven.Panel
             label.rectTransform.Stretch();
             var pad = height <= RowH ? 10f : 14f;
             label.rectTransform.offsetMin = new Vector2(hasIcon ? pad + size + 10 : 20, 0); label.rectTransform.offsetMax = new Vector2(-16, 0);
+            TextMeshProUGUI under = null;
+            if (sub != null)   // a second, smaller line under the name (a fellow who just joined, 0.7): the name in the top half, the line in the bottom
+            {
+                label.fontSize = 16; label.rectTransform.offsetMin = new Vector2(label.rectTransform.offsetMin.x, height / 2 - 4); label.rectTransform.offsetMax = new Vector2(-16, -3);
+                under = Label(img.transform, sub, PanelLook.MinText, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
+                under.textWrappingMode = TextWrappingModes.NoWrap; under.rectTransform.Stretch();
+                under.rectTransform.offsetMin = new Vector2(label.rectTransform.offsetMin.x, 4); under.rectTransform.offsetMax = new Vector2(-16, -(height / 2 - 2));
+            }
             if (hasIcon)
             {
                 var m = Marker(img.rectTransform, icon, size, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0, 0.5f); m.anchoredPosition = new Vector2(pad, 0);
@@ -2008,15 +2242,17 @@ namespace Hearthwoven.Panel
                 if (icon.StartsWith("vocab:")) foreach (var im in m.GetComponentsInChildren<Image>()) im.color = ListIconGold;   // as the Deeds title icons
             }
             // preferred: the whole text; a row that runs out of width shrinks it (ellipsis) instead of spilling past the edge
-            if (!stretch) { le.preferredWidth = label.preferredWidth + (hasIcon ? size + 46 : 40); le.minWidth = Mathf.Min(le.preferredWidth, (hasIcon ? size + 46 : 40) + 48); }
+            if (!stretch) { le.preferredWidth = Mathf.Max(label.preferredWidth, under != null ? under.preferredWidth : 0f) + (hasIcon ? size + 46 : 40); le.minWidth = Mathf.Min(le.preferredWidth, (hasIcon ? size + 46 : 40) + 48); }
             Clickable(img, click);
             return img.gameObject;
         }
 
         void Clickable(Image img, Action click)
         {
+            if (click == null) return;   // an inert entry (a fellow who just joined, 0.7): no button, so a click never reaches Safe(null)
             var button = img.gameObject.AddComponent<UnityEngine.UI.Button>();
             button.targetGraphic = img; button.transition = Selectable.Transition.None;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };   // never the UI's selection: a kept tab or row would answer Submit or the arrows (the book has its own keys)
             button.onClick.AddListener(() => Safe(click)());
         }
 
@@ -2034,7 +2270,7 @@ namespace Hearthwoven.Panel
             return (RectTransform)go.transform;
         }
 
-        static void Clear(RectTransform r) { for (int i = r.childCount - 1; i >= 0; i--) Destroy(r.GetChild(i).gameObject); r.DetachChildren(); }
+        static void Clear(RectTransform r) { KeepTexts(r); for (int i = r.childCount - 1; i >= 0; i--) Destroy(r.GetChild(i).gameObject); r.DetachChildren(); }   // its plain labels kept for the next drawing (PanelReuse.cs)
 
         static RectTransform Row(RectTransform parent, float spacing) { var row = Node("Row", parent); Layout(row.gameObject.AddComponent<HorizontalLayoutGroup>(), spacing, TextAnchor.UpperLeft); return row; }
 
@@ -2049,27 +2285,47 @@ namespace Hearthwoven.Panel
 
         static Image Img(Transform parent, string name, Sprite sprite, Color color, bool raycast = false)
         {
-            var img = Node(name, parent).gameObject.AddComponent<Image>();
+            var kept = SpareImage(name);   // 0.8.1: an image kept from an earlier drawing, reset (PanelReuse.cs); set while it sleeps, it wakes in its place
+            var img = kept ? kept : MadeImage(Node(name, parent).gameObject.AddComponent<Image>());
             img.sprite = sprite; img.color = color; img.raycastTarget = raycast; img.preserveAspect = sprite != null;
+            if (kept) kept.rectTransform.SetParent(parent, false);
             return img;
         }
 
         // a kit sprite at white tint (its colour is authored), nine-sliced where the kit gives borders
         static Image Kit(Transform parent, string name, string sprite, bool raycast = false)
         {
-            var img = Node(name, parent).gameObject.AddComponent<Image>();
-            img.sprite = PanelLook.Ui(sprite); img.color = img.sprite ? Color.white : PanelLook.Slot; img.raycastTarget = raycast;
-            if (PanelLook.Sliced(sprite)) { img.type = Image.Type.Sliced; img.pixelsPerUnitMultiplier = 1f; }
-            else img.preserveAspect = true;
+            var kept = SpareImage(name);   // 0.8.1: an image kept from an earlier drawing (PanelReuse.cs)
+            var img = kept ? kept : MadeImage(Node(name, parent).gameObject.AddComponent<Image>());
+            KitLook(img, sprite); img.raycastTarget = raycast;   // the sprite's look (PanelReuse.cs: also a kept tab's or row's restyle)
+            if (kept) kept.rectTransform.SetParent(parent, false);
             return img;
         }
 
         static TextMeshProUGUI Label(Transform parent, string text, float size, Color color, bool title = false,
                                      TextAlignmentOptions align = TextAlignmentOptions.TopLeft, FontStyles style = FontStyles.Normal, TMP_FontAsset face = null)
         {
-            var t = Node("Text", parent).gameObject.AddComponent<TextMeshProUGUI>();
             var font = face ? face : title ? PanelLook.Title : PanelLook.Body;
+            // 0.8.1: a text kept from an earlier drawing, reset to what a new label is (PanelReuse.cs); set while it sleeps, it wakes in its place once
+            var kept = font ? SpareText() : null;
+            if (kept != null)
+            {
+                if (kept.font != font) kept.font = font;
+                kept.text = text ?? ""; kept.fontSize = Mathf.Max(size, PanelLook.MinText); kept.color = color; kept.alignment = align; kept.fontStyle = style;
+                kept.textWrappingMode = TextWrappingModes.Normal; kept.raycastTarget = false; kept.richText = false;
+                kept.rectTransform.SetParent(parent, false);
+                return kept;
+            }
+            // the font goes on before the label wakes: TMP's Awake looks for a font at once and, with none yet (the game ships no TMP default),
+            // logs "The LiberationSans SDF Font Asset was not found" for every label drawn (release-0.8.0, Joost's log). Added to an inactive
+            // object, Awake waits until it is shown, the font already set
+            var go = Node("Text", parent).gameObject;
+            go.SetActive(false);
+            var t = go.AddComponent<TextMeshProUGUI>();
             if (font) t.font = font;
+            go.SetActive(true);
+            if (font && newText == null) newText = new NewText(t);   // what a new label is, before it is set (the reset for kept texts)
+            TextsMade++;
             t.text = text ?? ""; t.fontSize = Mathf.Max(size, PanelLook.MinText); t.color = color; t.alignment = align; t.fontStyle = style;
             t.textWrappingMode = TextWrappingModes.Normal; t.raycastTarget = false; t.richText = false;
             return t;
@@ -2110,6 +2366,17 @@ namespace Hearthwoven.Panel
     }
 
     /// <summary>
+    /// The book's raycaster, asked before every other one while the book is open. The game's HUD canvas draws above the book (its hover
+    /// text, PanelHooks.NoHoverText) and so was asked first; its hover text, emptied but still there, caught the pointer over its box just
+    /// right of the screen's centre, and the bar parts under it never lit (0.8 rc1 play-test: "a blind spot in the center of the page").
+    /// Drawing order stays as it is; outside the book's frame the game's UI gets the pointer as always, and with the book shut this is off.
+    /// </summary>
+    sealed class PanelRaycaster : GraphicRaycaster
+    {
+        public override int sortOrderPriority => int.MaxValue;
+    }
+
+    /// <summary>
     /// Draws vocabulary blocks off screen and destroys them again, for the self-test (selftest/SelfTest.cs): no canvas, no
     /// player, no game state and no click targets, so it is safe on a dedicated server, where the panel itself never opens.
     /// </summary>
@@ -2121,7 +2388,7 @@ namespace Hearthwoven.Panel
     /// </summary>
     // a chip that acts on press: the left button its own act (the next view or biome), the right button the previous one
     /// <summary>A focus ring (PanelUi.FocusRing): whether its box holds the focus; KeyFocus decides whether it shows.</summary>
-    sealed class FocusMark : MonoBehaviour { public bool Focused; }
+    sealed class FocusMark : MonoBehaviour { public bool Focused; /* 0.8: what it stands in for while it shows (a foe cell's icon, hidden while its factor shows) */ public GameObject Hide; }
 
     sealed class Press : MonoBehaviour, IPointerDownHandler
     {

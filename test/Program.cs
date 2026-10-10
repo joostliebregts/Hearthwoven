@@ -59,6 +59,15 @@ Check(dmg.GetProperty("taken").GetProperty("Troll|EnemyHit|blunt").GetDouble() =
 var packed = Transport.Pack(json);
 Check(Transport.Unpack(packed) == json, $"gzip transport round-trip ({json.Length} -> {packed.Length} bytes)");
 
+// 0.7 sync item 2: the first copy 10 s after spawn, but never inside the server's 20 s gate after the previous copy (it would be refused)
+Check(Plugin.FirstSendAt(100f, -100f) == 110f && Plugin.FirstSendAt(100f, 95f) == 95f + Plugin.MinSendGap && Plugin.MinSendGap > (float)ServerIntake.RateGate.MinGap,
+      "first copy: 10 s after spawning; a respawn just after a send waits until the server's 20 s gap has passed");
+Check(Plugin.NotInsideGap(105f, 100f) == 100f + Plugin.MinSendGap && Plugin.NotInsideGap(300f, 100f) == 300f && Plugin.NotInsideGap(-1f, 100f) == -1f,
+      "after a share change or anchor copy, an interval copy due within 21 s waits (never refused by the server's gate); a later one keeps its time; not spawned stays not spawned");
+// 0.7 sync item 3: the interval default 5 -> 2 minutes, moved once (as the panel's key layout): the old default moves, a choice stays
+Check(Plugin.MigrateInterval(0, 5f) == (1, 2f) && Plugin.MigrateInterval(0, 10f) == (1, 10f) && Plugin.MigrateInterval(0, 2f) == (1, 2f) && Plugin.MigrateInterval(1, 5f) == (1, 5f),
+      "interval: (0, 5) -> (1, 2); (0, 10) keeps 10; (1, 5) set again after the move stays 5");
+
 // routed-damage parser
 var hit = new HitData { m_skill = Skills.SkillType.Bows, m_hitType = HitData.HitType.PlayerHit };
 hit.m_damage.m_pierce = 55f;
@@ -509,6 +518,8 @@ using (var pe = new System.Reflection.PortableExecutable.PEReader(gameFile))
 }
 Check(new[] { "CookingStation.OnInteract/1", "CookingStation.IsItemDone/1", "CookingStation.SpawnItem/4", "CookingStation.RPC_RemoveDoneItem/3", "ZNetView.InvokeRPC/2", "PlayerProfile.IncrementStatItemCraft/3" }.All(gameMethods.Contains),
       "G1 the game methods the cooking hooks attach to exist (OnInteract, IsItemDone, SpawnItem, RPC_RemoveDoneItem(sender, point, amount), InvokeRPC, IncrementStatItemCraft)");
+Check(new[] { "Piece.DropResources/1", "ItemDrop.Awake/0", "ZDOMan.HandleDestroyedZDO/1", "Humanoid.Pickup/3", "WearNTear.RPC_Remove/2" }.All(gameMethods.Contains),
+      "G2 the game methods salvage attaches to exist (Piece.DropResources, ItemDrop.Awake, ZDOMan.HandleDestroyedZDO, Humanoid.Pickup; WearNTear.RPC_Remove, why the drops are made on the host)");
 
 // ---------- trees you felled, counted on your own PC (TreeFalls: the felling blow, then the tree destroyed) ----------
 var tf = new TreeFalls<int>();
@@ -540,7 +551,43 @@ Check(treeBase.TakeBaseline("treesFelled", new System.Collections.Generic.Dictio
       LocalTotals.FromJson(treeBase.ToJson(t2026)).Baseline["treesFelled"]["Tree"] == 410 && LocalTotals.FromJson(treeBase.ToJson(t2026)).ExactAtBaseline["treesFelled"].Count == 0,
       "T9 the game's trees-felled counter at first run is the baseline; nothing Hearthwoven counted is in it (exactAtBaseline 0)");
 
-// ---------- Deeds twins (DeedsZones): "since install" of a counter the game keeps complete = the counter now minus its baseline ----------
+// ---------- materials back from a piece that came down (0.8 SalvageWatch): recovered, never brought in ----------
+var salvage = new SalvageWatch<int>(); var svPicked = new SessionEvents();
+salvage.Created(1, 10f); salvage.Created(3, 10f);   // drops this PC made inside Piece.DropResources (it hosts the piece)
+SessionEvents.CountPickup(svPicked, "$item_stone", false, salvage.Recovered(1, 20f), 6, 0, 6);    // the wall's stone
+SessionEvents.CountPickup(svPicked, "$item_stone", false, salvage.Recovered(2, 20f), 5, 6, 11);   // a rock's stone
+SessionEvents.CountPickup(svPicked, "$item_wood", false, salvage.Recovered(3, 20f), 10, 46, 50);  // the wall's wood, room for 4
+SessionEvents.CountPickup(svPicked, "$item_wood", true, false, 10, 50, 60);                        // your own dropped stack
+Check(svPicked.Recovered["$item_stone"] == 6 && svPicked.PickedUp["$item_stone"] == 5 && svPicked.Recovered["$item_wood"] == 4 && !svPicked.PickedUp.ContainsKey("$item_wood"),
+      "SV1 a piece's drop counts as recovered, a rock's as brought in; a partial pickup counts what went in; a stack someone held counts nothing");
+var svFar = new SalvageWatch<int>();   // another PC hosts the pieces: the destroy and the drops arrive in either order
+svFar.CameDown(100, 10, 100, new Dictionary<string, int> { ["$item_stone"] = 6, ["$item_wood"] = 4 }, 1000, 50f);
+var svAfter = svFar.Appeared(10, "$item_stone", 6, 100.5f, 7, 100, 1000.2, 1000.5, 50.5f);
+var svSpent = !svFar.Appeared(11, "$item_stone", 2, 100, 7, 100, 1000.3, 1000.6, 50.6f);   // the piece's stone is all claimed
+var svLate = !svFar.Appeared(12, "$item_wood", 2, 100, 7, 100, 1030, 1030.2, 80f);         // made 30 s later: a log you split there
+var svAway = !svFar.Appeared(13, "$item_wood", 2, 112, 7, 100, 1000.2, 1000.5, 50.5f);     // 12 m from the piece
+var svOther = !svFar.Appeared(14, "$item_iron", 2, 100, 7, 100, 1000.2, 1000.5, 50.5f);    // not one of its materials
+var svFirst = !svFar.Appeared(20, "$item_wood", 4, 200, 5, 200, 2000, 2000.1, 60f);        // a drop before its piece's destroy: waits
+svFar.CameDown(200, 6, 200, new Dictionary<string, int> { ["$item_wood"] = 4 }, 2000.4, 60.3f);
+var svNone = !svFar.Appeared(30, "$item_stone", 3, 300, 2, 300, 3000.1, 3200, 260f);       // no piece came down there
+svFar.CameDown(400, 6, 400, new Dictionary<string, int> { ["$item_stone"] = 3 }, 4000, 300f);
+var svWalkIn = svFar.Appeared(31, "$item_stone", 3, 401, 1, 400, 4000.2, 4180, 480f);       // its drops show up as you walk in, 3 min later
+Check(svAfter && svSpent && svLate && svAway && svOther && svFirst && svFar.Recovered(20, 61f) && svNone && svWalkIn && !svFar.Recovered(12, 81f),
+      "SV2 a piece another PC brought down: its drops are recovered whether they arrive before or after its destroy, also when you come near later; " +
+      "a drop made 30 s apart, 12 m away, of another item or past the piece's amount is brought in");
+var svForget = new SalvageWatch<int>();
+svForget.Created(1, 0f);
+var svKept = svForget.Recovered(1, SalvageWatch<int>.Keep - 1f) && !svForget.Recovered(1, SalvageWatch<int>.Keep + 1f);
+for (int i = 2; i < 5000; i++) svForget.Created(i, 100f + i * 0.05f);   // a whole hall taken down within ten minutes
+Check(svKept && svForget.Recovered(4999, 400f) && svForget.Tracked <= 2048,
+      $"SV3 a recovered drop is forgotten after ten minutes; the memory stays bounded ({svForget.Tracked} kept of 4 999), the newest kept");
+var svFile = new LocalTotals { PlayerId = 7, FirstRunUtc = t2026.AddDays(-5) };
+foreach (var g in LocalTotals.StartGroups) svFile.Starts[g] = t2026.AddDays(-5);   // a 0.7 file
+Check(svFile.FillStarts(t2026) && svFile.Starts[LocalTotals.StartRecovered] == t2026 && LocalTotals.StartGroups.All(g => svFile.Starts[g] == t2026.AddDays(-5)) &&
+      LocalTotals.FromJson(svFile.ToJson(t2026)).Starts[LocalTotals.StartRecovered] == t2026,
+      "SV4 materials recovered are recorded from the first load of 0.8, never from the 0.6 first run; the date is kept in the file");
+
+// ---------- Deeds twins (DeedsBaseline): "since install" of a counter the game keeps complete = the counter now minus its baseline ----------
 var twinBase = new LocalTotals();
 var statsAtRun = new System.Collections.Generic.Dictionary<string, float> { ["CraftWeapon"] = 9, ["FishCaught"] = 200, ["Upgrades"] = 0 };
 var firstAt = new System.DateTime(2026, 10, 9, 8, 30, 0, System.DateTimeKind.Utc);
@@ -822,6 +869,11 @@ fails += FellowTests.Run();   // fellows by platform id, same-name players, old 
 fails += LocalFileTests.Run();
 fails += HistoryTests.Run();   // the day history (HISTORY-06.md): recording, live part, folding, size, file, shared per day   // 0.6.1: local-file resilience (NaN, atomic writes + .bak, one file per character, unknown keys, newer formats)
 fails += ServerResilienceTests.Run();   // RESILIENCE-06 server items: atomic files, input limits, the book per world, old logs compressed (test/ServerResilienceTests.cs)
+fails += ArmourTests.Run();   // 0.7: the armour ledger, its book on this PC (schema 4) and the short windows' buckets (test/ArmourTests.cs)
+fails += BattleRecTests.Run();   // 0.8: the battle record (one foe per creature, outcomes, fights, bounds, the book, what is shared; test/BattleRecTests.cs)
+fails += LiveSyncTests.Run();   // 0.7 live updates: a 10 s update's size, base + latest update = the next full copy, what the server keeps (test/LiveSyncTests.cs)
+fails += DeedLogTests.Run();   // 0.7 Deeds > Recent: deeds per minute as a time split of the session tallies, windows, cost; since last time (test/DeedLogTests.cs)
+fails += ResilienceTests.Run();   // 0.8: renamed characters, worlds made again under one name, two accounts with one id, the .bak as the last good copy, newer keys kept (test/ResilienceTests.cs)
 fails += HookGuardTests.Run();   // RESILIENCE-06 item 6: one guard for every Harmony hook, checked on the IL of each (test/HookGuardTests.cs)
 
 System.Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");

@@ -14,11 +14,13 @@ namespace Hearthwoven
         public static string Build(string modVersion, long playerId, string playerName, PlayerProfile.PlayerStats[] stats,
                                    IEnumerable<SkillInfo> skills, string world, DamageTally damage, string session = "", SessionEvents events = null, EventLog log = null, bool share = false,
                                    SessionEvents eventsSinceInstall = null, DamageTally damageSinceInstall = null, BiomeTally biomeSinceInstall = null, System.DateTime? biomeFromUtc = null, FeatsLedger feats = null,
-                                   IDictionary<string, float> dealtByDay = null)
+                                   IDictionary<string, float> dealtByDay = null, IEnumerable<string> knownBiomes = null, string copyId = null, FoeShare foes = null)
         {
             // Absolute values only: a resend after a reconnect or crash replaces, never adds.
             var j = new Json().Open()
                 .Str("mod", modVersion).Num("playerId", playerId).Str("name", playerName).Str("world", world ?? "").Str("session", session ?? "").Raw("share", share ? "true" : "false");
+            // 0.7: which full copy this is (live updates name it as their base, LiveSync.cs); an older reader ignores the key
+            if (!string.IsNullOrEmpty(copyId)) j.Str("copyId", copyId);
             j.Key("stats").OpenArr();
             // Only slot 0: the raw totals. The other slots are per difficulty and overlap, so adding them double-counts
             // (lesson from DudeWhatAreMyStats, see README credits).
@@ -64,6 +66,14 @@ namespace Hearthwoven
             if (dealtByDay != null && dealtByDay.Count > 0) j.Dict("dealtByDay", dealtByDay);
             // the bests behind some feats (Heavy Keel's load, Long Lead's lead): number, day and biome, never a place
             feats?.WriteSharedBests(j);
+            // the biomes this character found (0.7: the group feats' gate counts fellows' lands too; GROUP-FEATS.md 1.3): the game's own record mapped
+            // to Heightmap.Biome names, at most the nine of the journey. The server keeps and relays a copy whole (GroupShare.Store writes the JSON
+            // as sent, less death positions and worlds; GroupServe packs the file's text), so no server change; an older reader ignores the key
+            var biomes = knownBiomes?.Where(b => !string.IsNullOrEmpty(b)).Distinct().Take(16).ToList();
+            if (biomes != null && biomes.Count > 0) j.Raw("knownBiomes", "[" + string.Join(",", biomes.Select(Json.Q).ToArray()) + "]");
+            // 0.8: the foes you fought per kind and what became of them, this session and since recording began (FoeShare: compact, at most 60 kinds
+            // each); the battle feed itself stays on your PC. An older reader ignores the key
+            foes?.WriteTo(j);
             return j.Close().ToString();
         }
     }

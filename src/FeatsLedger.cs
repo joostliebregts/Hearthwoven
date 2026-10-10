@@ -43,7 +43,9 @@ namespace Hearthwoven
     {
         public const int MaxFeats = 64, MaxTiers = 3, MaxCounts = 32, MaxBests = 8;
         public bool Primed;
-        public int Seen;
+        /// <summary>Earned tiers seen: Seen of the player's own feats (on Earned), SeenGroup of the group's feats (on Together). Each page
+        /// answers its own gold dot, so opening Earned never clears a group tier's dot.</summary>
+        public int Seen, SeenGroup;
         public readonly Dictionary<string, List<FeatMoment>> Earned = new Dictionary<string, List<FeatMoment>>();
         public readonly Dictionary<string, double> Counts = new Dictionary<string, double>();
         /// <summary>Bests that are not sums (cargoBestVoyage: metal and ore items aboard over 2 km; ledBestMeters: metres of the longest lead):
@@ -62,9 +64,14 @@ namespace Hearthwoven
         }
 
         public int TiersEarned => Earned.Values.Sum(l => l.Count);
-        /// <summary>Earned tiers the player has not seen on the Feats page yet (the gold dot).</summary>
-        public int Unseen => Math.Max(0, TiersEarned - Seen);
-        public void MarkSeen() { Seen = TiersEarned; }
+        /// <summary>Earned tiers of the group's feats (group = true) or the player's own (false); isGroup says which ids are group feats (the panel's FeatDefs).</summary>
+        public int TiersEarnedOf(Func<string, bool> isGroup, bool group) => Earned.Where(kv => isGroup(kv.Key) == group).Sum(kv => kv.Value.Count);
+        /// <summary>Earned tiers not seen yet on their own page (the gold dot): Earned for the player's own, Together for the group's.</summary>
+        public int UnseenOf(Func<string, bool> isGroup, bool group) => Math.Max(0, TiersEarnedOf(isGroup, group) - (group ? SeenGroup : Seen));
+        /// <summary>Marks one side seen: own (Earned was opened) or group (Together was opened).</summary>
+        public void MarkSeenOf(Func<string, bool> isGroup, bool group) { var n = TiersEarnedOf(isGroup, group); if (group) SeenGroup = n; else Seen = n; }
+        /// <summary>Marks both sides seen (samples and tests).</summary>
+        public void MarkSeen(Func<string, bool> isGroup) { MarkSeenOf(isGroup, false); MarkSeenOf(isGroup, true); }
 
         /// <summary>Records every tier up to <paramref name="tier"/> that is not there yet, each with the moment; true when anything was added.</summary>
         public bool Earn(string id, int tier, FeatMoment moment)
@@ -109,7 +116,7 @@ namespace Hearthwoven
             return true;
         }
 
-        public bool IsEmpty => !Primed && Earned.Count == 0 && Counts.Count == 0 && Bests.Count == 0 && Seen == 0;
+        public bool IsEmpty => !Primed && Earned.Count == 0 && Counts.Count == 0 && Bests.Count == 0 && Seen == 0 && SeenGroup == 0;
 
         static string Iso(DateTime d) => d.ToString("o", CultureInfo.InvariantCulture);
         static DateTime ParseUtc(string s) => DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var d) ? d.ToUniversalTime() : DateTime.MinValue;
@@ -132,10 +139,11 @@ namespace Hearthwoven
         };
         static string NullIfEmpty(string s) => string.IsNullOrEmpty(s) ? null : s;
 
-        /// <summary>The local file's form (LocalTotals, top-level "feats"): {"primed":1,"seen":n,"earned":{id:[moment,..]},"counts":{key:n}}.</summary>
+        /// <summary>The local file's form (LocalTotals, top-level "feats"): {"primed":1,"seen":n,"seenGroup":n,"earned":{id:[moment,..]},"counts":{key:n}}.</summary>
         public void WriteTo(Json j, string key = "feats")
         {
             j.Key(key).Open().Num("primed", Primed ? 1 : 0).Num("seen", Seen);
+            if (SeenGroup > 0) j.Num("seenGroup", SeenGroup);
             j.Key("earned").Open();
             foreach (var kv in Earned.Take(MaxFeats))
             {
@@ -195,7 +203,7 @@ namespace Hearthwoven
         {
             var l = new FeatsLedger();
             if (o == null) return l;
-            l.Primed = MiniJson.Num(o, "primed") > 0; l.Seen = (int)MiniJson.Num(o, "seen");
+            l.Primed = MiniJson.Num(o, "primed") > 0; l.Seen = (int)MiniJson.Num(o, "seen"); l.SeenGroup = (int)MiniJson.Num(o, "seenGroup");
             var earned = MiniJson.Obj(o, "earned");
             if (earned != null)
                 foreach (var kv in earned)

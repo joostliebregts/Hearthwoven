@@ -36,6 +36,7 @@ namespace Hearthwoven
             new KeyValuePair<string, string>("filter-key", "open the panel on Deeds > Crafting (or Building, Battle) and press the filter key"),
             new KeyValuePair<string, string>("snapshot-final", "log out to the main menu (the line comes at logout)"),
             new KeyValuePair<string, string>("perf", "play a minute, open the book (H) and page through it (one 'perf' line a minute: the panel, page refresh and hook cost per frame)"),
+            new KeyValuePair<string, string>("armour", "with armour on, take a few plain hits (Greydwarf, Neck) and compare each 'armour' line with the red number above you; then one hit with no armour, one blocked, one with the ward up"),
         };
 
         public static string Line(string status, string area, string text) => Prefix + " " + status + " " + area + ": " + text;

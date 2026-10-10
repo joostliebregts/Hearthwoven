@@ -27,15 +27,18 @@ namespace Hearthwoven
 
         /// <summary>Markers in the chest log: a world save, and a server start. Events after the last save that are followed
         /// by a start without a save in between were rolled back with the world (INTEGRITY C12); the companion drops them.
-        /// 0.6.1: each marker names the world, so a rebuild of one world's book reads only that world's events (RESILIENCE-06 I8).</summary>
+        /// 0.6.1: each marker names the world, so a rebuild of one world's book reads only that world's events (RESILIENCE-06 I8);
+        /// 0.8: and its id ("worldUid", the game's World.m_uid as text), so a world made again under the same name is another world.</summary>
         internal static void Marker(string what)
         {
             try
             {
                 var dir = Path.Combine(BepInEx.Paths.BepInExRootPath, "Hearthwoven");
                 Directory.CreateDirectory(dir);
-                File.AppendAllText(Path.Combine(dir, "chests-" + DailyLogs.Day(DateTime.UtcNow) + ".jsonl"),
-                    new Json().Open().Str("t", DateTime.UtcNow.ToString("o")).Str("marker", what).Str("world", ZNet.instance?.GetWorldName() ?? "").Close() + "\n");
+                var line = new Json().Open().Str("t", DateTime.UtcNow.ToString("o")).Str("marker", what).Str("world", ZNet.instance?.GetWorldName() ?? "");
+                var uid = ServerBookHooks.WorldUid();
+                if (uid != null) line.Str("worldUid", uid);   // 0.8: the world's id too (a world made again under the same name is another world)
+                File.AppendAllText(Path.Combine(dir, "chests-" + DailyLogs.Day(DateTime.UtcNow) + ".jsonl"), line.Close() + "\n");
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] marker: " + e.Message); }
         }

@@ -55,7 +55,7 @@ namespace Hearthwoven.Panel
                 var row = Line(col, ReadGap, TextAnchor.UpperLeft); row.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, 0, 10, 10);
                 var mark = Node("Mark", row); Size(mark, ReadMark, ReadMark);
                 if ((r.Icon ?? "").StartsWith("vocab:promise-") || r.Icon == "vocab:about-info") VocabImg(mark, "Mark", VocabName(r.Icon), PanelLook.Muted).rectTransform.Stretch();
-                else { var m = Marker(mark, r.Icon, ReadMark, layout: false); m.Stretch(); if (r.Tone == "faded") foreach (var im in m.GetComponentsInChildren<Image>()) im.color = new Color(1, 1, 1, 0.4f); }
+                else Marker(mark, r.Icon, ReadMark, layout: false).Stretch();
                 var text = VStack(row, 6); Size(text, Column - ReadMark - ReadGap, -1);
                 Label(text, r.Title, 22, PanelLook.Text);
                 Label(text, r.Text, 18, OriginBody);
@@ -99,16 +99,16 @@ namespace Hearthwoven.Panel
                     {
                         for (var x = xi + 4; x + 8 <= x1; x += 15) Bar(box, x, mid - 3, 8, 6, PanelLook.Muted);   // dashed: only while they share
                         // what a fellow's line is: the copy they last shared, not a live count (fix-rest, review)
-                        if (!string.IsNullOrEmpty(s.Text)) { var cap = Label(box, s.Text, 13, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight); cap.rectTransform.Box(x0, top, xi - x0 - 10, SpanRowH); cap.textWrappingMode = TextWrappingModes.NoWrap; }
+                        if (!string.IsNullOrEmpty(s.Text)) { var cap = Label(box, s.Text, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight); cap.rectTransform.Box(x0, top, xi - x0 - 10, SpanRowH); cap.textWrappingMode = TextWrappingModes.NoWrap; }
                     }
                 }
             }
             for (var y = 0f; y < spans.Count * SpanRowH + 4; y += 6) Bar(box, xi, y, 1, 3, new Color(PanelLook.Accent.r, PanelLook.Accent.g, PanelLook.Accent.b, 0.6f));   // install
             var foot = spans.Count * SpanRowH + 6;
             Bar(box, x0, foot, x1 - x0, 1, rule);
-            var made = Label(box, b.Text, 13, PanelLook.Faint); made.rectTransform.Box(x0, foot + 6, xi - x0 - 100, 20); made.textWrappingMode = TextWrappingModes.NoWrap;
-            var now = Label(box, b.Value2, 13, PanelLook.Faint, align: TextAlignmentOptions.TopRight); now.rectTransform.Box(x1 - 60, foot + 6, 60, 20);
-            var inst = Label(box, b.Value, 13, PanelLook.Accent, align: TextAlignmentOptions.TopRight, style: FontStyles.Bold); inst.rectTransform.Box(xi - 120, foot + 6, x1 - 60 - (xi - 120) - 12, 20);
+            var made = Label(box, b.Text, 14, PanelLook.Faint); made.rectTransform.Box(x0, foot + 6, xi - x0 - 100, 20); made.textWrappingMode = TextWrappingModes.NoWrap;
+            var now = Label(box, b.Value2, 14, PanelLook.Faint, align: TextAlignmentOptions.TopRight); now.rectTransform.Box(x1 - 60, foot + 6, 60, 20);
+            var inst = Label(box, b.Value, 14, PanelLook.Accent, align: TextAlignmentOptions.TopRight, style: FontStyles.Bold); inst.rectTransform.Box(xi - 120, foot + 6, x1 - 60 - (xi - 120) - 12, 20);
             inst.textWrappingMode = TextWrappingModes.NoWrap;
         }
 
@@ -126,7 +126,7 @@ namespace Hearthwoven.Panel
                 Label(one, p.Title, 14, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
             }
             // a promise's one explaining line (other mods' items) under the row, quiet
-            foreach (var p in items.Where(x => !string.IsNullOrEmpty(x.Text))) Label(col, p.Text, 13, PanelLook.Muted);
+            foreach (var p in items.Where(x => !string.IsNullOrEmpty(x.Text))) Label(col, p.Text, 14, PanelLook.Muted);
         }
     }
 }

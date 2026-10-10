@@ -42,8 +42,8 @@ namespace Hearthwoven.Panel
         // resources that never mark a tier: fasteners, fuel, glue, trim, and what monsters drop (a Wood Gate with iron nails is still wood)
         static readonly string[] PieceMarkless = { "nails", "bolt", "coal", "resin", "flint", "feather", "leatherscraps", "hide", "pelt", "chain", "core", "eye", "bone", "thistle", "honey", "entrails", "ymirremains" };
 
-        // the tabs' bar has no colours of its own: its parts take the bars' palette by size (FacetModel.BarColours), so nineteen tabs
-        // of a modded hammer never share one fallback colour (0.6.5, Joost in game); the eighth and smaller fold into "Other (n kinds)"
+        // the tabs are abstract categories: each takes its colour from its name (PanelModel.CategoryColour: the game's tabs fixed, a mod's
+        // by a stable hash), so a tab wears one colour on every page and window (0.7); the eighth and smaller fold into "Other (n kinds)"
 
         // each material's own colour in the linked bar, kept where it stays apart from the larger parts (FacetModel.BarColours);
         // wood brown, dark core wood, stone grey, bronze and iron are tuned to be told apart from each other (CIEDE2000 above 20)
@@ -207,7 +207,7 @@ namespace Hearthwoven.Panel
                 new FacetDef { Id = "material", Title = "Main material", Sub = "by main material", BarTitle = "By main material",
                                Options = materials.Select(m => new FacetOption { Id = m, Label = m, Colour = PieceMaterialColour(m) }).ToList() },
             };
-            return Facets(state, BuildFilter, defs, items, "built", SrcCharacter, "piece", "pieces", "No filter: every piece");
+            return Facets(state, BuildFilter, defs, items, "built", SrcCharacter, "piece", "pieces", "No filter: every piece", overview: true);
         }
     }
 }

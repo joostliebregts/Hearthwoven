@@ -4,6 +4,9 @@
     <AssemblyName>Hearthwoven</AssemblyName>
     <LangVersion>latest</LangVersion>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- the same commit builds the same DLL from any checkout: the PDB path and source paths in the build say /hearthwoven, not the worktree -->
+    <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=/hearthwoven</PathMap>
   </PropertyGroup>
   <ItemGroup><PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" /></ItemGroup>
   <ItemGroup>

@@ -60,7 +60,7 @@ static class ParseCountTests
             var before = PanelModel.EnjoyedByFellows(rich);
             var feasts = new SessionEvents();
             SessionEvents.Add(feasts.AteFromFeastOf, rich.PlayerId.ToString(CultureInfo.InvariantCulture) + "|$item_feastmeadows", 1234);
-            rich.Fellows = (rich.Fellows ?? new List<PanelInput>()).Concat(new[] { new PanelInput { PlayerName = "Ulf", IsSelf = false, Events = feasts } }).ToList();
+            rich.Fellows = (rich.Fellows ?? new List<PanelInput>()).Concat(new[] { new PanelInput { PlayerName = "Finch", IsSelf = false, Events = feasts } }).ToList();
             var total = PanelModel.EnjoyedByFellows(rich);
             Check(total == before + 1234 && total >= 1000, "cooking: enjoyed by fellows is the sum of the numbers, " + before + " + 1234 = " + total + " (over 1 000, where the shown text has a no-break space)");
 

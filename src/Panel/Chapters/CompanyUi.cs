@@ -9,8 +9,8 @@ namespace Hearthwoven.Panel
 {
     /// <summary>
     /// Company's own forms (work/hearthwoven-visual-vocabulary/proto: vocab.js hearth + giftRow, r3-company.js Together,
-    /// r4over.js Gear shared): giving (players around the hearth, Codex's pre-baked thread arcs placed, rotated, scaled,
-    /// mirrored and tinted once; thickness = count as stacked copies, never a stretched weave), together (category chips,
+    /// r4over.js Gear shared): giving (players around the hearth, one thin flat line per gift along its FireLayout arc, its width and
+    /// arrowhead by the count, 0.7), together (category chips,
     /// the group's total as one bar coloured per player, the players x categories dot matrix) and madeby (their gear, your
     /// gear: maker, an arrow, one tile per kind). Every picture is a ready sprite; geometry is worked out once per fill.
     /// </summary>
@@ -22,17 +22,15 @@ namespace Hearthwoven.Panel
 
         static void Caption(RectTransform parent, string text, float x, float top, float w)
         {
-            var h = Label(parent, text, 13, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.MidlineLeft);
+            var h = Label(parent, text, 14, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.MidlineLeft);
             h.characterSpacing = 14; h.textWrappingMode = TextWrappingModes.NoWrap; h.rectTransform.Box(x, top, w, 20);
         }
 
         // ----- giving: from whom to whom? -----
 
-        const float FireH = 400, FireR = 140, ShieldD = 40, GiftRowH = 32, GiftPerson = 88, LegendH = 30, CountPx = 19, CountCompactPx = 16, BeadSpread = 68;
+        const float FireH = 400, FireR = 140, ShieldD = 40, GiftRowH = 40, GiftPerson = 88, LegendH = 30, CountPx = 19, CountCompactPx = 16, BeadSpread = 68;
         static float FireW => Mathf.Min(360f, Column * 0.49f);   // the fire on the left, the list beside it
         static float ListX => FireW + 22;
-        // the three baked arcs (ui-language/README.md): 256 x 96, chord (8,8)-(248,8); their shape (a parabola, FireLayout.Arcs) and the end tangent are FireLayout's
-        static readonly string[] ArcSprites = { "thread-arc-shallow", "thread-arc-medium", "thread-arc-deep" };
 
         internal static void Giving(RectTransform col, Block b)
         {
@@ -41,7 +39,9 @@ namespace Hearthwoven.Panel
             var gifts = items.Where(i => i.Kind == "gift").ToList();
             if (players.Count == 0) return;
             var mine = gifts.Where(g => g.Selected).ToList(); var others = gifts.Where(g => !g.Selected).ToList();
-            var listH = (mine.Count > 0 ? 24 + mine.Count * GiftRowH : 0) + (others.Count > 0 ? 30 + others.Count * GiftRowH : 0);
+            float ScopeH(string v) => string.IsNullOrEmpty(v) ? 0 : GiftScopeH;
+            int Rows(List<Block> gs) => gs.Sum(g => Math.Max(1, g.Items?.Count ?? 0));   // a gift with meals and feast servings: a list line each
+            var listH = (mine.Count > 0 ? 24 + ScopeH(b.Value) + Rows(mine) * GiftRowH : 0) + (others.Count > 0 ? 30 + ScopeH(b.Value2) + Rows(others) * GiftRowH : 0);
             var root = Node("Fireside", col); Size(root, -1, LegendH + Mathf.Max(FireH, listH));
 
             // the circle: players at even angles from the top (the owner first), the fire in the middle (FireLayout.cs: y up, origin top left)
@@ -67,8 +67,18 @@ namespace Hearthwoven.Panel
 
             // the list beside the fire: between the owner and the others, then around the fire; each list says its scope once in its caption (fix4-rest)
             float y = LegendH, w = Column - ListX;
-            if (mine.Count > 0) { Caption(root, b.Title + (string.IsNullOrEmpty(b.Value) ? "" : ", " + b.Value), ListX, y, w); y += 24; foreach (var g in mine) { GiftRow(root, g, players, ListX, y, w, string.IsNullOrEmpty(b.Value)); y += GiftRowH; } }
-            if (others.Count > 0) { y += 4; Caption(root, b.Text + ", fainter" + (string.IsNullOrEmpty(b.Value2) ? "" : ", " + b.Value2), ListX, y, w); y += 26; foreach (var g in others) { GiftRow(root, g, players, ListX, y, w, string.IsNullOrEmpty(b.Value2)); y += GiftRowH; } }
+            // each section says its source once, on a quiet line under its caption (Value, Value2); a row adds words only where it differs
+            // the name columns as wide as the longest name needs (Joost in game: a long name was cut on a row with room to spare), at least the old 88 px,
+            // at most what leaves the item line its 200 px; only then a name is cut
+            float longest = 0;
+            foreach (var p in players)
+            {
+                var probe = Label(root, p.Text ?? p.Title ?? p.Id, 16, PanelLook.Text); longest = Mathf.Max(longest, Mathf.Ceil(probe.preferredWidth)); UnityEngine.Object.Destroy(probe.gameObject);
+            }
+            var personW = Mathf.Clamp(longest + 38, GiftPerson, Mathf.Max(GiftPerson, (w - 200) / 2));
+            void Lines(Block g) { foreach (var line in g.Items != null && g.Items.Count > 0 ? g.Items : new List<Block> { g }) { GiftRow(root, g, line, players, ListX, y, w, personW); y += GiftRowH; } }
+            if (mine.Count > 0) { Caption(root, b.Title, ListX, y, w); y += 24; y = Scope(root, b.Value, ListX, y, w); foreach (var g in mine) Lines(g); }
+            if (others.Count > 0) { y += 4; Caption(root, b.Text + ", fainter", ListX, y, w); y += 26; y = Scope(root, b.Value2, ListX, y, w); foreach (var g in others) Lines(g); }
             // the legend above the drawing: which thread is food, which is gear, where the arrow points, what a faint thread is
             var key = Node("Legend", root); key.Box(0, 0, Column, 24);
             Layout(key.gameObject.AddComponent<HorizontalLayoutGroup>(), 7, TextAnchor.MiddleLeft);
@@ -78,33 +88,34 @@ namespace Hearthwoven.Panel
             Size(Fill(key, "Gear", GearThread), 22, 4); Label(key, PanelModel.LegendGear, 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
             Size(Node("Gap", key), 14, 1);
             Size(VocabImg(key, "Arrow", "thread-arrow", PanelLook.Muted), 12, 12); Label(key, PanelModel.LegendArrow, 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            if (gifts.Any(g => g.Items != null && g.Items.Any(l => l.Tone == PanelModel.TeamworkTone)))   // a feast one made and another set out (0.8): its mark, once
+            {
+                Size(Node("Gap", key), 14, 1); TeamworkMark(key); Label(key, PanelModel.LegendTeamwork, 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            }
         }
 
-        // one gift as a baked arc in its lane: the pair's bundle bends gently away from the fire, the arc and side chosen so no thread
-        // runs along or crosses another where it need not (the geometry: FireLayout.Build)
+        /// <summary>The teamwork mark (0.8, B22): the Together page's two-people line sprite in the list gold, small and calm.</summary>
+        internal static void TeamworkMark(RectTransform parent) => Size(VocabImg(parent, "Teamwork", "list-together", PanelLook.Gold), 16, 16);
+
+        const float GiftScopeH = 20, GiftItemPx = 24, GiftArrowY = 25;   // the arrow's line, from the row's top (its head 19 .. 31; the rule at 39)
+        static float Scope(RectTransform root, string text, float x, float y, float w)
+        {
+            if (string.IsNullOrEmpty(text)) return y;
+            var t = Label(root, text, 14, PanelLook.Faint, style: FontStyles.Italic, align: TextAlignmentOptions.MidlineLeft); t.textWrappingMode = TextWrappingModes.NoWrap;
+            t.rectTransform.Box(x, y - 4, w, 18);
+            return y + GiftScopeH;
+        }
+
+        // one gift as a thin flat line along its arc in its lane: the pair's bundle bends gently away from the fire, the arc and side chosen so no
+        // thread runs along or crosses another where it need not (the geometry: FireLayout.Build); width by the count, the arrowhead 3 times the
+        // width (FireLayout.StrokeOf, 0.7 variant A), both one mesh so a faint thread never darkens where line and head meet
         static void Thread(RectTransform layer, Block g, FireLayout.Geo geo)
         {
-            var sprite = ArcSprites[geo.Arc]; var bendRight = geo.BendRight;
-            var mid = new Vector2((float)geo.Mid.x, (float)geo.Mid.y); var dir = new Vector2((float)geo.Dir.x, (float)geo.Dir.y); var p1 = new Vector2((float)geo.P1.x, (float)geo.P1.y);
-            var s = (float)geo.Scale; var angle = (float)geo.AngleDeg;
-            var faint = !g.Selected; var tint = ThreadTint(g, faint);
-
-            // the arc image, scaled uniformly; unmirrored its bend lies on the right of travel (y up), mirrored on the left
-            var holder = Node("Thread", layer); holder.anchorMin = holder.anchorMax = new Vector2(0, 1); holder.pivot = new Vector2(0.5f, 0.5f);
-            holder.anchoredPosition = mid; holder.sizeDelta = Vector2.zero; holder.localRotation = Quaternion.Euler(0, 0, angle);
-            holder.localScale = new Vector3(s, bendRight ? s : -s, 1);
-            var copies = 1 + Mathf.RoundToInt(2 * Mathf.Clamp01(g.Fraction));   // thickness = count: one, two or three cords side by side
-            for (int k = 0; k < copies; k++)
-            {
-                var img = VocabImg(holder, "Cord", sprite, tint); img.preserveAspect = false;
-                var r = img.rectTransform; r.anchorMin = r.anchorMax = new Vector2(0.5f, 0.5f); r.pivot = new Vector2(0.5f, 1 - 8f / 96f);
-                r.sizeDelta = new Vector2(256, 96); r.anchoredPosition = new Vector2(0, (k - (copies - 1) / 2f) * 2.2f / s);
-            }
-            // the arrow at the receiving end, along the arc's own end tangent (at most 18 px: the lanes beside it keep their own arrows clear)
-            var endAngle = (float)geo.EndAngleDeg;
-            var arrow = VocabImg(layer, "Arrow", "thread-arrow", tint).rectTransform;
-            arrow.anchorMin = arrow.anchorMax = new Vector2(0, 1); arrow.pivot = new Vector2(22f / 24f, 0.5f);
-            arrow.sizeDelta = new Vector2(12 + 2 * copies, 12 + 2 * copies); arrow.anchoredPosition = p1 + dir * 4; arrow.localRotation = Quaternion.Euler(0, 0, endAngle);
+            var st = FireLayout.StrokeOf(geo, g.Fraction);
+            var line = Node("Thread", layer); line.Stretch(); line.pivot = new Vector2(0, 1);   // local (0, 0) = the drawing's top left, y up: FireLayout's own coordinates
+            var stroke = line.gameObject.AddComponent<ThreadStroke>(); stroke.raycastTarget = false; stroke.color = ThreadTint(g, !g.Selected);
+            Vector2 V((double x, double y) p) => new Vector2((float)p.x, (float)p.y);
+            stroke.Set(st.Line.Select(V).ToArray(), (float)st.Width, V(st.Tip), V(st.Left), V(st.Right));
             // a thread between two fellow players stays a faint thread: its count is in the list under "Among fellow players" (fix3-rest)
         }
 
@@ -119,32 +130,32 @@ namespace Hearthwoven.Panel
         }
 
         // maker -> the item and its count over a short thread, the grateful verb under it -> the one who enjoyed it
-        static void GiftRow(RectTransform root, Block g, List<Block> players, float x, float top, float w, bool own)
+        // line: the gift itself, or one of its lines (meals, feast servings: "set out a Mountains feast · × 3 enjoyed", teamwork: "Tor set it out · × 3 enjoyed")
+        static void GiftRow(RectTransform root, Block g, Block line, List<Block> players, float x, float top, float w, float personW)
         {
-            string Who(string id) => players.FirstOrDefault(p => p.Id == id)?.Title ?? id;
+            string Who(string id) { var p = players.FirstOrDefault(x2 => x2.Id == id); return p?.Text ?? p?.Title ?? id; }   // the list's short name ("You")
             var tint = ThreadTint(g, false);
             void Person(string id, float px)
             {
-                var m = Marker(root, "person:" + id, 22, layout: false); m.Box(px, top + 5, 22, 22);
+                var m = Marker(root, "person:" + id, 22, layout: false); m.Box(px, top + GiftArrowY - 11, 22, 22);   // the names at both ends of the arrow, on its line
                 var t = Label(root, Who(id), 16, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft); t.textWrappingMode = TextWrappingModes.NoWrap; t.overflowMode = TextOverflowModes.Ellipsis;
-                t.rectTransform.Box(px + 30, top + 4, GiftPerson - 32, 24);
+                t.rectTransform.Box(px + 30, top + GiftArrowY - 12, personW - 32, 24);
             }
             Person(g.Title, x);
-            float mx = x + GiftPerson, mw = w - 2 * GiftPerson;
-            var said = Node("Item", root); said.Box(mx, top, mw, 16);
-            Layout(said.gameObject.AddComponent<HorizontalLayoutGroup>(), 5, TextAnchor.MiddleCenter);
-            Marker(said, g.Icon, 16);
-            Label(said, "× " + g.Value, 15, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
-            Fill(root, "Line", tint).rectTransform.Box(mx + 4, top + 16, mw - 18, 2);
-            var arrow = VocabImg(root, "Arrow", "thread-arrow", tint).rectTransform; arrow.Box(mx + mw - 16, top + 11, 12, 12);
-            var verb = Node("Verb", root); verb.Box(mx, top + 17, mw, 14);
-            Layout(verb.gameObject.AddComponent<HorizontalLayoutGroup>(), 6, TextAnchor.MiddleCenter);
-            Label(verb, g.Note, 12, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
-            if (!own) { }   // the list's caption says the scope (since install, or as they last shared it)
-            else if (g.SinceInstall) Since(verb, 11);
-            else if (!string.IsNullOrEmpty(g.Value2)) { var sc = Label(verb, g.Value2, 12, PanelLook.Faint, style: FontStyles.Italic); sc.textWrappingMode = TextWrappingModes.NoWrap; }   // whose record: their last session
-            Person(g.Text, x + w - GiftPerson + 6);
-            Img(root, "Rule", null, PanelLook.Rule).rectTransform.Box(x, top + GiftRowH - 2, w, 1);
+            float mx = x + personW, mw = w - 2 * personW;
+            // one line ABOVE the arrow (Joost 2026-10-09): the item (1.5 times the old 16 px), "× 3" and the verb side by side; nothing under the arrow
+            var said = Node("Item", root); said.Box(mx, top - 1, mw, GiftItemPx);
+            Layout(said.gameObject.AddComponent<HorizontalLayoutGroup>(), 6, TextAnchor.MiddleCenter);
+            Marker(said, line.Icon, GiftItemPx);
+            if (line.Tone == PanelModel.TeamworkTone) TeamworkMark(said);   // "Tor set it out": one made it, another set it out
+            if (line != g && !string.IsNullOrEmpty(line.Title)) Label(said, line.Title + " ·", 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            Label(said, "× " + line.Value, 15, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+            Label(said, line.Note, 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            if (!string.IsNullOrEmpty(g.Value2)) { var sc = Label(said, g.Value2, 14, PanelLook.Faint, style: FontStyles.Italic); sc.textWrappingMode = TextWrappingModes.NoWrap; }   // only where it differs from the section: their last session
+            Fill(root, "Line", tint).rectTransform.Box(mx + 4, top + GiftArrowY - 1, mw - 18, 2);
+            var arrow = VocabImg(root, "Arrow", "thread-arrow", tint).rectTransform; arrow.Box(mx + mw - 16, top + GiftArrowY - 6, 12, 12);
+            Person(g.Text, x + w - personW + 6);
+            Img(root, "Rule", null, PanelLook.Rule).rectTransform.Box(x, top + GiftRowH - 1, w, 1);   // B32: 8 px of air between the arrow and the row's rule
         }
 
         // ----- together: the group's whole, per category; never a ranking or a combined score -----
@@ -180,32 +191,12 @@ namespace Hearthwoven.Panel
             // the chosen category large: the group's total, one bar coloured per player, the legend under it
             var parts = (pick.Items ?? new List<Block>()).Where(p => p.Fraction > 0).ToList();
             HeroNumber(Line(col, 0, TextAnchor.LowerLeft), new Block { Value = pick.Value, Title = pick.Text, Note = pick.Note }, HeroSize, HeroLabel);   // the shared hero's look
+            if (pick.Before != null) HeroBeforeLine(col, pick);   // 0.8 Compare: the period before on a line of its own (the hero's words are long here)
             if (parts.Count < 2) { TogetherScope(col, b, pick); return; }   // alone: the number is the page (with its scope and keys); the bar and the matrix of one are noise
-            var bar = Kit(col, "Together", "meter-track"); Size(bar, -1, 26);
-            var shares = parts.Select(p => Mathf.Max(p.Fraction, 4f / Column)).ToList(); var sum = shares.Sum(); float x = 0;
-            for (int k = 0; k < parts.Count; k++)
-            {
-                var r = Fill(bar.transform, "Part", PersonTint(parts[k].Id)).rectTransform; var w = shares[k] / sum;
-                r.anchorMin = new Vector2(x, 0); r.anchorMax = new Vector2(x + w, 1); r.pivot = new Vector2(0, 0.5f);
-                r.offsetMin = new Vector2(k == 0 ? 3 : 1, 3); r.offsetMax = new Vector2(k == parts.Count - 1 ? -3 : -1, -3);
-                // the name inside a segment wide enough for it (the key below names the small ones): colour never stands alone
-                if (w * (Column - 6) >= 70)
-                {
-                    var slot = personColors.TryGetValue(parts[k].Id ?? "", out var pi) ? pi : 0;
-                    var nm = Label(r, parts[k].Title, 14, PanelModel.DarkTextOn(slot) ? DarkInk : LightInk, style: FontStyles.Bold, align: TextAlignmentOptions.Center);
-                    nm.rectTransform.Stretch(); nm.textWrappingMode = TextWrappingModes.NoWrap; nm.overflowMode = TextOverflowModes.Ellipsis;
-                }
-                x += w;
-            }
-            var key = Line(col, 22);
-            foreach (var p in parts)
-            {
-                var e = Line(key, 7);
-                Size(Fill(e, "Swatch", PersonTint(p.Id)), 14, 14);
-                Label(e, p.Value, 22, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
-                Label(e, p.Title, 15, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
-                if (p.SinceInstall) Since(e, 13);
-            }
+            // the book's one bar form (BarFormUi.cs) in the players' colours: the bar, and the list names each player with their number and share
+            var compared = (b.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == PanelModel.CompareRowsKind && i.Id == pick.Id);   // 0.8 Compare: a row per player, now beside the period before
+            if (compared != null) CompareRows(col, compared);
+            else BarWithList(col, parts, false, new BarLook { Colour = p => PersonTint(p.Id) });
             TogetherScope(col, b, pick);   // since when the category counts, and the keys that flip the chips (fix4-rest)
 
             // each player's share (V1, Joost 2026-10-08, proto/share-pA.png): one 100 % bar per category in player colours, You
@@ -235,7 +226,7 @@ namespace Hearthwoven.Panel
                 if (windowed && c == 1) Caption(rows, b.Note, 0, y - CapH + 3, Column);
                 var dim = windowed && !on;
                 if (PanelLook.Icon(cat.Icon) != null) { var ic = Marker(rows, cat.Icon, 18, layout: false); ic.Box(0, y + 3, 18, 18); if (cat.Icon.StartsWith("vocab:")) foreach (var im in ic.GetComponentsInChildren<Image>()) im.color = PanelLook.Gold; }
-                var l = Label(rows, cat.Title, 13, on ? PanelLook.Gold : dim ? PanelLook.Faint : PanelLook.Muted, style: on ? FontStyles.Bold : FontStyles.Normal, align: TextAlignmentOptions.MidlineLeft);
+                var l = Label(rows, cat.Title, 14, on ? PanelLook.Gold : dim ? PanelLook.Faint : PanelLook.Muted, style: on ? FontStyles.Bold : FontStyles.Normal, align: TextAlignmentOptions.MidlineLeft);
                 l.rectTransform.Box(24, y, LabelW - 26, RowH); l.textWrappingMode = TextWrappingModes.NoWrap; l.overflowMode = TextOverflowModes.Ellipsis;
                 var track = Img(rows, "Bar", null, new Color(0, 0, 0, 0.35f)).rectTransform; track.Box(LabelW + 12, y + 1, barW, BarH);
                 if (dim) { var cg = track.gameObject.AddComponent<CanvasGroup>(); cg.alpha = 0.5f; }   // the rows outside the window: dimmed
@@ -331,6 +322,28 @@ namespace Hearthwoven.Panel
             names.textWrappingMode = TextWrappingModes.NoWrap; names.overflowMode = TextOverflowModes.Ellipsis;
             names.rectTransform.Box(tx, top + Mathf.CeilToInt(Mathf.Max(1, tiles.Count) / (float)per) * (GearTile + GearGap) - GearGap + 3, makerFirst ? w - GearPerson - GearArrow : w, GearNameH);
             Img(root, "Rule", null, PanelLook.Rule).rectTransform.Box(x, top + GearRowHeight(r, w) - 7, w, 1);
+        }
+    }
+
+    /// <summary>One Fireside thread as a single mesh: the line as a mitred strip of the given width along its points, and the arrowhead triangle
+    /// (FireLayout.StrokeOf). Points are in the RectTransform's local space with the pivot at the drawing's top left.</summary>
+    sealed class ThreadStroke : MaskableGraphic
+    {
+        Vector2[] pts = new Vector2[0]; float width; Vector2 tip, left, right;
+        public void Set(Vector2[] line, float w, Vector2 t, Vector2 l, Vector2 r) { pts = line; width = w; tip = t; left = l; right = r; SetVerticesDirty(); }
+        protected override void OnPopulateMesh(VertexHelper vh)
+        {
+            vh.Clear(); var c = (Color32)color; int n = pts.Length;
+            for (int i = 0; n >= 2 && i < n; i++)
+            {
+                Vector2 Nrm(Vector2 a, Vector2 b) { var d = (b - a).normalized; return new Vector2(-d.y, d.x); }
+                var nA = i > 0 ? Nrm(pts[i - 1], pts[i]) : Nrm(pts[i], pts[i + 1]); var nB = i + 1 < n ? Nrm(pts[i], pts[i + 1]) : nA;
+                var m = (nA + nB).normalized; var k = Mathf.Max(0.5f, Vector2.Dot(m, nA));   // the mitre: half the width across the bend
+                var o = m * (width / 2 / k);
+                vh.AddVert(pts[i] + o, c, Vector2.zero); vh.AddVert(pts[i] - o, c, Vector2.zero);
+                if (i > 0) { int b = 2 * i; vh.AddTriangle(b - 2, b - 1, b); vh.AddTriangle(b - 1, b + 1, b); }
+            }
+            int h = vh.currentVertCount; vh.AddVert(tip, c, Vector2.zero); vh.AddVert(left, c, Vector2.zero); vh.AddVert(right, c, Vector2.zero); vh.AddTriangle(h, h + 1, h + 2);
         }
     }
 }

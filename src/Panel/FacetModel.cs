@@ -46,14 +46,16 @@ namespace Hearthwoven.Panel
     ///   - the chosen chips as removable tokens, the result line ("2 items · 6 crafted") and Clear all;
     ///   - a slim linked bar per row that has colours, filtered by the other rows and not by its own (the crossfilter rule: its
     ///     chosen part is outlined, the rest stays visible so you can choose another); at most BarMaxParts parts, largest
-    ///     first, the rest as "Other (n kinds)", every two told apart (BarColours; 0.6.5);
+    ///     first, the rest as "Other (n kinds)", every two told apart, a category's colour fixed by its name (BarColours; 0.7);
     ///   - keys: the filter key (default K) enters a focus on the rows; there A/D or the arrows move along a row, W/S between
     ///     rows, Enter or Space chooses, Delete clears all, Esc or the filter key leaves. The mouse needs no focus;
     ///   - collapsed by default (Open false): one line (the header: "Filter", the key's cap, the chosen tokens or "all", the
     ///     result line, Clear all, Show filters), so the page's list stays above the fold. The rows and the linked bars open
     ///     with the filter key (the focus) or a click on the header, and close again with Esc, the key or the header's
     ///     Hide filters. While collapsed the linked bars stay only if they fit above the fold with the list's first two
-    ///     rows (their Tone is "hidden" when they do not); their legends carry the colour's name only: the chips carry the counts.
+    ///     rows (their Tone is "hidden" when they do not); on a page whose first bar is its overview (overview), that bar always
+    ///     stays, with its list, and the others wait. Each linked bar is the book's one bar form (BarForm.cs, BAR-FORM.md):
+    ///     the bar, and under it its list (name, number, share).
     /// Block shape: Kind "filterbar" (Id = the filter's id, Text = the result line, KeyCap = the key, Open = rows shown), Items =
     /// "facet" (Id, Title, Note = its honest line, Tone "focus" while the keys act on it; Items = "chip": Id, Title, Value =
     /// count, Selected, Tone "zero" | "cursor"), one "applied" (Title = what shows with no filter on an inline bar, Value =
@@ -84,24 +86,12 @@ namespace Hearthwoven.Panel
         /// <summary>The click target of the header's Show filters / Hide filters.</summary>
         public static string FacetOpenLink(string filter) => FacetOpenTarget + filter;
 
-        // the lines a linked bar's legend takes: names only, wrapped at the column (14 px text, an 18 px swatch, gaps)
-        static int LegendLines(IEnumerable<string> labels, double column = 840)
-        {
-            double used = 0; var lines = 1;
-            foreach (var l in labels)
-            {
-                var w = 22 + 6.8 * (l ?? "").Length;
-                if (used > 0 && used + 12 + w > column) { lines++; used = 0; }
-                used += (used > 0 ? 12 : 0) + w;
-            }
-            return lines;
-        }
-
-        // do the linked bars fit above the fold with the list's first two rows? (5 px gaps; head 18, track 13, a 16 px legend line)
+        // do the linked bars fit above the fold with the list's first two rows? Each bar in the one bar form (BarForm.cs): its head,
+        // the bar, its list (one row per part, two columns past four) and the air after it
         static bool BarsFit(IEnumerable<BarPlan> plans, double above)
         {
             var h = above + FilterHeader + FilterListRows;
-            foreach (var p in plans) h += 18 + 5 + 22 + 5 + LegendLines(p.Labels) * 16 + 5;   // fix4: the bar 22 high with its edge (was 13)
+            foreach (var p in plans) h += BarFormHeight(p.Labels.Count(), true);
             return h <= FilterViewport;
         }
 
@@ -112,40 +102,42 @@ namespace Hearthwoven.Panel
         public const int BarMaxParts = 8;
         /// <summary>The id of a bar's folded part ("Other (12 kinds)"): never an option, so it is never a click target.</summary>
         public const string FoldId = "…other";
-        /// <summary>The colour of the rest ("Other", and the folded part): a quiet warm dark, apart from every colour below.</summary>
-        public const string BarOtherColour = "#47423c";
-        /// <summary>How far apart two parts of one bar must be, as CIEDE2000 (about 20: told apart at a glance, not side by side only).</summary>
-        public const double BarApart = 20;
+        /// <summary>The colour of the rest ("Other", and the folded part): a quiet grey (BAR-FORM v4), apart from every colour below.</summary>
+        public const string BarOtherColour = "#76706a";
+        /// <summary>How far apart two parts of one bar must be, as CIEDE2000 (BAR-FORM.md: at least 15, told apart at a glance).</summary>
+        public const double BarApart = 15;
         /// <summary>
-        /// The bars' one ordered palette ("Nordic earth" in spirit: muted, warm, readable on the dark plate): the largest part
-        /// without a colour of its own takes the first that stays apart from those already on the bar. The first seven are at
-        /// least BarApart from each other and from BarOtherColour; the last four (rose, plum, olive, lavender) are apart from all of
-        /// them and from the materials' own wood, stone, bronze and iron, so a second bar on the page need not reuse the first
-        /// bar's colours. Checked in BuildingFacetTests (CIEDE2000 between every two parts of a bar).
+        /// The abstract categories' palette (BAR-FORM.md, D's family from the v4 prototype: muted, warm, mid light; v4's two darkest
+        /// tones lifted to CIELAB L 45 and over, and its olive moved off the Other grey): slate, sand, rose, green, violet, olive, pale
+        /// stone, brick, plum, teal, clay. Every two at least BarApart from each other and from BarOtherColour (min 15.5); checked in
+        /// BuildingFacetTests. A category's colour comes from its name (CategoryIndex), never its rank.
         /// </summary>
-        public static readonly string[] BarPalette = { "#5f8fbf", "#c9973f", "#a5484f", "#8fae5e", "#9a78b8", "#ddd2b4", "#3f7f73", "#e6969a", "#684870", "#687030", "#bcbce0" };
+        public static readonly string[] BarPalette = { "#6f8798", "#c9b98e", "#cfb0ad", "#5f7d62", "#7e6e96", "#8e7c46", "#b9c1c4", "#9c5a52", "#b87c8e", "#52a09a", "#ac826a" };
 
         /// <summary>
-        /// The colours of a bar's parts (id -> "#rrggbb"), given in rank order (largest first) with each part's own colour (or null):
-        /// a fixed colour is always kept (an approved palette: damage types, groundwork); an own colour (wood brown, a kind's colour,
-        /// an item's tint) is kept when it stays BarApart from those kept before it, in rank order; the rest take the palette's
-        /// first colour that stays apart, preferring one no other bar of the page uses (avoid: one colour, one meaning), else any
-        /// apart, else the farthest one. (Keeping apart from colours NEAR another bar's too was tried: with a modded hammer's seven
-        /// tabs and seven materials the palette runs out and the second bar then reuses the first one's colours outright.) other: the bar has an Other part (BarOtherColour), which every colour keeps apart from too.
+        /// The colours of a bar's parts (id -> "#rrggbb"), given in rank order (largest first) with each part's name and own colour
+        /// (or null). A fixed colour is always kept (an approved palette: damage types, groundwork); an item's own colour (wood brown,
+        /// an item's tint) is kept when it stays BarApart from those kept before it; every other part is an abstract category and
+        /// takes its own colour by NAME (CategoryColour: a fixed table for the known ones, a stable hash for a mod's), so the same
+        /// category wears the same colour on every page and window (BAR-FORM.md). On a crowded bar the known names claim first, then
+        /// the others by name; a colour already on the bar (or closer than BarApart to one) steps on to the palette's next free one,
+        /// so the same set always looks the same. other: the bar has an Other part (BarOtherColour), which every colour keeps apart from too.
         /// </summary>
-        public static Dictionary<string, string> BarColours(IList<(string id, string own, bool fixedColour)> ranked, bool other, ICollection<string> avoid = null)
+        public static Dictionary<string, string> BarColours(IList<(string id, string name, string own, bool fixedColour)> ranked, bool other)
         {
             var used = new List<string>(); if (other) used.Add(BarOtherColour);
             var res = new Dictionary<string, string>();
             bool Apart(string c) => used.All(u => ColourDistance(c, u) >= BarApart);
             foreach (var p in ranked) if (p.fixedColour && p.own != null && !res.ContainsKey(p.id)) { res[p.id] = p.own; used.Add(p.own); }
             foreach (var p in ranked) if (!res.ContainsKey(p.id) && IsHex(p.own) && Apart(p.own)) { res[p.id] = p.own; used.Add(p.own); }
-            foreach (var p in ranked)
+            var rest = ranked.Where(p => !res.ContainsKey(p.id)).GroupBy(p => p.id).Select(g => g.First())
+                             .OrderBy(p => KnownCategory(p.name ?? p.id) ? 0 : 1).ThenBy(p => SameLabel(p.name ?? p.id), StringComparer.Ordinal).ThenBy(p => p.id, StringComparer.Ordinal).ToList();
+            foreach (var p in rest)
             {
-                if (res.ContainsKey(p.id)) continue;
-                var free = BarPalette.Where(c => !used.Contains(c, StringComparer.OrdinalIgnoreCase)).ToList();
-                var pick = free.FirstOrDefault(c => Apart(c) && (avoid == null || !avoid.Contains(c))) ?? free.FirstOrDefault(Apart)
-                           ?? free.OrderByDescending(c => used.Count == 0 ? 0 : used.Min(u => ColourDistance(c, u))).FirstOrDefault() ?? BarPalette[res.Count % BarPalette.Length];
+                var at = CategoryIndex(p.name ?? p.id); string pick = null;
+                for (int k = 0; k < BarPalette.Length && pick == null; k++) { var c = BarPalette[(at + k) % BarPalette.Length]; if (!used.Contains(c, StringComparer.OrdinalIgnoreCase) && Apart(c)) pick = c; }
+                for (int k = 0; k < BarPalette.Length && pick == null; k++) { var c = BarPalette[(at + k) % BarPalette.Length]; if (!used.Contains(c, StringComparer.OrdinalIgnoreCase)) pick = c; }
+                pick = pick ?? BarPalette[at];
                 res[p.id] = pick; used.Add(pick);
             }
             return res;
@@ -178,6 +170,9 @@ namespace Hearthwoven.Panel
             var rt = -Math.Sin(Rad(2 * dth)) * rc;
             return Math.Sqrt(Math.Pow(dLp / sl, 2) + Math.Pow(dCp / sc, 2) + Math.Pow(dHp / sh, 2) + rt * (dCp / sc) * (dHp / sh));
         }
+
+        /// <summary>CIELAB lightness of a "#rrggbb" colour (0 black .. 100 white): the bars' palette keeps to L 45 and over (BAR-FORM.md).</summary>
+        public static double Lightness(string hex) => IsHex(hex) ? Lab(hex).l : 0;
 
         static (double l, double a, double b) Lab(string hex)
         {
@@ -249,14 +244,6 @@ namespace Hearthwoven.Panel
         /// <summary>The click target of a chip, a token or a bar part.</summary>
         public static string FacetLink(string filter, string facet, string option) => FacetTarget + FacetKey(filter, facet) + "|" + option;
 
-        /// <summary>
-        /// The pattern of a linked bar's part (fix4, rubric 4: nothing is told by colour alone): the part's place in its row (a row's options keep
-        /// their order, so a part always keeps its pattern) picks one of seven marks, solid first; the bar's segment and the legend's swatch both
-        /// carry it, and a segment wide enough also says its name (FacetUi). Ready sprites src/Panel/vocab/grain-hatch-*.png, tiled over the colour.
-        /// </summary>
-        public static readonly string[] FacetPatterns = { null, "vocab:grain-hatch-diag", "vocab:grain-hatch-vert", "vocab:grain-hatch-horiz", "vocab:grain-hatch-dots", "vocab:grain-hatch-check", "vocab:grain-hatch-cross" };
-        public static string FacetPatternOf(int part) => FacetPatterns[((part % FacetPatterns.Length) + FacetPatterns.Length) % FacetPatterns.Length];
-
         /// <summary>A click on a filter target (chip, token, bar part, Clear all); false for any other target.</summary>
         public static bool FollowFacet(PanelState s, string target)
         {
@@ -273,10 +260,12 @@ namespace Hearthwoven.Panel
         /// Builds a filter bar over items. unit: the page's own word for the weight ("crafted"); src: the source mark of those
         /// numbers; noun1/nounN: what one entry is called ("item", "items"). The focus marks (FilterRow, FilterCursor) come
         /// from the state, so the keys and the picture agree. above: what the page puts above the list in px (the fold test of
-        /// the collapsed bars).
+        /// the collapsed bars). overview: the first bar is the page's overview (Building, Crafting, Cooking): collapsed, that bar shows
+        /// with its list and the others wait for the open filter (0.7 integration: a collapsed filter showed no bar at all there).
         /// </summary>
         public static FacetResult Facets(PanelState state, string filter, IList<FacetDef> defs, IList<FacetItem> items, string unit, string src,
-                                         string noun1 = "item", string nounN = "items", string empty = "No filter: every item", double above = FilterAbove)
+                                         string noun1 = "item", string nounN = "items", string empty = "No filter: every item", double above = FilterAbove,
+                                         bool overview = false)
         {
             state = state ?? new PanelState();
             // near-duplicate options are one ("Misc" and a mod's "Misc."): the first in the row's order stays, the others' items count under it
@@ -350,19 +339,12 @@ namespace Hearthwoven.Panel
             // has, their order and their colours come from the whole list (PlanBar), so they stay put while the other rows narrow;
             // a bar does not reuse a colour another bar of the page shows where the palette allows (one colour, one meaning)
             var plans = defs.Where(x => x.Bar).Select(d => (d, plan: PlanBar(opts[d], id => items.Where(it => Has(it, d, id)).Sum(it => it.Weight)))).ToList();
-            var pageColours = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int k = 0; k < plans.Count; k++)
-            {
-                // not to reuse: the colours the bars before this one took, and the own colours shown on the bars after it (a kind's colour)
-                var avoid = new HashSet<string>(pageColours, StringComparer.OrdinalIgnoreCase);
-                foreach (var later in plans.Skip(k + 1)) foreach (var o in later.plan.Shown) if (IsHex(o.Colour)) avoid.Add(o.Colour);
-                var plan = plans[k].plan;
-                plan.Colours = BarColours(plan.Shown.Select(o => (o.Id, o.Colour, false)).ToList(), plan.Rest.Count > 0, avoid);
-                foreach (var c in plan.Colours.Values) pageColours.Add(c);
-            }
-            var barsShown = bar.Open || BarsFit(plans.Select(p => p.plan), above);
+            // each bar's colours by name (BarColours): a category wears the same colour on every page and window (BAR-FORM.md: stability wins over "one colour, one meaning" across a page's bars)
+            foreach (var (_, plan) in plans) plan.Colours = BarColours(plan.Shown.Select(o => (o.Id, o.Label, o.Colour, false)).ToList(), plan.Rest.Count > 0);
+            var barsShown = bar.Open || (!overview && BarsFit(plans.Select(p => p.plan), above));
             foreach (var (d, plan) in plans)
             {
+                var shownHere = barsShown || (overview && d == plans[0].d);
                 var chosen = ChosenIn(d);
                 var counts = plan.Shown.Select(o => (o, n: CountOf(d, o.Id))).ToList();
                 var rest = plan.Rest.Sum(o => CountOf(d, o.Id));
@@ -370,14 +352,13 @@ namespace Hearthwoven.Panel
                 var title = d.BarTitle ?? d.Title;
                 // the honest line stays under the row; on the bar it only stays when the bar's title does not already say it
                 var note = !string.IsNullOrEmpty(d.Sub) && title.IndexOf(d.Sub, StringComparison.OrdinalIgnoreCase) >= 0 ? null : d.Sub;
-                var fb = new Block { Kind = "facetbar", Id = d.Id, Title = title, Note = note, Tone = barsShown ? null : "hidden", Items = new List<Block>() };
-                var at = 0;
+                var fb = new Block { Kind = "facetbar", Id = d.Id, Title = title, Value = sum > 0 ? N(sum) : null, Note = note, Tone = shownHere ? null : "hidden", Items = new List<Block>() };   // 0.8 layout D+: its heading's total
                 foreach (var (o, n) in counts)
-                    fb.Items.Add(new Block { Kind = "part", Id = o.Id, Title = o.Label, Value = N(n), Colour = plan.Colours[o.Id], Pattern = FacetPatternOf(at++), Fraction = sum > 0 ? (float)(n / sum) : 0, Selected = chosen.Contains(o.Id), Tone = n <= 0 ? "zero" : null });
+                    fb.Items.Add(new Block { Kind = "part", Id = o.Id, Title = o.Label, Value = N(n), Colour = plan.Colours[o.Id], Fraction = sum > 0 ? (float)(n / sum) : 0, Selected = chosen.Contains(o.Id), Tone = n <= 0 ? "zero" : null });
                 // the rest: "Other" as it is, or the folded part (no click of its own: its chips are in the row above)
                 if (plan.Rest.Count > 0)
                     fb.Items.Add(new Block { Kind = "part", Id = plan.Folded ? FoldId : plan.Rest[0].Id, Title = plan.Folded ? FoldLabel(plan.Rest.Count) : plan.Rest[0].Label, Value = N(rest), Colour = BarOtherColour,
-                                             Pattern = FacetPatternOf(at++), Fraction = sum > 0 ? (float)(rest / sum) : 0, Selected = plan.Rest.Any(o => chosen.Contains(o.Id)), Tone = rest <= 0 ? "zero" : null });
+                                             Fraction = sum > 0 ? (float)(rest / sum) : 0, Selected = plan.Rest.Any(o => chosen.Contains(o.Id)), Tone = rest <= 0 ? "zero" : null });
                 bar.Items.Add(fb);
             }
             return new FacetResult { Bar = bar, Shown = shown, Pass = it => Passes(it, null) };
@@ -448,7 +429,9 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>True while Esc has something to close here: the focus is in, or this page's filter was opened by a click.</summary>
-        public static bool FilterAnyOpen(PanelState s, PanelView v) => s != null && (s.FilterRow >= 0 || (v != null && FilterOf(v) is Block f && s.OpenFilters.Contains(f.Id)));
+        public static bool FilterAnyOpen(PanelState s, PanelView v) => s != null && (s.FilterRow >= 0 || FilterAnyOpen(s, v != null ? FilterOf(v) : null));
+        /// <summary>The same with the page's filter bar already found (FilterOf walks the whole page: the open book asks every frame, PanelIdle.cs).</summary>
+        public static bool FilterAnyOpen(PanelState s, Block filter) => s != null && (s.FilterRow >= 0 || (filter != null && s.OpenFilters.Contains(filter.Id)));
 
         /// <summary>Esc: leaves the focus and collapses the filter. true when there was something to leave.</summary>
         public static bool FilterLeave(PanelState s, PanelView v = null)

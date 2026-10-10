@@ -18,13 +18,19 @@ static class ReviewFixTests
             var i = PanelSample.Full(now); i.History.From = PanelModel.LocalToday(i);   // the day history began today: 7 days waits
             bool Line(PanelView v) => PanelModel.AllText(v).Any(t => t.Contains("works from"));
             var st = new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.Today }; st.Page[Chapter.Battle] = "defense";
-            PanelModel.Build(i, st);
+            var before = PanelModel.Build(i, st);
             st.Window = TimeWindow.SevenDays;   // the greyed chip pressed (PanelUi's chip)
             var pressed = PanelModel.Build(i, st);
             st.Chapter = Chapter.Deeds; st.Page[Chapter.Deeds] = "mining"; var mining = PanelModel.Build(i, st);
             st.Chapter = Chapter.Battle; var back = PanelModel.Build(i, st);
             Check(Line(pressed) && pressed.ShownWindow == TimeWindow.SinceInstall && !Line(mining) && mining.ShownWindow == TimeWindow.Today && !Line(back) && back.ShownWindow == TimeWindow.Today && st.Window == TimeWindow.Today,
                   "wait line: a greyed 7 days pressed on Defence says its line there only; Mining and Defence again show Today, the last window that worked (" + st.Window + ")");
+            // 0.8.1 review 3: each greyed day chip its own reason; with 7 days pressed the greyed 30 days says its own day, never 7 days' line
+            string Why(PanelView v, string id) => v.Windows.Single(c => c.Id == id).Why ?? "";
+            Check(pressed.WindowTip == "SevenDays" && Why(pressed, "SevenDays").StartsWith("7 days works from ") && Why(pressed, "ThirtyDays").StartsWith("30 days works from ") &&
+                  !Why(pressed, "ThirtyDays").Contains(Why(pressed, "SevenDays")) && before.WindowTip == null &&
+                  Why(before, "SevenDays") == Why(pressed, "SevenDays") && Why(before, "ThirtyDays") == Why(pressed, "ThirtyDays"),
+                  "window reasons: each greyed day chip says its own day, before a press too; the pressed 7 days keeps its line, the greyed 30 days never shows it (" + Why(pressed, "ThirtyDays") + ")");
             // Together: the same with its own switch
             const string wkey = "Company/together/window";
             var tg = new PanelState { Chapter = Chapter.Company }; tg.Page[Chapter.Company] = "together"; tg.View["Company/together/category"] = "dealt"; tg.View[wkey] = "Today";

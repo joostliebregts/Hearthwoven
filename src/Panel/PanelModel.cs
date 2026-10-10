@@ -16,6 +16,9 @@ namespace Hearthwoven.Panel
         public Chapter Chapter = Chapter.Deeds;
         public readonly Dictionary<Chapter, string> Page = new Dictionary<Chapter, string>();   // chosen left-list entry per chapter
         public TimeWindow Window = TimeWindow.Session;      // the chosen time window of every page that has window chips (WindowsOf, HISTORY-06.md)
+        /// <summary>The player chose a window (a chip, or the view key cycling them). Until then the Deeds pages show All: the book's default
+        /// Session is Battle's, and a Deeds page opened for the first time shows the whole record (PanelModel.Deeds).</summary>
+        public bool WindowPicked;
         /// <summary>A greyed day window that was pressed (B17) holds only on the page where it was pressed: WaitAt is that page, LastWorking the
         /// last chosen window that was open, and leaving the page (or closing the book) returns Window to it (PanelModel.SettleWait). The same
         /// for Together's window switch: WaitView is its id, LastWorkingView its last open choice per switch.</summary>
@@ -24,6 +27,9 @@ namespace Hearthwoven.Panel
         public string WaitView;
         public readonly Dictionary<string, string> LastWorkingView = new Dictionary<string, string>();
         public string Player = "";                          // "" = yourself; otherwise a fellow player's name
+        /// <summary>The Everyone chip is on (0.8, Chapters/EveryoneModel.cs): every page with a group view shows the group's numbers; with Player
+        /// "" (you). One flag for the whole book, kept between sessions (PanelPrefs): it answers "whose book" like the names beside it.</summary>
+        public bool Everyone;
         public bool TheyReceived = true;                    // Company: true = "They enjoyed your food", false = "You enjoyed their food"
         public bool ShowAbout;                              // the one "About Hearthwoven" page is open (InfoKey)
         public string Hotkey = "H";
@@ -40,11 +46,23 @@ namespace Hearthwoven.Panel
         /// <summary>The filter bars opened by a click on their header (FacetModel.cs), by filter id; a bar is collapsed to one line otherwise, and open while the focus is in.</summary>
         public readonly HashSet<string> OpenFilters = new HashSet<string>();
         public string ViewKey = "F";                        // flips the page's view switch; F: bound by no mod in the group's client profile, nor by the panel
+        /// <summary>The page's "About these numbers" box is open (the numbers key, or its button); kept across pages until pressed again or the panel closes.</summary>
+        public bool ShowNumbers;
+        public string NumbersKey = "Y";                     // shows and hides "About these numbers" (Panel.NumbersKey); Y: no game default, no group mod binds it
+        public string BookKey = "B";                        // 0.8: steps whose book the page shows, as the player row's chips do (Panel.BookKey; StepBook)
         public string FeatSel = "";                         // the Feats chapter: the feat the detail area shows (mouse hover, A/D); "" = the first card of the view
         public string PageOf(Chapter c) => Page.TryGetValue(c, out var p) ? p : null;
         public readonly List<PanelPlace> History = new List<PanelPlace>();   // the back stack while the panel is open (PanelNav.cs)
         public PanelPlace Here;                                              // the page shown now
         public bool GoingBack;                                               // the next Visited is the Back itself: no push
+        /// <summary>Since you were away (Chapters/AwayModel.cs): the session whose first opening already decided whether the book opens there by
+        /// itself; where the book was before it did (LeaveAway puts it back), and Company's page then.</summary>
+        public string AwayDecidedFor;
+        public PanelPlace AwayReturn;
+        public string AwayCompanyBefore;
+        /// <summary>0.8 Compare periods (Chapters/CompareModel.cs): the Compare chip is on, on every page that offers it (kept in PanelPrefs).
+        /// CompareTip: the greyed chip's reason is showing (the preview's picture of the pointer on it; in game the pointer shows it).</summary>
+        public bool Compare, CompareTip;
     }
 
     /// <summary>
@@ -101,10 +119,6 @@ namespace Hearthwoven.Panel
         public bool Waits;
         /// <summary>ladder, ladders: practised since install on this PC (the soft glow at the climber).</summary>
         public bool Practised;
-        /// <summary>Draw the small "since install" label here (Joost 2026-10-08: no icons beside numbers; your character's and
-        /// fellow players' counts carry nothing). On a section: once after its heading; on any other block or item: once after
-        /// its number. Set by PanelModel (PlaceSinceInstall) from Src; Battle pages carry none.</summary>
-        public bool SinceInstall;
         /// <summary>filterbar: the key that enters its focus ("Tab"), drawn as a small keycap beside the rows; null = none.</summary>
         public string KeyCap;
         /// <summary>filterbar: the chip rows (and the linked bars) are shown: the focus is in, or the header was opened. false = collapsed to its header line.</summary>
@@ -113,23 +127,35 @@ namespace Hearthwoven.Panel
         public int Columns;
         /// <summary>plate: the pill on the right of the heading row (the page's title badges, "Woodcutter") and its icon; null = none.</summary>
         public string Pill, PillIcon;
-        /// <summary>A layered number (Farming's planted, 2026-10-08): Faded = the game's own counter when Hearthwoven first ran
-        /// (LocalTotals.Baseline, drawn faint), Solid = what Hearthwoven counted exactly since (drawn as the number), both
-        /// formatted; the number itself (Value, or Value2 on an item tile) stays their sum. null = a plain number.</summary>
-        public string Faded, Solid;
-        /// <summary>A layered number whose "faded = before install" key is drawn right under its faded part (fix4: the key sat under the
-        /// whole hero, under a number that was not faded). The key's note block stays on the page with Tone "tag"; the renderers skip it.</summary>
-        public bool FadedTag;
+
+        // ---------- 0.7 redesign (work/hearthwoven-0.7/REDESIGN-RULES.md; RecordedModel.cs) ----------
+        /// <summary>A Src "pc" number's start when it is not the install (a 0.6 counter group, a later baseline); null = StartOf(input, null).
+        /// PlaceRecordedFrom dates its label from this.</summary>
+        public DateTime? From;
+        /// <summary>The label drawn after this heading or number: "Recorded from 8 October · this PC" on a section, block or page part,
+        /// "from 8 October" after a single number. Set by PlaceRecordedFrom only (a page with view.Recorded).</summary>
+        public string RecordedFrom;
+        /// <summary>Value is NotRecorded ("Not recorded"): the counter did not run for this period or person. Drawn muted, italic, at the
+        /// label's size, never gold; never "0".</summary>
+        public bool Unrecorded;
+
+        // ---------- 0.8 Compare periods (Chapters/CompareModel.cs) ----------
+        /// <summary>While comparing: the number the period before held, as shown ("86"), and the change mark ("▲ 12 %", "new", "same"); on a hero
+        /// number and a cap's total BeforeLabel says what the period before is ("the 7 days before"). On a compare row (Kind "row" of
+        /// "comparerows") Value is now, Before the period before, Fraction and Fraction2 their lengths on the block's one scale.</summary>
+        public string Before, Change, BeforeLabel;
+        /// <summary>switch: a chip that sits after its chips, not one of its views (Compare beside Together's window chips): Selected = on, Tone
+        /// OffTone = greyed with Text its reason, Open = the reason's tag is showing.</summary>
+        public Block Chip;
     }
 
-    public class Choice { public string Id, Label, Icon; public bool Selected, Disabled; public bool Dot; /* a gold dot: something new to see (earned feats not opened yet) */ public bool Waits; /* a greyed day window of your own book that works later: pressable, its WaitLine says when (B17) */ }   // Disabled: drawn dim, does nothing (the biome chip where a page has no biomes)
+    public class Choice { public string Id, Label, Icon; public bool Selected, Disabled; public bool Dot; /* a gold dot: something new to see (earned feats not opened yet) */ public bool Waits; /* a greyed day window of your own book that works later: pressable, its WaitLine says when (B17) */ public string Why; /* a greyed window chip's own reason, under it on hover (PageHead.cs) */ }   // Disabled: drawn dim, does nothing (the biome chip where a page has no biomes)
 
     public class PanelView
     {
         public string Title = "Hearthwoven", Owner, Scope, Heading, ShareNote, ListTitle;
         public string HeadingSource;                        // source tag of a number in the heading (see Block.Source)
         public string HeadingSrc;                           // the heading's source mark: "character" | "pc" | "fellows" (see Block.Src)
-        public bool HeadingSinceInstall;                    // the "since install" label after the page heading (see Block.SinceInstall)
         public Chapter Active;
         public string Page;
         public bool HasFilters, ShowAbout;
@@ -139,14 +165,35 @@ namespace Hearthwoven.Panel
         public TimeWindow? ShownWindow;
         /// <summary>The page shows a chosen time window of the logs, not counts since install (Company's Together, Damage dealt): no "since install" label.</summary>
         public bool Windowed;
-        /// <summary>Deeds twins: the ember zone of this page counts from here (UTC), later than the install, because one of its
-        /// counters was baselined when Hearthwoven first read it (DeedsZones.Began); null = from the install. ZonesModel says so in the zone line.</summary>
-        public DateTime? EmberFrom;
         public readonly List<Choice> Chapters = new List<Choice>(), List = new List<Choice>(), Badges = new List<Choice>(), Toggle = new List<Choice>(),
                                      Windows = new List<Choice>(), Biomes = new List<Choice>(), Players = new List<Choice>();
+        /// <summary>A 0.7 page (REDESIGN-RULES.md): no zones, no "since install" label; PlaceRecordedFrom dates the numbers counted on
+        /// this PC instead. Each page sets it when it migrates, so pages move one at a time.</summary>
+        public bool Recorded;
+        /// <summary>The page's "About these numbers" box (Kind "aboutnumbers", RecordedModel.AboutNumbers); null = the page has none.</summary>
+        public Block AboutNumbers;
+        /// <summary>The label after the page heading when every number on the page was counted on this PC ("Recorded from 8 October · this PC").</summary>
+        public string HeadingRecordedFrom;
         public readonly List<Block> Blocks = new List<Block>();
         public readonly List<string> Keys = new List<string>();
         public readonly Dictionary<string, int> PersonColors = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);   // name -> palette index
+        /// <summary>0.8 (Chapters/EveryoneModel.cs): the Everyone chip shows at the end of the player row (EveryoneChip; sharing on), the page
+        /// shows the group (EveryoneOn), or the chip is greyed here with its second line and its reason (EveryoneSub, EveryoneWhy).</summary>
+        public bool EveryoneChip, EveryoneOn;
+        public string EveryoneSub, EveryoneWhy;
+        /// <summary>The greyed chip's press: the page it opens with Everyone on ("Battle/damage"); null = nowhere (nobody else shares yet).</summary>
+        public string EveryoneTo;
+        /// <summary>0.8: the Compare chip after the window chips (Chapters/CompareModel.cs); null = the page offers none. Disabled = greyed, with
+        /// CompareWhy its reason (the tag on hover; CompareTip: shown now). Comparing: the page is merged with the period before.</summary>
+        public Choice Compare;
+        public string CompareWhy;
+        public bool CompareTip, Comparing;
+        /// <summary>0.8 layout D+ (PageHead.cs): why all the greyed window chips are greyed (a fellow's copy, the group); each greyed chip's own reason
+        /// (Choice.Why: this, then a day window's own day before the history) shows under it while the pointer is on it; WindowTip: the chip whose
+        /// reason shows now, the one just pressed (B17's line, no longer on the plate).</summary>
+        public string WindowWhy, WindowTip;
+        /// <summary>0.8 layout D+ (PageHead.cs): a fellow's book says whose copy it is and when at the strip's right end ("Edda, as of 8 Oct 00:28").</summary>
+        public string StripNote;
     }
 
     /// <summary>
@@ -386,6 +433,8 @@ namespace Hearthwoven.Panel
             }
             return r;
         }
+        /// <summary>The game's pickup counter was stored when Hearthwoven first ran (LocalTotals.Baseline "pickedUp"); false: a fellow's copy, totals not loaded.</summary>
+        static bool HasPickupBaseline(PanelInput i) => i?.Baseline != null && i.Baseline.TryGetValue("pickedUp", out var stored) && stored != null;
         /// <summary>Brought in, the whole kind: the same total as the page's bar (Deeds card, Together).</summary>
         public static double BroughtInTotal(PanelInput i, string kind) => BroughtIn(i, kind).Values.Sum(v => v.before + v.exact);
 
@@ -401,10 +450,18 @@ namespace Hearthwoven.Panel
         /// <summary>The brought-in bar: one composition, each part its item's total, its Fraction2 the faded share (counted
         /// before Hearthwoven); the note says what faded means, only when something is faded. Nothing faded: all counted on
         /// this PC since install.</summary>
-        static Block BroughtInBar(string title, PanelInput input, string kind, Func<string, string> label, Func<string, (string colour, string pattern)> look)
+        static Block BroughtInBar(string title, PanelInput input, string kind, Func<string, string> label, Func<string, (string colour, string pattern)> look, bool recorded = false)
         {
             var parts = BroughtIn(input, kind);
             var faded = parts.Values.Any(v => v.before > 0);
+            if (recorded)   // 0.7 rule A: the sum per part, your character's whole count; no faded shares, no key; "Earlier counts may be incomplete." beside the total when an earlier part is above 0 or there is no baseline
+            {
+                var r = Composition(title, parts.ToDictionary(kv => kv.Key, kv => kv.Value.before + kv.Value.exact), label, look, SrcCharacter, tint: ItemTint(input));
+                if (r == null) return null;
+                if (faded || !HasPickupBaseline(input)) r.Text = PickupNote(input, kind);
+                if (!input.IsSelf && r.Items.Count == 1) r.Tone = "single";
+                return r;
+            }
             var b = Composition(title, parts.ToDictionary(kv => kv.Key, kv => kv.Value.before + kv.Value.exact), label, look, faded ? SrcCharacter : SrcPc, tint: ItemTint(input));
             if (b == null) return null;
             foreach (var part in b.Items)
@@ -427,9 +484,9 @@ namespace Hearthwoven.Panel
         /// </summary>
         static Block PickaxeFindsKey(PanelInput input, Func<string, string> named)
         {
-            var b = BroughtInBar(PickaxeFindsTitle, input, PickaxeFinds, named, k => (null, null));
+            var b = BroughtInBar(PickaxeFindsTitle, input, PickaxeFinds, named, k => (null, null), recorded: true);   // 0.7 rule A: the sum per item, no faded share
             if (b == null) return null;
-            b.Tone = "single"; b.Note = null; b.Text = null;   // the legend alone; the bar above carries the faded key and the pickup line
+            b.Tone = "single"; b.Note = null; b.Text = null;   // the legend alone; the bar above carries "Earlier counts may be incomplete."
             return b;
         }
 
@@ -536,46 +593,60 @@ namespace Hearthwoven.Panel
         public static IEnumerable<string> BiomesSeen(EventLog log)
         {
             if (log == null) return Enumerable.Empty<string>();
-            var seen = new HashSet<string>(log.Damage.Keys.Select(k => k.Split('|')).Where(p => p.Length >= 2).Select(p => p[1]));
+            var seen = new HashSet<string>();
+            foreach (var k in log.Damage.Keys) { var p = LogKeys.Of(k).P; if (p.Length >= 2) seen.Add(p[1]); }   // 0.8: each key split once (LogKeys.cs)
             foreach (var d in log.Deaths) seen.Add(d.Biome);
             return seen.OrderBy(b => { var i = Array.IndexOf(BiomeOrder, b); return i < 0 ? 99 : i; }).ThenBy(b => b, StringComparer.Ordinal);
         }
 
-        static bool TryBucket(string iso, out DateTime utc) =>
-            DateTime.TryParseExact(iso, "yyyy-MM-dd'T'HH:mm'Z'", Inv, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out utc);
+        static bool TryBucket(string iso, out DateTime utc) => LogKeys.Minute(iso, out utc);   // 0.8: each minute string parsed once (LogKeys.cs)
 
         /// <summary>Start of the window, or null for the whole session.</summary>
         public static DateTime? Cutoff(TimeWindow w, DateTime nowUtc) =>
             w == TimeWindow.LastTenMinutes ? nowUtc.AddMinutes(-10) : w == TimeWindow.LastThirtyMinutes ? nowUtc.AddMinutes(-30) :
             w == TimeWindow.LastHour ? nowUtc.AddHours(-1) : w == TimeWindow.LastThreeHours ? nowUtc.AddHours(-3) : (DateTime?)null;
 
-        /// <summary>Damage rows inside the window and biome. A bucket (one minute; ten for an older sender) counts when any part of it lies in the window.</summary>
-        public static List<DamageRow> Damage(EventLog log, TimeWindow w, string biome, DateTime nowUtc)
+        /// <summary>
+        /// B33 on every page with windows (Joost 2026-10-10: "Session" is YOUR session's span): on a fellow's book their Session counts from
+        /// when you started playing this time (their log's rows are timed, so what they did before you came in is left out); null on your own
+        /// book, or when the start of your session is not known.
+        /// </summary>
+        public static DateTime? SessionFrom(PanelInput input) => input != null && !input.IsSelf ? input.ViewerSessionStartUtc : null;
+
+        /// <summary>A fellow who did not play during your session (B33): not seen in the world this connection, or their latest record is older
+        /// than your session's start. Their Session then says so ("Edda has not played since 21:40."), never as if they had been there.</summary>
+        public static bool FellowOffThisSession(PanelInput input) =>
+            input != null && !input.IsSelf && (input.OnThisSession == false ||
+            (input.ViewerSessionStartUtc.HasValue && input.LastRecordedUtc.HasValue && input.LastRecordedUtc.Value.AddMinutes(SpanOf(input)) <= input.ViewerSessionStartUtc.Value));
+
+        /// <summary>Damage rows inside the window and biome. A bucket (one minute; ten for an older sender) counts when any part of it lies in the window.
+        /// sessionFrom: where Session starts (SessionFrom: a fellow's book counts from your session's start); null = the whole log.</summary>
+        public static List<DamageRow> Damage(EventLog log, TimeWindow w, string biome, DateTime nowUtc, DateTime? sessionFrom = null)
         {
             var rows = new List<DamageRow>();
             if (log == null) return rows;
             foreach (var kv in log.Damage)
             {
-                var p = kv.Key.Split('|');
-                if (p.Length < 6 || !InFilter(p[0], p[1], w, biome, nowUtc, log.Span)) continue;
+                var p = LogKeys.Of(kv.Key).P;   // 0.8: each key split once (LogKeys.cs); its minute parsed once too (TryBucket)
+                if (p.Length < 6 || !InFilter(p[0], p[1], w, biome, nowUtc, log.Span, sessionFrom)) continue;
                 TryBucket(p[0], out var t);
                 rows.Add(new DamageRow { Bucket = t, Biome = p[1], Dir = p[2], Other = p[3], Cause = p[4], Type = p[5], Amount = kv.Value });
             }
             return rows;
         }
 
-        static bool InFilter(string bucketIso, string rowBiome, TimeWindow w, string biome, DateTime nowUtc, int span)
+        static bool InFilter(string bucketIso, string rowBiome, TimeWindow w, string biome, DateTime nowUtc, int span, DateTime? sessionFrom = null)
         {
             if (!TryBucket(bucketIso, out var t)) return false;
-            var cutoff = Cutoff(w, nowUtc);
+            var cutoff = Cutoff(w, nowUtc) ?? (w == TimeWindow.Session ? sessionFrom : null);
             if (cutoff.HasValue && t.AddMinutes(span) <= cutoff.Value) return false;
             return string.IsNullOrEmpty(biome) || rowBiome == biome;
         }
 
-        public static List<EventLog.Death> Deaths(EventLog log, TimeWindow w, string biome, DateTime nowUtc)
+        public static List<EventLog.Death> Deaths(EventLog log, TimeWindow w, string biome, DateTime nowUtc, DateTime? sessionFrom = null)
         {
             if (log == null) return new List<EventLog.Death>();
-            var cutoff = Cutoff(w, nowUtc);
+            var cutoff = Cutoff(w, nowUtc) ?? (w == TimeWindow.Session ? sessionFrom : null);
             return log.Deaths.Where(d => (!cutoff.HasValue || d.Time >= cutoff.Value) && (string.IsNullOrEmpty(biome) || d.Biome == biome))
                              .OrderByDescending(d => d.Time).ToList();
         }
@@ -652,7 +723,7 @@ namespace Hearthwoven.Panel
         public static string WindowLabel(TimeWindow w) =>
             w == TimeWindow.LastTenMinutes ? "Last 10 minutes" : w == TimeWindow.LastThirtyMinutes ? "Last 30 minutes" : w == TimeWindow.LastHour ? "Last hour" :
             w == TimeWindow.LastThreeHours ? "Last 3 hours" : w == TimeWindow.Session ? "This session" : w == TimeWindow.Today ? "Today" :
-            w == TimeWindow.SevenDays ? "Last 7 days" : w == TimeWindow.ThirtyDays ? "Last 30 days" : "Since install";
+            w == TimeWindow.SevenDays ? "Last 7 days" : w == TimeWindow.ThirtyDays ? "Last 30 days" : "All";   // 0.7 rule W.2: All (the page's own dates say when)
         /// <summary>The window as a chip says it (six chips must fit the heading row); the plate's own line carries the full name.</summary>
         public static string WindowShort(TimeWindow w) =>
             w == TimeWindow.LastTenMinutes ? "10 min" : w == TimeWindow.LastThirtyMinutes ? "30 min" : w == TimeWindow.LastHour ? "1 h" :
@@ -687,7 +758,11 @@ namespace Hearthwoven.Panel
         static readonly NumberFormatInfo Grouped = new NumberFormatInfo { NumberGroupSeparator = ThousandsGap, NumberDecimalSeparator = ".", NumberGroupSizes = new[] { 3 } };
         static string N(double v) => Number(v);
         // a real amount between 0 and 1 (0.4 damage) rounds to "0", which reads as nothing happened: say so instead
-        public static string NAtLeast(double v) => v > 0 && v < 1 ? "under 1" : N(v);
+        public static string NAtLeast(double v) => v > 0 && v < 1 ? LessThanOne : N(v);
+        /// <summary>An amount above 0 that rounds to nothing (B26, Joost: "under 1" read odd beside "A falling tree"; 0.8.1, Joost: "&lt;1", a number like the others).</summary>
+        public const string LessThanOne = "<1";
+        /// <summary>Words that must stay on one line ("received blunt less than 1" wrapped in game as "less than" / "1"): every space a no-break space.</summary>
+        public static string NoBreak(string s) => s?.Replace(' ', '\u00A0');
         static string Km(double meters) { var km = meters / 1000.0; return (km < 100 ? km.ToString("0.0", Inv) : Number(km)) + " km"; }
         static string Plural(double n, string one, string many) => N(n) + " " + (Math.Round(n) == 1 ? one : many);
         static string About(double seconds) => seconds < 90 ? "about " + N(seconds) + " seconds" : "about " + N(seconds / 60) + " minutes";
@@ -707,17 +782,14 @@ namespace Hearthwoven.Panel
         public const string SourceTheirLast = "measured in last shared";
         public static string MeasuredOf(PanelInput i) => i.IsSelf ? SourceSession : SourceTheirLast;
 
-        // The page scope: nothing for yourself (the source marks say where each number comes from); a fellow's data is their
-        // latest shared copy, which can be days old, so their pages still say whose copy it is and when it is from.
-        static string FellowScope(PanelInput i) => i.IsSelf ? null : Name(i) + ", " + (i.SharedSinceInstall ? SharedScope(i) : SessionScope(i));
-        // a fellow's copy that carries their since-install totals: say so, with the date of their latest record
+        // The page scope of a fellow's book is RecordedScope (RecordedModel.cs): whose copy it is and when it is from.
         // the one "as of" form (fix3-rest): "as of 8 Oct 15:54", the moment of their latest record
         public static string AsOf(PanelInput i) => "as of " + Local(i, i.LastRecordedUtc.Value).ToString("d MMM HH:mm", Inv);
-        static string SharedScope(PanelInput i) => SinceInstallLabel + (i.LastRecordedUtc.HasValue ? ", " + AsOf(i) : "");
 
         // A fellow's data is their latest shared copy, which can be days old: always say so, with the date.
         static string SessionScope(PanelInput i)
         {
+            if (!i.IsSelf && i.Cached && i.ReceivedUtc.HasValue) return "last shared " + Local(i, i.ReceivedUtc.Value).ToString("d MMM HH:mm", Inv);   // B23: from this PC's cache until the server's fresh copy comes
             if (!i.IsSelf) return "last shared" + (i.LastRecordedUtc.HasValue ? ", " + Local(i, i.LastRecordedUtc.Value).ToString("d MMM HH:mm", Inv) : "");
             return i.SessionStartUtc.HasValue ? "this session, since " + Local(i, i.SessionStartUtc.Value).ToString("HH:mm", Inv) : "this session";
         }
@@ -754,8 +826,8 @@ namespace Hearthwoven.Panel
         /// </summary>
         public static readonly SagaTitle[] SagaTitles =
         {
-            new SagaTitle("explorer", "Trailfinder", "Paths travelled, places found", Chapter.Voyages, "onfoot",
-                new SagaLine(Profile, i => C(i, "DistanceTraveled") > 0 ? C(i, "DistanceTraveled") : C(i, "DistanceWalk") + C(i, "DistanceRun"), v => Km(v) + " travelled"),
+            new SagaTitle("explorer", "Trailfinder", "Paths traveled, places found", Chapter.Voyages, "onfoot",
+                new SagaLine(Profile, i => C(i, "DistanceTraveled") > 0 ? C(i, "DistanceTraveled") : C(i, "DistanceWalk") + C(i, "DistanceRun"), v => Km(v) + " traveled"),
                 new SagaLine(Profile, i => C(i, "TreasureBuriedFound") + C(i, "TreasureDungeonFound") + C(i, "TreasureLocationFound"), v => Plural(v, "treasure found", "treasures found"))),
             new SagaTitle("woodcutter", "Woodcutter", "Trees felled, logs split", Chapter.Deeds, "woodcutting",
                 new SagaLine(Measured, i => M(i, e => e.ChopHits), v => Plural(v, "axe hit", "axe hits")),
@@ -776,7 +848,8 @@ namespace Hearthwoven.Panel
                 // the game's gear counters: the same item types as the "Gear made most" list (ItemKindOf); upgrades on their own line
                 new SagaLine(Profile, i => C(i, "CraftWeapon") + C(i, "CraftArmor") + C(i, "CraftTool") + C(i, "CraftTrinket"), v => Plural(v, "piece of gear made", "pieces of gear made")),
                 new SagaLine(Profile, i => C(i, "Upgrades"), v => Plural(v, "upgrade", "upgrades")),
-                new SagaLine(Measured, i => M(i, e => e.SmelterAdded), v => N(v) + " ore and fuel into smelters")),
+                // only what the player put in: a Stoker's Chest's feeding is nobody's (Hall > Smelters shows it apart); "by hand" says so where chests feed
+                new SagaLine(Measured, i => M(i, e => e.SmelterAdded), (v, i) => N(v) + " ore and fuel into smelters" + (ChestsFeed(i) ? " by hand" : ""))),
             new SagaTitle("hauler", "Storekeeper", "Carts pulled home", Chapter.Stores, "carts",
                 new SagaLine(Measured, i => M(i, e => e.CartMeters), v => N(v) + " m pulling a cart")),
             new SagaTitle("sailor", "Helmskeeper", "Distance at the helm", Chapter.Voyages, "sailing",
@@ -788,8 +861,8 @@ namespace Hearthwoven.Panel
                 new SagaLine(Profile, BuiltCount, v => Plural(v, "piece built", "pieces built"))),
             new SagaTitle("mender", "Mender", "Repairs that keep the hall standing", Chapter.Deeds, "building",
                 new SagaLine(Measured, i => M(i, e => e.Repairs), v => Plural(v, "repair with the hammer", "repairs with the hammer"))),
-            new SagaTitle("wallwarden", "Wallwarden", "Defences built, armed and loaded", Chapter.Battle, "defense",
-                new SagaLine(Profile, i => C(i, "BuildClusterDefense") + C(i, "TrapArmed") + C(i, "TurretAmmoAdded"), v => N(v) + " defences built, armed or loaded")),   // short: it is also the title's reason in the strip on its page (B18)
+            new SagaTitle("wallwarden", "Wallwarden", "Defenses built, armed and loaded", Chapter.Deeds, "building",   // B28: with the base defences it counts
+                new SagaLine(Profile, i => C(i, "BuildClusterDefense") + C(i, "TrapArmed") + C(i, "TurretAmmoAdded"), v => N(v) + " defenses built, armed or loaded")),   // short: it is also the title's reason in the strip on its page (B18)
             new SagaTitle("defender", "Shieldbearer", "Blocks and well-timed parries", Chapter.Battle, "defense",
                 // one reason with the Defence tile's split (review 0.6.5: the reason said the game's blocks, which include the parries, beside a
                 // tile that says them apart): "196 blocks · 58 parries", a zero part left out
@@ -867,14 +940,16 @@ namespace Hearthwoven.Panel
 
         static readonly (string id, string label, string icon)[] DeedsList =
         {
-            ("overview", "Overview", ListOverview), ("cooking", "Cooking", "title:cook"), ("building", "Building", "title:builder"), ("groundwork", "Groundwork", "vocab:ground-lower"), ("crafting", "Crafting", "title:smith"),
+            (RecentPageId, RecentTitle, RecentIcon),   // 0.7: what grew lately, yours and the group's (Chapters/RecentPage.cs); first, the book still opens on the Overview
+            ("overview", "Overview", ListOverview), ("cooking", "Cooking", "title:cook"), (MealsPageId, MealsLabel, MealsIcon), ("building", "Building", "title:builder"), ("groundwork", "Groundwork", "vocab:ground-lower"), ("crafting", "Crafting", "title:smith"),
             ("woodcutting", "Woodcutting", "title:woodcutter"), ("mining", "Mining", "title:miner"), ("farming", "Farming", "title:farmer"),
             ("fishing", "Fishing", "title:fisher"), ("taming", "Taming", "title:tamer"),
         };
         static readonly (string id, string label, string icon)[] StoresList =
             { ("overview", "Overview", ListOverview), ("trader", "Trader", "title:trader"), ("smelters", "Smelters", "vocab:list-smelters") };   // chest and cart records are server-only: not here
         static readonly (string id, string label, string icon)[] BattleList =
-            { ("overview", "Overview", ListOverview), ("damage", "Damage", "vocab:list-damage"), ("defense", "Defence", "vocab:block-mark"), ("deaths", "Deaths", "vocab:death"), ("foes", "Foes", "vocab:list-foes") };
+            { ("overview", "Overview", ListOverview), (LastFightPage, LastFightLabel, LastFightIcon), (FeedPage, FeedLabel, FeedIcon),   // 0.8: the last fight and the feed (Chapters/BattleFeedModel.cs)
+              ("damage", "Damage", "vocab:list-damage"), ("defense", "Defense", "vocab:block-mark"), ("deaths", "Deaths", "vocab:death"), ("foes", "Foes", "vocab:list-foes") };
         static readonly (string id, string label, string icon)[] VoyagesList =
             { ("overview", "Overview", ListOverview), ("sailing", "Sailing", "vocab:list-sailing"), ("cargo", "Cargo", "vocab:cargo-mark"), ("onfoot", "On foot", "title:explorer"), ("maps", "Maps", "vocab:compass-home") };
         // every left-list entry carries a line icon (ADDENDUM-6); a sprite not shipped yet draws no icon, never an error
@@ -897,12 +972,14 @@ namespace Hearthwoven.Panel
                 case Chapter.Feats: items = FeatsList; break;   // Earned, Unsung (Chapters/FeatsModel.cs)
                 case Chapter.Company:
                     items = CompanyList.Select(x => (x.id, x.label, CompanyIcons.TryGetValue(x.id, out var ic) ? ic : ""));   // Fireside, Together, Food shared, Gear shared (Chapters/CompanyModel.cs)
+                    if (input == null || input.IsSelf) items = new[] { (AwayPage, AwayLabel, AwayIcon) }.Concat(items);   // Since you were away first: told to you, so your own book only (Chapters/AwayModel.cs)
                     break;
                 default:
                     items = new[] { ("overview", "Overview", ListOverview) }.Concat(SkillNames(input).Select(s => (s, SkillName(input, s), "skill:" + s)));
                     break;
             }
-            return items.Select(x => new Choice { Id = x.id, Label = x.label, Icon = x.icon }).ToList();
+            // 0.8: a fellow's copy carries no feed: the feed and the last fight stay in the list, greyed, and their page says why
+            return items.Select(x => new Choice { Id = x.id, Label = x.label, Icon = x.icon, Disabled = c == Chapter.Battle && input != null && !input.IsSelf && (x.id == FeedPage || x.id == LastFightPage) }).ToList();
         }
 
         /// <summary>"your" on your own page, "their" on a fellow player's book (sample-one: a fellow's book never speaks to the reader about them).</summary>
@@ -925,7 +1002,9 @@ namespace Hearthwoven.Panel
 
         // ---------- the panel ----------
 
-        public static PanelView Build(PanelInput input, PanelState state)
+        public static PanelView Build(PanelInput input, PanelState state) => WithFeatMemo(() => SettleHead(input, state, CompareOrPlain(input, state, BuildView(input, state))));   // L6: feat numbers once per render (FeatsModel.FeatMemo); 0.8: Compare periods (CompareModel.cs), then the page head (PageHead.cs)
+
+        static PanelView BuildView(PanelInput input, PanelState state)
         {
             input = input ?? new PanelInput();
             state = state ?? new PanelState();
@@ -938,7 +1017,9 @@ namespace Hearthwoven.Panel
             if (state.ShowAbout) view.List.AddRange(AboutList.Select(x => new Choice { Id = x.id, Label = x.label }));
             else view.List.AddRange(ListOf(input, state.Chapter));
             var page = state.ShowAbout ? state.AboutPage : state.PageOf(state.Chapter);
-            if (view.List.Count > 0 && !view.List.Any(l => l.Id == page)) page = view.List[0].Id;
+            if (view.List.Count > 0 && !view.List.Any(l => l.Id == page))   // Deeds opens on its Overview (Recent sits above it); Company still opens on Fireside (Since you were away is chosen, or opens by itself)
+                page = !state.ShowAbout && state.Chapter == Chapter.Deeds ? "overview"
+                     : state.Chapter == Chapter.Company && !state.ShowAbout && view.List.Count > 1 && view.List[0].Id == AwayPage ? view.List[1].Id : view.List[0].Id;
             view.Page = page;
             var place = new PanelPlace { Chapter = state.Chapter, Page = page, Player = state.Player ?? "", About = state.ShowAbout };
             SettleWait(state, place, input);   // a greyed day window pressed on another page: back to the last window that worked (B17)
@@ -952,10 +1033,20 @@ namespace Hearthwoven.Panel
             foreach (var t in titles.Where(t => !state.ShowAbout && t.Chapter == state.Chapter && t.Page == page))
                 view.Badges.Add(new Choice { Id = t.Id, Label = t.Title, Icon = "title:" + t.Id });
 
+            // 0.8: where the Everyone chip works (Chapters/EveryoneModel.cs); on About, the page it was opened from
+            var under = state.ShowAbout ? state.PageOf(state.Chapter) ?? (state.Chapter == Chapter.Deeds ? "overview" : ListOf(input, state.Chapter).FirstOrDefault()?.Id) : page;
+            var everyoneOff = EveryoneOff(state.Chapter, under, state.ShowAbout, state.PageOf(Chapter.Deeds));
+            view.EveryoneSub = everyoneOff?.sub; view.EveryoneWhy = everyoneOff?.why; view.EveryoneTo = everyoneOff?.to;
             if (state.ShowAbout) About(input, page, view);
+            else if (ShowsEveryone(input, state, page)) EveryonePage(input, page, state, view);   // the group's page: the total, a row per player, the group's own bar
             else switch (state.Chapter)
             {
-                case Chapter.Deeds: Deeds(input, page, titles, view, state); break;
+                case Chapter.Deeds:
+                    Deeds(input, page, titles, view, state);
+                    // a fellow's Deeds page keeps every window chip, greyed but All (as Battle): the plate's second line says why
+                    if (!input.IsSelf && view.Windows.Count > 0 && view.Windows.Any(c => c.Disabled) && PlateOf(view) is Block deedsPlate)
+                        deedsPlate.Text = (string.IsNullOrEmpty(deedsPlate.Text) ? "" : deedsPlate.Text + "\n") + (page == RecentPageId ? RecentWindowsLine(input) : DeedsWindowsLine(input));   // Recent: its own reason (B33)
+                    break;
                 case Chapter.Company: Company(input, page, state, view); break;
                 case Chapter.Stores: Stores(input, page, view); break;
                 case Chapter.Battle: Battle(input, page, state, view); break;
@@ -968,7 +1059,9 @@ namespace Hearthwoven.Panel
             // every window, the day-window pages only when it is not All (there All is the page as it always was)
             // a fellow's last shared session is said on the plate's first line with its date ("Tor, last shared session, 8 Oct 00:10"): the heading
             // stays the page's name, so it is not cut by the nine chips
-            if (view.HasFilters && view.ShownWindow.HasValue && (state.Chapter == Chapter.Battle || view.ShownWindow != TimeWindow.SinceInstall) && (input.IsSelf || view.ShownWindow != TimeWindow.Session))
+            if (view.HasFilters && view.ShownWindow.HasValue && (state.Chapter == Chapter.Battle || view.ShownWindow != TimeWindow.SinceInstall) && (input.IsSelf || view.ShownWindow != TimeWindow.Session)
+                && !(view.Recorded && view.ShownWindow == TimeWindow.SinceInstall)   // a 0.7 page on All: the automatic "Recorded from" label speaks instead (rule W.2)
+                && !view.EveryoneOn)   // 0.8: the "Everyone" tag stands before the title and the chosen chip says the window (PICKS: the heading never truncates)
                 view.HeadingWindow = WindowLabelFor(input, view.ShownWindow.Value).ToLowerInvariant();
             if (view.HasFilters && view.ShownWindow.HasValue && view.ShownWindow != TimeWindow.SinceInstall && state.Chapter != Chapter.Battle) view.Windowed = true;   // a window, not since install: no "since install" label
             // a plate's title badges go in the strip at its top with their reason (FeatsFinish, B18), no longer in the heading row's pill
@@ -978,7 +1071,8 @@ namespace Hearthwoven.Panel
             if (asked.WaitView != null && asked.WaitAt == null) asked.WaitAt = place;   // Together's greyed day chip: its line holds on this page only
             if (waitLine != null && plate != null) plate.Text = string.IsNullOrEmpty(plate.Text) ? waitLine : plate.Text + "\n" + waitLine;
             TagSources(view);
-            PlaceSinceInstall(view, state.Chapter);
+            // a 0.7 page (view.Recorded, RecordedModel.cs) dates what this PC counted; the others keep "since install" until they migrate
+            if (view.Recorded) PlaceRecordedFrom(input, view, state.Chapter);
 
             // every key that works on this page, short (Joost's live test: the line was incomplete); the arrow keys work too,
             // the README and About say so, the footer stays short
@@ -1000,14 +1094,18 @@ namespace Hearthwoven.Panel
             var info = string.IsNullOrEmpty(state.InfoKey) ? null : state.InfoKey;
             if (state.ShowAbout) view.Keys.Add("[" + (info == null ? "Esc" : info + "/Esc") + "] Back");
             else if (info != null) view.Keys.Add("[" + info + "] About");
+            NumbersKeyLine(state, view);   // "[Y] About these numbers", right before the About key, on a page that has the box (RecordedModel.cs)
             // the close keys: the hotkey, Tab (unless Tab is the filter key: PanelUi.TabCloses), and Esc on the pages (About goes back with Esc)
             var closeKeys = new List<string>();
             if (!string.IsNullOrEmpty(state.Hotkey)) closeKeys.Add(state.Hotkey);
             if (state.FilterKey != "Tab") closeKeys.Add("Tab");
             if (!state.ShowAbout) closeKeys.Add("Esc");
             if (closeKeys.Count > 0) view.Keys.Add("[" + string.Join("/", closeKeys) + "] Close");
-            Zones(input, state, view);   // design B: your character's counts and this PC's each in their own zone (ZonesModel.cs)
+            if (view.Recorded) OneIncompletePerPage(PlateOf(view)?.Items ?? view.Blocks);   // "Earlier counts may be incomplete." once per page (RecordedModel.cs)
             FeatsFinish(input, state, view);   // the feat band on an owner page, the gold dots, the Feats page's keys (Chapters/FeatsModel.cs)
+            FoesFinish(state, view);   // 0.8: the Foes page's cursor and its keys (Chapters/FoesKeys.cs)
+            GrowthLine(input, view);   // 0.8: the growth line from the day history beside the page's hero (Chapters/GrowthLines.cs)
+            PlaceAboutNumbers(state, view);   // the page's "About these numbers" button, and its box when open, under the hero (RecordedModel.cs)
             ColorPeople(view);
             FilterFocusFix(state, view);   // the filter focus (FacetModel.cs)
             if (!ReferenceEquals(asked, state)) { asked.FilterRow = state.FilterRow; asked.FilterCursor = state.FilterCursor; }   // the fellow's window copy: only the focus is the caller's
@@ -1024,7 +1122,7 @@ namespace Hearthwoven.Panel
             if (note == SourceSession || note == SourceTheirLast || note == "measured on your PC" || note == AfterResistance || note == AfterTheirs || note == BeforeResistance) return TagMeasured;
             return null;
         }
-        public const string AfterResistance = "after your armour", AfterTheirs = "after their armour", BeforeResistance = "before the foe's armour";
+        public const string AfterResistance = "after your armor", AfterTheirs = "after their armor", BeforeResistance = "before the foe's armor";
 
         // every block whose label names a source gets the machine-readable tag; blocks set explicitly keep theirs
         // and every row inside a block carries its block's tag, so a source mark can sit on any single number
@@ -1059,64 +1157,6 @@ namespace Hearthwoven.Panel
         // the source marks of a block and of everything under it that shows a number
         static IEnumerable<string> Srcs(Block b) => new[] { b.Src }.Concat((b.Items ?? new List<Block>()).SelectMany(Srcs)).Where(s => s != null);
         static bool AllPc(Block b) { var s = Srcs(b).ToList(); return s.Count > 0 && s.All(x => x == SrcPc); }
-
-        /// <summary>
-        /// Where "since install" goes, once per place it is true (Joost 2026-10-08): after the page heading when every number
-        /// on the page was counted on this PC (or the heading's own number was and the blocks above the first section are
-        /// too); after a section heading when its whole section was; otherwise after the block, or after each single row
-        /// that was. Your character's counts and fellow players' carry nothing. Battle's windowed pages carry none: they state
-        /// their time window once (their event log is per session); Defense, with no window, shows blocks since install.
-        /// </summary>
-        public static void PlaceSinceInstall(PanelView view, Chapter chapter)
-        {
-            if (view.ShowAbout || view.Windowed || (chapter == Chapter.Battle && view.HasFilters)) return;
-            if (chapter == Chapter.Feats) return;   // feats of every source side by side; each says in words how it is counted
-            var numbered = view.Blocks.Where(b => Srcs(b).Any()).ToList();
-            if (numbered.Count == 0) return;
-            var hasHeading = !string.IsNullOrEmpty(view.Heading);
-            // the heading stands over every view of a switch: there the label stays inside the view it is true for
-            if (hasHeading && numbered.All(AllPc) && !Content(view).Any(b => b.Kind == "switch")) { view.HeadingSinceInstall = true; return; }
-            view.HeadingSinceInstall = hasHeading && view.HeadingSrc == SrcPc;
-            var leading = true;
-            Place(view.Blocks, view.HeadingSinceInstall, ref leading);
-        }
-
-        // one list of blocks, in stretches: an optional section heading and the blocks under it, up to the next section,
-        // divider or layout box. A box is opened and its blocks placed the same way (a plate continues the page; each
-        // column of a columns box and each view of a switch is a list of its own).
-        static void Place(List<Block> blocks, bool headingSince, ref bool leading)
-        {
-            for (int i = 0; i < blocks.Count;)
-            {
-                var b = blocks[i];
-                if (b.Kind == "divider") { leading = false; i++; continue; }
-                if (IsBox(b))
-                {
-                    if (b.Kind == "columns") leading = false;
-                    if (b.Kind == "columns" || b.Kind == "switch") foreach (var c in b.Items ?? new List<Block>()) { var own = false; Place(c.Items ?? new List<Block>(), headingSince, ref own); }
-                    else Place(b.Items ?? new List<Block>(), headingSince, ref leading);
-                    i++; continue;
-                }
-                var head = b.Kind == "section" ? b : null;
-                if (head != null) leading = false;
-                int from = head != null ? i + 1 : i, end = from;
-                while (end < blocks.Count && blocks[end].Kind != "section" && blocks[end].Kind != "divider" && !IsBox(blocks[end])) end++;
-                var stretch = blocks.GetRange(from, end - from).Where(x => Srcs(x).Any()).ToList();
-                var whole = stretch.Count > 0 && stretch.All(AllPc);
-                if (whole && head != null) head.SinceInstall = true;
-                else if (!(whole && leading && headingSince)) foreach (var x in stretch) LabelPc(x);
-                i = end;
-            }
-        }
-
-        // the block when all its numbers were counted on this PC, else each such number inside it (a row's own number even
-        // when a quieter number of another source rides along under it)
-        static void LabelPc(Block b)
-        {
-            if (AllPc(b)) { b.SinceInstall = true; return; }
-            if (b.Src == SrcPc && ((b.Value ?? "").Any(char.IsDigit) || (b.Kind == "stat" && (b.Title ?? "").Any(char.IsDigit)))) b.SinceInstall = true;
-            foreach (var i in b.Items ?? new List<Block>()) LabelPc(i);
-        }
 
         static Block Section(string title) => new Block { Kind = "section", Title = title };
         /// <summary>"in the Swamp": the biome a Battle overview is narrowed to, said in the legend and over what hurt you (null: all biomes).</summary>
@@ -1190,20 +1230,21 @@ namespace Hearthwoven.Panel
         public static readonly (string label, string text)[] AboutRows =
         {
             ("Your character's own count", "The game's counters, kept with your character in every world, also from before Hearthwoven: trees felled, pieces built, crafts, foes defeated. They can miss some work: what you do where a fellow player's PC hosts the area, and items you pick up onto a stack you already carry."),
-            ("Hearthwoven on this PC", "Counts from the day you installed it: damage, blocks and parries, repairs, smelting, carts, whose food you enjoyed, and exactly what you brought in. Only these start at install. Battle's windows look back from now."),
-            ("Faded", "A faded part of a bar or number is the game's count from before you installed Hearthwoven. The solid part is what Hearthwoven counted since."),
+            ("Hearthwoven on this PC", "Counts from the day you installed it: damage, blocks and parries, repairs, smelting, carts, whose food you enjoyed, and exactly what you brought in. Only these start at install. Battle's windows look back from now. Some counts began in a later version: their page says from when."),
             ("Feats", "A moment worth telling, earned by doing it: a rule, a number and a date, never a rank. Unsung ones are not earned yet. A title is earned by its own count; there is no combined score."),
+            ("Your armor", "Battle > Defense, What your armor stopped: each hit as it reached your armor and as it left it, on this PC from the day this version first ran. Falls, drowning and cold never meet armor; What hurt you counts them too."),
             // fix4-rest (review: the page opened with Titles and the one thing that matters sat in the third row): what is shared, how to switch it, what stays private, where it goes
-            ("What fellow players see", "Fellow players who run Hearthwoven see your counts in their own book: deeds, fights, voyages, skills and feats. You see theirs the same way."),
+            ("What fellow players see", "Fellow players who run Hearthwoven see your counts in their own book: deeds, fights, voyages, skills, feats and the lands you found. You see theirs the same way."),
             ("Turn sharing on or off", "Set ShareWithGroup in your mod manager's config editor (Gale or r2modman). It is on by default, and a change works while the game runs. Off: you see only your own book, and nobody sees yours."),
             ("What stays private", "Where you died and which worlds you played are left out of what fellow players see. Hearthwoven only reads the game and never changes your world."),
             ("Where your counts go", "To the server you play on, when it runs Hearthwoven; a server without it keeps nothing. Switching sharing off stops fellow players seeing your counts, not the server keeping them. Remove Hearthwoven.dll to uninstall it."),
         };
-        static readonly string[] ReadsRows = { "Your character's own count", "Hearthwoven on this PC", "Faded", "Feats" }, SharingRows = { "What fellow players see", "Turn sharing on or off", "What stays private", "Where your counts go" };
+        // 0.7: no "Faded" row (no faded parts are left on a page; REDESIGN-RULES.md part 5, G8, SOURCE-MATRIX row 136)
+        static readonly string[] ReadsRows = { "Your character's own count", "Hearthwoven on this PC", "Feats", "Your armor" }, SharingRows = { "What fellow players see", "Turn sharing on or off", "What stays private", "Where your counts go" };
         // each row of What it reads and Sharing carries the mark of the card it belongs to on How it counts (fix-rest: a wall of text had no scan structure)
         static readonly Dictionary<string, string> AboutMarks = new Dictionary<string, string>
         {
-            ["Your character's own count"] = "vocab:src-stone", ["Hearthwoven on this PC"] = "vocab:src-hearth", ["Faded"] = "vocab:src-stone", ["Feats"] = FeatsIcon,
+            ["Your character's own count"] = "vocab:src-stone", ["Hearthwoven on this PC"] = "vocab:src-hearth", ["Feats"] = FeatsIcon, ["Your armor"] = "vocab:block-mark",
             ["What fellow players see"] = "vocab:src-fellows", ["Turn sharing on or off"] = "vocab:promise-optional", ["What stays private"] = "vocab:promise-world", ["Where your counts go"] = "vocab:about-info",
         };
 
@@ -1218,18 +1259,23 @@ namespace Hearthwoven.Panel
             view.Heading = page == "reads" ? "What it reads" : page == "sharing" ? "Sharing" : AboutHeading;
             if (page == "reads" || page == "sharing")
             {
-                // readrows: one row per statement, its mark, its title and its words (the "Faded" row's mark is drawn faded: it IS the faded count)
+                // readrows: one row per statement, its mark, its title and its words
                 view.Blocks.Add(new Block { Kind = "readrows", Items = AboutRows.Where(r => (page == "reads" ? ReadsRows : SharingRows).Contains(r.label))
-                    .Select(r => new Block { Kind = "readrow", Icon = AboutMarks[r.label], Title = r.label, Text = r.text, Tone = r.label == "Faded" ? "faded" : null }).ToList() });
+                    .Select(r => new Block { Kind = "readrow", Icon = AboutMarks[r.label], Title = r.label, Text = r.text }).ToList() });
                 Plate(view, "vocab:about-info");
                 return;
             }
+            var installedOn = StartOf(input, null);   // 0.7 date words: "from 1 October", never "since you installed it"
             view.Blocks.Add(new Block { Kind = "origins", Items = new List<Block> {
                 new Block { Kind = "origin", Icon = "vocab:src-stone", Title = "Your character's own count", Value = MadeLine(input), Text = "goes with your character to every world · trees, kills, skills", Tone = SrcCharacter },
-                new Block { Kind = "origin", Icon = "vocab:src-hearth", Title = "Hearthwoven on this PC", Value = "since you installed it", Text = "damage · axe hits · whose food you enjoyed", Tone = SrcPc },
+                new Block { Kind = "origin", Icon = "vocab:src-hearth", Title = "Hearthwoven on this PC", Value = installedOn.HasValue ? "from " + RecordDate(input, installedOn.Value) : "from the day you added it", Text = "damage · axe hits · whose food you enjoyed", Tone = SrcPc },
                 new Block { Kind = "origin", Icon = "vocab:src-fellows", Title = "Your fellow players' PCs", Value = "when they share too", Text = "who put your gear to good use", Tone = SrcFellows } } });
-            view.Blocks.Add(new Block { Kind = "sincewhen", Title = "Since when", Text = (string.IsNullOrEmpty(input.PlayerName) ? "Your character" : input.PlayerName) + " made",
-                Value = "Hearthwoven installed", Value2 = "now", Items = new List<Block> {
+            // 0.7: the dates the mod knows (the character's making, the install), in the player's words; a fellow's book carries neither
+            var installed = StartOf(input, null);
+            var madeCaption = (string.IsNullOrEmpty(input.PlayerName) ? "Your character" : input.PlayerName) + " made" +
+                              (input.IsSelf && input.CharacterMade.HasValue && input.CharacterMade.Value.Date != NoCreationDate ? " " + RecordDate(input, input.CharacterMade.Value) : "");   // NoCreationDate: the game's fixed date for old profiles (RecordedModel)
+            view.Blocks.Add(new Block { Kind = "sincewhen", Title = "Since when", Text = madeCaption,
+                Value = installed.HasValue ? "installed " + RecordDate(input, installed.Value) : "Hearthwoven installed", Value2 = "now", Items = new List<Block> {
                 new Block { Kind = "span", Icon = "vocab:src-stone", Title = "Your character", Tone = SrcCharacter },
                 new Block { Kind = "span", Icon = "vocab:src-hearth", Title = "This PC", Tone = SrcPc },
                 new Block { Kind = "span", Icon = "vocab:src-fellows", Title = "Fellow players", Tone = SrcFellows, Text = "as they last shared it" } } });
@@ -1246,47 +1292,81 @@ namespace Hearthwoven.Panel
 
         static void Deeds(PanelInput input, string page, List<TitleRow> titles, PanelView view, PanelState state)
         {
-            view.Scope = FellowScope(input);
+            view.Scope = RecordedScope(input);   // a fellow's book: whose and when (rule E); each page sets it again
             Func<string, string> named = k => Who(input, k);
-            if (DeedsPage(input, page, view, state)) return;   // Overview, Cooking, Building, Crafting, Farming, Fishing, Taming: Chapters/DeedsModel.cs
-            // Woodcutting and Mining (the composition pages of slice 1) stay here; they have the day windows (HISTORY-06.md)
+            // the day windows (HISTORY-06.md; 0.7: every page but the Overview): a page in a day window reads the window's copy of the input
+            // (DeedsWindow), so its own code, filters included, works on the window's rows
+            if (page == RecentPageId) { RecentPage(input, view, state); return; }   // Deeds > Recent (Chapters/RecentPage.cs): its own chips and views
+            if (page == MealsPageId) { Meals(input, view, state); return; }   // 0.8.1 Deeds > Meals (Chapters/MealsModel.cs): its own chips and its group view
             var offered = WindowsOf(Chapter.Deeds, page);
-            if (offered != null && state != null && WindowChips(input, state, view, offered) is TimeWindow w && IsDayWindow(w)) { DeedsDay(InWindow(input, w) ?? input, page, view, w); return; }
+            // 0.7: the short windows (10 min .. Session) come from this session's DeedLog (DeedsShort), built into the same kind of copy, so the
+            // pages and their filters need nothing new. Your own book only: a fellow's copy has no minutes (greyed there, DeedsWindowOpen).
+            // A Deeds page shows All until a window is chosen: the book's default Session is Battle's (PanelState.WindowPicked)
+            // a fellow's copy has no minutes and no days: their chips stay in the row, greyed (WindowChips), as on Battle (DeedsWindowsLine says why)
+            var chosen = state != null && state.Window == TimeWindow.Session && !state.WindowPicked ? TimeWindow.SinceInstall : state?.Window;
+            var w = offered != null && state != null ? WindowChips(input, state, view, offered, chosen, DeedsWindowOpen) : TimeWindow.SinceInstall;
+            string notShort = null;
+            var day = IsDayWindow(w) ? DeedsWindow(input, w) : IsShortWindow(w) ? DeedsShort(input, w, out notShort) : null;
+            if (notShort != null)   // no DeedLog yet: the window says why, never the page's all-time numbers
+            {
+                view.Recorded = true; view.Heading = DeedsList.First(p => p.id == page).label;
+                view.Blocks.Add(Empty(NothingYet + (w == TimeWindow.Session ? " this session" : " in the " + WindowLabel(w).ToLowerInvariant()), notShort));
+                Plate(view, DeedsList.First(p => p.id == page).icon);
+                return;
+            }
+            if (day != null && (page == "woodcutting" || page == "mining")) { DeedsDay(day, page, view, w); return; }
+            if (DeedsPage(day ?? input, page, view, state)) { if (day != null) DeedsDayLines(input, day, page, view, w); return; }   // Overview, Cooking, Building, Groundwork, Crafting, Farming, Fishing, Taming: Chapters/DeedsModel.cs
+            // Woodcutting and Mining (the composition pages of slice 1) stay here
             switch (page)
             {
                 case "woodcutting":
-                    // r2-refine-woodcutting: the title's numbers as the hero, the brought-in bar (K1: faded before Hearthwoven,
-                    // solid counted exactly since install), then the axe hits per tree kind
+                    // 0.7 (REDESIGN-RULES.md part 3, the worked page): one recorded total with its breakdown, no zones. The hero is the trees
+                    // felled (rule A: the game's count when Hearthwoven first ran plus every tree counted since) with the axe hits beside it
+                    // (rule C: this PC only, "from 1 October"), the Wood Cutting skill on the right (rule K); the brought-in bar (rule A, the sum
+                    // per wood); the per-tree lists in their own sections, "Recorded from 1 October · this PC" (hard case 1); the About box
+                    view.Recorded = true;
                     view.Heading = "Woodcutting";
-                    TitleHero(view, titles, "woodcutter");
-                    TreesFelledHero(view, input);
-                    Add(view, BroughtInBar("Wood brought in", input, "wood", named, WoodLookOf(input)));
-                    TreesFelledStrip(view, input);
-                    // r2-refine-woodcutting (approved): each tree kind's picture, name, a bar on one scale and the number, two columns
-                    if (M(input, e => e.ChopHits) > 0) Group(view, "Axe hits per tree", Ranking(TreeHits(input), k => k, TreeIcon, SrcPc, top: GatherTop, columns: 2));
-                    SkillStrip(input, view, SkillHeading, new[] { "WoodCutting" });
-                    if (!input.IsSelf && view.Blocks.Count(b => b.Kind != "ladders") <= 2) view.Blocks.Add(new Block { Kind = "note", Text = Name(input) + "'s shared copy holds only this." });
-                    Plate(view, "title:woodcutter", FellowScope(input));
+                    view.Scope = RecordedScope(input);   // a fellow's copy: whose and when, without "since install" (rule E)
+                    {
+                        var layers = TreesFelledLayers(input);
+                        double felled = TreesFelled(input), hits = M(input, e => e.ChopHits);
+                        Add(view, Hero((felled > 0 ? N(felled) : null, Label1(felled, "tree felled", "trees felled"), SrcCharacter, layers == null || layers.Value.faded > 0 ? EarlierIncomplete : null),
+                                       (hits > 0 ? N(hits) : null, Label1(hits, "axe hit", "axe hits"), SrcPc, null)));
+                        SkillBeside(view, input, "WoodCutting");
+                        Add(view, BroughtInBar("Wood brought in", input, "wood", named, WoodLookOf(input), recorded: true));
+                        TreesFelledStrip(view, input);
+                        // r2-refine-woodcutting (approved): each tree kind's picture, name, a bar on one scale and the number, two columns
+                        if (hits > 0) Group(view, "Axe hits per tree", Ranking(TreeHits(input), k => k, TreeIcon, SrcPc, top: GatherTop, columns: 2));
+                        if (!input.IsSelf && view.Blocks.Count <= 2) view.Blocks.Add(new Block { Kind = "note", Text = Name(input) + "'s shared copy holds only this." });
+                        WoodcuttingNumbers(view, input, layers);
+                    }
+                    Plate(view, "title:woodcutter", RecordedScope(input));
                     return;
                 case "mining":
+                    // 0.7 (REDESIGN-RULES.md part 1, rules A, C, K and the box; the Woodcutting pattern): the hero is the stone and ore brought in
+                    // (rule A: the game's count when Hearthwoven first ran plus every piece counted since), the Pickaxes skill on the right (rule K);
+                    // the bar under it is the sum per ore, "Earlier counts may be incomplete." once beneath it; the other pickaxe finds stay outside
+                    // that total; the pickaxe hits (rule C: this PC only, "from 1 October") beside the hero as on Woodcutting (the hero row wraps when it
+                    // is full, HeroLines), their per-rock list in its own section; About these numbers
+                    view.Recorded = true;
                     view.Heading = "Mining";
-                    // the hero is the number the overview card leads with (fix3: "2 037 stone and ore brought in", not the pickaxe hits): the bar under it keeps
-                    // the parts and the faded key; the pickaxe hits are Hearthwoven's own count, the hero of the since-install zone
-                    var brought = BroughtInBar("Stone and ore brought in", input, "mining", named, k => (null, null));   // each ore in its own icon's colour
-                    if (brought != null)
+                    view.Scope = RecordedScope(input);   // a fellow's copy: whose and when (rule E)
                     {
-                        var pickupGap = brought.Text; brought.Text = null;   // the pickup gap, said on its own line under the hero (beside it the hero's long label leaves no room)
-                        var exactAll = BroughtIn(input, "mining").Values.Sum(v => v.exact); var beforeAll = BroughtIn(input, "mining").Values.Sum(v => v.before);
-                        Add(view, Hero((brought.Value, "stone and ore brought in", brought.Src, beforeAll > 0 && exactAll > 0 ? PartLine(N(exactAll)) : null)));   // zones-wording: the part counted since install, said at the total
-                        brought.Title = null; brought.Value = null;
-                        if (!string.IsNullOrEmpty(pickupGap)) view.Blocks.Add(new Block { Kind = "note", Text = pickupGap });
-                        Add(view, brought);
+                        var brought = BroughtInBar("Stone and ore brought in", input, "mining", named, k => (null, null), recorded: true);   // each ore in its own icon's colour
+                        var pick = BroughtIn(input, "mining");
+                        double pickaxeHits = M(input, e => e.PickaxeHits);
+                        bool earlier = pick.Values.Any(v => v.before > 0) || !HasPickupBaseline(input);
+                        // the hero is the stone and ore total, the pickaxe hits beside it, the skill on the right (rule K); the row wraps when it is full
+                        Add(view, Hero((brought?.Value, "stone and ore brought in", SrcCharacter, null), (pickaxeHits > 0 ? N(pickaxeHits) : null, Label1(pickaxeHits, "pickaxe hit", "pickaxe hits"), SrcPc, null)));
+                        SkillBeside(view, input, "Pickaxes");
+                        if (brought != null) { brought.Title = null; brought.Value = null; brought.Text = null; Add(view, brought); }
+                        if (earlier && brought != null) view.Blocks.Add(new Block { Kind = "note", Text = EarlierIncomplete });   // rule A.3: beside the bar, where the worked page's one line stands
+                        Add(view, PickaxeFindsKey(input, named));
+                        var rocks = pickaxeHits > 0 ? Ranking(D(input.Events.PickaxeHits), named, RockIcon, SrcPc, top: GatherTop, columns: 2) : null;
+                        if (rocks != null) Group(view, "Pickaxe hits per rock", rocks);
+                        MiningNumbers(view, input);
                     }
-                    Add(view, PickaxeFindsKey(input, named));
-                    TitleHero(view, titles, "miner");
-                    if (M(input, e => e.PickaxeHits) > 0) Group(view, "Pickaxe hits per rock", Ranking(D(input.Events.PickaxeHits), named, RockIcon, SrcPc, top: GatherTop, columns: 2));
-                    SkillStrip(input, view, SkillHeading, new[] { "Pickaxes" });
-                    Plate(view, "title:miner", FellowScope(input));
+                    Plate(view, "title:miner", RecordedScope(input));
                     return;
             }
         }
@@ -1300,57 +1380,103 @@ namespace Hearthwoven.Panel
             Func<string, string> named = k => Who(src, k);
             if (page == "woodcutting")
             {
+                view.Recorded = true;   // 0.7: no zones; the window's name is the label (rule W.1), the skill beside the hero (rule K.5)
                 view.Heading = "Woodcutting";
                 double felled = TreesFelledByKind(src).Values.Sum(), hits = M(src, e => e.ChopHits);
                 Add(view, Hero((felled > 0 ? N(felled) : null, felled == 1 ? "tree felled" : "trees felled", SrcPc, null), (hits > 0 ? N(hits) : null, hits == 1 ? "axe hit" : "axe hits", SrcPc, null)));
+                SkillBeside(view, src, "WoodCutting");
                 Add(view, BroughtInBar("Wood brought in", src, "wood", named, WoodLookOf(src)));
                 TreesFelledStrip(view, src);
                 if (hits > 0) Group(view, "Axe hits per tree", Ranking(TreeHits(src), k => k, TreeIcon, SrcPc, top: GatherTop, columns: 2));
                 if (view.Blocks.Count == 0) view.Blocks.Add(DayEmpty(src, w));
-                SkillStrip(src, view, SkillHeading, new[] { "WoodCutting" });
+                if (src.Window.Clipped) view.Blocks.Add(new Block { Kind = "note", Text = ClippedLineOf(src.Window) });
                 Plate(view, "title:woodcutter");
                 return;
             }
+            view.Recorded = true;   // 0.7: no zones; the window's name is the label (rule W.1), the skill beside the hero (rule K.5)
             view.Heading = "Mining";
-            var brought = BroughtInBar("Stone and ore brought in", src, "mining", named, k => (null, null));
+            var brought = BroughtInBar("Stone and ore brought in", src, "mining", named, k => (null, null), recorded: true);
             double rockHits = M(src, e => e.PickaxeHits);
             if (brought != null) { Add(view, Hero((brought.Value, "stone and ore brought in", SrcPc, null))); brought.Title = null; brought.Value = null; brought.Text = null; Add(view, brought); }
+            SkillBeside(view, src, "Pickaxes");
             Add(view, PickaxeFindsKey(src, named));
             if (rockHits > 0) Group(view, "Pickaxe hits per rock", Ranking(D(src.Events.PickaxeHits), named, RockIcon, SrcPc, top: GatherTop, columns: 2));
             if (view.Blocks.Count == 0) view.Blocks.Add(DayEmpty(src, w));
-            SkillStrip(src, view, SkillHeading, new[] { "Pickaxes" });
+            if (src.Window.Clipped) view.Blocks.Add(new Block { Kind = "note", Text = ClippedLineOf(src.Window) });
             Plate(view, "title:miner");
         }
 
-        // the hero's trees-felled number (T3): the sum of both layers stays the number (two layers at hero size do not fit
-        // beside the axe hits; the strip below carries them). All counted since install: a number from this PC. No baseline:
-        // the game's counter, with the one line that says it misses trees
-        static void TreesFelledHero(PanelView view, PanelInput input)
-        {
-            var hero = view.Blocks.LastOrDefault(b => b.Kind == "hero");
-            var n = hero == null ? null : new[] { hero }.Concat(hero.Items ?? new List<Block>()).FirstOrDefault(b => b.Title == "tree felled" || b.Title == "trees felled");
-            if (n == null) return;
-            var l = TreesFelledLayers(input);
-            if (!l.HasValue) n.Note = TreesMissed(input);
-            else if (l.Value.faded <= 0) { n.Src = SrcPc; n.Source = TagOfSrc(SrcPc); }
-            else if (l.Value.solid > 0) n.Note = PartLine(N(l.Value.solid));   // zones-wording: "410 trees felled in all · 30 of them since install" (Joost: the total and the since-install part, never to be added up)
-            else if (l.Value.solid <= 0) n.Note = TreesMissedBefore;   // the owner trap sits in the faded part, the game's count before install; with both layers the line sits with them (TreesFelledStrip; fix4: the hero stands clean)
-        }
-
-        // trees felled per tree kind, counted by Hearthwoven since install (rows, like the axe hits); above them, only when it
-        // has both layers, the whole in its two layers (faded: the game's counter when Hearthwoven first ran, solid: every tree
-        // counted since) with the key under it
+        // trees felled per tree kind, counted by Hearthwoven since install (rows, like the axe hits), in a section of its own with its
+        // own total: never the breakdown of the hero's trees felled, which also holds the game's count from before (hard case 1)
         static void TreesFelledStrip(PanelView view, PanelInput input)
         {
             var rows = Ranking(TreesFelledByKind(input), k => k, TreeIcon, SrcPc, top: GatherTop, columns: 2);   // as the axe hits: picture, bar, number
             if (rows == null) return;
             // the layered whole first (your character's count: the stone zone), then the heading and the rows (counted on this PC:
             // the ember zone keeps its heading with them)
-            var l = TreesFelledLayers(input);
-            // zones-wording: the hero says "in all · 30 of them since install"; the owner trap of the faded part stays as its own line
-            if (l.HasValue && l.Value.faded > 0 && l.Value.solid > 0) view.Blocks.Add(new Block { Kind = "note", Text = TreesMissedBefore });
+            // 0.7: the hero carries "Earlier counts may be incomplete." for the trees felled (rule A.3); this list is Hearthwoven's own, its own section
             view.Blocks.Add(Section("Trees felled per tree", TreesFelledByKind(input).Values.Sum(), SrcPc));
             view.Blocks.Add(rows);
+        }
+
+        /// <summary>
+        /// Woodcutting's "About these numbers" (REDESIGN-RULES.md part 3, row 8): before the split date the game's own counts (trees felled,
+        /// wood picked up) with what they missed; from it what Hearthwoven counted exactly; the per-tree lists and the axe hits only from the
+        /// install. The trees' date is the trees-felled baseline's (StartOf), the wood's the pickup baseline's: when they differ, each half
+        /// says its own date (hard case 4). Own book only; nothing without a baseline of either.
+        /// </summary>
+        static void WoodcuttingNumbers(PanelView view, PanelInput input, (double faded, double solid)? layers)
+        {
+            if (!input.IsSelf || (layers == null && !HasPickupBaseline(input))) return;
+            var wood = BroughtIn(input, "wood");
+            double treesBefore = layers?.faded ?? 0, treesSince = layers?.solid ?? 0, woodBefore = wood.Values.Sum(v => v.before), woodSince = wood.Values.Sum(v => v.exact);
+            var treesFrom = StartOf(input, TreesBaseline); var woodFrom = StartOf(input, "pickedUp");
+            string Trees(double n) => N(n) + " " + Label1(n, "tree", "trees");
+            string Wood(double n) => N(n) + " wood";
+            const string Gap = "It missed wood that went onto a stack you were already carrying, and trees felled where another player's PC ran the area, so the real numbers are higher.";
+            string before, from;
+            if (treesFrom == woodFrom)
+            {
+                before = "The game's own count: " + Trees(treesBefore) + ", " + Wood(woodBefore) + ". " + Gap;
+                from = "Hearthwoven counted every tree you felled and every piece you picked up, on this PC: " + Trees(treesSince) + ", " + Wood(woodSince) + " so far.";
+            }
+            else   // hard case 4: one sentence per date, earliest first
+            {
+                string When(DateTime? d) => d.HasValue ? RecordDate(input, d.Value) : "install";
+                before = "The game's own count: " + Trees(treesBefore) + " before " + When(treesFrom) + ", " + Wood(woodBefore) + " before " + When(woodFrom) + ". " + Gap;
+                var parts = new[] { (treesFrom, "From " + When(treesFrom) + ": Hearthwoven counted every tree you felled, " + Trees(treesSince) + " so far."),
+                                    (woodFrom, "From " + When(woodFrom) + ": every piece you picked up, " + Wood(woodSince) + " so far.") };
+                from = string.Join(" ", parts.OrderBy(x => x.Item1 ?? DateTime.MinValue).Select(x => x.Item2));
+            }
+            var install = StartOf(input, null);
+            AboutNumbers(view, input, treesFrom, before, from, Sentences(install.HasValue ? "Trees per kind and axe hits are only known from " + RecordDate(input, install.Value) + "." : null,
+                                                                  RecoveredElsewhere(input, "wood from pieces that came down counts")));
+        }
+
+        /// <summary>Woodcutting's and Mining's About box (0.8): from when what a piece dropped counts on Building (Materials recovered), not here.</summary>
+        static string RecoveredElsewhere(PanelInput input, string what)
+        {
+            var from = StartOf(input, LocalTotals.StartRecovered);
+            return from.HasValue ? "From " + RecordDate(input, from.Value) + ", " + what + " on Building, not here." : null;
+        }
+        static string Sentences(params string[] sentences) { var s = string.Join(" ", sentences.Where(x => !string.IsNullOrEmpty(x))); return s.Length > 0 ? s : null; }
+
+        /// <summary>
+        /// Mining's "About these numbers" (REDESIGN-RULES.md part 1, box template A; SOURCE-MATRIX "About these numbers, Mining"): before the
+        /// pickup baseline's date the game's own pickup count with what it missed; from that date what Hearthwoven counted on this PC; the
+        /// pickaxe hits only from the install. Own book only; nothing without the pickup baseline.
+        /// </summary>
+        static void MiningNumbers(PanelView view, PanelInput input)
+        {
+            if (!input.IsSelf || !HasPickupBaseline(input)) return;
+            var pick = BroughtIn(input, "mining");
+            double before = pick.Values.Sum(v => v.before), since = pick.Values.Sum(v => v.exact);
+            var install = StartOf(input, null);
+            AboutNumbers(view, input, StartOf(input, "pickedUp"),
+                "The game's own count: " + N(before) + ". It missed stone and ore that went onto a stack you were already carrying, so you brought in more.",
+                "Hearthwoven counted every piece you picked up, on this PC: " + N(since) + " so far.",
+                Sentences(install.HasValue ? "Pickaxe hits are only known from " + RecordDate(input, install.Value) + ". The game's own pickaxe count leaves out rocks in an area another player's PC hosted, so the book shows Hearthwoven's." : null,
+                     RecoveredElsewhere(input, "stone and ore from pieces that came down count")));
         }
 
         // ---------- Company: src/Panel/Chapters/CompanyModel.cs ----------
@@ -1385,10 +1511,16 @@ namespace Hearthwoven.Panel
 
         static void Battle(PanelInput input, string page, PanelState state, PanelView view)
         {
+            // 0.7 (REDESIGN-RULES.md part 1, group G5): every Battle page is a recorded page (no zones, dated numbers, one earlier-counts line)
+            view.Recorded = true;
+            // 0.8: the feed and the last fight are this session's, on your own book (Chapters/BattleFeedModel.cs): no window chips
+            if (page == FeedPage) { view.Scope = input.IsSelf ? "This session · your fights" : "This session"; BattleFeedView(input, view, state); return; }
+            if (page == LastFightPage) { view.Scope = input.IsSelf ? "This session · your last fight" : "This session"; BattleLastFight(input, view, state); return; }
             // every Battle page has the one window set (HISTORY-06.md): the log's short windows, the day history's days, All. A day window
             // reads a copy of the input whose totals are the window's rows (InWindow), so it takes the since-install path of each page
             var windowed = page == "overview" || page == "damage" || page == "deaths" || page == "foes" || page == "defense";
             var w = windowed ? WindowChips(input, state, view, AllWindows) : state.Window;
+            if (w == TimeWindow.SinceInstall) BattleNumbers(input, view);   // "About these numbers" on All only (BattleModel.cs)
             var day = IsDayWindow(w);
             var src = day ? InWindow(input, w) ?? input : input;
             // Since install (and a day window) is the total this PC folded: damage by foe, cause and type, with no biome and no time, and
@@ -1402,18 +1534,28 @@ namespace Hearthwoven.Panel
             var filterId = page == "overview" ? BattleOverviewFilter : page == "damage" ? BattleDamageFilter : page == "deaths" ? BattleDeathsFilter : null;
             var chosen = new HashSet<string>(filterId == null || (page == "damage" && since) ? new List<string>() : Chosen(state, filterId, "biome"));
             var now = input.NowUtc;
-            var rows = since ? DamageSinceInstallRows(src) : Damage(input.Log, w, "", now);
+            var rows = since ? DamageSinceInstallRows(src) : Damage(input.Log, w, "", now, SessionFrom(input));   // B33: a fellow's Session from your session's start
             var taken = rows.Where(r => r.Dir == "taken").ToList();
-            var deaths = Deaths(input.Log, since ? TimeWindow.Session : w, "", now);
+            var deaths = Deaths(input.Log, since ? TimeWindow.Session : w, "", now, since ? null : SessionFrom(input));
             if (day) { var start = WindowStartUtc(input, w); deaths = deaths.Where(d => !start.HasValue || d.Time >= start.Value).ToList(); }   // the falls of this session that lie in the day window
             if (windowed)
             {
                 // a fellow's book: their last session, and since install when they share it; the other windows stay in the row, greyed
                 // (Joost 2026-10-09: shown, not dropped), and the plate's second line says why (SharedWindowsLine)
-                view.Scope = (chosen.Count > 0 ? string.Join(" and ", chosen.OrderBy(BiomeRank).Select(BiomeName)) + " combat" : "All biomes") + " · all foes" + (!input.IsSelf && w == TimeWindow.Session ? "" : " · " + WindowLabel(w).ToLowerInvariant()) +   // a fellow's Session is their last shared session, said once below
-                             (input.IsSelf ? "" : " · " + Name(input) + ", " + SessionScope(input));
+                // All has no window word (rule W.2: the page's own dates say when); a fellow's All says whose copy and as of when (rule E)
+                view.Scope = (chosen.Count > 0 ? string.Join(" and ", chosen.OrderBy(BiomeRank).Select(BiomeName)) + " combat" : "All biomes") + " · all foes" +
+                             (w == TimeWindow.SinceInstall || (!input.IsSelf && w == TimeWindow.Session) ? "" : " · " + WindowLabel(w).ToLowerInvariant()) +   // a fellow's Session is said once below
+                             (input.IsSelf ? "" : " · " + (w == TimeWindow.SinceInstall ? RecordedScope(input)
+                                 : w == TimeWindow.Session && SessionFrom(input).HasValue ? Name(input) + ", " + SinceViewer(input) : Name(input) + ", " + SessionScope(input)));   // B33: their Session is your session's span
             }
-            else view.Scope = FellowScope(input);
+            else view.Scope = RecordedScope(input);
+            // B33: a fellow who did not play during your session shows no numbers in Session, never as if they had been there
+            if (windowed && w == TimeWindow.Session && SessionFrom(input).HasValue && FellowOffThisSession(input))
+            {
+                view.Heading = view.List.FirstOrDefault(l => l.Selected)?.Label ?? "Battle";
+                view.Blocks.Add(Empty(NothingYet + " this session", FellowNotOn(input)));
+                return;
+            }
             // a fellow's copy can be older than the window: say when it is from, never "nothing happened"
             var cutoff = Cutoff(w, now);
             if (windowed && !input.IsSelf && cutoff.HasValue && (!input.LastRecordedUtc.HasValue || input.LastRecordedUtc.Value.AddMinutes(SpanOf(input)) <= cutoff.Value))
@@ -1424,7 +1566,7 @@ namespace Hearthwoven.Panel
             }
             // ch-battle (Chapters/BattleModel.cs): Damage, Defense, Deaths, Foes from the approved prototypes
             if (page == "damage") { BattleDamage(src, view, state, page, rows, w); return; }
-            if (page == "defense") { BattleDefense(input, src, view, w); return; }
+            if (page == "defense") { BattleDefense(input, src, view, w); ArmourSwitch(input, view, state, page, w); return; }   // 0.7: Received / Your armour (Chapters/ArmourModel.cs)
             if (page == "deaths") { BattleDeaths(input, src, view, state, deaths, w); return; }
             if (page == "foes") { BattleFoes(input, src, view, state, page, w); return; }
             switch (page)
@@ -1490,7 +1632,10 @@ namespace Hearthwoven.Panel
 
         static void Skills(PanelInput input, string page, PanelState state, PanelView view)
         {
-            view.Scope = FellowScope(input);
+            // 0.7 (REDESIGN-RULES.md part 5, G8): the levels are the game's own now (class D); the practice is Hearthwoven's count from the
+            // install (class C: "from 8 October" after each share, the practised view's sections "Recorded from ..."); no zones
+            view.Recorded = true;
+            view.Scope = RecordedScope(input);
             var levels = (input.SkillLevels ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0).ToDictionary(kv => kv.Key, kv => Math.Floor((double)kv.Value));
             var practised = (input.Events?.SkillPractice ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0).ToDictionary(kv => kv.Key, kv => (double)kv.Value);
             if (string.IsNullOrEmpty(page) || page == "overview")
@@ -1500,15 +1645,29 @@ namespace Hearthwoven.Panel
                 var most = PracticeShares(input);
                 // r2-skills-overview: the ladders fill the plate; what was practised since install is the second view
                 Switch(view, state, "overview", "view", null,
-                       ("levels", "Levels", Stretch(v => { Add(v, HighestSkill(input)); Add(v, Ladders(input)); })),   // every skill's level now (the old "Levels now" list repeated it)
-                       ("practised", "Practised", most));
-                Plate(view, "ui:chapter-skills", FellowScope(input));
+                       ("levels", "Levels", Stretch(v => { Add(v, HighestSkill(input)); var lad = Ladders(input); if (lad != null) lad.Text = PractisedKeyText(input); Add(v, lad); })),   // every skill's level now (the old "Levels now" list repeated it)
+                       ("practised", "Practiced", most));
+                SkillsNumbers(view, input);
+                Plate(view, "ui:chapter-skills", RecordedScope(input));
                 return;
             }
             view.Heading = SkillName(input, page);
             Add(view, Ladder(input, page));   // the level and the practice since install, once each (no stats repeating them)
-            Plate(view, "skill:" + page, FellowScope(input));   // on the plate like every page (the first in-game snapshots: the ladder sat on the bright world)
+            SkillsNumbers(view, input);
+            Plate(view, "skill:" + page, RecordedScope(input));   // on the plate like every page (the first in-game snapshots: the ladder sat on the bright world)
         }
+
+        /// <summary>The Skills page's "About these numbers" box (SOURCE-MATRIX "About these numbers, Skills"): the levels are the game's own; the
+        /// practice is counted here from the install (StartOf null). Own book only (AboutNumbers); nothing on an empty page.</summary>
+        static void SkillsNumbers(PanelView view, PanelInput input)
+        {
+            if (view.Blocks.Count == 0) return;
+            AboutNumbers(view, input, StartOf(input, null), "Not recorded: the game keeps only your level now.",
+                         "Hearthwoven counted how much you practiced each skill.", "Levels are the game's own, without food or potion bonuses.");
+        }
+
+        /// <summary>The key of the glowing ladders (PanelUi "practised ...: N of M skills"): "practised from 8 October" (hard case 14), "practised on Tor's PC" for a fellow.</summary>
+        public static string PractisedKeyText(PanelInput input) => "practiced " + FromShort(input, StartOf(input, null));
 
         // ---------- the visual vocabulary: composition, biomes, ladders (VOCABULARY.md) ----------
 
@@ -1516,7 +1675,7 @@ namespace Hearthwoven.Panel
         public const string DealtLabel = "damage dealt", DealtQualifier = BeforeResistance, ReceivedLabel = "damage received", ReceivedQualifier = AfterResistance,
                             DiedHere = "died here", BossDefeated = "boss defeated", WhatHurtYou = "What hurt you", PracticeGained = "of your practice", PracticeHeroLabel = "of your practice went into", PracticeWhere = "Where your practice went",
                             PracticeExplained = "Practice is what the game credits each time a skill is used. Each figure is one skill's share of it.",
-                            PractisedKey = "practised since install", LevelWord = "level", ProgressTo = "To level";
+                            PractisedKey = "practiced", LevelWord = "level", ProgressTo = "To level";   // the fallback only: the ladders' key carries its date (PractisedKeyText, hard case 14)
 
         // colour and fill sprite per part (the prototype's colours; the grain sprites are Codex's kit). A part without a look
         // takes the next colour of a neutral palette: recognition only, never a meaning.
@@ -1580,8 +1739,8 @@ namespace Hearthwoven.Panel
         /// <summary>
         /// "What is it made of?": one proportional bar, a part per kind, largest first; Value = the total, each part's
         /// Fraction = its share (the shares sum to 1). A part's colour: the block's own look (damage palette, groundwork,
-        /// wood grain), then tint (an item's own icon colour), then the bars' palette (FacetModel.BarColours, 0.6.5: the parts
-        /// without a colour of their own stay apart from all the others, never one shared neutral). Past BarMaxParts the smallest kinds
+        /// wood grain), then tint (an item's own icon colour), then the abstract categories' colour by name (FacetModel.BarColours,
+        /// 0.7: the same category the same colour on every page, apart from the others on its bar, never one shared neutral). Past BarMaxParts the smallest kinds
         /// fold into one "Other (n kinds)" part (Id FoldId, no picture) whose Items are the folded parts, so a caller that
         /// rewrites the parts' numbers can sum them. null when there is nothing to show.
         /// </summary>
@@ -1595,7 +1754,7 @@ namespace Hearthwoven.Panel
             var shown = fold ? list.Take(BarMaxParts - 1).ToList() : list;
             // an approved look and an item's own colour stay (C1, diff-05: the legend shows the item's picture beside it); a part with
             // neither takes the bars' palette, apart from the others, never one shared neutral (0.6.5)
-            var colours = BarColours(shown.Select(kv => { var own = look(kv.Key).colour ?? tint?.Invoke(kv.Key); return (kv.Key, own, own != null); }).ToList(), fold);
+            var colours = BarColours(shown.Select(kv => { var own = look(kv.Key).colour ?? tint?.Invoke(kv.Key); return (kv.Key, label(kv.Key), own, own != null); }).ToList(), fold);
             Block Part(KeyValuePair<string, double> kv) => new Block
             {
                 Id = kv.Key, Icon = icon != null ? icon(kv.Key) : "item:" + kv.Key, Title = label(kv.Key), Value = N(kv.Value), Fraction = (float)(kv.Value / total),
@@ -1627,13 +1786,15 @@ namespace Hearthwoven.Panel
         public static string BiomeEmblem(string key) => "vocab:biome-" + BiomeName(key).ToLowerInvariant().Replace(" ", "");
 
         /// <summary>
-        /// The biomes the character found, for the biome choice and the strip: the game's own record (Player.m_knownBiome, the
-        /// set behind "new biome discovered") plus any biome with evidence in the log, in journey order with the Ocean last.
+        /// The biomes the character found, for the biome choice, the strips and the Maps tiles: on your own book the game's own record
+        /// (Player.m_knownBiome, the set behind "new biome discovered") plus any biome with evidence in the log; on a fellow's book only
+        /// the evidence their copy carries, as before 0.7. A fellow's shared "knownBiomes" opens the group feats' gate only (GroupFound):
+        /// it never names a land on their pages that the group did not reach through evidence there (spoiler-safe). Journey order, Ocean last.
         /// </summary>
         public static List<string> FoundBiomes(PanelInput input)
         {
             var found = new HashSet<string>(BiomesSeen(input?.Log));
-            foreach (var k in input?.KnownBiomes ?? new string[0]) found.Add(k);
+            if (input != null && input.IsSelf) foreach (var k in input.KnownBiomes ?? new string[0]) found.Add(k);
             return found.OrderBy(b => { var i = Array.FindIndex(BiomeTiles, t => t.key == b); return i < 0 ? 99 : i; }).ThenBy(b => b, StringComparer.Ordinal).ToList();
         }
 
@@ -1711,8 +1872,7 @@ namespace Hearthwoven.Panel
             if (have.Count < 2) return null;
             var best = have.OrderByDescending(x => x.level).ThenBy(x => SkillName(input, x.key), StringComparer.OrdinalIgnoreCase).First();
             var hero = Hero((best.level.ToString("0", Inv), SkillName(input, best.key), SrcCharacter, Their(input) + " highest skill"));
-            if (hero != null) hero.Tone = Compact;   // fix3-rest: one modest line, so the Gather, Move and Make ladders are above the fold
-            return hero;
+            return hero;   // 0.8 layout D+: one hero form on every page (Woodcutting's); the compact one is gone
         }
 
         /// <summary>Practice since install as a share (Skills > Practised, the skill page). The game's raise factors have no unit a player
@@ -1722,7 +1882,7 @@ namespace Hearthwoven.Panel
         {
             if (whole <= 0) return "0 %";
             var pct = Math.Round(100 * part / whole);
-            return part > 0 && pct == 0 ? "under 1 %" : pct.ToString("0", Inv) + " %";   // a real share below 0.5 % would read as nothing
+            return part > 0 && pct == 0 ? LessThanOne + " %" : pct.ToString("0", Inv) + " %";   // a real share below 0.5 % would read as nothing
         }
 
         static double TotalPractice(PanelInput input) => (input.Events?.SkillPractice ?? new Dictionary<string, float>()).Where(kv => kv.Value > 0).Sum(kv => (double)kv.Value);
@@ -1822,7 +1982,7 @@ namespace Hearthwoven.Panel
                 // the share of all practice since install and the rank among the skills practised (the raw sum has no unit a player knows)
                 var order = PracticeOrder(input); var rank = order.FindIndex(kv => kv.Key == skill) + 1;
                 b.Items.Add(new Block { Kind = "practice", Title = input.IsSelf ? PracticeGained : "of their practice", Value = Share(practice, TotalPractice(input)), Src = SrcPc, Source = TagMeasured,
-                                        Note = order.Count < 2 ? (input.IsSelf ? "the only skill you practised" : "the only skill practised") : rank == 1 ? "the most of any skill" : Ordinal(rank) + " of " + order.Count + " skills" });
+                                        Note = order.Count < 2 ? (input.IsSelf ? "the only skill you practiced" : "the only skill practiced") : rank == 1 ? "the most of any skill" : Ordinal(rank) + " of " + order.Count + " skills" });
             }
             if (SkillDeed.TryGetValue(skill, out var deed)) b.Items.Add(new Block { Kind = "link", Id = deed.page, Title = deed.label });
             return b;
@@ -1887,16 +2047,6 @@ namespace Hearthwoven.Panel
             t.Lines.Select((l, i) => (l, i)).OrderBy(x => x.l.Value == SourceCharacter ? 0 : 1).ThenBy(x => x.i)
              .Select(x => { var s = SplitNumber(x.l.Key); return (s.value, s.label, SrcOf(TagOf(x.l.Value))); }).ToList();
 
-        /// <summary>The owner page's hero from its title's own lines; a line without a leading number stays a stat under it.</summary>
-        static void TitleHero(PanelView view, List<TitleRow> titles, string id)
-        {
-            var t = titles.FirstOrDefault(x => x.Id == id);
-            if (t == null) return;
-            var numbers = TitleNumbers(t);
-            Add(view, Hero(numbers.Where(n => n.value != null).Select(n => (n.value, n.label, n.src, (string)null)).ToArray()));
-            foreach (var n in numbers.Where(n => n.value == null)) { var st = Stat("", "", n.label, null, null); st.Src = n.src; st.Source = TagOfSrc(n.src); view.Blocks.Add(st); }
-        }
-
         /// <summary>Stretches of blocks side by side (vocab.css .cols2, the hits grid). Empty stretches drop out; a single one
         /// stands inline, without the box.</summary>
         static void Columns(PanelView view, params List<Block>[] columns)
@@ -1938,6 +2088,8 @@ namespace Hearthwoven.Panel
         public static void Follow(PanelState s, string target)
         {
             if (FollowFacet(s, target)) return;   // a filter bar's chip, token, bar part or Clear all (FacetModel.cs)
+            if (target == NumbersTarget) { s.ShowNumbers = !s.ShowNumbers; return; }   // the "About these numbers" button (RecordedModel.cs)
+            if (target == CompareTarget) { s.Compare = !s.Compare; s.CompareTip = false; return; }   // the Compare chip (CompareModel.cs)
             if (target != null && target.StartsWith(ViewTarget, StringComparison.Ordinal))
             {
                 var t = target.Substring(ViewTarget.Length); var eq = t.LastIndexOf('=');
@@ -1972,7 +2124,7 @@ namespace Hearthwoven.Panel
             if (sw == null && v != null && v.HasFilters && open.Count > 1)   // a Battle page without a switch: the view key cycles its time windows
             {
                 var at = Math.Max(0, open.FindIndex(x => x.Selected)); var count = open.Count;
-                s.Window = (TimeWindow)Enum.Parse(typeof(TimeWindow), open[((at + d) % count + count) % count].Id);
+                s.Window = (TimeWindow)Enum.Parse(typeof(TimeWindow), open[((at + d) % count + count) % count].Id); s.WindowPicked = true;
                 return true;
             }
             if (sw == null || sw.Items == null || sw.Items.Count < 2) return false;
@@ -1983,7 +2135,8 @@ namespace Hearthwoven.Panel
 
         /// <summary>
         /// Deeds overview A (r4over-deeds-a): one card per earned title of a chapter, with a number: icon and title on top,
-        /// the big number and its label (your character's count first), the next line small under it (Items, Kind "number");
+        /// the big number and its label (your character's count first), the next line small under it (Items, Kind "number") when it is
+        /// a class A, B or D number (0.7, hard case 13: a class C count such as axe hits, counted on this PC, drops off the card);
         /// a click opens the owner page (Id). Titles whose lines have no leading number are left out. Not on the Deeds
         /// overview yet: there the titles stay shortcuts without numbers (the owner rule) until Joost decides.
         /// </summary>
@@ -1995,10 +2148,11 @@ namespace Hearthwoven.Panel
                 var numbers = TitleNumbers(t).Where(n => n.value != null).ToList();
                 if (numbers.Count == 0) continue;
                 var main = numbers[0];
+                var next = numbers.Skip(1).Where(n => n.src != SrcPc).Take(1).Select(n => new Block { Kind = "number", Value = n.value, Title = n.label, Src = n.src, Source = TagOfSrc(n.src) }).ToList();
                 cards.Add(new Block
                 {
                     Kind = "card", Id = t.Chapter + "/" + t.Page, Icon = "title:" + t.Id, Title = t.Title, Value = main.value, Text = main.label, Src = main.src, Source = TagOfSrc(main.src),
-                    Items = numbers.Count > 1 ? numbers.Skip(1).Take(1).Select(n => new Block { Kind = "number", Value = n.value, Title = n.label, Src = n.src, Source = TagOfSrc(n.src) }).ToList() : null,
+                    Items = next.Count > 0 ? next : null,
                 });
             }
             return cards.Count == 0 ? null : new Block { Kind = "cards", Items = cards };
@@ -2093,6 +2247,24 @@ namespace Hearthwoven.Panel
             return over < MinOverflow ? 0f : over;
         }
 
+        /// <summary>
+        /// Where a grid that scrolls inside its page (the Feats and Titles cards) stands once the page is drawn again (B31: after scrolling down, a hover
+        /// near the top threw the list back to the top). kept = where the player left it on this same page, null on a page just opened. A page just opened
+        /// shows the chosen card's row, scrolled only as far as it needs. The same page drawn again (an update arrived, a hover chose a card) stays where
+        /// it was; only a choice that has to be on screen (follow: A/D moved it, or the page is new) scrolls, and only as far as its row needs.
+        /// </summary>
+        public static float GridScroll(float? kept, bool follow, float rowTop, float rowBottom, float view, float max)
+        {
+            max = Math.Max(0f, max);
+            float Clamp(float y) => Math.Min(Math.Max(y, 0f), max);
+            if (kept == null) return Clamp(rowBottom - view);
+            var at = Clamp(kept.Value);
+            if (!follow) return at;
+            if (rowTop < at) return Clamp(rowTop);
+            if (rowBottom > at + view) return Clamp(rowBottom - view);
+            return at;
+        }
+
         /// <summary>W/S: move through the left list of the current chapter (wraps).</summary>
         public static void StepList(PanelState s, PanelView v, int d)
         {
@@ -2163,8 +2335,13 @@ namespace Hearthwoven.Panel
         /// <summary>Together with sharing off: the line under your own number (the header already says sharing is off).</summary>
         public const string TogetherAloneOff = "Fellow players appear beside you once sharing is on.";
 
-        /// <summary>You first, then fellow players who share, by name. Sharing off: no switcher, one line on how to turn it on.</summary>
-        public static void AddPlayers(PanelView view, string me, IEnumerable<string> others, string selected, bool sharing, bool solo = false)
+        /// <summary>0.7 (SYNC-DESIGN.md item 1): a fellow player on the game's list whose first shared copy has not arrived yet (JoinWatch):
+        /// the chip's second line, and the header's note when nobody else shows yet (the note has room only then).</summary>
+        public const string JoinedLine = "just joined", JoiningNote = "Their stats follow once they share too.";
+
+        /// <summary>You first, then fellow players who share, by name, then (0.7) who just joined: a dimmed chip that does nothing, no numbers,
+        /// until their copy arrives and it becomes their normal chip. Sharing off: no switcher, one line on how to turn it on.</summary>
+        public static void AddPlayers(PanelView view, string me, IEnumerable<string> others, string selected, bool sharing, bool solo = false, IEnumerable<string> joining = null, string bookKey = null)
         {
             view.Players.Clear();
             if (!sharing || solo)
@@ -2183,25 +2360,88 @@ namespace Hearthwoven.Panel
             var pick = list.Contains(selected ?? "", StringComparer.OrdinalIgnoreCase) ? selected : "";
             view.Players.Add(new Choice { Id = "", Label = string.IsNullOrEmpty(me) ? "You" : me, Icon = "person:" + me, Selected = string.IsNullOrEmpty(pick) });
             foreach (var n in list) view.Players.Add(new Choice { Id = n, Label = n, Icon = "person:" + n, Selected = SameName(n, pick) });
-            view.ShareNote = list.Count == 0 ? ShareWaitingNote : null;
+            var join = (joining ?? Enumerable.Empty<string>()).Where(n => !string.IsNullOrEmpty(n) && !SameName(n, me) && !list.Contains(n, StringComparer.OrdinalIgnoreCase))
+                                                             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var n in join) view.Players.Add(new Choice { Id = n, Label = n, Icon = "person:" + n, Disabled = true });
+            view.ShareNote = list.Count > 0 ? null : join.Count > 0 ? JoiningNote : ShareWaitingNote;
+            // 0.8: the Everyone chip, always the row's last entry; on, no name is chosen (the row is the colour key for the group's bars); nobody
+            // else yet: greyed with its reason (Chapters/EveryoneModel.cs)
+            view.EveryoneChip = true;
+            if (list.Count == 0) { view.EveryoneOn = false; view.EveryoneSub = EveryoneAloneSub; view.EveryoneWhy = EveryoneAloneWhy; view.EveryoneTo = null; }
+            if (view.EveryoneOn) foreach (var c in view.Players) c.Selected = false;
+            BookKeyLine(view, bookKey);
             ColorPeople(view);
+        }
+
+        // ---------- 0.8: the book key ([B] Book, the pad's Y): the player row by keys and controller ----------
+
+        public const string BookWord = "Book";
+
+        /// <summary>The books the key steps through, in the row's order: you, the fellow players (not one that is just joining), then Everyone
+        /// unless its chip is greyed with nowhere to go (nobody else shares yet). Index Players.Count stands for Everyone.</summary>
+        static bool BookTarget(PanelView view, int k) =>
+            k < view.Players.Count ? !view.Players[k].Disabled : view.EveryoneChip && (view.EveryoneOn || string.IsNullOrEmpty(view.EveryoneWhy) || !string.IsNullOrEmpty(view.EveryoneTo));
+
+        /// <summary>The book key in the key line, before Back (KeyLine leaves it out right after the scroll hint when the line is full); only
+        /// when the row holds a second book to go to and the page is not About.</summary>
+        static void BookKeyLine(PanelView view, string bookKey)
+        {
+            if (string.IsNullOrEmpty(bookKey) || view.ShowAbout || Enumerable.Range(0, view.Players.Count + 1).Count(k => BookTarget(view, k)) < 2) return;
+            var key = "[" + bookKey + "] " + BookWord;
+            var at = view.Keys.IndexOf("[Backspace] Back");
+            if (at < 0) at = view.Keys.FindIndex(k => k.EndsWith("] Close", StringComparison.Ordinal));
+            if (at < 0) view.Keys.Add(key); else view.Keys.Insert(at, key);
+        }
+
+        /// <summary>
+        /// The book key ([B], the pad's Y): the next book in the player row, wrapping, skipping a chip that does nothing, doing what its click does
+        /// (a name: that book, Everyone off; Everyone: the group's page, no name chosen; Everyone greyed here: the nearest page where it works,
+        /// EveryoneJump). False when the row has no other book to go to.
+        /// </summary>
+        public static bool StepBook(PanelState state, PanelView view)
+        {
+            if (state == null || view == null || view.Players.Count == 0) return false;
+            int n = view.Players.Count + 1, at = view.EveryoneOn ? view.Players.Count : view.Players.FindIndex(c => c.Selected);
+            for (int step = 1; step <= n; step++)
+            {
+                var k = (at + step + n) % n;
+                if (k == at || !BookTarget(view, k)) continue;
+                if (k < view.Players.Count) { state.Player = view.Players[k].Id; state.Everyone = false; }
+                else if (!view.EveryoneOn && !string.IsNullOrEmpty(view.EveryoneWhy)) EveryoneJump(state, view);
+                else { state.Everyone = true; state.Player = ""; }
+                return true;
+            }
+            return false;
         }
 
         // ---------- JSON (for the static preview) ----------
 
-        public static string ToJson(PanelView v)
+        /// <summary>The view as JSON: the preview's data, and in game the 2 s refresh's "did anything change" test. <paramref name="islands"/>: also
+        /// the plate's island plan, for a dump the preview draws (the test-panel's, the in-game snapshot); the change test leaves it out, since
+        /// the plan is a pure function of the blocks already in the text (0.8.1 review 8).</summary>
+        public static string ToJson(PanelView v, bool islands = false)
         {
             var j = new Json().Open().Str("title", v.Title).Str("owner", v.Owner).Str("listTitle", v.ListTitle ?? "").Str("scope", v.Scope ?? "").Str("heading", v.Heading ?? "").Str("headingWindow", v.HeadingWindow ?? "").Str("headingSource", v.HeadingSource ?? "").Str("headingSrc", v.HeadingSrc ?? "")
-                .Num("headingSince", v.HeadingSinceInstall ? 1 : 0).Num("showAbout", v.ShowAbout ? 1 : 0).Str("shareNote", v.ShareNote ?? "")
+                .Num("showAbout", v.ShowAbout ? 1 : 0).Str("shareNote", v.ShareNote ?? "")
                 .Str("active", v.Active.ToString()).Str("page", v.Page ?? "").Num("hasFilters", v.HasFilters ? 1 : 0);
+            if (!string.IsNullOrEmpty(v.HeadingRecordedFrom)) j.Str("headingRecordedFrom", v.HeadingRecordedFrom);
+            if (v.EveryoneChip) j.Num("everyoneChip", 1).Num("everyoneOn", v.EveryoneOn ? 1 : 0).Str("everyoneSub", v.EveryoneSub ?? "").Str("everyoneWhy", v.EveryoneWhy ?? "").Str("everyoneTo", v.EveryoneTo ?? "");   // 0.8: written only with the chip, so the older data stays as it was
             void Choices(string k, List<Choice> cs)
             {
                 j.Key(k).OpenArr();
-                foreach (var c in cs) j.Open().Str("id", c.Id ?? "").Str("label", c.Label ?? "").Str("icon", c.Icon ?? "").Num("selected", c.Selected ? 1 : 0).Num("dot", c.Dot ? 1 : 0).Num("disabled", c.Disabled ? 1 : 0).Close();
+                foreach (var c in cs)
+                {
+                    j.Open().Str("id", c.Id ?? "").Str("label", c.Label ?? "").Str("icon", c.Icon ?? "").Num("selected", c.Selected ? 1 : 0).Num("dot", c.Dot ? 1 : 0).Num("disabled", c.Disabled ? 1 : 0);
+                    if (!string.IsNullOrEmpty(c.Why)) j.Str("why", c.Why);   // a greyed window chip's own reason (PageHead.cs), written only when set
+                    j.Close();
+                }
                 j.CloseArr();
             }
             Choices("chapters", v.Chapters); Choices("list", v.List); Choices("badges", v.Badges); Choices("toggle", v.Toggle);
             Choices("windows", v.Windows); Choices("biomes", v.Biomes); Choices("players", v.Players);
+            if (!string.IsNullOrEmpty(v.WindowWhy) || !string.IsNullOrEmpty(v.WindowTip)) j.Str("windowWhy", v.WindowWhy ?? "").Str("windowTip", v.WindowTip ?? "");   // 0.8 layout D+ (PageHead.cs), written only when set
+            if (!string.IsNullOrEmpty(v.StripNote)) j.Str("stripNote", v.StripNote);
+            if (v.Compare != null) { j.Key("compare").Open().Str("label", v.Compare.Label ?? "").Num("selected", v.Compare.Selected ? 1 : 0).Num("disabled", v.Compare.Disabled ? 1 : 0).Str("why", v.CompareWhy ?? "").Num("tip", v.CompareTip ? 1 : 0).Close(); }   // 0.8, written only when offered
             j.Key("keys").OpenArr(); foreach (var k in v.Keys) j.Open().Str("text", k).Close(); j.CloseArr();
             j.Dict("personColors", v.PersonColors.Select(kv => new KeyValuePair<string, float>(kv.Key, kv.Value + 1)));   // +1: Json.Dict leaves zeros out
             j.Key("palette").OpenArr(); foreach (var c in PlayerPalette) j.Open().Str("c", c).Close(); j.CloseArr();   // the preview reads the same table
@@ -2210,10 +2450,15 @@ namespace Hearthwoven.Panel
                 j.Open().Str("kind", b.Kind ?? "").Str("id", b.Id ?? "").Str("icon", b.Icon ?? "").Str("title", b.Title ?? "").Str("value", b.Value ?? "").Str("text", b.Text ?? "")
                  .Str("note", b.Note ?? "").Str("tone", b.Tone ?? "").Str("source", b.Source ?? "").Num("fraction", b.Fraction).Num("selected", b.Selected ? 1 : 0)
                  .Str("src", b.Src ?? "").Str("colour", b.Colour ?? "").Str("pattern", b.Pattern ?? "").Num("fraction2", b.Fraction2).Str("value2", b.Value2 ?? "")
-                 .Num("count", b.Count).Num("level", b.Level).Num("progress", b.Progress).Num("practised", b.Practised ? 1 : 0).Num("since", b.SinceInstall ? 1 : 0).Str("pill", b.Pill ?? "").Str("pillIcon", b.PillIcon ?? "");
+                 .Num("count", b.Count).Num("level", b.Level).Num("progress", b.Progress).Num("practised", b.Practised ? 1 : 0).Str("pill", b.Pill ?? "").Str("pillIcon", b.PillIcon ?? "");
                 j.Num("columns", b.Columns);
-                j.Num("fadedTag", b.FadedTag ? 1 : 0).Str("faded", b.Faded ?? "").Str("solid", b.Solid ?? "").Str("keyCap", b.KeyCap ?? "").Num("open", b.Open ? 1 : 0);
+                j.Str("keyCap", b.KeyCap ?? "").Num("open", b.Open ? 1 : 0);
+                if (!string.IsNullOrEmpty(b.RecordedFrom)) j.Str("recordedFrom", b.RecordedFrom);   // 0.7 (RecordedModel.cs): written only when set, so the older pages' data stays as it was
+                if (b.Unrecorded) j.Num("unrecorded", 1);
+                if (b.Before != null) j.Str("before", b.Before).Str("change", b.Change ?? "").Str("beforeLabel", b.BeforeLabel ?? "");   // 0.8 Compare: written only when set
+                if (b.Chip != null) { j.Key("chip"); B(b.Chip); }
                 j.Key("items").OpenArr(); foreach (var i in b.Items ?? new List<Block>()) B(i); j.CloseArr();
+                if (islands && b.Kind == "plate" && ReferenceEquals(b, PlateOf(v))) IslandsJson(j, b);   // 0.8 layout D+: the page's islands (Islands.cs), dumps only
                 j.Close();
             }
             j.Key("blocks").OpenArr(); foreach (var b in v.Blocks) B(b); j.CloseArr();
@@ -2223,10 +2468,12 @@ namespace Hearthwoven.Panel
         /// <summary>Every player-visible string in the view (for the no-em-dash check and localisation review).</summary>
         public static IEnumerable<string> AllText(PanelView v)
         {
-            IEnumerable<string> Of(Block b) => new[] { b.Title, b.Value, b.Value2, b.Text, b.Note, b.Pill }.Concat((b.Items ?? new List<Block>()).SelectMany(Of));
-            return new[] { v.Title, v.Owner, v.Scope, v.Heading, v.ShareNote }
+            IEnumerable<string> Of(Block b) => new[] { b.Title, b.Value, b.Value2, b.Text, b.Note, b.Pill, b.Before, b.Change, b.BeforeLabel }.Concat((b.Items ?? new List<Block>()).SelectMany(Of)).Concat(b.Chip != null ? Of(b.Chip) : Enumerable.Empty<string>());
+            return new[] { v.Title, v.Owner, v.Scope, v.Heading, v.ShareNote, v.EveryoneSub, v.EveryoneWhy, v.WindowWhy, v.StripNote,   // 0.8 layout D+: the window chips' reason, the strip's note (PageHead.cs)
+                           v.Windows.FirstOrDefault(c => c.Id == v.WindowTip)?.Why }   // the pressed chip's own reason, shown now (the others only on hover)
                 .Concat(new[] { v.Chapters, v.List, v.Badges, v.Toggle, v.Windows, v.Biomes, v.Players }.SelectMany(cs => cs.Select(c => c.Label)))
-                .Concat(v.Keys).Concat(v.Blocks.SelectMany(Of))
+                .Concat(v.Keys).Concat(v.Blocks.SelectMany(Of)).Concat(CompareText(v))
+                .Concat(v.AboutNumbers != null && !Content(v).Any(b => b.Kind == "aboutnumbers" && b.Items != null && b.Items.Count > 0) ? Of(v.AboutNumbers) : Enumerable.Empty<string>())   // About these numbers while closed: its lines are the page's words too (open, the page holds them)
                 .Where(s => !string.IsNullOrEmpty(s));
         }
     }

@@ -142,7 +142,8 @@ static class ServerBookTests
 
         // the real log of the 8 Oct iron haul, when it is on this machine (totals only, never names)
         var dir = Environment.GetEnvironmentVariable("HW_REAL_CHESTS") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ValheimReport", "hearthwoven");
-        var files = Directory.Exists(dir) ? Directory.GetFiles(dir, "chests-*.jsonl").OrderBy(f => f, StringComparer.Ordinal).ToList() : new List<string>();
+        // the 8 Oct log by name: the daily report job adds a day to this folder each day (from 9 Oct they name the server's world), so "every file there" moves
+        var files = Directory.Exists(dir) ? Directory.GetFiles(dir, "chests-20261008.jsonl").ToList() : new List<string>();
         if (files.Count > 0)
         {
             var real = new ServerBook();

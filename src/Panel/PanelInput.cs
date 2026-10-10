@@ -14,12 +14,14 @@ namespace Hearthwoven.Panel
     {
         public string PlayerName = "";
         public long PlayerId;                               // the game's player id (feasts name their creator by it)
+        public string FellowKey;                            // a fellow's copy: who it is (FellowIds.KeyOf: platform id and profile id), never the shown name; null on your own book
         public DateTime NowUtc = DateTime.UtcNow;
         public DateTime? SessionStartUtc;                   // first spawn of this connection (a session); null = not known
         public bool IsSelf = true;                          // false: a fellow player's shared snapshot
         public bool Solo;                                   // singleplayer: no fellow players can appear (PanelModel.SoloNote)
         public string ViewerName;                           // who is looking (marked "(you)" in someone else's company)
         public DateTime? LastRecordedUtc;                   // fellow player: newest moment in their shared log
+        public DateTime? FirstRecordedUtc;                  // fellow player: oldest moment in their shared log (its log starts with their connection)
         public DateTime? CharacterMade;                     // the day the character was made (PlayerProfile.m_dateCreated); null = not known (a fellow's copy)
         public DateTime? InstalledUtc;                      // when Hearthwoven first counted for this character on this PC (LocalTotals.FirstRunUtc); null = not known
 
@@ -34,6 +36,7 @@ namespace Hearthwoven.Panel
         public IDictionary<string, Dictionary<string, float>> Baseline;
         public IDictionary<string, Dictionary<string, float>> ExactAtBaseline;   // kind -> what Hearthwoven had counted exactly (since install) when the baseline was taken (LocalTotals.ExactAtBaseline); null = none   // kind ("pickedUp") -> the game counter when Hearthwoven first ran for this character (LocalTotals.Baseline); null = not known (a fellow's copy)
         public IDictionary<string, DateTime> BaselineAt;    // kind -> when that baseline was taken (LocalTotals.BaselineAt); a kind without one counts from the install; null = not known
+        public IDictionary<string, DateTime> Starts;        // counter group -> UTC start (LocalTotals.Starts: cargo, led, born, feats); null = not known (a fellow's copy)
         public ICollection<string> KnownBiomes;             // biomes this character found (Player.m_knownBiome, as Heightmap.Biome names); null = not known
 
         // what the game data says about a token, derived at runtime by PanelUi (item type, drop tables, piece components).
@@ -67,6 +70,43 @@ namespace Hearthwoven.Panel
         public Dictionary<string, float> DealtByDay;
         /// <summary>A day window's input (PanelModel.InWindow): the window this copy holds; null = the input as recorded.</summary>
         public PanelModel.DayView Window;
+        /// <summary>Defence's armour view (0.7, ArmourTally.cs), yourself only (never shared; a fellow's copy: all null). This session's ledger, the same
+        /// in one-minute buckets (the short windows), everything recorded on this PC, the book with its day rows, the running session's unsaved part
+        /// (added to today), and when recording began ("Recorded from"); null = not known.</summary>
+        public ArmourTally ArmourSession, ArmourSince, ArmourPending;
+        public ArmourLog ArmourMinutes;
+        public ArmourBook ArmourBook;
+        public DateTime? ArmourFromUtc;
+        /// <summary>The battle record (0.8, BattleRecord.cs; the model: Chapters/BattleRecModel.cs). Yourself: this session's recorder (foes per
+        /// creature, the fights of the feed), the foes kept on this PC (FoeBook, day rows), the foes since recording began (book + session), the
+        /// running session's unsaved part (added to today) and when recording began. A fellow's copy: FoesSession and FoesSince as they shared them
+        /// (no recorder, no feed, no book). Battle.DealtAfterArmour (dev, yourself only): your damage after the foe's armour this session. null = not known.</summary>
+        public BattleRecorder Battle;
+        public FoeBook FoeBook;
+        public FoeCounts FoesSession, FoesSince, FoesPending;
+        public DateTime? FoesFromUtc;
+        public ArmourTally DealtArmourSession;
+        public ArmourLog DealtArmourMinutes;
+        /// <summary>Deeds > Recent and Since you were away (0.7, RecentModel.cs). Yourself: this session's deeds per minute (DeedLog, flushed when
+        /// gathered) and when your previous session on this PC ended (LocalTotals' last save before this session; null = no earlier session
+        /// here). A fellow's copy: its session id, when this PC received this copy, and their mark as this PC last saw it before this session
+        /// (FellowMarks.Before; null = never seen before). Null = not known.</summary>
+        public DeedLog Deeds;
+        public DateTime? PreviousSessionEndUtc;
+        public string SessionId;
+        public DateTime? ReceivedUtc;
+        public FellowMarks.Mark SeenBefore;
+        /// <summary>A fellow's copy (0.7, B33): when their copies reached this PC this connection (null: none yet, e.g. only the cached one);
+        /// whether their copies come timed finely enough for 10 min to 3 h (the server sends live updates and their Hearthwoven makes them);
+        /// whether they were in the world at all this connection (null: not known); and the start of YOUR session, which their Session counts from.</summary>
+        public FellowTrail Trail;
+        public bool Timed;
+        /// <summary>The server sends live updates (a 0.7 server): a fellow's copy that still comes untimed is from an older Hearthwoven (REVIEW-07 #11).</summary>
+        public bool ServerLive;
+        public bool? OnThisSession;
+        public DateTime? ViewerSessionStartUtc;
+        /// <summary>A fellow's copy shown from this PC's cache until the server's fresh one comes (B23): "as Edda last shared it" with ReceivedUtc's date.</summary>
+        public bool Cached;
 
         /// <summary>A copy that shares every reference (PanelModel.InWindow swaps the tallies of the window into it).</summary>
         public PanelInput ShallowCopy() => (PanelInput)MemberwiseClone();
@@ -81,6 +121,8 @@ namespace Hearthwoven.Panel
         public Func<string, PanelModel.FoeData> Foe;        // creature prefab -> its damage modifiers and trophy
         public Func<IList<PanelModel.ArrowData>> Arrows;    // every arrow the game defines, with its damage
         public Func<string, bool> RecipeKnown;              // item token -> your character knows its recipe (Player.IsRecipeKnown); null = not known (a fellow's copy)
+        public Func<IList<PanelModel.ArrowData>> Gear;      // 0.7 Foes ranking: every bolt and weapon the game defines, with its base damage (Kind bolt | weapon); null = unknown
+        public Func<string, bool> Owned;                    // item token -> in your inventory now (read once per page build); null = not known (a fellow's copy, the tests)
         public IDictionary<string, float> Harvested;        // since this character was made: m_pickableStats, pickable item prefab ("Barley") or fish token ("$animal_fish1") -> count
         public Func<string, string> CropOf;                 // planted piece token -> the item prefab its grown plant yields ("Barley"); null = not a crop
         public Func<string, string> MainMaterial;           // gear token -> its main material ("Bronze"), from its recipe in the game's data (PanelModel.MainMaterial); null = not known
@@ -90,6 +132,7 @@ namespace Hearthwoven.Panel
         public Func<string, string> DishType;               // food token -> "meal" | "grilled" | "baked" | "feast" | "uncooked" | "meadbase", from the game's data (PanelModel.DishTypeOf); null = not known (Cooking's filter: Other)
         public Func<string, string> DishBoost;              // food token -> "health" | "stamina" | "eitr" | "balanced", its biggest food value (PanelModel.DishBoostOf); null = no food value or not known
         public Func<string, string> ItemToken;              // item prefab ("CookedMeat") -> its token ("$item_cookedmeat"), as fellows record food they ate; null = not known
+        public Func<string, int> RecipeYield;               // item token -> how many one craft puts in the bag (Recipe.m_amount: 4 sausages), from this PC's game data; null or 0 = not known (one)
 
         /// <summary>
         /// A fellow player's shared snapshot (Snapshot.Build output, received through GroupShare). Rebuilds the mod's own
@@ -98,7 +141,8 @@ namespace Hearthwoven.Panel
         public static PanelInput FromSnapshot(string json)
         {
             if (!(MiniJson.Parse(json) is Dictionary<string, object> root)) return null;
-            var input = new PanelInput { IsSelf = false, PlayerName = Str(root, "name"), PlayerId = (long)Num(root, "playerId"), Session = new DamageTally(), Events = new SessionEvents(), Log = new EventLog() };
+            var input = new PanelInput { IsSelf = false, PlayerName = Str(root, "name"), PlayerId = (long)Num(root, "playerId"), SessionId = Str(root, "session"), Session = new DamageTally(), Events = new SessionEvents(), Log = new EventLog() };
+            input.FellowKey = FellowIds.KeyOf(json);   // the same key GroupShare keeps the copy under (the group feats count each person once by it)
             if (root.TryGetValue("stats", out var st) && st is List<object> slots && slots.Count > 0 && slots[0] is Dictionary<string, object> slot0)
             {
                 input.Character = Dict(Obj(slot0, "counters"));
@@ -127,6 +171,10 @@ namespace Hearthwoven.Panel
             input.SharedSinceInstall = since != null;
             if (Obj(root, "measuredThisSession") != null) input.SessionOnly = new SessionEvents().ReadFrom(Obj(root, "measuredThisSession"));
             input.DealtByDay = Dict(Obj(root, "dealtByDay"));
+            var foes = FoeShare.ReadFrom(Obj(root, "foes"));   // 0.8: the foes they fought per kind (an older copy has none: null)
+            if (foes != null) { input.FoesSession = foes.Session; input.FoesSince = foes.Since; input.FoesFromUtc = foes.FromUtc; }
+            // the biomes they found (0.7 on; an older copy has none: null, and the group feats' gate falls back on the evidence the copy carries)
+            if (root.TryGetValue("knownBiomes", out var kb) && kb is List<object> biomes) input.KnownBiomes = biomes.OfType<string>().Where(b => b.Length > 0).Take(16).ToList();
             if (Obj(root, "feats") != null) input.Feats = FeatsLedger.ReadShared(Obj(root, "feats"));   // the feats they earned (Feats page, their book)
             if (Obj(root, "featBests") != null) { input.Feats = input.Feats ?? new FeatsLedger(); input.Feats.ReadSharedBests(Obj(root, "featBests")); }   // the bests behind Heavy Keel and Long Lead
             var damageSince = Obj(root, "damageSinceInstall");
@@ -140,9 +188,10 @@ namespace Hearthwoven.Panel
             var log = Obj(root, "measuredLog");
             Into(Obj(log, "damage"), input.Log.Damage); Into(Obj(log, "hits"), input.Log.Hits);
             input.Log.Span = log != null && Num(log, "bucketMinutes") >= 1 ? (int)Num(log, "bucketMinutes") : 10;   // an older sender kept ten-minute buckets
-            DateTime? last = null;
+            DateTime? last = null, first = null;
             foreach (var k in input.Log.Damage.Keys)
-                if (DateTime.TryParseExact(k.Split('|')[0], "yyyy-MM-dd'T'HH:mm'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var b) && (last == null || b > last)) last = b;
+                if (DateTime.TryParseExact(k.Split('|')[0], "yyyy-MM-dd'T'HH:mm'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var b))
+                { if (last == null || b > last) last = b; if (first == null || b < first) first = b; }
             if (log != null && log.TryGetValue("deaths", out var ds) && ds is List<object> deaths)
                 foreach (var o in deaths.OfType<Dictionary<string, object>>())
                 {
@@ -154,8 +203,9 @@ namespace Hearthwoven.Panel
                             d.Timeline.Add(new EventLog.Hit { Ago = (float)Num(h, "ago"), Amount = (float)Num(h, "amount"), Source = Str(h, "source", "?"), Cause = Str(h, "cause", "?"), Type = Str(h, "type", "damage") });
                     input.Log.Deaths.Add(d);
                     if (last == null || d.Time > last) last = d.Time;
+                    if (first == null || d.Time < first) first = d.Time;
                 }
-            input.LastRecordedUtc = last;
+            input.LastRecordedUtc = last; input.FirstRecordedUtc = first;
             return input;
         }
 

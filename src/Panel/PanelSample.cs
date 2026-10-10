@@ -302,8 +302,13 @@ namespace Hearthwoven.Panel
         public static readonly Dictionary<string, string> BattleNames = new Dictionary<string, string>
         {
             ["Troll"] = "Troll", ["Greydwarf"] = "Greydwarf", ["Greydwarf_Elite"] = "Greydwarf Brute", ["Draugr"] = "Draugr", ["Boar"] = "Boar", ["Neck"] = "Neck",
-            ["Leech"] = "Leech", ["Blob"] = "Blob", ["ArrowWood"] = "Wood Arrow", ["ArrowFire"] = "Fire Arrow", ["ArrowFrost"] = "Frost Arrow",
-            ["ArrowNeedle"] = "Needle Arrow", ["ArrowPoison"] = "Poison Arrow",
+            ["Leech"] = "Leech", ["Blob"] = "Blob", ["Greydwarf_Shaman"] = "Greydwarf Shaman", ["ArrowWood"] = "Wood Arrow", ["ArrowFire"] = "Fire Arrow", ["ArrowFrost"] = "Frost Arrow",
+            ["ArrowNeedle"] = "Needle Arrow", ["ArrowPoison"] = "Poison Arrow", ["ArrowSilver"] = "Silver Arrow", ["ArrowCarapace"] = "Carapace Arrow",
+            // the Foes ranking's bolts and weapons (0.7)
+            ["BoltBone"] = "Bone Bolt", ["BoltIron"] = "Iron Bolt", ["BoltBlackmetal"] = "Black Metal Bolt", ["BoltCarapace"] = "Carapace Bolt",
+            ["SwordBronze"] = "Bronze Sword", ["SwordIron"] = "Iron Sword", ["SwordBlackmetal"] = "Black Metal Sword", ["MaceBronze"] = "Bronze Mace", ["MaceIron"] = "Iron Mace",
+            ["AtgeirIron"] = "Iron Atgeir", ["SpearBronze"] = "Bronze Spear", ["AxeIron"] = "Iron Axe", ["KnifeFlint"] = "Flint Knife", ["BowFineWood"] = "Fine Bow",
+            ["BowDraugrFang"] = "Draugr Fang", ["StaffFireball"] = "Staff of Embers", ["CrossbowArbalest"] = "Arbalest",
         };
 
         // SAMPLE creature data (w = Weak, r = Resistant, i = Immune), the prototype's table: in game it comes from the prefabs
@@ -313,6 +318,7 @@ namespace Hearthwoven.Panel
             ["Greydwarf_Elite"] = ("TrophyGreydwarfBrute", "fire:w poison:r spirit:i"), ["Draugr"] = ("TrophyDraugr", "fire:r poison:i"),
             ["Leech"] = ("TrophyLeech", "poison:r fire:i spirit:i"), ["Blob"] = ("TrophyBlob", "blunt:w frost:w lightning:w slash:r pierce:r fire:r poison:i"),
             ["Boar"] = ("TrophyBoar", "spirit:i"), ["Neck"] = ("TrophyNeck", "fire:w poison:r spirit:i"),
+            ["Greydwarf_Shaman"] = ("TrophyGreydwarfShaman", "fire:w poison:r spirit:i"),   // only in the long-name case (REVIEW-081 #7)
         };
 
         public static PanelModel.FoeData SampleFoe(string prefab)
@@ -325,7 +331,33 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>The arrow recipes the sample character knows (wood to carapace; not silver).</summary>
-        public static readonly HashSet<string> SampleRecipes = new HashSet<string> { "$item_arrow_wood", "$item_arrow_fire", "$item_arrow_frost", "$item_arrow_needle", "$item_arrow_poison", "$item_arrow_carapace" };
+        public static readonly HashSet<string> SampleRecipes = new HashSet<string> { "$item_arrow_wood", "$item_arrow_fire", "$item_arrow_frost", "$item_arrow_needle", "$item_arrow_poison", "$item_arrow_carapace",
+            "$item_bolt_bone", "$item_bolt_iron", "$item_sword_bronze", "$item_mace_iron", "$item_atgeir_iron", "$item_bow_finewood", "$item_spear_bronze", "$item_axe_iron", "$item_crossbow_arbalest" };
+        /// <summary>What the sample character carries now (the Foes ranking's "owned").</summary>
+        public static readonly HashSet<string> SampleOwned = new HashSet<string> { "$item_sword_iron", "$item_bow_draugrfang", "$item_arrow_wood", "$item_arrow_fire", "$item_bolt_bone", "$item_staff_fireball" };
+
+        // SAMPLE bolts and weapons (base damage close to the game's own), the Foes ranking (0.7)
+        public static IList<PanelModel.ArrowData> SampleGear()
+        {
+            PanelModel.ArrowData G(string kind, string prefab, string token, params (string t, float v)[] dmg)
+            {
+                var a = new PanelModel.ArrowData { Prefab = prefab, Token = token, Kind = kind };
+                foreach (var (t, v) in dmg) a.Damage[t] = v;
+                return a;
+            }
+            return new List<PanelModel.ArrowData>
+            {
+                G("bolt", "BoltBone", "$item_bolt_bone", ("pierce", 32)), G("bolt", "BoltIron", "$item_bolt_iron", ("pierce", 52)),
+                G("bolt", "BoltBlackmetal", "$item_bolt_blackmetal", ("pierce", 62)), G("bolt", "BoltCarapace", "$item_bolt_carapace", ("pierce", 72)),
+                G("weapon", "SwordBronze", "$item_sword_bronze", ("slash", 35)), G("weapon", "SwordIron", "$item_sword_iron", ("slash", 55)),
+                G("weapon", "SwordBlackmetal", "$item_sword_blackmetal", ("slash", 70)), G("weapon", "MaceBronze", "$item_mace_bronze", ("blunt", 35)),
+                G("weapon", "MaceIron", "$item_mace_iron", ("blunt", 55)), G("weapon", "AtgeirIron", "$item_atgeir_iron", ("pierce", 55)),
+                G("weapon", "SpearBronze", "$item_spear_bronze", ("pierce", 35)), G("weapon", "AxeIron", "$item_axe_iron", ("slash", 50)),
+                G("weapon", "KnifeFlint", "$item_knife_flint", ("slash", 12)), G("weapon", "BowFineWood", "$item_bow_finewood", ("pierce", 32)),
+                G("weapon", "BowDraugrFang", "$item_bow_draugrfang", ("pierce", 47), ("poison", 15)), G("weapon", "StaffFireball", "$item_staff_fireball", ("fire", 60)),
+                G("weapon", "CrossbowArbalest", "$item_crossbow_arbalest", ("pierce", 52)),
+            };
+        }
 
         // SAMPLE arrows (damage close to the game's own)
         public static IList<PanelModel.ArrowData> SampleArrows()
@@ -444,6 +476,7 @@ namespace Hearthwoven.Panel
             foreach (var kv in battle.ItemsCrafted) full.ItemsCrafted[kv.Key] = Math.Max(kv.Value, full.ItemsCrafted.TryGetValue(kv.Key, out var c) ? c : 0f);
             foreach (var kv in battle.ItemsPickedUp) full.ItemsPickedUp[kv.Key] = kv.Value;
             full.Foe = SampleFoe; full.Arrows = SampleArrows; full.RecipeKnown = t => SampleRecipes.Contains(t);   // the arrows a Mistlands character knows
+            full.Gear = SampleGear; full.Owned = t => SampleOwned.Contains(t);   // the Foes ranking (0.7): bolts, weapons, what you carry
             var deedsName = full.DisplayName;
             full.DisplayName = t => t != null && BattleNames.TryGetValue(t, out var n) ? n : deedsName(t);
             // the Company: Edda, Tor and Finch share; feasts name Rowan by this id

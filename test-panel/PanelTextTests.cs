@@ -60,8 +60,9 @@ static class PanelTextTests
                 // chrome A2: 40 px rows, 18 px, a 22 px line icon 10 px in and 10 px before the label
                 Fit(where, "list", c.Label, Max(ListW - 4 - (icon ? 10 + 22 + 10 : 20) - 16, 18));
             }
-            // the footer key line (PanelUi: 1052 px at 15 px, the keys six spaces apart)
-            Fit(where, "footer keys", string.Join("      ", v.Keys.ToArray()), Max(1052, 15));
+            // the footer key line (PanelUi: 1052 px at 15 px, the keys six spaces apart): PanelModel.KeyLine leaves out the least needed keys
+            // (KeysToDrop) while it is too wide; with the character estimate standing in for the drawn width, every other key must still fit
+            Fit(where, "footer keys", PanelModel.KeyLine(v.Keys, l => l.Length <= Max(1052, 15)), Max(1052, 15));
             // chapter tabs (PanelUi.Tab): six across the 1116 px row, 20 px
             foreach (var c in v.Chapters) Fit(where, "tab", c.Label, Max(TabW - 20 - 26 - 8, 18));   // A2: the icon left of the label, 18 px
             foreach (var b in PanelModel.Content(v))
@@ -84,11 +85,11 @@ static class PanelTextTests
                 {
                     Fit(where, "card title", c.Title, Max(w - (string.IsNullOrEmpty(c.Icon) ? 0 : 32), 16));
                     if (c.Tone == "unsung") Fit(where, "card description (three lines)", c.Text, 3 * Max(w, 15, SmallEm) - 6);   // wraps; a word break loses about two characters a line
-                    else Fit(where, "card label", c.Text, Max(w - (c.SinceInstall ? Since : 0), 15, SmallEm));
+                    else Fit(where, "card label", c.Text, Max(w - (!string.IsNullOrEmpty(c.RecordedFrom) ? Since : 0), 15, SmallEm));
                     var sub = (c.Items ?? new List<Block>()).FirstOrDefault();
                     if (sub != null)
                     {
-                        var room = w - (sub.SinceInstall ? Since : 0) - 6 - (sub.Value ?? "").Length * SmallEm * 14;
+                        var room = w - (!string.IsNullOrEmpty(sub.RecordedFrom) ? Since : 0) - 6 - (sub.Value ?? "").Length * SmallEm * 14;
                         Fit(where, "card second line", sub.Title, Max(room, 13, SmallEm));
                     }
                 }
@@ -98,6 +99,27 @@ static class PanelTextTests
         foreach (var t in distinct.Take(20)) System.Console.WriteLine("    " + t);
         Check(PanelModel.ItemTilesPerLine(PlateColumn) == 4 && PanelModel.ItemTilesPerLine((PlateColumn - 34) / 2) == 2, "item tiles: four across the plate, two in a half column (fix2 6)");
         Check(distinct.Count == 0, $"fit: every list label, chapter tab, chip, card line and item tile name fits its box ({pages.Count} pages and views)" + (distinct.Count > 0 ? ": " + distinct[0] : ""));
+
+        // 0.7 redesign (REDESIGN-RULES.md part 0): a migrated page (view.Recorded) says no "since install", "before install", "faded" or "in all ·"
+        var retired = new[] { "since install", "before install", "faded", "in all ·" };
+        var oldWords = pages.Where(p => p.v.Recorded).SelectMany(p => PanelModel.AllText(p.v).Concat(new[] { p.v.HeadingRecordedFrom, p.v.HeadingWindow }).Concat(p.v.Keys)
+                                  .Where(t => t != null && retired.Any(r => t.IndexOf(r, StringComparison.OrdinalIgnoreCase) >= 0)).Select(t => p.where + ": \"" + t + "\"")).Distinct().ToList();
+        Check(oldWords.Count == 0, "0.7 wording: no \"since install\", \"before install\", \"faded\" or \"in all ·\" on a migrated page (" + pages.Count(p => p.v.Recorded) + " pages and views)" + (oldWords.Count > 0 ? ": " + oldWords[0] : ""));
+        // the class sweep (0.7 merge): every page of every chapter in every window, your book and the fellows' (an older sender's last session
+        // too, and the preview world's books), with what sits around the page (scope, plate line, heading window, window chips, keys)
+        var sweepWorld = PanelSample.Full(new DateTime(2026, 10, 9, 18, 0, 0, DateTimeKind.Utc));
+        var swept = new List<string>(); int sweptPages = 0;
+        foreach (var (name, inp) in samples.Concat(FullDump.Books(sweepWorld).Select(b => ("world " + b.who, b.book))))
+            foreach (Chapter ch in Enum.GetValues(typeof(Chapter)))
+                foreach (var l in PanelModel.Build(inp, new PanelState { Chapter = ch }).List)
+                    foreach (TimeWindow tw in Enum.GetValues(typeof(TimeWindow)))
+                    {
+                        var v = PanelModel.Build(inp, new PanelState { Chapter = ch, Page = { [ch] = l.Id }, Window = tw }); sweptPages++;
+                        swept.AddRange(PanelModel.AllText(v).Concat(new[] { v.HeadingRecordedFrom, v.HeadingWindow, v.Scope, PanelModel.PlateOf(v)?.Text }).Concat(v.Keys).Concat(v.Windows.Select(w => w.Label))
+                                       .Where(t => t != null && retired.Take(2).Any(r => t.IndexOf(r, StringComparison.OrdinalIgnoreCase) >= 0)).Select(t => name + " " + ch + "/" + l.Id + " " + tw + ": \"" + t + "\""));
+                    }
+        swept = swept.Distinct().ToList();
+        Check(swept.Count == 0, "0.7 wording sweep: no \"since install\" or \"before install\" on any page in any window, own or fellow book (" + sweptPages + " views)" + (swept.Count > 0 ? ": " + swept[0] : ""));
 
         var atLeast = pages.Where(p => PanelModel.AllText(p.v).Any(t => t.IndexOf("at least", StringComparison.OrdinalIgnoreCase) >= 0)).Select(p => p.where).Distinct().ToList();
         Check(atLeast.Count == 0, "wording: no \"at least\" on any page or view" + (atLeast.Count > 0 ? ": " + atLeast[0] : ""));

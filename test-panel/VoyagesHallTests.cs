@@ -39,12 +39,12 @@ static partial class Program
         Check(Seq(sea.Select(s => s.Id + "=" + s.Value + "=" + s.Title)) == "helm=6.6 km=at the helm,passenger=14.9 km=as passenger" && Math.Abs(sea.Sum(s => s.Fraction) - 1) < 1e-4 && sea.All(s => s.Src == "character"),
               "VH journey: sailed splits into at the helm and as passenger (sailed minus at the helm)");
         var home = First(over, "composition", b => b.Title == PanelModel.HomeAway);
-        Check(home != null && Seq(home.Items.Select(p => p.Title + "=" + p.Value)) == "resting at home=6 hours 10 min,away from home=11 hours 40 min" && home.Src == "character" && !home.SinceInstall,
+        Check(home != null && Seq(home.Items.Select(p => p.Title + "=" + p.Value)) == "resting at home=6 hours 10 min,away from home=11 hours 40 min" && home.Src == "character",
               "VH home and away: the game's time in base and away, your character's count (no label)");
         var crew = First(over, "crew");
         var crewHead = PanelModel.Content(over).Single(b => b.Kind == "section" && b.Title == PanelModel.SailedWithTitle);
         Check(crew != null && Seq(crew.Items.Select(p => p.Title + "=" + p.Value)) == "Edda=21 min,Finch=10 min,Tor=8 min" && crew.Items[0].Fraction == 1 && crew.Items.All(p => p.Icon == "person:" + p.Title && p.Src == "pc") &&
-              Zoned.Says(over, crewHead) && !crew.SinceInstall && !over.HeadingSinceInstall, "VH crew: fellow players by name (never ranked), minutes aboard, since install once on the section");
+              Zoned.Says(over, crewHead), "VH crew: fellow players by name (never ranked), minutes aboard, since install once on the section");
         Check(crew.Items.All(p => p.Items == null), "VH crew: no whose-helm split per fellow (the mod does not record it)");
 
         // ---------- Voyages > Sailing ----------
@@ -91,7 +91,8 @@ static partial class Program
         var hall = Show(Chapter.Stores);
         Check(hall.Chapters.Single(c => c.Id == "Stores").Label == "Hall" && hall.ListTitle == "Hall" && Seq(hall.List.Select(l => l.Label)) == "Overview,Trader,Smelters" && hall.Heading == PanelModel.HallOverview,
               "VH hall: the chapter is Hall, its list Overview, Trader, Smelters");
-        var hallText = PanelModel.AllText(hall).Concat(PanelModel.AllText(Show(Chapter.Stores, "trader"))).Concat(PanelModel.AllText(Show(Chapter.Stores, "smelters"))).ToList();
+        IEnumerable<string> PageWords(PanelView v) => PanelModel.AllText(v).Where(t => !(v.AboutNumbers?.Items ?? new List<Block>()).Any(l => l.Text == t));   // About's sentences may name a Stoker's Chest
+        var hallText = PageWords(hall).Concat(PageWords(Show(Chapter.Stores, "trader"))).Concat(PageWords(Show(Chapter.Stores, "smelters"))).ToList();
         Check(!hallText.Any(t => t.IndexOf("chest", StringComparison.OrdinalIgnoreCase) >= 0 || t.IndexOf("cart", StringComparison.OrdinalIgnoreCase) >= 0 || t.Contains("Stowed") || t.Contains("Drawn")),
               "VH hall: chest and cart records (server-only) are not shown");
         var comps = PanelModel.Content(hall).Where(b => b.Kind == "composition").ToList(); var coins = comps[0];   // under their heroes, untitled
@@ -108,7 +109,7 @@ static partial class Program
               "VH hall: put in the smelters by kind (ore, fuel, and wood in the kiln on its own)");
         var byItem = hallAll.Last(b => b.Kind == "itemgrid");   // the smelted items follow the smelters bar, no "by item" heading
         Check(byItem.Kind == "itemgrid" && Seq(byItem.Items.Select(r => r.Title + "=" + r.Value)) == "Wood=40,Copper Ore=30,Coal=27,Tin Ore=20,Black Metal Scrap=10", "VH hall: smelters by item, the vanilla fuel named (Coal), top five");
-        Check(Zoned.Labels(hall) == 1 && All(hall.Blocks).Count(b => b.SinceInstall) == 0, "VH hall: every number from this PC: since install once, after the heading");
+        Check(Zoned.Labels(hall) == 1, "VH hall: every number from this PC: since install once, after the heading");
         var trader = Show(Chapter.Stores, "trader");
         var trLedger = PanelModel.Content(trader).FirstOrDefault(b => b.Kind == "ledger");
         Check(trader.Heading == "Trader" && trader.Badges.Any(b => b.Label == "Far Trader") && trLedger != null && Seq(trLedger.Items.Select(r => r.Title + "=" + r.Colour)) == "Haldor=#e8a948,Hildir=#b8708c" &&
@@ -116,19 +117,34 @@ static partial class Program
               trLedger.Items.SelectMany(r => r.Items).All(c => c.Src == "pc" && c.Icon.StartsWith("item:")),
               "fix2 7 trader: one ledger row per trader (most coins first), what was bought there as chips edged in the trader's colour; the Far Trader title");
         var trHero = PanelModel.Content(trader).First(b => b.Kind == "hero"); var trBar = PanelModel.Content(trader).First(b => b.Kind == "composition");
-        Check(trHero.Tone == PanelModel.Compact && trHero.Value == "650" && trBar.Tone == PanelModel.Thin && !PanelModel.Content(trader).Any(b => b.Kind == "itemgrid" || b.Kind == "columns"),
-              "fix2 7 trader: a compact hero with the bar right under it at reduced height, no tall tiles");
+        Check(trHero.Tone == null && trHero.Value == "650" && trBar.Tone == PanelModel.Thin && !PanelModel.Content(trader).Any(b => b.Kind == "itemgrid" || b.Kind == "columns"),
+              "fix2 7 trader: the one hero form (0.8 layout D+: no compact hero) with the bar right under it, thin, no tall tiles");
         var smelters = Show(Chapter.Stores, "smelters");
         var smAll = PanelModel.Content(smelters); var smLedger = smAll.FirstOrDefault(b => b.Kind == "ledger");
         Check(smLedger != null && Seq(smLedger.Items.Select(r => r.Title)) == "Blast Furnace,Charcoal Kiln,Smelter" &&
               Seq(smLedger.Items[0].Items.Select(r => r.Title + "=" + r.Value + "=" + (r.Tone ?? ""))) == "Coal=15=fuel,Black Metal Scrap=10=" &&
-              smAll.First(b => b.Kind == "hero").Tone == PanelModel.Compact && smAll.First(b => b.Kind == "composition").Tone == PanelModel.Thin,
-              "fix2 7 smelters: a compact hero and thin bar, then one ledger row per station by its game name, its goods as chips, the fuel marked as fuel");
+              smAll.First(b => b.Kind == "hero").Tone == null && smAll.First(b => b.Kind == "composition").Tone == PanelModel.Thin,
+              "fix2 7 smelters: the one hero form and a thin bar, then one ledger row per station by its game name, its goods as chips, the fuel marked as fuel");
         var smBar = smAll.First(b => b.Kind == "composition"); string PartColour(string id) => smBar.Items.Single(p => p.Id == id).Colour;
         Check(PartColour("Fuel") == PanelModel.FuelColour && PartColour("Ore") == PanelModel.OreColour && PartColour("Wood") != PartColour("Fuel") &&
               smLedger.Items.SelectMany(r => r.Items).All(c => c.Colour == (c.Tone == "fuel" ? PanelModel.FuelColour : c.Title == "Wood" ? PartColour("Wood") : PanelModel.OreColour)) &&
               smLedger.Items.SelectMany(r => r.Items).Where(c => c.Tone == "fuel").Sum(c => int.Parse(c.Value)) == int.Parse(smBar.Items.Single(p => p.Id == "Fuel").Value),
               "fix2 7 smelters: fuel in one distinct colour (not Wood's), each chip edged in its part's colour, the fuel chips add up to the bar's Fuel");
+        // the Stoker's Chest (StokerHooks, OverDrive-SmelterUpgrades): the chests' feeding is its own part, never "items put in", never the player's title
+        string Forge(PanelInput who) => PanelModel.Titles(who).SingleOrDefault(t => t.Id == "smith")?.Lines.Select(l => l.Key).FirstOrDefault(k => k.Contains("into smelters"));
+        Check(!PanelModel.StokersChests && !smAll.Any(b => b.Kind == "section" && b.Title == PanelModel.FedByChests) && !PanelModel.AllText(smelters).Contains(PanelModel.ChestsNoneYet) &&
+              Forge(voyager) == "127 ore and fuel into smelters", "stoker: without the chests nothing about them, and the Forgekeeper line as before");
+        var stoked = VoyagesHallSample(PanelSample.Evening(DateTime.UtcNow));
+        SessionEvents.Add(stoked.Events.ChestFed, "blastfurnace|IronScrap", 300); SessionEvents.Add(stoked.Events.ChestFed, "blastfurnace|fuel", 150);
+        var stSm = Show(Chapter.Stores, "smelters", stoked); var stAll = PanelModel.Content(stSm);
+        var fedAt = stAll.FindIndex(b => b.Kind == "section" && b.Title == PanelModel.FedByChests);
+        Check(fedAt > 0 && stAll[fedAt + 1].Kind == "itemgrid" && Seq(stAll[fedAt + 1].Items.Select(r => r.Title + "=" + r.Value)) == "Iron Scrap=300,Coal=150" &&
+              stAll[fedAt + 1].Note == PanelModel.ChestNote(stoked) && stAll.First(b => b.Kind == "hero").Value == "127" &&
+              Forge(stoked) == "127 ore and fuel into smelters by hand" && SessionEvents.Sum(stoked.Events).ChestFed.Values.Sum() == 450,
+              "stoker: what a Stoker's Chest fed is its own part on Smelters (its note says it is nobody's), the hand count and the Forgekeeper line stay the player's, \"by hand\"");
+        PanelModel.StokersChests = true;
+        try { Check(PanelModel.AllText(Show(Chapter.Stores, "smelters")).Contains(PanelModel.ChestsNoneYet), "stoker: the mod is here but no chest fed yet: one quiet line says where its feeding will show"); }
+        finally { PanelModel.StokersChests = false; }
         Check(Seq(ledger.Items.Select(i => i.Title + "=" + i.Colour)) == "Fishing Bait=#e8a948,Ymir Flesh=#e8a948,Megingjord=#e8a948,Hat=#b8708c" &&
               byItem.Items.Single(i => i.Title == "Coal").Tone == "fuel" && byItem.Items.Where(i => i.Title != "Coal").All(i => i.Tone == null),
               "fix2 7 hall overview: each bought item edged in its trader's colour (Haldor gold, Hildir rose); Coal marked as fuel");
@@ -143,7 +159,7 @@ static partial class Program
             foreach (var b in All(v.Blocks))
             {
                 if ((b.Value ?? "").Any(char.IsDigit) && (b.Src == null || b.Source == null)) bad ??= v.Page + ": no source on " + (b.Title ?? b.Value);
-                if (b.SinceInstall && b.Kind != "section" && b.Src != "pc") bad ??= v.Page + ": since install on a " + b.Src + " number";
+                if (!string.IsNullOrEmpty(b.RecordedFrom) && b.Kind != "section" && b.Src != "pc") bad ??= v.Page + ": since install on a " + b.Src + " number";
             }
         Check(bad == null, "VH sources: every number carries Src and Source; since install only on numbers from this PC" + (bad != null ? ": " + bad : ""));
         var unlabelled = views.Where(v => All(v.Blocks).Any(b => b.Src == "pc") && Zoned.Labels(v) == 0).Select(v => v.Page).ToList();

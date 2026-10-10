@@ -134,7 +134,7 @@ namespace Hearthwoven.Panel
                         sc = scrollers.FirstOrDefault(s => s.Rect && s.Rect.content == content);
                         if (sc != null) { room = Room(sc); step = Mathf.Max(100f, sc.Rect.viewport.rect.height - 48f); }
                         parts = room <= 0f ? 1 : Mathf.Min(MaxParts, 1 + Mathf.CeilToInt(room / step));
-                        File.WriteAllText(Path.Combine(dir, shot.Name + ".json"), PanelModel.ToJson(view), PeerIdentity.Utf8);
+                        File.WriteAllText(Path.Combine(dir, shot.Name + ".json"), PanelModel.ToJson(view, islands: true), PeerIdentity.Utf8);   // with the island plan, as the preview draws it
                         pages++;
                     }
                     catch (Exception e) { failure = shot.Name + ": " + e.Message; break; }
@@ -204,7 +204,7 @@ namespace Hearthwoven.Panel
 
         PanelState Probe(Chapter c)
         {
-            var s = new PanelState { Chapter = c, Window = state.Window, TheyReceived = state.TheyReceived, Hotkey = state.Hotkey, InfoKey = state.InfoKey, ViewKey = state.ViewKey };
+            var s = new PanelState { Chapter = c, Window = state.Window, WindowPicked = state.WindowPicked, TheyReceived = state.TheyReceived, Hotkey = state.Hotkey, InfoKey = state.InfoKey, ViewKey = state.ViewKey };
             foreach (var kv in state.View) s.View[kv.Key] = kv.Value;
             return s;
         }
@@ -244,19 +244,8 @@ namespace Hearthwoven.Panel
             return filters.Any(f => f == "*" || key.StartsWith(f, StringComparison.Ordinal));
         }
 
-        static string Safe(string s)
-        {
-            var chars = (s ?? "").ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray();
-            var t = new string(chars).Trim('-');
-            while (t.Contains("--")) t = t.Replace("--", "-");
-            return t.Length == 0 ? "page" : t.Length > 48 ? t.Substring(0, 48) : t;
-        }
-
-        static string Unique(HashSet<string> names, string name)
-        {
-            var n = name; for (int i = 2; !names.Add(n); i++) n = name + "-" + i;
-            return n;
-        }
+        static string Safe(string s) => PanelBenchWalk.Safe(s);   // one naming for the page walk, the snapshots and Dev.Bench
+        static string Unique(HashSet<string> names, string name) => PanelBenchWalk.Unique(names, name);
 
         void Apply(Shot shot)
         {

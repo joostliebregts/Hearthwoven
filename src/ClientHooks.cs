@@ -36,9 +36,10 @@ namespace Hearthwoven
                 var who = Prefab(a);
                 if (hit.m_damage.m_fire > 0f || hit.m_damage.m_spirit > 0f) { dotSource["Burning"] = who; dotAt["Burning"] = Time.time; }
                 if (hit.m_damage.m_poison > 0f) { dotSource["Poisoned"] = who; dotAt["Poisoned"] = Time.time; }
+                BattleHooks.DotFrom(hit, a);   // 0.8: and which creature, for the battle feed
             });
         }
-        static string Source(HitData hit)
+        internal static string Source(HitData hit)   // ArmourHooks names the source the same way
         {
             var attacker = hit.GetAttacker();
             if (attacker != null) return Prefab(attacker);
@@ -54,10 +55,12 @@ namespace Hearthwoven
             {
                 if (hit != null && Local(hit.GetAttacker()) && !Local(__instance))
                 {
-                    Plugin.Session.AddDealt(Prefab(__instance), hit.m_skill.ToString(), hit.m_damage);
+                    var target = Prefab(__instance);
+                    Plugin.Session.AddDealt(target, hit.m_skill.ToString(), hit.m_damage);
                     // every hit, also on a foe another PC owns (the game's EnemyHits/PlayerHits miss those: owner trap)
                     SessionEvents.Add(Plugin.Events.Battle, __instance is Player ? "PlayerHits" : "EnemyHits");
-                    Plugin.Log.AddDamage(DateTime.UtcNow, Biome(), true, Prefab(__instance), hit.m_skill.ToString(), hit.m_damage);
+                    Plugin.Log.AddDamage(DateTime.UtcNow, Biome(), true, target, hit.m_skill.ToString(), hit.m_damage);
+                    BattleHooks.Dealt(__instance, target, hit);   // 0.8: this foe as its own creature (count per kind, battle feed)
                 }
             });
         }
@@ -72,6 +75,7 @@ namespace Hearthwoven
                 var source = Source(hit);
                 Plugin.Session.AddTaken(source, hit.m_hitType.ToString(), hit.m_damage);
                 Plugin.Log.AddDamage(DateTime.UtcNow, Biome(), false, source, hit.m_hitType.ToString(), hit.m_damage);
+                BattleHooks.Received(hit, source);   // 0.8: which creature hit you (battle feed)
             });
         }
 
@@ -313,7 +317,8 @@ namespace Hearthwoven
             });
         }
 
-        // Feasts: who ate from whose placed feast (the piece's creator).
+        // Feasts: who ate from whose placed feast (the piece's creator: the one who SET IT OUT), and from which feast (its ZDO id, the same on
+        // every PC), so the feast's maker can be found in the placer's own record (SetOutFeastMadeBy, 0.8).
         static bool feasting;
         [HarmonyPatch(typeof(Feast), "RPC_EatConfirmation")]
         static class FeastEat
@@ -323,8 +328,57 @@ namespace Hearthwoven
             {
                 feasting = true;
                 var piece = __instance.GetComponent<Piece>();
-                SessionEvents.Add(Plugin.Events.AteFromFeastOf, (piece ? piece.GetCreator() : 0L) + "|" + Prefab(__instance));
+                var key = (piece ? piece.GetCreator() : 0L) + "|" + Prefab(__instance);
+                SessionEvents.Add(Plugin.Events.AteFromFeastOf, key);
+                var zdo = __instance.GetComponent<ZNetView>()?.GetZDO();
+                if (zdo != null) SessionEvents.Add(Plugin.Events.AteFromFeastAt, key + "|" + zdo.m_uid);
             });
+        }
+
+        // Feasts set out (0.8, B22): who made the feast you set out. Player.PlacePiece names YOU (the placer) as the piece's creator, and the
+        // feast item's crafter is gone once it is placed, so it is read here from the item the game is about to take from your bag
+        // (Player.UpdatePlacement takes it after TryPlacePiece returns: ConsumeResources, Inventory.RemoveItem, the first matching stack at
+        // your world level). The new feast's ZDO id joins it to whoever eats from it (FeastEat). Read only: nothing is written to the world.
+        static bool placingFeast;   // inside Player.PlacePiece for the local player, placing a feast
+        [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece))]
+        static class SetOut
+        {
+            static void Prefix(Player __instance, Piece piece)
+            {
+                try { placingFeast = __instance != null && __instance == Player.m_localPlayer && piece != null && piece.GetComponent<Feast>() != null; }
+                catch (Exception e) { HookGuard.Fail(e, "ClientHooks.SetOut.Prefix"); }   // the finalizer clears it
+            }
+            static void Finalizer() { try { placingFeast = false; } catch (Exception e) { HookGuard.Fail(e, "ClientHooks.SetOut.Finalizer"); } }   // runs even if the game's method throws
+        }
+        [HarmonyPatch(typeof(Piece), nameof(Piece.SetCreator))]
+        static class SetOutFeast
+        {
+            static void Postfix(Piece __instance) => Safe(() =>
+            {
+                if (!placingFeast || __instance == null) return;
+                var me = Player.m_localPlayer; if (me == null || __instance.GetCreator() != me.GetPlayerID()) return;
+                placingFeast = false;   // one feast per placement
+                var zdo = __instance.GetComponent<ZNetView>()?.GetZDO(); if (zdo == null) return;
+                var crafter = FeastCrafter(me, __instance);
+                if (!string.IsNullOrEmpty(crafter)) SessionEvents.Add(Plugin.Events.SetOutFeastMadeBy, crafter + "|" + Prefab(__instance) + "|" + zdo.m_uid);
+            });
+        }
+
+        /// <summary>The crafter of the feast item the game takes from your bag for this piece: the first stack of it at your world level, in the
+        /// bag's order (Inventory.RemoveItem). Null when nothing is taken (the no-cost cheat, the world's no-crafting-cost key) or none is there;
+        /// "" for an item nobody crafted.</summary>
+        static string FeastCrafter(Player me, Piece piece)
+        {
+            if (me.NoCostCheat() || (ZoneSystem.instance != null && ZoneSystem.instance.GetGlobalKey(piece.FreeBuildKey()))) return null;
+            var bag = me.GetInventory(); if (bag == null || piece.m_resources == null) return null;
+            foreach (var req in piece.m_resources)
+            {
+                var name = req != null && req.m_resItem ? req.m_resItem.m_itemData?.m_shared?.m_name : null;
+                if (string.IsNullOrEmpty(name) || req.GetAmount(0) <= 0) continue;
+                foreach (var item in bag.GetAllItems())
+                    if (item?.m_shared != null && item.m_shared.m_name == name && item.m_worldLevel >= Game.m_worldLevel) return item.m_crafterName ?? "";
+            }
+            return null;
         }
 
         // Gear: whose crafted weapon, tool or armour did you put on?
@@ -394,7 +448,8 @@ namespace Hearthwoven
         // drops from trees, rocks, pickables (Pickable.RPC_Pick spawns them in the world), loot, and a fish taken from the
         // water. Not here: chest transfers, crafting output, trader purchases (no world drop). Counted by how much the
         // carried amount of that item grew, so a partial pickup with a full inventory counts only what went in.
-        class PickState { public string Item; public bool Held; public int Stack, Before; }
+        // 0.8: a piece's materials (what it dropped when it came down: SalvageHooks) are recovered, never brought in.
+        class PickState { public string Item; public bool Held, FromPiece; public int Stack, Before; }
         [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.Pickup))]
         static class Pickup
         {
@@ -408,7 +463,7 @@ namespace Hearthwoven
                     var inv = __instance.GetInventory();
                     if (data?.m_shared == null || string.IsNullOrEmpty(data.m_shared.m_name) || inv == null) return;
                     __state = new PickState { Item = data.m_shared.m_name, Held = data.m_pickedUp, Stack = data.m_stack,
-                                              Before = inv.CountItems(data.m_shared.m_name, -1, false) };
+                                              Before = inv.CountItems(data.m_shared.m_name, -1, false), FromPiece = !data.m_pickedUp && SalvageHooks.FromPiece(go) };
                 }
                 catch (Exception e) { __state = null; HookGuard.Fail(e, "ClientHooks.Pickup.Prefix"); }
             }
@@ -416,8 +471,7 @@ namespace Hearthwoven
             {
                 if (__state == null || __state.Held) return;
                 var inv = __instance.GetInventory(); if (inv == null) return;
-                var n = SessionEvents.PickedAmount(__state.Held, __state.Stack, __state.Before, inv.CountItems(__state.Item, -1, false));
-                if (n > 0) SessionEvents.Add(Plugin.Events.PickedUp, __state.Item, n);
+                SessionEvents.CountPickup(Plugin.Events, __state.Item, __state.Held, __state.FromPiece, __state.Stack, __state.Before, inv.CountItems(__state.Item, -1, false));
             });
         }
 

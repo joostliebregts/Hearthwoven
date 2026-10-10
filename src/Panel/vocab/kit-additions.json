@@ -1648,5 +1648,140 @@
       29,
       29
     ]
+  },
+  "list-recent.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by list/hero text or selection colour."
+  },
+  "list-away.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by list/hero text or selection colour."
+  },
+  "list-titles.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by list/hero text or selection colour."
+  },
+  "away-hero-built.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by list/hero text or selection colour."
+  },
+  "away-hero-stone-ore.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by list/hero text or selection colour."
+  },
+  "away-hero-wood.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by list/hero text or selection colour."
+  },
+  "away-hero-dishes.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by list/hero text or selection colour."
+  },
+  "list-feed.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by list/hero text or selection colour."
+  },
+  "list-lastfight.png": {
+    "size": [
+      32,
+      32
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "Pure white mask; multiply by list/hero text or selection colour."
   }
 }
