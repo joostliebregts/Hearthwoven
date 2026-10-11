@@ -10,9 +10,9 @@ Press **H** and it opens on what you did: the trees you felled, the dishes you c
 - **Feats:** moments worth telling, earned alone or together, like steering a ship 2 km home with a heavy load of ore.
 - **Voyages:** distance sailed and on foot, who sailed with you, and the cargo you carried.
 
-[![Damage dealt together in the last hour, and each player's part by damage type](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/everyone-battle-damage.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/everyone-battle-damage.png)
+[![A tour of the book](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/tour.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/tour.gif)
 
-*Damage dealt together in the last hour, and each player's part by damage type. Sample data: Rowan, Edda, Finch and Tor are fictional players. Select any image to open it at full size.*
+*A tour of the book: your woodcutting, your damage to each foe, what your armor stopped, and the damage the group received. Sample data: Rowan, Edda, Finch and Tor are fictional players. Select any image to open it at full size.*
 
 [Why](#why) · [How it works](#how-it-works) · [What is in the book](#what-is-in-the-book) · [Installation](#installation) · [Reference](#reference)
 
@@ -39,6 +39,10 @@ Every fight since you installed Hearthwoven, counted: the damage you dealt by we
 [![Battle, By foe: how many of each kind you fought, which ones you defeated, and your damage by type](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-damage-foe.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-damage-foe.png)
 
 *By foe: how many of each kind you fought, which ones you defeated, and your damage by type.*
+
+[![Point at a part of a damage bar to see its type and number](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/hover.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/hover.gif)
+
+*Point at any part of a damage bar to see its damage type and number. Click a feat card to see its tiers and your progress.*
 
 ### Who helped whom
 
@@ -70,6 +74,10 @@ The same works on almost every page: the **Everyone** chip at the end of the pla
 
 *Everyone on Woodcutting: the wood the group brought in, and each player's share.*
 
+[![Everyone on Meals: the group's meals by dish and by player](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/group.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/group.gif)
+
+*Everyone shows the meals of the whole group, by dish and by player: who cooked the food that each player ate.*
+
 ### Your own deeds
 
 Your deeds are grouped under titles such as Hearth Cook, Hallwright and Woodcutter, one for each way of playing. Open one to see what went into it. Each Deeds page goes deep: Cooking shows every dish you cooked, by type and by kind, and where you cooked it. Meals shows the meals you ate, and with **Everyone** on, who cooked for whom.
@@ -82,9 +90,9 @@ Your deeds are grouped under titles such as Hearth Cook, Hallwright and Woodcutt
 
 The Feed tells your fights this session, newest first: each foe "defeated by you", "defeated with Edda", "survived" or "got away", with the damage both ways. Show it as Log, Cards or Timeline, and filter it by time, biome and foe. Fellow players who share see it on your book, and you see theirs. (Battle > Feed)
 
-[![The battle feed: your fights this session, foe by foe, newest first](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-feed-cards.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-feed-cards.png)
+[![The battle feed as cards and as a log, with the foe filter](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/feed.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/feed.gif)
 
-*The battle feed: your fights this session, foe by foe, newest first.*
+*The battle feed shows each fight as cards or as a log. Use the foe filter to show only the fights with one foe.*
 
 ### Feats
 
