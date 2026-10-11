@@ -261,6 +261,59 @@ var feed = ChestLedger.Attribute(P(Inv((H("Coal"), 50, "", 1, 0, 0))), P(Inv((H(
 var chestUnattended = ChestLedger.Attribute(P(Inv((iron, 30, "", 1, 0, 0))), P(Inv((iron, 20, "", 1, 0, 0))), "chest", false, true, null, C, A, inUse: false);
 Check(feed.Count == 1 && feed[0].Action == "auto-feed" && feed[0].Via == "unattended" && chestUnattended[0].Via == "unattended",
       "C9 a feeder chest taking coal by itself is auto-feed; any change with nobody at the chest is marked unattended");
+// 0.8.5 (Joost's evening: the server's chest log shows his PC fed 879 items from Stoker's Chests on 10 October, his book counted none): the
+// hook on Inventory.RemoveItem called as Harmony calls it, each parameter by its name, the prefix before the game's method and the postfix after
+// it with the arguments as that method leaves them (it counts "amount" down to 0 as it removes). One take during a feeding call counts once.
+{
+    var bf = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+    var hooks = typeof(Plugin).Assembly.GetType("Hearthwoven.StokerHooks"); var taken = hooks.GetNestedType("Taken", bf);
+    var events = (SessionEvents)typeof(Plugin).GetField("Events", bf).GetValue(null);
+    object Call(string method, Dictionary<string, object> args, object state)
+    {
+        var m = taken.GetMethod(method, bf); if (m == null) return state;
+        var ps = m.GetParameters(); var a = ps.Select(p => p.Name == "__state" ? state : args.TryGetValue(p.Name, out var v) ? v : null).ToArray();
+        m.Invoke(null, a);
+        var i = System.Array.FindIndex(ps, p => p.Name == "__state"); return i >= 0 && ps[i].IsOut ? a[i] : state;
+    }
+    void Take(bool feeding)
+    {
+        if (feeding)   // as FeedFuel's prefix leaves it: a smelter, its fuel
+        {
+            hooks.GetField("station", bf).SetValue(null, System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Smelter)));
+            hooks.GetField("stationName", bf)?.SetValue(null, "smelter"); hooks.GetField("fuel", bf).SetValue(null, true);
+        }
+        var state = Call("Prefix", new Dictionary<string, object> { ["name"] = "$item_coal", ["amount"] = 1, ["itemQuality"] = -1, ["worldLevelBased"] = true }, null);
+        Call("Postfix", new Dictionary<string, object> { ["name"] = "$item_coal", ["amount"] = 0, ["itemQuality"] = -1, ["worldLevelBased"] = true }, state);
+    }
+    events.ChestFed.Clear();
+    System.Func<bool> no = () => false;   // a player's PC, not a server (the game's network class does not load here)
+    hooks.GetField("Dedicated", bf).SetValue(null, no); hooks.GetField("Hosting", bf).SetValue(null, no);
+    Take(true); Take(false);   // a feed, then a take outside any feeding call (a player's own RemoveItem)
+    Check(events.ChestFed.TryGetValue("smelter|fuel", out var stoked) && stoked == 1 && events.ChestFed.Count == 1,
+          "Stoker: a Stoker's Chest's take counts once through the hook as Harmony calls it, though the game's RemoveItem counts its amount down to 0 first; a take outside a feeding call counts nothing (" +
+          string.Join(", ", events.ChestFed.Select(kv => kv.Key + " " + kv.Value)) + ")" + (HookGuard.Summary() is string hookFails ? " [hooks failed: " + hookFails + "]" : ""));
+    events.ChestFed.Clear();
+}
+// 0.8.5 (Joost's evening: the chests fed the group's smelters and no PC counted it): the server counts a Stoker's Chest's feeding once, from the
+// updates of the chest's own PC (whoever hosts it, whatever Hearthwoven it runs), the way ChestWatch.Write hands each event to ServerBookHooks.Chest
+{
+    var stokerNames = new Dictionary<int, string> { [H("Coal")] = "Coal", [iron] = "IronScrap" };
+    var stokerBook = new ServerBook(); var stokerT = new System.DateTime(2026, 10, 11, 18, 0, 0, System.DateTimeKind.Utc);
+    void Server(List<ChestLedger.Event> evs) { foreach (var e in evs) stokerBook.Fed("feeder", e.Action, stokerNames[int.Parse(e.Key.Split('|')[0])], e.Count, stokerT); }
+    var stokerFull = Inv((H("Coal"), 50, "", 1, 0, 0), (iron, 30, "", 1, 1, 0)); var stokerFed = Inv((H("Coal"), 49, "", 1, 0, 0), (iron, 29, "", 1, 1, 0));
+    Server(ChestLedger.Attribute(P(stokerFull), P(stokerFed), "feeder", false, true, null, A, A, inUse: false));                          // A hosts it: one coal, one scrap fed
+    Server(ChestLedger.Attribute(P(stokerFed), P(stokerFed), "feeder", false, true, null, A, A, inUse: false));                           // the same copy again: nothing
+    var stokerPulled = ChestLedger.Attribute(P(stokerFed), P(Inv((H("Coal"), 49, "", 1, 0, 0), (iron, 24, "", 1, 1, 0))), "feeder", false, true, null, B, A, inUse: false);
+    Server(stokerPulled);                                                                                                            // B's craft-from-chest mod pulls 5 scrap: a take
+    Server(ChestLedger.Attribute(P(Inv((H("Coal"), 49, "", 1, 0, 0), (iron, 24, "", 1, 1, 0))), P(Inv((H("Coal"), 69, "", 1, 0, 0), (iron, 24, "", 1, 1, 0))), "feeder", false, true, null, A, A));   // A fills it, open
+    var stokerSaved = ServerBook.FromJson(stokerBook.ToJson());
+    var stokerWorld = ServerBook.World.Read(MiniJson.Parse(stokerSaved.WorldJson()) as Dictionary<string, object>);
+    Check(stokerBook.ChestFed.Count == 2 && stokerBook.ChestFed["Coal"] == 1 && stokerBook.ChestFed["IronScrap"] == 1 && stokerPulled[0].Action == "take" &&
+          stokerSaved.ChestFed["Coal"] == 1 && stokerSaved.FedFrom == stokerT && stokerWorld != null && stokerWorld.ChestFedTotal == 2 && stokerWorld.FedFrom == stokerT &&
+          new ServerBook().WorldJson() == null && ServerBook.FromJson("{\"version\":1,\"clock\":0}").FedFrom == null,
+          "Stoker: the server counts a chest's feeding once, from its own PC's updates (1 coal, 1 scrap); a repeat counts nothing, another PC's unopened pull is a take, a fill is a put; kept through a save and shared as the world's (" +
+          string.Join(", ", stokerBook.ChestFed.Select(kv => kv.Key + " " + kv.Value)) + "; pull " + stokerPulled[0].Action + ")");
+}
 // F4 / C10: cargo of a sunk ship or broken cart is salvage, never a chest gift or take
 var crate1 = ChestLedger.Attribute(new List<ChestLedger.Slot>(), P(Inv((iron, 60, "", 1, 0, 0))), "crate", true, false, null, A, A);
 var crate2 = ChestLedger.Attribute(P(Inv((iron, 60, "", 1, 0, 0))), new List<ChestLedger.Slot>(), "crate", false, false, null, A, A);
@@ -639,10 +692,10 @@ Check(twinKinds.Contains("CraftTrinket") && twinKinds.Contains("FishCaughtTier6"
 
 // O5: the per-biome tally is folded as hits come in (EventLog.Biome); it equals the pass over the whole log (BiomeTally.FromLog, the earlier code)
 {
-    bool SameTally(BiomeTally a, BiomeTally b, float tol) =>
-        a.Damage.Count == b.Damage.Count && a.Deaths.Count == b.Deaths.Count &&
+    bool SameTally(BiomeTally a, BiomeTally b, float tol, bool deaths = true) =>
+        a.Damage.Count == b.Damage.Count && (!deaths || a.Deaths.Count == b.Deaths.Count) &&
         a.Damage.All(kv => b.Damage.TryGetValue(kv.Key, out var v) && System.Math.Abs(v - kv.Value) <= tol * System.Math.Max(1f, System.Math.Abs(v))) &&
-        a.Deaths.All(kv => b.Deaths.TryGetValue(kv.Key, out var v) && v == kv.Value);
+        (!deaths || a.Deaths.All(kv => b.Deaths.TryGetValue(kv.Key, out var v) && v == kv.Value));
     var rnd = new System.Random(5); var start = new System.DateTime(2026, 10, 9, 8, 0, 0, System.DateTimeKind.Utc);
     string[] biomes = { "Meadows", "BlackForest", "Swamp", "Mountain", "Plains", null, "Mistlands" }, foes = { "Boar", "Troll", "Draugr", "Wolf", "Blob", null }, causes = { "Axes", "EnemyHit", "Poisoned", "Bows" };
     var exactLog = new EventLog(); var looseLog = new EventLog(); int deaths = 0;
@@ -656,9 +709,13 @@ Check(twinKinds.Contains("CraftTrinket") && twinKinds.Contains("FishCaughtTier6"
         looseLog.AddDamage(at, b, dealt, f, cz, new HitData.DamageTypes { m_slash = L(), m_pierce = L(), m_frost = L(), m_damage = L() });
         if (i % 52 == 7 && deaths < 230) { exactLog.AddDeath(at, b, 0, 0); looseLog.AddDeath(at, b, 0, 0); deaths++; }
     }
-    Check(SameTally(exactLog.Biome, BiomeTally.FromLog(exactLog), 0f) && exactLog.Biome.Damage.Count > 40 && exactLog.Biome.Deaths.Values.Sum() == 200,
-          "O5 the folded per-biome tally equals the whole-log pass exactly (5 h, folded buckets, null biome and foe, 230 deaths of which 200 are listed)");
-    Check(SameTally(looseLog.Biome, BiomeTally.FromLog(looseLog), 1e-4f), "O5 and within rounding for arbitrary damage values (only the order of the float additions differs)");
+    // 0.8.5 (Battle > Deaths' "no place"): past the death list's cap a fall still keeps its biome in the fold, and the totals file books the fold, so a
+    // counted fall never loses its place to the cap (before 0.8.5 the 30 past it were counted with no place)
+    var recorded = new LocalTotals(); recorded.Record("O5", null, new SessionEvents(), exactLog);
+    Check(SameTally(exactLog.Biome, BiomeTally.FromLog(exactLog), 0f, deaths: false) && exactLog.Biome.Damage.Count > 40 && BiomeTally.FromLog(exactLog).Deaths.Values.Sum() == 200 &&
+          exactLog.Biome.Deaths.Values.Sum() == 230 && recorded.LastBiome.Deaths.Values.Sum() == 230,
+          "O5 the folded per-biome tally equals the whole-log pass exactly (5 h, folded buckets, null biome and foe); every one of 230 falls keeps its place, though the list holds 200, and the totals file books all 230");
+    Check(SameTally(looseLog.Biome, BiomeTally.FromLog(looseLog), 1e-4f, deaths: false), "O5 and within rounding for arbitrary damage values (only the order of the float additions differs)");
     // more distinct heads than MaxBuckets in one minute: the overflow keys fold into other|other, the biome totals are unchanged
     var flood = new EventLog();
     for (int i = 0; i < EventLog.MaxBuckets + 500; i++) flood.AddDamage(start, "Swamp", true, "foe" + i, "Axes", new HitData.DamageTypes { m_slash = 2f });
@@ -870,9 +927,11 @@ fails += LocalFileTests.Run();
 fails += HistoryTests.Run();   // the day history (HISTORY-06.md): recording, live part, folding, size, file, shared per day   // 0.6.1: local-file resilience (NaN, atomic writes + .bak, one file per character, unknown keys, newer formats)
 fails += ServerResilienceTests.Run();   // RESILIENCE-06 server items: atomic files, input limits, the book per world, old logs compressed (test/ServerResilienceTests.cs)
 fails += ArmourTests.Run();   // 0.7: the armour ledger, its book on this PC (schema 4) and the short windows' buckets (test/ArmourTests.cs)
+fails += AfterArmourTests.Run();   // 0.8.5: damage dealt after the foe's armor: per hit, in the log (shared, joined), in the file (schema 7) (test/AfterArmourTests.cs)
 fails += BattleRecTests.Run();   // 0.8: the battle record (one foe per creature, outcomes, fights, bounds, the book, what is shared; test/BattleRecTests.cs)
 fails += LiveSyncTests.Run();   // 0.7 live updates: a 10 s update's size, base + latest update = the next full copy, what the server keeps (test/LiveSyncTests.cs)
 fails += DayTypesTests.Run();   // 0.9: damage dealt per day by weapon kind and type in the shared copy: parts add up, bytes, the live update through the 0.8.1 server's checks (test/DayTypesTests.cs)
+fails += DayDeedsTests.Run();   // 0.8.5: the Deeds per day in the shared copy: bytes, the live update through the 0.8.1 server's checks, read back, older and hostile copies (test/DayDeedsTests.cs)
 fails += FeedShareTests.Run();   // 0.8.2: the battle feed in the shared copy: round trip through the live update, names only of players who share, a busy fight's bytes (test/FeedShareTests.cs)
 fails += FightGroupTests.Run();   // 0.9: fights as a group, boss fights, dungeon runs: four feeds join by the creatures' ids, the arena rule, run borders, no place shared, bytes (test/FightGroupTests.cs)
 fails += FightPagesRealTests.Run();   // 0.9: the fight pages drawn from the data layer's own recorded Queen fight (test/FightPagesRealTests.cs)
@@ -880,6 +939,7 @@ fails += DeedLogTests.Run();   // 0.7 Deeds > Recent: deeds per minute as a time
 fails += ResilienceTests.Run();   // 0.8: renamed characters, worlds made again under one name, two accounts with one id, the .bak as the last good copy, newer keys kept (test/ResilienceTests.cs)
 fails += HookGuardTests.Run();   // RESILIENCE-06 item 6: one guard for every Harmony hook, checked on the IL of each (test/HookGuardTests.cs)
 fails += KeptMinutesTests.Run();   // 0.8.2: your minutes kept across a restart: the file, world and character, the 3 h bound, the shared copy, its size and live updates (test/KeptMinutesTests.cs)
+fails += KeptFightsTests.Run();   // 0.8.5: your fights kept across a restart: Last fight with its "ago", world and character, the bounds, a busy week's file and load time (test/KeptFightsTests.cs)
 
 System.Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
 return fails;

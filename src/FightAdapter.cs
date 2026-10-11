@@ -9,8 +9,9 @@ namespace Hearthwoven
     /// <summary>
     /// The fights the pages draw (Panel/Chapters/FightView.cs), built from this data layer (0.9, work/hearthwoven-0.8.5/fights/DESIGN.md): the group
     /// fights, boss fights and dungeon runs this session joined from every record (GroupFights.Join, JoinRuns), then the saved attempts and runs
-    /// (BossLog, RunLog) the session no longer holds, newest first. Every amount goes into a foe row's player part (FightFoe.By); no player total is
-    /// written, so foe rows and player rows always add up. Pure C#, tested (test/FightGroupTests.cs).
+    /// (BossLog, RunLog) the session no longer holds, and (0.8.5) the group fights of earlier sessions kept on this PC (KeptFights), newest first.
+    /// Every amount goes into a foe row's player part (FightFoe.By); no player total is written, so foe rows and player rows always add up. Pure
+    /// C#, tested (test/FightGroupTests.cs, test/KeptFightsTests.cs).
     ///
     /// Ids, the same on every PC: a boss fight "boss:" + its first boss's network id + "@" + its start minute (UTC); a run "run:" + its kind + "@" +
     /// its start minute; a group fight "fight:" + its first creature's id + "@" + its start minute.
@@ -18,7 +19,8 @@ namespace Hearthwoven
     public static class FightAdapter
     {
         /// <param name="placeName">A dungeon's name from its kind and the game's name token (the game's own Localization in the mod); null: not known.</param>
-        public static FightBook Build(IList<FightSide> sides, BossLog bosses, RunLog runs, DateTime nowUtc, Func<string, string, string> placeName = null)
+        /// <param name="kept">0.8.5: your earlier sessions' fights (KeptFights.Earlier); null: none.</param>
+        public static FightBook Build(IList<FightSide> sides, BossLog bosses, RunLog runs, DateTime nowUtc, Func<string, string, string> placeName = null, IList<KeptSession> kept = null)
         {
             placeName = placeName ?? ((kind, token) => null);
             var book = new FightBook();
@@ -59,9 +61,73 @@ namespace Hearthwoven
                 if (gruns.Any(x => x.Kind == r.Kind && Meet(x.StartUtc, x.EndUtc, r.StartUtc, r.StartUtc.AddSeconds(r.Seconds)))) continue;
                 book.Fights.Add(SavedRun(r, placeName));
             }
+            // a kept fight a fellow who did not restart still shares was joined live too, without you (the same id): one fight, your kept part in it
+            var liveGroups = book.Fights.Where(f => f.Kind == FightKind.Group).ToList();
+            foreach (var k in KeptViews(kept))
+            {
+                var l = liveGroups.FirstOrDefault(f => f.Id == k.Id);
+                if (l == null) book.Fights.Add(k); else MergeKept(l, k);
+            }
             var sorted = book.Fights.OrderByDescending(f => f.EndUtc).ThenByDescending(f => f.StartUtc).ToList();
             book.Fights.Clear(); book.Fights.AddRange(sorted);
             return book;
+        }
+
+        /// <summary>
+        /// 0.8.5: the group fights of earlier sessions, each session's kept records joined again as they were joined live (GroupFights.Join), so a
+        /// kept fight's page is the page it was, with the fellows' parts in it. A fight of a boss fight is left out: its attempt is in the BossLog and
+        /// drawn from there. Ended, never live (joined as of a day after the session: no kept copy is fresh). Joined once per kept list: it does
+        /// not change during a session, and the book is built every refresh.
+        /// </summary>
+        static List<FightView> KeptViews(IList<KeptSession> kept)
+        {
+            if (kept == null || kept.Count == 0) return new List<FightView>();
+            lock (keptLock)
+            {
+                if (ReferenceEquals(kept, keptFor) && kept.Count == keptCount) return keptViews;
+                var views = new List<FightView>();
+                foreach (var s in kept)
+                {
+                    var names = new HashSet<string>(s.Sides.Select(x => x.Name), StringComparer.OrdinalIgnoreCase);
+                    foreach (var g in GroupFights.Join(s.Sides, s.ToUtc.AddDays(1)))
+                        if (g.Players.Any(p => p.Self) && !g.Foes.Any(f => f.InBoss)) views.Add(GroupView(g, names));
+                }
+                keptFor = kept; keptCount = kept.Count; keptViews = views;
+                return views;
+            }
+        }
+        static readonly object keptLock = new object(); static IList<KeptSession> keptFor; static int keptCount; static List<FightView> keptViews;
+
+        /// <summary>
+        /// 0.8.5 (review): a kept fight into the live one of the same id, which a fellow's shared feed still holds after your restart: each player the
+        /// kept fight counts and the live one does not (you, and a fellow whose copy no longer has it) with their row and their part of each foe;
+        /// a foe kind only the kept fight has comes with every part. The kept view is shared across refreshes: never changed, its parts copied.
+        /// </summary>
+        static void MergeKept(FightView live, FightView kept)
+        {
+            var add = kept.Players.Where(p => p.Has && live.PlayerOf(p.Name)?.Has != true).ToList();
+            if (add.Count == 0) return;
+            var names = new HashSet<string>(add.Select(p => p.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (var kf in kept.Foes)
+            {
+                var lf = live.Foes.FirstOrDefault(f => f.Prefab == kf.Prefab && f.Boss == kf.Boss);
+                var all = lf == null;
+                if (all) live.Foes.Add(lf = new FightFoe { Prefab = kf.Prefab, Boss = kf.Boss, Count = kf.Count, Defeated = kf.Defeated });
+                else { lf.Count = Math.Max(lf.Count, kf.Count); lf.Defeated = Math.Max(lf.Defeated, kf.Defeated); }
+                foreach (var kv in kf.By)
+                {
+                    if (!all && !names.Contains(kv.Key)) continue;
+                    var part = new FightPart();
+                    foreach (var d in kv.Value.Dealt) part.Dealt[d.Key] = d.Value;
+                    foreach (var r in kv.Value.Received) part.Received[r.Key] = r.Value;
+                    lf.By[kv.Key] = part;
+                }
+            }
+            var players = live.Players.Where(p => !names.Contains(p.Name)).Concat(add).OrderByDescending(p => p.You).ToList();   // you first (a stable sort)
+            foreach (var p in players.Where(p => !p.You && p.NearSeconds < 0)) p.NearSeconds = kept.PlayerOf(p.Name)?.NearSeconds ?? -1f;   // near you: only your record knows
+            live.Players.Clear(); live.Players.AddRange(players);
+            if (kept.StartUtc < live.StartUtc) live.StartUtc = kept.StartUtc;
+            if (kept.EndUtc > live.EndUtc) live.EndUtc = kept.EndUtc;
         }
 
         public static string BossId(FoeId lead, DateTime startUtc) => "boss:" + lead + "@" + Minute(startUtc);
@@ -127,7 +193,7 @@ namespace Hearthwoven
             var seen = new HashSet<string>(v.Players.Select(x => x.Name), StringComparer.OrdinalIgnoreCase);
             var near = me == null ? Enumerable.Empty<string>() : me.Fights.Where(f => f.Near != null).SelectMany(f => f.Near.Where(kv => kv.Value >= BattleRecorder.NearSeconds).Select(kv => kv.Key));
             foreach (var name in near.Concat(g.Foes.SelectMany(f => f.DefeatedBy)).Distinct(StringComparer.OrdinalIgnoreCase))
-                if (sharers.Contains(name) && seen.Add(name)) v.Players.Add(new FightPlayer { Name = name, Has = false, NearSeconds = Near(name) });
+                if (sharers.Contains(name) && seen.Add(name)) v.Players.Add(new FightPlayer { Name = name, Has = false, Shares = true, NearSeconds = Near(name) });
         }
 
         static FightView RunView(GroupRun r, List<(GroupBoss b, FightView v)> bossViews, DateTime now, Func<string, string, string> placeName)

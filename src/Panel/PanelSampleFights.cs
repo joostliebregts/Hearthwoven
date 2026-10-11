@@ -47,6 +47,47 @@ namespace Hearthwoven.Panel
             return book;
         }
 
+        /// <summary>
+        /// 0.8.5: Brenna, one of Hildir's minibosses, through the real recorder and the fight adapter (not hand-made like the fights above): the game
+        /// does not flag her a boss (every hit says boss: false) and the recorder knows her by name (BattleRecorder.IsBoss), so her fight is a boss
+        /// fight. Rowan fights her for 2 min 40 s with three Skeletons and two Skeletons without a bow around her (one row: one name, FoeGroup) and
+        /// wins. <paramref name="name"/>: her name as the game gives it (the tests and the preview pass it with the game's color tags, which no
+        /// label may show: PanelRich.Untagged).
+        /// </summary>
+        public static PanelInput WithBrenna(PanelInput book, string name = "Brenna")
+        {
+            var now = book.NowUtc; var t0 = now.AddSeconds(-240);
+            const string Brenna = "Skeleton_Hildir", BrennaToken = "$enemy_skeletonfire";
+            var rec = new BattleRecorder();
+            var at = new Spot(812.5f, 34.25f, -1460.75f);
+            var boss = new FoeId(book.PlayerId, 9001);
+            HitData.DamageTypes D(float blunt = 0, float slash = 0, float fire = 0) => new HitData.DamageTypes { m_blunt = blunt, m_slash = slash, m_fire = fire };
+            for (int s = 0; s <= 160; s += 4)
+            {
+                rec.Dealt(t0.AddSeconds(s), boss, Brenna, BrennaToken, "BlackForest", D(blunt: 45), false, at);
+                if (s % 10 == 0) rec.BossSeen(t0.AddSeconds(s + 1), boss, Brenna, BrennaToken, Math.Max(0f, 1f - s / 165f), at);
+                if (s % 16 == 8) rec.Received(t0.AddSeconds(s + 2), boss, Brenna, BrennaToken, "BlackForest", D(fire: 28, slash: 12), false, at);
+            }
+            // her skeletons, near her: three with a bow, two without (the game names both "Skeleton")
+            var adds = new[] { "Skeleton", "Skeleton", "Skeleton", "Skeleton_NoArcher", "Skeleton_NoArcher" };
+            for (int i = 0; i < adds.Length; i++)
+            {
+                var id = new FoeId(book.PlayerId, (uint)(9100 + i)); var near = new Spot(at.X + 6 * i - 12, at.Y, at.Z + 4 * i - 8); var from = 20 + 25 * i;
+                rec.Dealt(t0.AddSeconds(from), id, adds[i], "$enemy_skeleton", "BlackForest", D(slash: 38), false, near);
+                rec.Received(t0.AddSeconds(from + 3), id, adds[i], "$enemy_skeleton", "BlackForest", D(slash: 11), false, near);
+                rec.Dealt(t0.AddSeconds(from + 6), id, adds[i], "$enemy_skeleton", "BlackForest", D(blunt: 52), false, near);
+                if (i == 4) continue;   // the last one got away
+                rec.Killed(t0.AddSeconds(from + 7), "$enemy_skeleton", 1); rec.Destroyed(t0.AddSeconds(from + 7.5), id);
+            }
+            rec.Killed(t0.AddSeconds(164), BrennaToken, 1); rec.Destroyed(t0.AddSeconds(164.5), boss);
+            rec.Tick(now);
+            book.Fights = FightAdapter.Build(new List<FightSide> { FightSide.Of(rec, book.PlayerName) }, null, null, now);
+            var names = book.DisplayName; var foe = book.Foe;
+            book.DisplayName = t => t == Brenna || t == BrennaToken ? name : t == "Skeleton" || t == "Skeleton_NoArcher" ? "Skeleton" : names?.Invoke(t);
+            book.Foe = p => p == Brenna ? new PanelModel.FoeData { Trophy = "TrophySkeletonHildir" } : p == "Skeleton" ? new PanelModel.FoeData { Trophy = "TrophySkeleton" } : foe?.Invoke(p);
+            return book;
+        }
+
         // ---------- the builders ----------
 
         static Dictionary<string, double> Types(string spec)

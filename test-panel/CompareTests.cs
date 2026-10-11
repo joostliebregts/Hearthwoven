@@ -101,7 +101,7 @@ static class CompareTests
         {
             var all = PanelModel.Build(two, Page(Chapter.Deeds, "woodcutting", TimeWindow.SinceInstall));
             var hour = PanelModel.Build(two, Page(Chapter.Battle, "damage", TimeWindow.LastHour));
-            Check(all.Compare.Disabled && all.CompareWhy == PanelModel.CompareNeedsDay && hour.Compare.Disabled && hour.CompareWhy == PanelModel.CompareNeedsDay && !all.Comparing,
+            Check(all.Compare.Disabled && Says(all, PanelModel.CompareNeedsDay) && hour.Compare.Disabled && Says(hour, PanelModel.CompareNeedsDay) && !all.Comparing,
                   "compare: All and the session's windows are greyed: Compare needs a day window");
             var month = PanelModel.Build(two, Page(Chapter.Deeds, "woodcutting", TimeWindow.ThirtyDays));
             Check(month.Compare.Disabled && !month.Comparing, "compare: 30 days against the 30 before reaches past the day rows the history keeps: greyed (" + month.CompareWhy + ")");
@@ -121,7 +121,7 @@ static class CompareTests
         // a page compared (Woodcutting): the hero carries the number before; the wood and the trees open into rows on one scale, every part of either period
         {
             var v = PanelModel.Build(two, Page(Chapter.Deeds, "woodcutting", TimeWindow.SevenDays));
-            var plate = PanelModel.PlateOf(v); var items = plate.Items;
+            var items = PanelModel.Content(v);   // wherever the page lays them out
             var hero = items.First(b => b.Kind == "hero");
             var wood = items.FirstOrDefault(b => b.Kind == PanelModel.CompareRowsKind && b.Title == "Wood brought in");
             var trees = items.FirstOrDefault(b => b.Kind == PanelModel.CompareRowsKind && b.Title == null && b.Items.Any(r => r.Id == "Beech"));
@@ -139,9 +139,9 @@ static class CompareTests
             Check(wood != null && wood.Items.All(r => r.Before != null && r.Change != null) && Math.Abs(max - 1) < 1e-4 && wood.Before != null
                   && wood.Items.All(r => Math.Abs(r.Fraction - PanelModel.Amount(r.Value) / wood.Items.Max(q => Math.Max(PanelModel.Amount(q.Value), PanelModel.Amount(q.Before)))) < 1e-3),
                   "compare: one scale per block: now and before are lengths of the block's largest number, solid and outline");
-            var line = PanelModel.AboutText(v).Split('\n')[0];   // 0.8 layout D+ (PageHead.cs): About these numbers' first line, not the plate's
-            Check(plate.Text == null && line.StartsWith("7 days, ") && line.Contains("against the 7 days before") && line.Contains(PanelModel.DayRange(today.AddDays(-13), today.AddDays(-7), today)),
-                  "compare: About these numbers' first line names both periods (" + line + ")");
+            var before = PanelModel.DayRange(today.AddDays(-13), today.AddDays(-7), today);
+            Check(Says(v, "7 days", before),
+                  "compare: one line of the page names both periods, these 7 days and the 7 before (" + before + "): " + Texts(v).FirstOrDefault(t => t.Contains(before)));
             var parts = new List<Block> { new Block { Kind = "plate", Items = new List<Block> { new Block { Kind = "composition", Title = "Wood brought in", Value = "15", Src = PanelModel.SrcPc,
                 Items = new List<Block> { new Block { Id = "a", Title = "Wood", Value = "10" }, new Block { Id = "b", Title = "Finewood", Value = "5" } } } } } };
             var was = new List<Block> { new Block { Kind = "plate", Items = new List<Block> { new Block { Kind = "composition", Title = "Wood brought in", Value = "12", Src = PanelModel.SrcPc,
@@ -262,6 +262,101 @@ static class CompareTests
                   members.Count > 1 && hero != null && !string.IsNullOrEmpty(hero.Before) &&
                   Math.Abs(rows.Items.Sum(r => PanelModel.Amount(r.Value)) - PanelModel.Amount(hero.Value)) < 1.5,
                   "compare + Everyone: Woodcutting greyed with the reason; Battle > Damage compares a row per player (" + string.Join(", ", members) + ") that add up to the group's hero, which gets its number before");
+        }
+        // 0.8.5 (proto/4-compare C): what to compare against. Each option's period before is the day history's own rows for that stretch: the
+        // wood brought in and the trees felled the compared page shows for it are the sums of those day rows, read here straight from the rows
+        {
+            var h = two.History; var first = h.FirstDay(today);
+            double Felled(DateTime d) => h.Rows.Where(r => r.IsDay && r.Start == d).Sum(r => r.Events.Felled.Values.Where(x => x > 0).Sum(x => (double)x));
+            double WoodOn(DateTime from, DateTime to) => h.Sum(from, to).Events.PickedUp.TryGetValue("$item_wood", out var x) ? x : 0;
+            // your best day, worked out from the rows: the day before today with the most trees felled, the latest on a tie
+            var best = Enumerable.Range(1, (today - first).Days).Select(k => today.AddDays(-k)).OrderByDescending(Felled).ThenByDescending(d => d).First();
+            PanelState With(TimeWindow w, string with) { var st = Page(Chapter.Deeds, "woodcutting", w); if (with != PanelModel.CompareLastId) st.CompareWith["Deeds/woodcutting"] = with; return st; }
+            var expect = new[] { (PanelModel.CompareLastId, today.AddDays(-1)), (PanelModel.CompareSameId, today.AddDays(-7)), (PanelModel.CompareBestId, best) };
+            var wrong = new List<string>();
+            foreach (var (with, day) in expect)
+            {
+                var v = PanelModel.Build(two, With(TimeWindow.Today, with)); var c = PanelModel.Content(v);
+                var hero = c.First(b => b.Kind == "hero"); var wood = c.FirstOrDefault(b => b.Kind == PanelModel.CompareRowsKind && b.Title == "Wood brought in");
+                var woodRow = wood?.Items.FirstOrDefault(r => r.Id == "$item_wood");
+                var periods = PanelModel.CompareOptionPeriods(two, With(TimeWindow.Today, with));
+                if (!v.Comparing || PanelModel.Amount(hero.Before) != Felled(day) || woodRow == null || PanelModel.Amount(woodRow.Before) != WoodOn(day, day) || periods[with]?.to != day)
+                    wrong.Add(with + ": " + hero.Before + " trees and " + woodRow?.Before + " wood, the rows hold " + Felled(day) + " and " + WoodOn(day, day) + " on " + day.ToString("d MMM"));
+            }
+            // a day made the best on purpose (99 trees, neither yesterday nor the same day last week) is the one your best day finds
+            var boosted = CompareTests.Scenario(now); var top = boosted.History.Rows.Last(r => r.IsDay && r.Start < today.AddDays(-1) && r.Start != today.AddDays(-7)); top.Events.Felled["Beech"] = 99;
+            var found = PanelModel.CompareOptionPeriods(boosted, With(TimeWindow.Today, PanelModel.CompareBestId));
+            if (found[PanelModel.CompareBestId]?.to != top.Start) wrong.Add("the boosted day " + top.Start.ToString("d MMM") + " was not found: " + found[PanelModel.CompareBestId]?.to.ToString("d MMM"));
+            Check(wrong.Count == 0 && Felled(best) > 0, "compare options: yesterday, the same day last week (" + today.AddDays(-7).ToString("d MMM") + ") and your best day (" + best.ToString("d MMM") + ", " + Felled(best) +
+                  " trees felled) each set the day history's own numbers for that day beside today" + (wrong.Count > 0 ? " (" + string.Join("; ", wrong) + ")" : ""));
+
+            // the words follow the choice: the pair in the title, the legend in the strip, the number before's label and the column head
+            var y = PanelModel.Build(two, With(TimeWindow.Today, PanelModel.CompareLastId));
+            var b = PanelModel.Build(two, With(TimeWindow.Today, PanelModel.CompareBestId));
+            var bc = PanelModel.Content(b);
+            var w7 = PanelModel.Build(two, With(TimeWindow.SevenDays, PanelModel.CompareLastId));
+            Check(y.HeadingWindow == "today against yesterday" && y.CompareNow == "today" && y.CompareThen == "yesterday" &&
+                  b.HeadingWindow == "today against your best day" && b.CompareThen == "your best day, " + best.ToString("ddd ") + PanelModel.ShortDate(best, today) &&
+                  bc.First(x => x.Kind == "hero").BeforeLabel == "on your best day" && bc.Where(x => x.Kind == PanelModel.CompareRowsKind).All(x => x.NowHead == "today" && x.BeforeHead == "best day") &&
+                  w7.HeadingWindow == "last 7 days against the 7 before" && w7.CompareNow == "these 7 days" && w7.CompareThen == "the 7 before" &&
+                  PanelModel.HeadingLines("Woodcutting", b.HeadingWindow) == ("Woodcutting, today", "against your best day"),
+                  "compare options: the title (\"" + b.HeadingWindow + "\"), the strip's legend (\"" + b.CompareThen + "\"), the number before's label and the column heads all name the choice");
+
+            // an option the history does not reach greys with its reason; chosen anyway, the page sets the stretch just before beside it
+            var same7 = PanelModel.Build(two, With(TimeWindow.SevenDays, PanelModel.CompareSameId));
+            var opened = With(TimeWindow.SevenDays, PanelModel.CompareSameId); PanelModel.Follow(opened, PanelModel.CompareMenuTarget);
+            var menu = PanelModel.Build(two, opened).CompareMenu;
+            var row = menu?.Items.FirstOrDefault(i => i.Id == PanelModel.CompareSameId);
+            var opens = first.AddDays(28 + 6);
+            var bare = CompareTests.Scenario(now); foreach (var r in bare.History.Rows.Where(r => r.IsDay && r.Start < today)) { r.Events.Felled.Clear(); r.Events.ChopHits.Clear(); r.Game.Remove("Tree"); }   // no tree felled, no axe hit
+            var none = PanelModel.CompareOptionPeriods(bare, With(TimeWindow.Today, PanelModel.CompareBestId));
+            var noneMenu = PanelModel.Build(bare, ((Func<PanelState>)(() => { var st = With(TimeWindow.Today, PanelModel.CompareBestId); st.CompareMenu = true; return st; }))()).CompareMenu;
+            Check(same7.Comparing && same7.HeadingWindow == "last 7 days against the 7 before" && row != null && row.Tone == PanelModel.OffTone && row.Text == "opens " + PanelModel.ShortDate(opens, today) && row.Note == null &&
+                  none.ContainsKey(PanelModel.CompareBestId) && none[PanelModel.CompareBestId] == null && noneMenu.Items.First(i => i.Id == PanelModel.CompareBestId).Text == "none yet",
+                  "compare options: the same 7 days last month reaches past a two-week history: greyed (\"" + row?.Text + "\"), and chosen the page shows the 7 before; your best day with no woodcutting before today: \"" +
+                  noneMenu?.Items.FirstOrDefault(i => i.Id == PanelModel.CompareBestId)?.Text + "\" (" + same7.HeadingWindow + ", " + (none.TryGetValue(PanelModel.CompareBestId, out var nb) ? nb?.to.ToString("d MMM") ?? "greyed" : "absent") + ")");
+
+            // the menu: the chip opens it; the keys walk it past a greyed option and pick; Off turns Compare off; each page keeps its own choice
+            var s = Page(Chapter.Deeds, "woodcutting", TimeWindow.SevenDays);
+            var v0 = PanelModel.Build(two, s);
+            PanelModel.CompareKeyPressed(s, v0);
+            var m = PanelModel.Build(two, s);
+            var ids = m.CompareMenu?.Items.Select(i => i.Id).ToList() ?? new List<string>();
+            var onLast = m.CompareMenu?.Items.FindIndex(i => i.Open) == 0;
+            PanelModel.CompareMenuStep(s, m, 1); var m2 = PanelModel.Build(two, s);
+            var skipped = m2.CompareMenu?.Items.FindIndex(i => i.Open) == 2;   // the same 7 days last month is greyed: the keys go on to your best 7 days
+            PanelModel.CompareMenuChoose(s, m2); var picked = PanelModel.Build(two, s);
+            var mining = PanelModel.Build(two, Page(Chapter.Deeds, "mining", TimeWindow.SevenDays));
+            var back = new PanelState(); PanelPrefs.Apply(PanelPrefs.ToJson(s), back);
+            PanelModel.Follow(s, PanelModel.ComparePickLink("Deeds/woodcutting", PanelModel.CompareOffId));
+            var offNow = PanelModel.Build(two, s);
+            Check(ids.SequenceEqual(new[] { PanelModel.CompareLastId, PanelModel.CompareSameId, PanelModel.CompareBestId, PanelModel.CompareOffId }) && onLast && skipped &&
+                  !s.CompareMenu && picked.CompareMenu == null && picked.HeadingWindow == "last 7 days against your best 7 days" && mining.HeadingWindow == "last 7 days against the 7 before" &&
+                  back.CompareWith.TryGetValue("Deeds/woodcutting", out var kept) && kept == PanelModel.CompareBestId && !offNow.Comparing && !s.Compare,
+                  "compare menu: the key opens it on the choice now, W/S skip the greyed option, Enter picks your best 7 days for Woodcutting only (Mining keeps the 7 before), PanelPrefs keeps it, Off turns Compare off");
+
+            // a click outside the open menu only closes it: the choice, the page and the window stay, and a second one never opens it again (the chip toggles)
+            var o = With(TimeWindow.Today, PanelModel.CompareBestId); o.Compare = true; PanelModel.Follow(o, PanelModel.CompareMenuTarget);
+            var openMenu = PanelModel.Build(two, o).CompareMenu != null;
+            PanelModel.Follow(o, PanelModel.CompareCloseTarget); var shut = PanelModel.Build(two, o);
+            PanelModel.Follow(o, PanelModel.CompareCloseTarget);
+            Check(openMenu && shut.CompareMenu == null && !o.CompareMenu && o.Compare && o.CompareWith["Deeds/woodcutting"] == PanelModel.CompareBestId && shut.Page == "woodcutting" && o.Window == TimeWindow.Today &&
+                  shut.HeadingWindow == "today against your best day",
+                  "compare menu: a click outside closes it and changes nothing else (still \"" + shut.HeadingWindow + "\"); a second one leaves it shut");
+
+            // greyed in a day window: the chip says when it opens and its reason is one line in the strip (no tag over the page); on All the tag stays
+            var young = PanelSample.Full(now); young.History.From = today.AddDays(-7);
+            var g = PanelModel.Build(young, ((Func<PanelState>)(() => { var st = Page(Chapter.Deeds, "woodcutting", TimeWindow.SevenDays); st.CompareTip = true; return st; }))());
+            var all = PanelModel.Build(young, ((Func<PanelState>)(() => { var st = Page(Chapter.Deeds, "woodcutting", TimeWindow.SinceInstall); st.CompareTip = true; return st; }))());
+            Check(g.Compare.Disabled && g.Compare.Label == "Compare opens " + PanelModel.ShortDate(today.AddDays(6), today) && g.CompareNote != null && !g.CompareNote.StartsWith("Compare opens") &&
+                  g.CompareNote.Contains("14 full days") && g.CompareNote.Contains(PanelModel.ShortDate(today.AddDays(-7), today)) && !g.CompareTip && all.Compare.Label == "Compare" && all.CompareNote == null && all.CompareTip,
+                  "compare greyed: in 7 days the chip reads \"" + g.Compare.Label + "\" and the strip says why (\"" + g.CompareNote + "\"); on All the chip keeps its tag");
+
+            // your best day builds the page once per day of the history, once: the 2 s redraws and a second look reuse it
+            var bs = With(TimeWindow.Today, PanelModel.CompareBestId);
+            PanelModel.Build(two, bs); var d0 = PanelModel.CompareDayBuilds;
+            for (int k = 0; k < 3; k++) PanelModel.Build(two, bs);
+            Check(d0 > 0 && PanelModel.CompareDayBuilds == d0, "compare options: your best day is found once per page, not on every redraw");
         }
         return fails;
     }

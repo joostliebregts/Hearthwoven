@@ -51,6 +51,7 @@ namespace Hearthwoven.Panel
                 islands.Add(all); return islands;
             }
             var strip = (plate.Items ?? new List<Block>()).Any(b => b.Kind == "featband") ? TopSwitch(plate) : null;   // its chips ride in the strip
+            var together = (plate.Items ?? new List<Block>()).Any(b => b.Kind == "together");   // 0.8.5: its About button and box ride in its key row
             var head = new List<IslandPart>();
             Island sorted = null; var joinNext = false;   // a sorted list: its group headings and their grids stay in the island of its sort row
 
@@ -78,11 +79,12 @@ namespace Hearthwoven.Panel
                         case "featband": case "headlink": case "divider": continue;   // the strip, the heading row's chip; no divider lines (Joost, part 4)
                         case "ladders" when IsHeadStrip(b): continue;   // the page's own skill: a chip in the heading row
                         case "aboutnumbers":   // its button rides in the strip; open, its box, a row of its own
-                            if (b.Open) { var box = new Island { Span = IslandPlain }; box.Parts.Add(part); islands.Add(box); }
+                            if (b.Open && !together) { var box = new Island { Span = IslandPlain }; box.Parts.Add(part); islands.Add(box); }   // Together draws its box under its key row (CompanyUi.TogetherScope)
                             continue;
                         case "section": case "sort": head.Add(part); continue;
                         case "filterbar":   // the head line of what it filters: the island of its bars, or with none shown the next island; the battle
                                             // feed's its own island (it filters every fight, and each fight is an island of its own)
+                            if (head.Count == 0 && b.Tone == "inline" && FiltersStripAbove(islands.LastOrDefault(), b)) { islands[islands.Count - 1].Parts.Add(part); continue; }   // 0.8.5: the Overview's tiles' line, in their island
                             if ((b.Items ?? new List<Block>()).Any(x => x.Kind == "facetbar" && x.Tone != "hidden") || b.Open || b.Id == FeedFilter) Put(IslandWide, part); else head.Add(part);
                             continue;
                         case FeedLineKind: Put(IslandPlain, part); continue;   // the battle feed: the quiet time between two fight islands, what is left out, outside them
@@ -114,6 +116,14 @@ namespace Hearthwoven.Panel
                                 else Put(head.Count > 0 ? IslandWide : IslandPlain, part);
                                 continue;
                             }
+                        case "guard" when head.Count == 0 && b.Tone == GuardLineTone && islands.Count > 0 && islands[islands.Count - 1].Span == IslandWide && islands[islands.Count - 1].Parts.Count > 0 && islands[islands.Count - 1].Parts[islands[islands.Count - 1].Parts.Count - 1].Block.Tone == OneRowTone:
+                            islands[islands.Count - 1].Parts.Add(part); continue;   // 0.8.5: the overview's blocks and parries end What hurt you's island
+                        case SumKind:   // 0.8.5 the cargo sum works out a part of the bar above it: it ends that bar's island, a half one too
+                            {
+                                var last = islands.LastOrDefault();
+                                if (head.Count == 0 && last != null && last.Span != IslandPlain) last.Parts.Add(part); else Put(IslandWide, part);
+                                continue;
+                            }
                         case "empty": case "link": Put(head.Count > 0 ? IslandWide : IslandPlain, part); continue;
                         case "dmgmix":   // 0.8 damage rows: By weapon's weapons are one list in one island, as By foe's foes and By type's types
                             {
@@ -122,7 +132,7 @@ namespace Hearthwoven.Panel
                                 else Put(IslandWide, part);
                                 continue;
                             }
-                        case "composition": Put(HalfLegend(b.Items) ? IslandHalf : IslandWide, part); continue;
+                        case "composition": Put(b.Tone != OneRowTone && HalfLegend(b.Items) ? IslandHalf : IslandWide, part); continue;   // one damage row: as wide as its island
                         case "ranking": Put((b.Items?.Count ?? 0) <= IslandHalfRows ? IslandHalf : IslandWide, part); continue;
                         default: Put(IslandWide, part); continue;
                     }
@@ -141,6 +151,11 @@ namespace Hearthwoven.Panel
             }
             return islands;
         }
+
+        /// <summary>0.8.5 (Battle > Overview, variant A): an inline filter whose choices are the tiles of the strip just above it (the strip carries the
+        /// filter's id) is that island's last line, not a row of its own.</summary>
+        static bool FiltersStripAbove(Island last, Block filter) =>
+            last != null && last.Span == IslandWide && last.Parts.Count > 0 && last.Parts[last.Parts.Count - 1].Block.Kind == "biomes" && !string.IsNullOrEmpty(filter.Id) && last.Parts[last.Parts.Count - 1].Block.Id == filter.Id;
 
         /// <summary>A legend short enough for a half island: four parts or fewer, none patterned (the grain and groundwork bars want the width).</summary>
         public static bool HalfLegend(List<Block> parts)

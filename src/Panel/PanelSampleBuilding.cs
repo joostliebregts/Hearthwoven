@@ -31,6 +31,10 @@ namespace Hearthwoven.Panel
         };
 
         static readonly Dictionary<string, string> Tabs = new Dictionary<string, string>(), Materials = new Dictionary<string, string>();
+        /// <summary>A piece's hammer tab and main material as the game data names them on every PC (0.8.5: the fellows' books and what they share per
+        /// day sort their pieces as Rowan's book does); null for a piece the sample does not know.</summary>
+        public static string TabOf(string token) => token != null && Tabs.TryGetValue(token, out var tab) ? tab : null;
+        public static string MaterialOf(string token) => token != null && Materials.TryGetValue(token, out var m) ? m : null;
 
         /// <summary>Rowan's hall in the placed-pieces counter and its baseline, with the names, tabs and materials the panel reads.</summary>
         public static void Hall(PanelInput full)

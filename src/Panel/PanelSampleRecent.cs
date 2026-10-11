@@ -9,8 +9,10 @@ namespace Hearthwoven.Panel
     /// rest of the sample world so nothing can drift: what the session did IS today's row of the day history (SampleWorld.History), spread over
     /// the session's minutes, a little more of it towards the end (so the last ten minutes hold a handful of things). The kills per foe (which
     /// have no days) are today's kill count shared over the foes the character fought. Deterministic (seeded by the player id).
-    /// The fellows' copies (B33): what reached Rowan's PC from them while Rowan played (Fellows: a trail whose growth is each one's shared session
-    /// tally, most of it early, a little in the last ten minutes); Edda and Finch with live updates, Tor on full copies only.
+    /// The fellows' copies (B33): what reached Rowan's PC from them while Rowan played (Fellows: a trail whose growth is what each one did this
+    /// session, most of it early, a little in the last ten minutes); Edda and Finch with live updates, Tor on full copies only. 0.8.5: their
+    /// session is today's row of their own day history, as an own book's is, so their 10 min to Session sit inside their Today (which their
+    /// copy now shares per day); before, it was their shared session tally, everything since install in this sample.
     /// </summary>
     public static class RecentSample
     {
@@ -18,8 +20,10 @@ namespace Hearthwoven.Panel
         public static readonly string[] Timed = { "Edda", "Finch" };
 
         /// <summary>Each fellow copy of <paramref name="self"/>'s book gets the trail Rowan's PC would have kept: the first copy 20 s after the
-        /// session began (their totals less what they did this session), then 80 % of it 25 minutes ago, 95 % 5 minutes ago, all of it a minute ago.</summary>
-        public static void Fellows(PanelInput self)
+        /// session began (their totals less what they did this session), then 80 % of it 25 minutes ago, 95 % 5 minutes ago, all of it a minute ago.
+        /// What they did this session: <paramref name="todayOf"/> (their own today's row: the event families, pieces placed, plants and fish picked,
+        /// the counters Recent reads), else their shared session tally.</summary>
+        public static void Fellows(PanelInput self, Func<string, DayHistory.Row> todayOf = null)
         {
             if (self?.Fellows == null || !self.SessionStartUtc.HasValue) return;
             foreach (var f in self.Fellows)
@@ -27,8 +31,18 @@ namespace Hearthwoven.Panel
                 if (f == null || f.IsSelf || f.Trail != null) continue;
                 var now = FellowTrail.Flat(f);
                 var grew = new Dictionary<string, float>();
-                foreach (var fam in (f.SessionOnly ?? new SessionEvents()).Named())
+                var today = todayOf?.Invoke(f.PlayerName);
+                foreach (var fam in (today?.Events ?? f.SessionOnly ?? new SessionEvents()).Named())
                     if (Array.IndexOf(DeedLog.EventFamilies, fam.Key) >= 0) foreach (var t in fam.Value) if (t.Value > 0) grew[fam.Key + "|" + t.Key] = t.Value;
+                if (today != null)
+                {
+                    foreach (var kv in DayHistory.Family(today.Game, DayHistory.PlacedPrefix)) if (kv.Value > 0) grew[DeedLog.Placed + "|" + kv.Key] = kv.Value;
+                    foreach (var kv in DayHistory.Family(today.Game, DayHistory.PickedPrefix)) if (kv.Value > 0) grew[DeedLog.Picked + "|" + kv.Key] = kv.Value;
+                    foreach (var stat in DeedLog.CounterStats) if (today.Game.TryGetValue(stat, out var v) && v > 0) grew[DeedLog.Counters + "|" + stat] = v;
+                    var cargo = today.Events.CargoMeters.Values.Sum();   // 0.8.5: their cargo this session, all items (DeedLog.CargoTotal)
+                    if (cargo > 0) grew[DeedLog.Counters + "|" + DeedLog.CargoTotal] = cargo;
+                    foreach (var k in grew.Keys.Where(k => !now.ContainsKey(k)).ToList()) grew.Remove(k);   // only what their copy counts
+                }
                 Dictionary<string, float> At(float part) => now.ToDictionary(kv => kv.Key, kv => kv.Value - (grew.TryGetValue(kv.Key, out var g) ? (float)Math.Round(g * (1 - part)) : 0f));   // whole things: a tree is felled or not
                 var t0 = self.SessionStartUtc.Value.AddSeconds(20);
                 var trail = new FellowTrail(At(0f), f.SharedSinceInstall, t0);

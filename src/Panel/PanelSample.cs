@@ -132,6 +132,7 @@ namespace Hearthwoven.Panel
         {
             ["FishingBait"] = "Fishing Bait", ["HelmetHat1"] = "Hat", ["TinOre"] = "Tin Ore", ["Wood"] = "Wood", ["BlackMetalScrap"] = "Black Metal Scrap",
             ["Coal"] = "Coal", ["smelter"] = "Smelter", ["blastfurnace"] = "Blast Furnace", ["charcoal_kiln"] = "Charcoal Kiln",
+            ["Softtissue"] = "Soft Tissue", ["eitrrefinery"] = "Eitr Refinery",
         };
 
         /// <summary>The sample evening plus the numbers the Voyages and Hall pages show (fictional, after the prototypes).</summary>
@@ -301,7 +302,7 @@ namespace Hearthwoven.Panel
 
         public static readonly Dictionary<string, string> BattleNames = new Dictionary<string, string>
         {
-            ["Troll"] = "Troll", ["Greydwarf"] = "Greydwarf", ["Greydwarf_Elite"] = "Greydwarf Brute", ["Draugr"] = "Draugr", ["Boar"] = "Boar", ["Neck"] = "Neck",
+            ["Troll"] = "Troll", ["Greydwarf"] = "Greydwarf", ["Greydwarf_Elite"] = "Greydwarf Brute", ["Draugr"] = "Draugr", ["Draugr_Ranged"] = "Draugr", ["Boar"] = "Boar", ["Neck"] = "Neck",
             ["Leech"] = "Leech", ["Blob"] = "Blob", ["Greydwarf_Shaman"] = "Greydwarf Shaman", ["ArrowWood"] = "Wood Arrow", ["ArrowFire"] = "Fire Arrow", ["ArrowFrost"] = "Frost Arrow",
             ["ArrowNeedle"] = "Needle Arrow", ["ArrowPoison"] = "Poison Arrow", ["ArrowSilver"] = "Silver Arrow", ["ArrowCarapace"] = "Carapace Arrow",
             // the Foes ranking's bolts and weapons (0.7)
@@ -315,11 +316,21 @@ namespace Hearthwoven.Panel
         static readonly Dictionary<string, (string trophy, string mods)> BattleFoes = new Dictionary<string, (string, string)>
         {
             ["Troll"] = ("TrophyFrostTroll", "pierce:w blunt:r spirit:i"), ["Greydwarf"] = ("TrophyGreydwarf", "fire:w poison:r spirit:i"),
-            ["Greydwarf_Elite"] = ("TrophyGreydwarfBrute", "fire:w poison:r spirit:i"), ["Draugr"] = ("TrophyDraugr", "fire:r poison:i"),
+            ["Greydwarf_Elite"] = ("TrophyGreydwarfBrute", "fire:w poison:r spirit:i"), ["Draugr"] = ("TrophyDraugr", "fire:r poison:i"), ["Draugr_Ranged"] = ("TrophyDraugr", "fire:r poison:i"),
             ["Leech"] = ("TrophyLeech", "poison:r fire:i spirit:i"), ["Blob"] = ("TrophyBlob", "blunt:w frost:w lightning:w slash:r pierce:r fire:r poison:i"),
             ["Boar"] = ("TrophyBoar", "spirit:i"), ["Neck"] = ("TrophyNeck", "fire:w poison:r spirit:i"),
             ["Greydwarf_Shaman"] = ("TrophyGreydwarfShaman", "fire:w poison:r spirit:i"),   // only in the long-name case (REVIEW-081 #7)
         };
+
+        /// <summary>0.8.5: the sample's creatures that share a game name (as GameData reads the game's own, PanelModel.FoeKinOf): the ranged Draugr is a
+        /// Draugr, the Skeleton without a bow a Skeleton, the Fuling archer a Fuling, and Brenna's raid copy Brenna.</summary>
+        static readonly Dictionary<string, string> SampleKin = PanelModel.FoeKinOf(new Dictionary<string, string>
+        {
+            ["Draugr"] = "Draugr", ["Draugr_Ranged"] = "Draugr", ["Draugr_Elite"] = "Draugr Elite", ["Skeleton"] = "Skeleton", ["Skeleton_NoArcher"] = "Skeleton",
+            ["Goblin"] = "Fuling", ["GoblinArcher"] = "Fuling", ["Greydwarf"] = "Greydwarf", ["Greydwarf_Elite"] = "Greydwarf Brute",
+            ["Skeleton_Hildir"] = "Brenna", ["Skeleton_Hildir_nochest"] = "Brenna",
+        });
+        public static string SampleFoeKin(string prefab) => prefab != null && SampleKin.TryGetValue(prefab, out var k) ? k : null;
 
         public static PanelModel.FoeData SampleFoe(string prefab)
         {
@@ -418,7 +429,7 @@ namespace Hearthwoven.Panel
                 ItemsCrafted = new Dictionary<string, float> { ["$item_arrow_wood"] = 10, ["$item_arrow_fire"] = 4, ["$item_arrow_frost"] = 3, ["$item_arrow_needle"] = 2 },
                 ItemsPickedUp = new Dictionary<string, float> { ["$item_arrow_poison"] = 20 },
                 DisplayName = p => BattleNames.TryGetValue(p, out var n) ? n : null,
-                Foe = SampleFoe, Arrows = SampleArrows,
+                Foe = SampleFoe, FoeKin = SampleFoeKin, Arrows = SampleArrows,
             };
         }
 
@@ -475,7 +486,7 @@ namespace Hearthwoven.Panel
             full.DamageSinceInstall = SinceInstall(battle.Log);
             foreach (var kv in battle.ItemsCrafted) full.ItemsCrafted[kv.Key] = Math.Max(kv.Value, full.ItemsCrafted.TryGetValue(kv.Key, out var c) ? c : 0f);
             foreach (var kv in battle.ItemsPickedUp) full.ItemsPickedUp[kv.Key] = kv.Value;
-            full.Foe = SampleFoe; full.Arrows = SampleArrows; full.RecipeKnown = t => SampleRecipes.Contains(t);   // the arrows a Mistlands character knows
+            full.Foe = SampleFoe; full.FoeKin = SampleFoeKin; full.Arrows = SampleArrows; full.RecipeKnown = t => SampleRecipes.Contains(t);   // the arrows a Mistlands character knows
             full.Gear = SampleGear; full.Owned = t => SampleOwned.Contains(t);   // the Foes ranking (0.7): bolts, weapons, what you carry
             var deedsName = full.DisplayName;
             full.DisplayName = t => t != null && BattleNames.TryGetValue(t, out var n) ? n : deedsName(t);

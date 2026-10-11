@@ -88,9 +88,10 @@ namespace Hearthwoven.Panel
             };
             // per damage type, and per foe when the window knows who hit you (the minute buckets keep no source): a foe's types in the book's order,
             // each with what reached your armor and what got through
-            double Of(Dictionary<string, float> d, string source, string ty) => d.Where(kv => TypeOf(kv.Key) == ty && (source == null || SourceOf(kv.Key) == source)).Sum(kv => (double)kv.Value);
+            // 0.8.5: a foe by the game's name (FoeGroup): the ranged Draugr's hits are the Draugr's
+            double Of(Dictionary<string, float> d, string source, string ty) => d.Where(kv => TypeOf(kv.Key) == ty && (source == null || FoeGroup(input, SourceOf(kv.Key)) == source)).Sum(kv => (double)kv.Value);
             var byType = BattleTypes.Select(ty => (ty, b: Of(t.Before, null, ty), a: Of(t.After, null, ty))).Where(x => x.b > 0).OrderByDescending(x => x.b).ToList();
-            var foes = t.Before.Keys.Select(SourceOf).Where(s => s.Length > 0).Distinct()
+            var foes = t.Before.Keys.Select(SourceOf).Where(s => s.Length > 0).Select(s => FoeGroup(input, s)).Distinct()
                 .Select(s => (s, types: BattleTypes.Select(ty => (ty, before: Of(t.Before, s, ty), after: Of(t.After, s, ty))).Where(x => x.before > 0 || x.after > 0).ToList()))
                 .Select(x => (x.s, x.types, b: x.types.Sum(y => y.before))).Where(x => x.b > 0)
                 .OrderByDescending(x => x.b).ThenBy(x => x.s, StringComparer.Ordinal).Take(RowTop).ToList();

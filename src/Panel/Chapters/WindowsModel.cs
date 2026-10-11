@@ -17,8 +17,11 @@ namespace Hearthwoven.Panel
     public static partial class PanelModel
     {
         /// <summary>What a day window's copy of the input holds (PanelInput.Window): the window, its first and last local day, and whether a
-        /// row of it was clipped (MaxRowKeys) so a list may miss its smallest kinds.</summary>
-        public class DayView { public TimeWindow Window; public DateTime From, To; public bool Clipped; public bool Short => IsShortWindow(Window); }
+        /// row of it was clipped (MaxRowKeys) so a list may miss its smallest kinds. Shared (0.8.5): a fellow's day window from what their copy
+        /// shares per day (FellowDeedsWindow: family -> part -> amount), so a page leaves out the lists those parts cannot fill; null otherwise.
+        /// Whole (0.8.5): the book the window was cut from (its fellows, its all-time records), for a list a page draws from other players'
+        /// days (Cooking's Who enjoyed, FoodBookIn); null when not known.</summary>
+        public class DayView { public TimeWindow Window; public DateTime From, To; public bool Clipped; public Dictionary<string, Dictionary<string, double>> Shared; public PanelInput Whole; public bool Short => IsShortWindow(Window); }
 
         public static readonly TimeWindow[] ShortWindows = { TimeWindow.LastTenMinutes, TimeWindow.LastThirtyMinutes, TimeWindow.LastHour, TimeWindow.LastThreeHours, TimeWindow.Session };
         public static readonly TimeWindow[] DayWindows = { TimeWindow.Today, TimeWindow.SevenDays, TimeWindow.ThirtyDays };
@@ -124,12 +127,55 @@ namespace Hearthwoven.Panel
             return shown;
         }
 
-        /// <summary>A Deeds window on this book: a short one (10 min .. Session) needs your own DeedLog, so a fellow's copy shows it greyed (their
-        /// Session is not their deeds per minute); the day windows and All as WindowOpen.</summary>
-        public static bool DeedsWindowOpen(PanelInput input, TimeWindow w) => IsShortWindow(w) ? input != null && input.IsSelf : WindowOpen(input, w);
+        /// <summary>
+        /// A Deeds window on this book. Yours: a short one (10 min .. Session) from your DeedLog, the day windows and All as WindowOpen. A fellow's
+        /// (0.8.5): Session from what reached this PC from them while you played (their trail, as Recent and Everyone read it), 10 min to 3 h while
+        /// their copy is live (FellowLive, Battle's rule), the day windows when their copy shares Deeds days (FellowDeedsOpen), All as before.
+        /// </summary>
+        public static bool DeedsWindowOpen(PanelInput input, TimeWindow w)
+        {
+            if (input == null) return false;
+            if (input.IsSelf) return IsShortWindow(w) ? true : WindowOpen(input, w);
+            if (w == TimeWindow.Session) return true;
+            if (IsShortWindow(w)) return FellowLive(input);
+            return IsDayWindow(w) ? FellowDeedsOpen(input, w) : WindowOpen(input, w);
+        }
 
-        /// <summary>Why a fellow's Deeds window chips are greyed, in one line (as Battle's SharedWindowsLine).</summary>
-        public static string DeedsWindowsLine(PanelInput input) => Name(input) + " shares totals only, not days or minutes";
+        /// <summary>
+        /// Why a fellow's Deeds window chips are greyed, in one line (as Battle's SharedWindowsLine): 10 min to 3 h while they do not play
+        /// (FellowShortWhy), their days when their copy shares none (an older Hearthwoven: OlderLine), All when
+        /// their copy carries no totals. <paramref name="page"/>: the Deeds page (Meals and Taming have no short windows); null when nothing
+        /// is greyed.
+        /// </summary>
+        public static string DeedsWindowsLine(PanelInput input, string page = null)
+        {
+            if (input == null || input.IsSelf) return null;
+            var parts = new List<string>();
+            var offered = page == null ? AllWindows : WindowsOf(Chapter.Deeds, page) ?? DayAndAll;
+            if (offered.Any(w => IsShortWindow(w) && w != TimeWindow.Session)) parts.Add(FellowShortWhy(input));
+            if (input.DayDeeds == null) parts.Add(OlderThan(input, NeedsDayDeeds) ? OlderLine(input, "Today, 7 days and 30 days fill in") : Name(input) + "'s days are not shared.");
+            if (!input.SharedSinceInstall) parts.Add(Name(input) + "'s totals are not shared.");
+            var line = string.Join(" ", parts.Where(p => p != null).ToArray());
+            return line.Length == 0 ? null : line;
+        }
+
+        /// <summary>A window of Voyages > Sailing or Cargo on this book: yours as WindowOpen; a fellow's day windows (0.8.5) when their copy shares
+        /// voyage days, read as their Everyone row reads them (VoyageDays); All as before.</summary>
+        public static bool VoyagesWindowOpen(PanelInput input, TimeWindow w) =>
+            input != null && (input.IsSelf || !IsDayWindow(w) ? WindowOpen(input, w) : input.DayVoyages && input.DayDeeds != null);
+
+        /// <summary>Why a fellow's Sailing and Cargo window chips are greyed, in one line (as DeedsWindowsLine): their days when their copy shares no
+        /// voyage days (an older Hearthwoven or the 0.8.5 test build: OlderLine, never "sailed nothing"), All when it carries no totals; null when
+        /// nothing is greyed.</summary>
+        public static string VoyagesWindowsLine(PanelInput input)
+        {
+            if (input == null || input.IsSelf) return null;
+            var parts = new List<string>();
+            if (!VoyagesWindowOpen(input, TimeWindow.Today))
+                parts.Add(input.DayDeeds != null || OlderThan(input, NeedsDayDeeds) ? OlderLine(input, "Today, 7 days and 30 days fill in") : Name(input) + "'s days are not shared.");
+            if (!input.SharedSinceInstall) parts.Add(Name(input) + "'s totals are not shared.");
+            return parts.Count == 0 ? null : string.Join(" ", parts.ToArray());
+        }
 
         /// <summary>
         /// A copy of your input that holds a day window instead of the totals: Events, DamageSinceInstall, BiomeSinceInstall and the game's
@@ -149,7 +195,8 @@ namespace Hearthwoven.Panel
             c.EnemyKills = null;   // the kills per foe (the bosses on the strip) have no days: only the game's kill counter's growth is kept
             c.ItemsPickedUp = new Dictionary<string, float>(row.Events.PickedUp);
             c.Baseline = null; c.ExactAtBaseline = null; c.BaselineAt = null; c.Book = null;
-            c.Window = new DayView { Window = w, From = from, To = today, Clipped = row.Clipped };
+            c.Window = new DayView { Window = w, From = from, To = today, Clipped = row.Clipped, Whole = input };
+            c.DealtArmourSince = DealtLedgerIn(input, w);   // 0.8.5: the dealt ledger's same days (DamageSinceInstallRows reads it beside the day's damage)
             return c;
         }
 

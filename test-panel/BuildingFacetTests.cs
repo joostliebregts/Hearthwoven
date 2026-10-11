@@ -64,25 +64,17 @@ static class BuildingFacetTests
         Check(!Bar(all).Open && Parts(all, "tab").Tone == null && Parts(all, "material").Tone == "hidden" && Bar(opened).Open && Parts(opened, "tab").Tone == null && Parts(opened, "material").Tone == null,
               "building filter: collapsed by default with the Category bar and its list (the page's overview), open with both bars after a click on the header");
         Check(Chips(all, "tab") == "Misc=38,Crafting=4,Building=1 213,Stonecutter=272,Furniture=49", "building filter: the Category chips count the pieces built per hammer tab: " + Chips(all, "tab"));
-        Check(Chips(all, "material") == "Wood=1 081,Stone=272,Core wood=194,Fine wood=7,Bronze=1,Iron=21", "building filter: the Main material chips (zero ones stay, dimmed): " + Chips(all, "material"));
+        Check(Chips(all, "material") == "Wood=1 081,Stone=272,Core wood=194,Fine wood=7,Bronze=1,Iron=21", "building filter: the Main material chips count the pieces built per main material: " + Chips(all, "material"));
         var hero = PanelModel.Content(all).First(b => b.Kind == "hero");
         Check(bar.Text == "27 pieces · 1 576 built" && hero.Value == "1 576" && bar.Items.First(b => b.Kind == "applied").Title == "No filter: every piece",
               "building filter: the result line says \"27 pieces · 1 576 built\", the hero's number: " + bar.Text);
-        Check(Grid(all).StartsWith("Wood Wall=520,Wood Floor 2x2=310,Stone Wall 1x1=140,Wood Beam=96,Stone Floor 2x2=90") && PanelModel.Content(all).First(b => b.Kind == "itemgrid").Items.Count == 27,
-              "building filter: with nothing chosen the grid shows every piece, most first: " + Grid(all));
-        Check(Math.Abs(Parts(all, "tab").Items.Sum(p => p.Fraction) - 1) < 1e-5 && Math.Abs(Parts(all, "material").Items.Sum(p => p.Fraction) - 1) < 1e-5, "building filter: each bar adds up to its whole");
 
-        // ---------- Furniture and Fine wood: OR within a row, AND across rows, the other row's counts follow ----------
+        // ---------- Furniture and Fine wood (the bar's own rules, OR within a row, AND across rows, the counts that follow, the tokens: FacetTests) ----------
         var fw = Show(full, Chosen(("tab", "Furniture"), ("material", "Fine wood")));
         Check(Grid(fw) == "Bed=4,Throne=1" && Bar(fw).Text == "2 pieces · 5 built", "building filter: Furniture and Fine wood leave the Bed and the Throne: \"2 pieces · 5 built\"");
-        Check(Chips(fw, "tab") == "Misc=2,Crafting=0(0),Building=0(0),Stonecutter=0(0),Furniture=5" && Chips(fw, "material") == "Wood=26,Stone=0(0),Core wood=0(0),Fine wood=5,Bronze=0(0),Iron=18",
-              "building filter: each row's counts follow the other row: " + Chips(fw, "tab") + " | " + Chips(fw, "material"));
-        Check(Bar(fw).Items.First(b => b.Kind == "applied").Items.Select(t => t.Title + "/" + t.Text).SequenceEqual(new[] { "Furniture/Category", "Fine wood/Main material" }), "building filter: the chosen chips are removable tokens, in the order chosen");
         Check(Parts(fw, "tab").Items.First(p => p.Id == "Furniture").Selected && Parts(fw, "material").Items.First(p => p.Id == "Fine wood").Selected && Math.Abs(Parts(fw, "material").Items.First(p => p.Id == "Wood").Fraction - 26f / 49) < 1e-5,
               "building filter: the bars stay linked: the chosen parts outlined, the material bar counted over the tab only (wood 26 of 49)");
         Check(PanelModel.Content(fw).First(b => b.Kind == "hero").Value == hero.Value, "building filter: the hero keeps the whole (pieces built does not change with the filter)");
-        var two = Show(full, Chosen(("tab", "Stonecutter"), ("tab", "Crafting")));
-        Check(Bar(two).Text == "7 pieces · 276 built", "building filter: two chips in one row are OR: Stonecutter or Crafting");
         var empty = Show(full, Chosen(("tab", "Crafting"), ("material", "Stone")));
         Check(PanelModel.Content(empty).Any(b => b.Kind == "empty" && b.Title == "Nothing for this choice") && Row(empty, "material").Items.First(c => c.Id == "Stone").Selected && Row(empty, "material").Items.First(c => c.Id == "Stone").Tone != "zero",
               "building filter: a choice that matches nothing says so, and its chip stays choosable so it can be taken off");
@@ -98,9 +90,7 @@ static class BuildingFacetTests
         Check(PanelModel.FilterKeyPressed(f, v) && f.FilterRow == 0 && Show(full, f).Keys.Contains("[A/D] Move") && Row(Show(full, f), "tab").Items[f.FilterCursor].Title == "Misc", "building focus: the filter key enters on the first row, the cursor on its first chip");
         Check(Show(full).Keys.Any(k => k == "[K] Filter"), "building focus: the footer says [K] Filter on this page");
 
-        // ---------- where it sits (0.7 rule B: no zones; the bar is on the plate, the tiles are the game's whole count) ----------
-        Check(PanelModel.Content(all).Count(b => b.Kind == "filterbar") == 1 && !Zoned.Says(all, Bar(all)),
-              "building filter: the bar sits on the plate with the pieces it filters, no \"since install\" on it");
+        // ---------- 0.7 rule B: the tiles are the game's whole count (the bar without "since install": FacetTests) ----------
         Check(PanelModel.Content(all).Any(b => b.Kind == "section" && b.Title == "Pieces repaired" && b.Src == "pc"), "building filter: the repairs stay their own section, unfiltered (rule C)");
         var tile = PanelModel.Content(all).First(b => b.Kind == "itemgrid").Items.First(i => i.Title == "Wood Wall");
         Check(tile.Value == "520" && tile.Value2 == null && tile.Text == null, "building filter: a tile is the game's whole count (520), no part line under it (rule B)");

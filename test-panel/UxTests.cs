@@ -61,13 +61,18 @@ static class UxTests
         var fresh = PanelSample.Full(now); fresh.History.From = today;
         var edda = FullDump.Books(PanelSample.Full(now)).Single(b => b.who == "Edda").book;
         var fellowDeeds = Spark(Page(edda, Chapter.Deeds, "woodcutting"));
+        var fellowToday = PanelModel.ParseCount(Of(Page(edda, Chapter.Deeds, "woodcutting", s => { s.Window = TimeWindow.Today; s.WindowPicked = true; }), "hero")?.Value);
+        var eddaOld = edda.ShallowCopy(); eddaOld.DayDeeds = null; eddaOld.ModVersion = "0.8.3";   // a copy from before 0.8.5 shares no Deeds days
+        var olderDeeds = Spark(Page(eddaOld, Chapter.Deeds, "woodcutting"));
         var fellowDealt = PanelModel.SparkOf(Of(Page(edda, Chapter.Battle, null), "biomes"));
         Check(wood != null && wood.Items.Count == 3 && wood.Items[0].Id == DayHistory.DayKey(today.AddDays(-2)) && wood.Title == "since " + PanelModel.ShortDate(today.AddDays(-2), today) &&
               built != null && built.Items.Count == 2 && built.Items[0].Id == DayHistory.DayKey(today.AddDays(-1)) &&
               Spark(Page(fresh, Chapter.Deeds, "woodcutting")) == null &&
-              fellowDeeds != null && fellowDeeds.Tone == PanelModel.OffTone && fellowDeeds.Title == PanelModel.NoDaysShared && (fellowDeeds.Items == null || fellowDeeds.Items.Count == 0) &&
+              fellowDeeds != null && fellowDeeds.Tone == null && fellowDeeds.Items.Count >= 2 && fellowDeeds.Items.Last().Id == DayHistory.DayKey(today) && PanelModel.ParseCount(fellowDeeds.Items.Last().Value) == fellowToday &&
+              olderDeeds != null && olderDeeds.Tone == PanelModel.OffTone && olderDeeds.Title == PanelModel.NoDaysShared && (olderDeeds.Items == null || olderDeeds.Items.Count == 0) &&
               (edda.DealtByDay == null || edda.DealtByDay.Count == 0 ? fellowDealt == null : fellowDealt != null && fellowDealt.Tone == null),
-              "growth lines (0.8): only the days the history holds (from the counter's first kept day: pieces from when they were kept), no line under two days, a fellow's Deeds page greyed \"no days shared\", their damage dealt from what they share");
+              "growth lines (0.8): only the days the history holds (from the counter's first kept day: pieces from when they were kept), no line under two days; a fellow's Deeds line from the days " +
+              "they share (0.8.5: its last column their Today, " + fellowToday + "), greyed \"no days shared\" on a copy from before 0.8.5; their damage dealt from what they share");
         // ---------- the book key (0.8 integration): [B] and the pad's Y step the player row as its chips' clicks do ----------
         {
             string Step(PanelState st)
@@ -87,9 +92,9 @@ static class UxTests
             PanelModel.AddPlayers(alone, "Rowan", new string[0], "", true, bookKey: "B");
             var keys = line.Keys.ToList(); var book = keys.IndexOf("[B] Book");
             var full = PanelModel.KeyLine(keys.Concat(new[] { PanelModel.ScrollKey }), l => l.Length <= string.Join(PanelModel.KeyGap, keys).Length - 1);
-            Check(walk == "Edda Tor Everyone You" && noGroup == "Everyone" && landed == "Deeds/cooking" && book >= 0 && keys[book + 1] == "[Backspace] Back" && !alone.Keys.Any(k => k.EndsWith("] Book")) &&
+            Check(walk == "Edda Tor Everyone You" && noGroup == "Everyone" && landed == "Deeds/cooking" && book >= 0 && !alone.Keys.Any(k => k.EndsWith("] Book")) &&
                   !full.Contains("Scroll") && !full.Contains("] Book") && full.Contains("[Backspace] Back"),
-                  "book key (0.8): [B] steps you, the fellow players and Everyone (" + walk + "), skipping one just joining; on Everyone greyed it opens the nearest page where it works (" + noGroup + ", " + landed + "); in the key line before Back, left out right after the scroll hint when the line is full, absent with nobody else to go to");
+                  "book key (0.8): [B] steps you, the fellow players and Everyone (" + walk + "), skipping one just joining; on Everyone greyed it opens the nearest page where it works (" + noGroup + ", " + landed + "); in the key line, left out right after the scroll hint when the line is full, absent with nobody else to go to");
         }
         // ---------- the hover's blind spot (rc1 play-test): the game's HUD canvas, drawn above the book, was asked for the pointer first ----------
         {

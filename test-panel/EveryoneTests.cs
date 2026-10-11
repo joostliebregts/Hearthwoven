@@ -59,30 +59,31 @@ static class EveryoneTests
         // REVIEW-08 #12: a fellow whose Hearthwoven shares no since-install totals adds their last shared session on All: Deeds, Voyages and the
         // Hall say so under the rows, as Battle does
         {
-            var edda = books["Edda"]; var keepSince = edda.SharedSinceInstall; var line = "Edda shares no totals: their number is their last shared session.";
+            var edda = books["Edda"]; var keepSince = edda.SharedSinceInstall;
+            bool SaysLastSession(PanelView v) => Says(v, "Edda", "last shared session");   // the line that Edda's number is her last shared session
             try
             {
                 edda.SharedSinceInstall = false;
-                var said = new[] { (Chapter.Deeds, "woodcutting"), (Chapter.Voyages, "onfoot"), (Chapter.Stores, "trader") }.Select(x => PanelModel.AllText(PanelModel.Build(world, On(x.Item1, x.Item2))).Contains(line)).ToList();
+                var said = new[] { (Chapter.Deeds, "woodcutting"), (Chapter.Voyages, "onfoot"), (Chapter.Stores, "trader") }.Select(x => SaysLastSession(PanelModel.Build(world, On(x.Item1, x.Item2)))).ToList();
                 edda.SharedSinceInstall = keepSince;
-                var quiet = !PanelModel.AllText(PanelModel.Build(world, On(Chapter.Stores, "trader"))).Contains(line);
+                var quiet = !SaysLastSession(PanelModel.Build(world, On(Chapter.Stores, "trader")));
                 Check(said.All(x => x) && quiet, "Everyone REVIEW-08 #12: an older fellow's last-session number is said on Deeds, Voyages and the Hall on All (" + string.Join(", ", said) + "), and not for one who shares totals");
             }
             finally { edda.SharedSinceInstall = keepSince; }
         }
 
-        // 2. greyed: on Deeds the day windows (fellows share days only for damage dealt) with the reason on the plate, and the heading keeps no
-        // window phrase; Battle's Damage keeps them as your own day history allows; Skills greys the chip itself with its reason
+        // 2. greyed: 0.8.5 fellows share their Deeds days, so Deeds keeps the day windows as your own day history allows (as Battle's Damage), with no
+        // reason on the plate, and the heading keeps no window phrase; Skills greys the chip itself with its reason
         var wood = PanelModel.Build(world, On(Chapter.Deeds, "woodcutting", TimeWindow.LastHour));
         bool Greyed(PanelView v, TimeWindow w) => v.Windows.First(x => x.Id == w.ToString()).Disabled;
-        var dayGrey = PanelModel.DayWindows.All(d => Greyed(wood, d)) && !Greyed(wood, TimeWindow.LastHour) && !Greyed(wood, TimeWindow.SinceInstall) && wood.ShownWindow == TimeWindow.LastHour
-                      && (wood.WindowWhy ?? "").Contains(PanelModel.GroupDaysLine) && PanelModel.PlateOf(wood).Text == null && string.IsNullOrEmpty(wood.HeadingWindow);
+        var dayGrey = PanelModel.DayWindows.All(d => Greyed(wood, d) == !PanelModel.DayOpen(world, d)) && !Greyed(wood, TimeWindow.LastHour) && !Greyed(wood, TimeWindow.SinceInstall) && wood.ShownWindow == TimeWindow.LastHour
+                      && !Says(wood, PanelModel.GroupDaysLine) && string.IsNullOrEmpty(wood.HeadingWindow);
         var dmg = PanelModel.Build(world, On(Chapter.Battle, "damage", TimeWindow.SevenDays));
         var dmgDays = PanelModel.DayWindows.All(d => Greyed(dmg, d) == !PanelModel.DayOpen(world, d)) && dmg.ShownWindow == (PanelModel.DayOpen(world, TimeWindow.SevenDays) ? TimeWindow.SevenDays : TimeWindow.SinceInstall);
         var skills = PanelModel.Build(world, On(Chapter.Skills, null));
         PanelModel.AddPlayers(skills, "Rowan", new[] { "Edda", "Tor", "Finch" }, "", true);
         var chipGrey = !skills.EveryoneOn && skills.EveryoneChip && !string.IsNullOrEmpty(skills.EveryoneSub) && !string.IsNullOrEmpty(skills.EveryoneWhy) && skills.Players[0].Selected;
-        Check(dayGrey && dmgDays && chipGrey, "Everyone: Deeds greys Today, 7 days and 30 days with the reason on the plate (no window in the heading); Damage dealt keeps the day windows; Skills greys the chip with its reason" +
+        Check(dayGrey && dmgDays && chipGrey, "Everyone: Deeds and Damage dealt keep the day windows as your day history allows (no window in the heading); Skills greys the chip with its reason" +
               (dayGrey ? "" : " (Deeds windows)") + (dmgDays ? "" : " (Damage days)") + (chipGrey ? "" : " (Skills chip)"));
 
         // 3. v08-fix-open: a window where nobody can be counted (your deeds per minute not kept yet, no fellow's copies timed) asked for the
@@ -196,7 +197,7 @@ static class EveryoneTests
                 if (heroD != heroF) bad7.Add(w + ": hero " + heroF + ", Damage's " + heroD);
             }
             var days = PanelModel.Build(world, On(Chapter.Battle, "foes", TimeWindow.LastHour));
-            var daysGrey = PanelModel.DayWindows.All(d => Greyed(days, d)) && (days.WindowWhy ?? "").Contains(PanelModel.GroupFoesDaysLine) && days.EveryoneOn;
+            var daysGrey = PanelModel.DayWindows.All(d => Greyed(days, d)) && Says(days, PanelModel.GroupFoesDaysLine) && days.EveryoneOn;
             Check(bad7.Count == 0 && daysGrey, "Everyone on Foes: in 10 min, 1 h, Session and All each player's parts over the foe rows add up to their row on Everyone > Damage, each foe's parts to its Dealt, the hero is Damage's; the day windows greyed with their reason" +
                   (bad7.Count == 0 ? "" : ": " + string.Join("; ", bad7)) + (daysGrey ? "" : " (day windows)"));
 

@@ -3,7 +3,9 @@
 // and for busy groups of four, five and six (gifts both ways on most pairs) the plan must hold: no two threads run along each other; threads
 // cross only when their two pairs of players alternate around the ring (then once, at 30 degrees or more); nothing passes through the hearth,
 // another shield or a name; every count sits on its own thread and touches no other count, shield, name, arrow head or the hearth.
-// Near a shield (FireLayout.Hub) the threads of that shield meet, as threads tied to it. Called from Program.cs.
+// Near a shield (FireLayout.Hub) the threads of that shield meet, as threads tied to it. 0.8.5 (Joost in game, four players: "arrows are kinda
+// wonky"): every arrow's tip on its receiver's rim along the curve's end, each way of a pair on its right, no count on a crossing, and in a group
+// of four no count over the other way of its pair; Joost's evening of 10 Oct (FireFour, sample names) is one of the groups. Called from Program.cs.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -28,6 +30,24 @@ static partial class Program
                 else if (r < 0.9) G(names[j], names[i], "food", 1 + (int)Math.Floor(Rnd() * 18), sel);
                 if (Rnd() < 0.35) G(names[i], names[j], "gear", 1 + (int)Math.Floor(Rnd() * 4), sel);
             }
+        return new Block { Kind = "giving", Items = items };
+    }
+
+    /// <summary>Joost's evening of 2026-10-10 (four players, "arrows are kinda wonky"), sample names: Rowan as you at the top, Edda right, Finch at the
+    /// bottom, Tor left. You set out Mountains feasts for Edda (5) and Finch (1), gave Tor 6 servings and 29 kinds of gear; Edda set out a feast for
+    /// you (6), Finch gave you gear (14), Tor fed you (27); and a few gifts among the fellows. The feast lines carry the list's longest words.</summary>
+    internal static Block FireFour()
+    {
+        var names = new[] { "Rowan", "Edda", "Finch", "Tor" };
+        var items = names.Select((x, i) => new Block { Kind = "player", Id = x, Title = i == 0 ? "You" : x, Text = i == 0 ? "You" : x, Icon = "person:" + x, Selected = i == 0 }).ToList();
+        var gifts = new List<(string from, string to, string tone, int n, bool feast)> {
+            ("Rowan", "Edda", "food", 5, true), ("Rowan", "Finch", "food", 1, true), ("Rowan", "Tor", "food", 6, false), ("Rowan", "Tor", "gear", 29, false),
+            ("Edda", "Rowan", "food", 6, true), ("Finch", "Rowan", "gear", 14, false), ("Tor", "Rowan", "food", 27, false),
+            ("Edda", "Finch", "food", 4, false), ("Tor", "Edda", "food", 8, false), ("Finch", "Tor", "gear", 3, false) };
+        foreach (var (from, to, tone, n, feast) in gifts)
+            items.Add(new Block { Kind = "gift", Id = from + ">" + to, Title = from, Text = to, Tone = tone, Value = n.ToString(), Count = n, Fraction = n / 29f,
+                                  Selected = from == "Rowan" || to == "Rowan", Note = tone == "gear" ? "put to good use" : "enjoyed", Icon = tone == "gear" ? "item:AxeBronze" : feast ? "item:FeastMountains" : "item:CookedMeat",
+                                  Items = feast ? new List<Block> { new Block { Kind = "giftline", Icon = "item:FeastMountains", Title = PanelModel.SetOutFeast(new[] { "FeastMountains" }), Value = n.ToString(), Note = "enjoyed" } } : null });
         return new Block { Kind = "giving", Items = items };
     }
 
@@ -74,6 +94,18 @@ static partial class Program
             if (plan.Fixed.Any(f => FireLayout.Overlap(r, f) > 0)) bad.Add("count on a shield, name or the hearth: " + L(live[i].Gift));
             if (arrows.Any(a => FireLayout.Overlap(r, a) > 0)) bad.Add("count on an arrow head: " + L(live[i].Gift));
             for (int j = i + 1; j < live.Count; j++) if (FireLayout.Overlap(r, FireLayout.Rect.Around(live[j].At.x, live[j].At.y, live[j].Width / 2, live[j].H / 2)) > 0) bad.Add("counts touch: " + L(live[i].Gift) + " / " + L(live[j].Gift));
+            // 0.8.5 (Joost in game: "two sit on top of crossings"): no count covers a point where two threads cross
+            for (int a = 0; a < threads.Count; a++) for (int b = a + 1; b < threads.Count; b++)
+                    foreach (var x in FireLayout.Crossings(plan.Geos[threads[a]].Pts, plan.Geos[threads[b]].Pts))
+                        if (x.at.x > r.X0 && x.at.x < r.X1 && x.at.y > r.Y0 && x.at.y < r.Y1) bad.Add("count on a crossing: " + L(live[i].Gift) + " (" + L(threads[a]) + " x " + L(threads[b]) + ")");
+        }
+        // 0.8.5 (Joost in game, four players: "unclear which thread a number belongs to"): in a group of four a count never covers the other way of its
+        // own pair (the two ways bow apart; a busier ring draws a crowded pair's threads closer together, so there it may)
+        foreach (var p in players.Count <= 4 ? live : new List<FireLayout.Pill>())
+        {
+            var r = FireLayout.Rect.Around(p.At.x, p.At.y, p.Width / 2, p.H / 2);
+            foreach (var o in threads.Where(o => o.Title == p.Gift.Text && o.Text == p.Gift.Title))
+                if (FireLayout.SegmentsIn(plan.Geos[o].Pts, r)) bad.Add("count over the other way: " + L(p.Gift) + " on " + L(o));
         }
         foreach (var p in plan.Pills.Where(p => p.Dropped)) bad.Add("count left off the drawing: " + L(p.Gift));
         return bad;
@@ -88,27 +120,73 @@ static partial class Program
         }
         var world = PanelSample.Full(now); var books = FullDump.Books(world).ToDictionary(b => b.who, b => b.book);
         var cases = new List<(string name, Block giving)> { ("your book", Giving(world, null)), ("Edda's book", Giving(books["Edda"], "Edda")),
-            ("a busy four", FireBusy(4, 11)), ("a busy five", FireBusy(5, 26)), ("a busy six", FireBusy(6, 69)) };
+            ("Joost's four (10 Oct)", FireFour()), ("a busy four", FireBusy(4, 11)), ("a busy five", FireBusy(5, 26)), ("a busy six", FireBusy(6, 69)) };
         foreach (var (name, giving) in cases)
         {
             if (giving == null) { Check(false, "fireside geometry, " + name + ": no giving block"); continue; }
             var sw = System.Diagnostics.Stopwatch.StartNew(); var plan = FireLayout.Build(giving, 180, 232); var ms = sw.ElapsedMilliseconds;
-            var again = FireLayout.Build(new Block { Kind = "giving", Items = giving.Items.ToList() }, 181, 232);   // a fresh plan (a different key), moved 1 px: the same choices
+            var again = FireLayout.Build(new Block { Kind = "giving", Items = giving.Items.ToList() }, 180, 233);   // a fresh plan (a different key), moved 1 px down: the same choices (0.8.5: down, not right; a wider drawing moves the right-hand names by 2 px, so it is not the same drawing moved)
             var bad = FireProblems(plan, giving);
-            var same = plan.Bundles.Select(b => b.Opt).SequenceEqual(again.Bundles.Select(b => b.Opt)) && plan.Pills.Select(p => p.U).SequenceEqual(again.Pills.Select(p => p.U));
+            var same = plan.Bundles.Select(b => b.Bend).SequenceEqual(again.Bundles.Select(b => b.Bend)) && plan.Pills.Select(p => p.U).SequenceEqual(again.Pills.Select(p => p.U));
             Check(bad.Count == 0 && same && plan.Pills.Count == giving.Items.Count(g => g.Kind == "gift" && g.Selected) && ms < 1500,
                   "fireside geometry, " + name + " (" + giving.Items.Count(i => i.Kind == "player") + " players, " + plan.Drawn.Count + " threads, " + plan.Pills.Count + " counts, " + ms + " ms): " +
                   "no thread runs along another, threads cross only where their pairs alternate (once, at 30 degrees or more), none through the hearth, a shield or a name; " +
-                  "every count on its own thread touching nothing, none left off; the same plan every time" + (bad.Count > 0 ? ": " + string.Join("; ", bad.Take(6)) : "") + (same ? "" : " (not the same plan twice)"));
+                  "every count on its own thread touching nothing (no crossing either), none left off; the same plan every time" + (bad.Count > 0 ? ": " + string.Join("; ", bad.Take(6)) : "") + (same ? "" : " (not the same plan twice)"));
         }
         // beyond what the test promises: the heaviest load (you give and receive food and gear with every one of five fellow players) says what it still does
         var heavy = FireBusy(6, 48);
         var hp = FireLayout.Build(heavy, 180, 232); var hb = FireProblems(hp, heavy);
         System.Console.WriteLine("INFO fireside geometry, the busiest six (seed 48, " + hp.Drawn.Count + " threads): " + (hb.Count == 0 ? "clean" : hb.Count + " problems: " + string.Join("; ", hb.Take(4))));
-        // the arrows: each along its arc's true end tangent (the baked arc is a parabola)
-        var sp = FireLayout.Build(cases[0].giving, 180, 232);
-        Check(sp.Geos.Values.All(t => Math.Abs(t.EndAngleDeg - t.AngleDeg - (t.BendRight ? 1 : -1) * Math.Atan(4 * (FireLayout.Arcs[t.Arc] - 8) / 240) * 180 / Math.PI) < 1e-9) &&
-              sp.Geos.Values.Max(t => t.Arc) <= 1, "fireside: in the sample world no thread needs the deep arc; every arrow follows its arc's end tangent");
+        // 0.8.5 (Joost in game: "arrows are kinda wonky": heads ending short or past the shield, pointing sideways): every thread leaves its giver's rim
+        // and its arrow's tip sits on its receiver's rim (FireLayout.Rim: the shield's radius and the gap), the head along the curve's end tangent (the
+        // drawn line's last piece) and so into the shield, at most MaxOffRadial off its middle (in a group of four, 20 degrees: none points past
+        // the middle); the line leaves its giver as near straight out of it
+        var rimBad = new List<string>();
+        foreach (var (name, giving) in cases)
+        {
+            if (giving == null) continue;
+            var plan = FireLayout.Build(giving, 180, 232);
+            foreach (var kv in plan.Geos)
+            {
+                var g = kv.Key; var t = kv.Value; var st = FireLayout.StrokeOf(t, g.Fraction); var to = plan.Pos[g.Text]; var from = plan.Pos[g.Title];
+                double D((double x, double y) a, (double x, double y) b) => Math.Sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+                if (Math.Abs(D(st.Tip, to) - FireLayout.Rim) > 1e-6) rimBad.Add(name + ": " + g.Title + ">" + g.Text + " tip " + D(st.Tip, to).ToString("0.0") + " px from the middle");
+                if (Math.Abs(D(t.P0, from) - FireLayout.Rim) > 1e-6) rimBad.Add(name + ": " + g.Title + ">" + g.Text + " leaves " + D(t.P0, from).ToString("0.0") + " px from the middle");
+                double Deg((double x, double y) a, (double x, double y) b) => Math.Acos(Math.Max(-1, Math.Min(1, (a.x * b.x + a.y * b.y) / (Math.Sqrt(a.x * a.x + a.y * a.y) * Math.Sqrt(b.x * b.x + b.y * b.y))))) * 180 / Math.PI;
+                var head = (x: st.Tip.x - (st.Left.x + st.Right.x) / 2, y: st.Tip.y - (st.Left.y + st.Right.y) / 2);
+                var n = t.Pts.Length; var tangent = (x: t.Pts[n - 1].x - t.Pts[n - 2].x, y: t.Pts[n - 1].y - t.Pts[n - 2].y);   // the curve's own last piece
+                var into = (x: to.x - st.Tip.x, y: to.y - st.Tip.y); var last = st.Line[st.Line.Length - 2]; var piece = (x: st.Line[st.Line.Length - 1].x - last.x, y: st.Line[st.Line.Length - 1].y - last.y);
+                if (Deg(head, tangent) > 2) rimBad.Add(name + ": " + g.Title + ">" + g.Text + " head " + Deg(head, tangent).ToString("0") + " degrees off the curve's end");
+                if (Deg(head, piece) > 6) rimBad.Add(name + ": " + g.Title + ">" + g.Text + " head " + Deg(head, piece).ToString("0") + " degrees off the line's last piece");
+                if (Deg(head, into) > (plan.Pos.Count <= 4 ? 20 : FireLayout.MaxOffRadial + 1)) rimBad.Add(name + ": " + g.Title + ">" + g.Text + " head " + Deg(head, into).ToString("0") + " degrees off the shield's middle");
+                var lx = t.Pts[1].x - t.P0.x; var ly = t.Pts[1].y - t.P0.y; var cos = (lx * (t.P0.x - from.x) + ly * (t.P0.y - from.y)) / (Math.Sqrt(lx * lx + ly * ly) * FireLayout.Rim);
+                if (cos < Math.Cos((FireLayout.MaxOffRadial + 2) * Math.PI / 180)) rimBad.Add(name + ": " + g.Title + ">" + g.Text + " leaves its giver askew");
+            }
+        }
+        Check(rimBad.Count == 0, "fireside arrows: every thread leaves its giver's rim and every arrow's tip sits on its receiver's rim (" + FireLayout.Rim + " px from the middle), the head along the curve's end, into the shield" +
+              (rimBad.Count > 0 ? ": " + string.Join("; ", rimBad.Take(6)) : ""));
+        // the rule of the road: in every pair, each way keeps to its right (A > B on the right of A > B, so the two ways never touch); food and gear going
+        // the same way are two close lanes, food on the inside; measured at each thread's middle, across the chord
+        var roadBad = new List<string>();
+        foreach (var (name, giving) in cases)
+        {
+            if (giving == null) continue;
+            var plan = FireLayout.Build(giving, 180, 232);
+            foreach (var B in plan.Bundles)
+            {
+                var a = plan.Pos[B.A]; var b = plan.Pos[B.B]; double dx = b.x - a.x, dy = b.y - a.y, d = Math.Sqrt(dx * dx + dy * dy), rx = dy / d, ry = -dx / d;
+                double Side(Block g) { var m = plan.Geos[g].At(0.5); return (m.x - a.x) * rx + (m.y - a.y) * ry; }
+                var fwd = B.Lanes.Where(g => g.Title == B.A).ToList(); var back = B.Lanes.Where(g => g.Title == B.B).ToList();
+                if (fwd.Count > 0 && back.Count > 0 && fwd.Min(Side) <= back.Max(Side)) roadBad.Add(name + ": " + B.A + "/" + B.B + " the two ways are not each on their right");
+                foreach (var way in new[] { (fwd, 1), (back, -1) })
+                {
+                    var food = way.Item1.FirstOrDefault(g => g.Tone == "food"); var gear = way.Item1.FirstOrDefault(g => g.Tone == "gear");
+                    if (food != null && gear != null && (Side(gear) - Side(food)) * way.Item2 <= 0) roadBad.Add(name + ": " + food.Title + ">" + food.Text + " gear inside its food");
+                }
+            }
+        }
+        Check(roadBad.Count == 0, "fireside lanes: in every pair each way keeps to its right (the two ways never on one line), food and gear going one way side by side, food on the inside" +
+              (roadBad.Count > 0 ? ": " + string.Join("; ", roadBad.Take(6)) : ""));
         // 0.7 (Joost: "why is the line so thick and the arrow so small?"): a thin line that grows with the count, 1.5 to 5 px, the arrowhead 3 times its width;
         // the head stays inside the box PlacePills keeps clear of counts (FireProblems checks no count sits on it)
         var strokeBad = new List<string>();

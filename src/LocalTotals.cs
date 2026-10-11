@@ -59,11 +59,14 @@ namespace Hearthwoven
     /// Schema 6 (0.9, work/hearthwoven-0.8.5/fights/DESIGN.md): top-level "bossFights" (BossLog): the boss attempts you took part in, the newest
     /// BossLog.MaxAttempts, each with its boss, start, length, outcome and each sharing player's part; top-level "dungeonRuns" (RunLog): the dungeon
     /// runs you were in, the newest RunLog.MaxRuns (an older reader keeps both as unknown keys).
+    ///
+    /// Schema 7 (0.8.5): top-level "dealtAfter" (ArmourBook, the dealt ledger): your hits on foes before and after the foe's resistances and armor,
+    /// per foe, skill and type, with its own start date and day rows, the way "armour" keeps the hits on you (an older reader keeps it as an unknown key).
     /// </summary>
     public class LocalTotals
     {
         public const int Version = 1;      // breaking-format number: a reader refuses a higher one
-        public const int Schema = 6;       // additive revision of this writer (2: name, schema, unknown keys kept; 3: history; 4: armour and starts; 5: 0.8, feast families and foes; 6: 0.9, boss attempts)
+        public const int Schema = 7;       // additive revision of this writer (2: name, schema, unknown keys kept; 3: history; 4: armour and starts; 5: 0.8, feast families and foes; 6: 0.9, boss attempts; 7: 0.8.5, damage dealt after the foe's armor)
         public long PlayerId;
         /// <summary>The character's name as the file was last saved for (JSON "name"); "" in a file from before 0.6.1.</summary>
         public string Name = "";
@@ -72,7 +75,7 @@ namespace Hearthwoven
         /// <summary>Top-level keys this version does not know (from a newer Hearthwoven), written back as they were read.</summary>
         public readonly Dictionary<string, object> Extra = new Dictionary<string, object>();
         static readonly HashSet<string> KnownKeys = new HashSet<string>
-            { "version", "schema", "playerId", "name", "saved", "firstRun", "biomeFrom", "totals", "baseline", "exactAtBaseline", "baselineAt", "feats", "history", "armour", "starts", "foes", "bossFights", "dungeonRuns",
+            { "version", "schema", "playerId", "name", "saved", "firstRun", "biomeFrom", "totals", "baseline", "exactAtBaseline", "baselineAt", "feats", "history", "armour", "starts", "foes", "bossFights", "dungeonRuns", "dealtAfter",
               "historyBegan", "historySaved", "chestFed", "seenGroup" };   // 0.7's own fields at top level, where an older reader keeps them (REVIEW-07 #4)
         public int Sessions;                                     // sessions folded into Previous
         /// <summary>When Hearthwoven first counted for this character on this PC (the zones' "since you installed Hearthwoven on
@@ -150,6 +153,10 @@ namespace Hearthwoven
         /// <summary>The armour ledger (ArmourBook, 0.7): its own start date, sessions and day rows. JSON: top-level "armour" (schema 4), left
         /// out while empty; an older file has none and starts it on the next load.</summary>
         public ArmourBook Armour = new ArmourBook();
+        /// <summary>The dealt ledger (0.8.5, AfterArmour): your hits on foes as you swung them (Before) and after the foe's resistances and armor (After),
+        /// "foe|skill|type", in an ArmourBook of its own (start date, sessions, day rows; Incoming unused). JSON: top-level "dealtAfter" (schema 7),
+        /// left out while empty; an older file starts it on the next load.</summary>
+        public ArmourBook DealtAfter = new ArmourBook();
         /// <summary>The foes you fought (FoeBook, 0.8). JSON: top-level "foes" (schema 5), left out while empty; an older file starts it on the next load.</summary>
         public FoeBook Foes = new FoeBook();
         /// <summary>The boss attempts you took part in (BossLog, 0.9). JSON: top-level "bossFights" (schema 6), left out while empty.</summary>
@@ -263,11 +270,13 @@ namespace Hearthwoven
             if (string.IsNullOrEmpty(session)) return;
             // the day history first (HISTORY-06.md): what this save adds beyond what was recorded of the same session (all of it for a
             // new session) goes to today's row, and the game counters' growth since the last save with it; nothing counts twice
+            // the log's own per-biome fold (EventLog.Biome): it also places the falls past its list's cap (0.8.5), which FromLog cannot see
+            var biome = log == null ? new BiomeTally() : BiomeTally.Sum(log.Biome);
             if (localNow.HasValue)
             {
                 var same = session == LastSession;
                 History.Add(localNow.Value, SessionEvents.Minus(events, same ? LastEvents : null), DamageTally.Minus(damage, same ? LastDamage : null),
-                            BiomeTally.Minus(BiomeTally.FromLog(log), same ? LastBiome : null), gameNow);
+                            BiomeTally.Minus(biome, same ? LastBiome : null), gameNow);
             }
             if (session != LastSession)
             {
@@ -276,7 +285,7 @@ namespace Hearthwoven
             }
             LastDamage = DamageTally.Sum(damage);
             LastEvents = SessionEvents.Sum(events);
-            LastBiome = BiomeTally.FromLog(log);
+            LastBiome = biome;
         }
 
         public string ToJson(DateTime savedUtc)
@@ -320,6 +329,7 @@ namespace Hearthwoven
             }
             if (Feats.SeenGroup > 0) j.Num("seenGroup", Feats.SeenGroup);
             if (!Armour.IsEmpty) Armour.WriteTo(j);
+            if (!DealtAfter.IsEmpty) DealtAfter.WriteTo(j, "dealtAfter");
             if (!Foes.IsEmpty) Foes.WriteTo(j);
             if (!Bosses.IsEmpty) Bosses.WriteTo(j);
             if (!Runs.IsEmpty) Runs.WriteTo(j);
@@ -382,6 +392,7 @@ namespace Hearthwoven
                 if (t.LastEvents.ChestFed.Count == 0) MiniJson.Into(MiniJson.Obj(chest, "last"), t.LastEvents.ChestFed);
             }
             t.Armour = ArmourBook.ReadFrom(MiniJson.Obj(root, "armour"));
+            t.DealtAfter = ArmourBook.ReadFrom(MiniJson.Obj(root, "dealtAfter"));
             t.Foes = FoeBook.ReadFrom(MiniJson.Obj(root, "foes"));
             t.Bosses = BossLog.ReadFrom(root.TryGetValue("bossFights", out var bfs) ? bfs : null);
             t.Runs = RunLog.ReadFrom(root.TryGetValue("dungeonRuns", out var drs) ? drs : null);

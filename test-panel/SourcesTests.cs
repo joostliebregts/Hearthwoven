@@ -43,12 +43,7 @@ static class SourcesTests
                         pages.Add(((who.IsSelf ? who.PlayerName : "fellow " + who.PlayerName) + " " + ch + "/" + l.Id, PanelModel.Build(who, new PanelState { Chapter = ch, Page = { [ch] = l.Id }, TheyReceived = they })));
         Check(pages.All(p => Zoned.Zones(p.v).Count == 0), "Z every page (0.7): no zones anywhere, every book, every page");
 
-        // ---------- Woodcutting: 0.7's worked page has no zones (REDESIGN-RULES.md part 3; its own test is RecordedGatherTests) ----------
-        var wood = Show(input, Chapter.Deeds, "woodcutting");
-        Check(wood.Recorded && Zoned.Zones(wood).Count == 0, "Z woodcutting (0.7): migrated, no zones");
-        // Z mining (the zones' headings, drawn tight) retired with the zones: Mining is migrated (0.7, RecordedGatherTests: "woodcutting 0.7", "mining 0.7")
-        Check(Zoned.Zones(Show(input, Chapter.Deeds, "mining")).Count == 0 && Zoned.Zones(Show(input, Chapter.Deeds, "groundwork")).Count == 0,
-              "Z tight (0.7): Mining and Groundwork are migrated: no zones, so nothing on them is drawn tight");
+        // Woodcutting, Mining and Groundwork (0.7's worked pages; their own tests are RecordedGatherTests and RecordedMakeTests) are in the walk above
 
         // ---------- Battle overview (sinceB-battle; 0.7 G5: no zones, RecordedBattleTests has the dates) ----------
         var bo = Show(input, Chapter.Battle);
@@ -101,14 +96,15 @@ static class SourcesTests
               "Z empty (0.7): a Hall page that only counts since install, nothing yet: no zone, one empty state (\"Nothing yet\", no date known)");
         var cards = Show(input, Chapter.Deeds);
         var woodCard = PanelModel.Content(cards).Where(b => b.Kind == "cards").SelectMany(c => c.Items).FirstOrDefault(c => c.Title == "Woodcutter");
-        Check(!PanelModel.Content(cards).Any(b => b.Kind == "zone") && woodCard != null && (woodCard.Items == null || woodCard.Items.Count == 0),
-              "Z the Deeds has no zones (integrate-05): a deed card keeps its one number; the class C second line is gone (0.7, hard case 13)");
+        Check(woodCard != null && (woodCard.Items == null || woodCard.Items.Count == 0),
+              "Z the Deeds overview (integrate-05): a deed card keeps its one number; the class C second line is gone (0.7, hard case 13)");
 
         // ---------- a fellow player's copy ----------
-        // 0.7: every Deeds page is migrated, so a fellow's Deeds pages have no zones either; the plate says whose book it is, without "since install" and without a box
-        var eddaDeeds = new[] { "mining", "building", "crafting", "cooking", "farming" }.Select(pg => Show(edda, Chapter.Deeds, pg)).ToList();
-        Check(eddaDeeds.All(v => v.Recorded && Zoned.Zones(v).Count == 0 && v.AboutNumbers == null && (v.Scope ?? "").Contains("Edda") && !PanelModel.AllText(v).Any(t => t.Contains("since install"))),
-              "Z fellow (0.7): their Deeds pages have no zones and no box; the plate names Edda's book, never \"since install\"");
+        // 0.7: a fellow's Deeds pages say whose book it is, without "since install" and without a box: the every-page rule (PropertyTests, on the
+        // sample world's copies) also holds on an older copy that shares its last session only
+        var eddaDeeds = new[] { "mining", "building", "crafting", "cooking", "farming" }.ToDictionary(pg => pg, pg => Show(edda, Chapter.Deeds, pg));
+        var eddaFaults = eddaDeeds.SelectMany(kv => PropertyTests.Fellow(new PropertyTests.Page("Edda", false, "Deeds/" + kv.Key, null, kv.Value, null)).Select(f => kv.Key + ": " + f)).ToList();
+        Check(eddaFaults.Count == 0, "Z fellow (0.7): an older copy's Deeds pages carry no dates and no box, never \"since install\", and name Edda's book" + (eddaFaults.Count > 0 ? ": " + eddaFaults[0] : ""));
 
         // ---------- words and dates ----------
         Check(PanelModel.ShortDate(new DateTime(2026, 10, 8), new DateTime(2026, 12, 1)) == "8 Oct" && PanelModel.ShortDate(new DateTime(2025, 3, 2), new DateTime(2026, 1, 1)) == "2 Mar 2025",

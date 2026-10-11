@@ -45,19 +45,19 @@ static class OlderCopyTests
         Check(now82.ModVersion == Plugin.Version && said.Count == 0, "OC this build: a copy from " + now82.ModVersion + " says no version line on any page" + (said.Count > 0 ? ": " + string.Join("; ", said.Take(3)) : ""));
 
         // ---------- 0.6.5: each page that misses something says what, once ----------
-        string L(string fills, string ver) => "Edda's Hearthwoven is " + ver + ": " + fills + " once they update.";
+        // the page says it once, naming the version and what fills in (the sentence around them is PanelModel.OlderLine's)
+        bool One(PanelView v, string ver, params string[] what) => Lines(v) is var ls && ls.Count == 1 && ls[0].Contains(ver) && what.All(ls[0].Contains);
         var feed = Page(v065, Chapter.Battle, PanelModel.FeedPage); var last = Page(v065, Chapter.Battle, PanelModel.LastFightPage);
         var defense = Page(v065, Chapter.Battle, "defense"); var byFoe = Page(v065, Chapter.Battle, "damage", view: "foe");
         var quiet = new[] { "overview", "foes", "deaths" }.ToDictionary(p => p, p => Lines(Page(v065, Chapter.Battle, p)));
-        Check(Lines(feed).SequenceEqual(new[] { L("this page fills in", "0.6.5") }) && Lines(last).SequenceEqual(new[] { L("this page fills in", "0.6.5") }) &&
-              Lines(defense).SequenceEqual(new[] { L("blocks and parries and the ×N counts here fill in", "0.6.5") }) && Lines(byFoe).SequenceEqual(new[] { L("the ×N counts fill in", "0.6.5") }) &&
-              quiet.Values.All(x => x.Count == 0) && defense.WindowWhy == L("10 min to 3 h fill in", "0.6.5") + " Days are not shared.",
+        Check(One(feed, "0.6.5", "page") && One(last, "0.6.5", "page") && One(defense, "0.6.5", "blocks and parries", "×N") && One(byFoe, "0.6.5", "×N") && !Lines(byFoe)[0].Contains("blocks") &&
+              quiet.Values.All(x => x.Count == 0) && Says(defense, "0.6.5", "10 min to 3 h") && Says(defense, "not shared"),
               "OC 0.6.5: Feed and Last fight \"" + Lines(feed).FirstOrDefault() + "\"; Defense once \"" + Lines(defense).FirstOrDefault() + "\"; By foe \"" + Lines(byFoe).FirstOrDefault() +
-              "\"; the chips \"" + defense.WindowWhy + "\"; Overview, Foes and Deaths need nothing newer and say nothing");
+              "\"; the chips' reason names 0.6.5 for 10 min to 3 h and days not shared; Overview, Foes and Deaths need nothing newer and say nothing");
 
         // ---------- 0.8.1: only the feed and the block minutes wait ----------
         var feed81 = Page(v081, Chapter.Battle, PanelModel.FeedPage); var defense81 = Page(v081, Chapter.Battle, "defense"); var byFoe81 = Page(v081, Chapter.Battle, "damage", view: "foe");
-        Check(Lines(feed81).SequenceEqual(new[] { L("this page fills in", "0.8.1") }) && Lines(defense81).SequenceEqual(new[] { L("blocks and parries here fill in", "0.8.1") }) && Lines(byFoe81).Count == 0,
+        Check(One(feed81, "0.8.1", "page") && One(defense81, "0.8.1", "blocks and parries") && !Lines(defense81)[0].Contains("×N") && Lines(byFoe81).Count == 0,
               "OC 0.8.1: the feed and the block minutes wait (\"" + Lines(defense81).FirstOrDefault() + "\"); the ×N counts are there");
 
         // ---------- a friend in the world, quiet in battle since you came in: "has not fought", not "has not played" ----------

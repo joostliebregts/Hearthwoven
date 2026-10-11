@@ -388,11 +388,13 @@ namespace Hearthwoven.Panel
             Under(view.Blocks, Section(WhereCooked), ledger);
             if (ledger == null && !input.IsSelf && made > 0) view.Blocks.Add(new Block { Kind = "note", Text = Name(input) + "'s shared copy does not say where it was cooked." });
             // who enjoyed it (cook-B): one bar per fellow in their player colour, the count at the end; alphabetical, never a ranking
-            var axis = input.Window != null ? null : FoodAxis(input);   // a day window: fellows' records have no days (DeedsDayLines says so)
+            // 0.8.5: a day window reads each fellow's shared days in it (FoodBookIn); a short window has none (DeedsDayLines says so)
+            var food = input.Window == null ? input : FoodBookIn(input.Window);
+            var axis = food == null ? null : FoodAxis(food);
             var whose = input.IsSelf ? "your" : Name(input) + "'s";
             if (axis != null)
             {
-                var rows = FoodRows(input);
+                var rows = FoodRows(food);
                 var fans = rows.Select(r => new KeyValuePair<string, double>(r.fellow.PlayerName, r.total)).ToList();   // the numbers, not the shown text
                 // rule E: one total only when every row has the same period words; a list whose rows differ says its own words on each row
                 var sinceAll = rows.All(r => r.fellow.SharedSinceInstall); var uniform = sinceAll || rows.All(r => !r.fellow.SharedSinceInstall);
@@ -405,6 +407,8 @@ namespace Hearthwoven.Panel
                 Under(view.Blocks, whoHead, who);
                 // the servings are counted on the fellows' PCs, by dish: they stay whole under a filter, and say so (as Crafting's upgrades)
                 if (on) view.Blocks.Add(new Block { Kind = "note", Text = EnjoyedWhole(whose), Src = SrcFellows, Source = TagFellows });
+                // a day window on your own book: each fellow's whole day counts, as on the group's pages (a fellow's book says it for them: FellowDayLines)
+                if (input.Window != null && input.IsSelf && rows.Any(r => !r.fellow.IsSelf)) view.Blocks.Add(new Block { Kind = "note", Text = DayWindowLine(input.Window.Window) });
             }
             else if (made > 0 && input.Window == null) view.Blocks.Add(new Block { Kind = "note", Text = "When a fellow player enjoys " + whose + " food, they show up here." });
             // About these numbers (own book, all time, with a baseline): the game's own count before the split, what Hearthwoven counted after it
@@ -578,6 +582,7 @@ namespace Hearthwoven.Panel
             view.Recorded = true;   // 0.7 rule B (game complete): the game's placed-pieces counter is the number; no twins, no zones
             view.Heading = "Building";
             view.Scope = RecordedScope(input);   // a fellow's copy: whose and when, with no install wording (rule E); replaces the page scope FellowScope
+            if (input.Window?.Shared != null) { SharedBuilding(input, view); Plate(view, "title:builder", RecordedScope(input)); return; }   // 0.8.5: a fellow's shared days (DeedsDays.cs)
             Func<string, string> named = k => Who(input, k);
             var built = Placed(input, "built");
             // the game's counts before Hearthwoven's first run and the placements since (the box's numbers only; the page shows the game's counter)
@@ -713,6 +718,7 @@ namespace Hearthwoven.Panel
             // the gear as a filter bar (Kind, Main material: FacetModel.cs, CraftingFacets.cs), then the gear that passes it as the item grid
             var items = CounterLayers(input, CraftedBaseline, input.ItemsCrafted, k => ItemKind(input, k) == "gear");   // the box's numbers only
             var gearMade = Crafted(input, "gear");
+            if (input.Window?.Shared != null) Add(view, SharedGearKinds(input));   // 0.8.5: a fellow's shared days carry the game's counters per kind, not the items
             var filter = GearFilter(input, state, gearMade);
             if (filter != null)
             {
@@ -837,26 +843,29 @@ namespace Hearthwoven.Panel
                 var c = CropOf(input, kv.Key);
                 if (c != null) Bump(crops, c, kv.Value); else Bump(notCrops, kv.Key, kv.Value);
             }
-            // every crop you planted: picked big and planted small on its tile (m_pickableStats has the picks per item)
+            // every crop you planted: picked big and planted small on its tile (m_pickableStats has the picks per item). 0.8.5: a fellow's shared
+            // days carry what was planted per crop, not the picks per crop: each tile then holds its planted alone (picked is the hero's number)
+            var sharedDay = input.Window?.Shared != null;
             double Got(string crop) => input.Harvested != null && input.Harvested.TryGetValue(crop, out var v) ? v : 0;
-            var cropGrid = ItemGrid(crops.Select(kv => (kv.Key, Got(kv.Key), kv.Value)), k => Who(input, k), k => "item:" + k, SrcCharacter, "planted");
+            var cropGrid = sharedDay ? ItemGrid(crops.Select(kv => (kv.Key, kv.Value, 0.0)), k => Who(input, k), k => "item:" + k, plantSrc)
+                                     : ItemGrid(crops.Select(kv => (kv.Key, Got(kv.Key), kv.Value)), k => Who(input, k), k => "item:" + k, SrcCharacter, "planted");
             // each crop tile carries two thin paired bars on the crop's own scale: planted (the sum, rule A) and picked (the game's counter, rule B)
             if (cropGrid != null)
             {
-                cropGrid.Kind = "cropgrid"; cropGrid.Text = PickedScope;
+                cropGrid.Kind = "cropgrid"; cropGrid.Text = sharedDay ? null : PickedScope;
                 foreach (var i in cropGrid.Items)
                 {
                     crops.TryGetValue(i.Id, out var sown1); var got = Got(i.Id); var max = Math.Max(1, Math.Max(sown1, got));
                     i.Kind = "crop";
                     i.Items = new List<Block> {
-                        new Block { Kind = "pair", Tone = PlantedWord, Title = PlantedWord, Value = N(sown1), Fraction = (float)(sown1 / max), Colour = PlantedColour, Src = input.Window != null ? plantSrc : i.Src, Source = input.Window != null ? TagOfSrc(plantSrc) : i.Source },
-                        new Block { Kind = "pair", Tone = PickedWord, Title = PickedWord, Value = N(got), Fraction = (float)(got / max), Colour = PickedColour, Src = SrcCharacter, Source = TagOfSrc(SrcCharacter) } };
+                        new Block { Kind = "pair", Tone = PlantedWord, Title = PlantedWord, Value = N(sown1), Fraction = (float)(sown1 / max), Colour = PlantedColour, Src = input.Window != null ? plantSrc : i.Src, Source = input.Window != null ? TagOfSrc(plantSrc) : i.Source } };
+                    if (!sharedDay) i.Items.Add(new Block { Kind = "pair", Tone = PickedWord, Title = PickedWord, Value = N(got), Fraction = (float)(got / max), Colour = PickedColour, Src = SrcCharacter, Source = TagOfSrc(SrcCharacter) });
                 }
             }
             // fix4: the crops picked add up to the hero's number ON THE LIST: what you picked of plants you never planted (wild ones, a fellow's field) is the list's last tile,
             // "Other plants", so 155 + 71 + 66 + 20 reads as the 312 picked; the berries, mushrooms, honey and sap are other counters and say so under their own heading
             // a day window that begins before the picks per crop were kept (KeptWhole): the remainder would be days, not wild plants, so no tile
-            var otherPlants = KeptWhole(input, DayHistory.PickedPrefix) ? picked - crops.Keys.Sum(Got) : 0;
+            var otherPlants = KeptWhole(input, DayHistory.PickedPrefix) && !sharedDay ? picked - crops.Keys.Sum(Got) : 0;
             if (otherPlants > 0)
             {
                 if (cropGrid == null) cropGrid = new Block { Kind = "cropgrid", Text = PickedScope, Src = SrcCharacter, Source = TagOfSrc(SrcCharacter), Items = new List<Block>() };
@@ -913,7 +922,8 @@ namespace Hearthwoven.Panel
             double caughtNow = C(input, "FishCaught"), hookedNow = C(input, "FishHooked");
             if (caughtNow > 0 || hookedNow > 0) Add(view, Hero((N(caughtNow), Label1(caughtNow, "fish caught", "fish caught"), SrcCharacter, null), (hookedNow > 0 ? N(hookedNow) : null, "hooked", SrcCharacter, null)));
             SkillBeside(view, input, "Fishing");
-            var hcl = new[] { ("FishHooked", "Hooked", "#6f8fa8"), ("FishCaught", "Caught", "#e8a948"), ("FishLost", "Got away", "#b8432e") };
+            var hcl = new[] { ("FishHooked", "Hooked", "#6f8fa8"), ("FishCaught", "Caught", "#e8a948"), ("FishLost", "Got away", "#b8432e") }
+                      .Take(input.Window?.Shared != null ? 2 : 3).ToArray();   // 0.8.5: a fellow's shared days carry hooked and caught, not what got away
             var left = new List<Block>();
             // They need not add up and no remainder is named (fish-held, Joost + Codex: 20 hooked and 8 got away do not prove 12 of anything). Beside a bite,
             // a counter at 0 stays: "Caught 0" says no fish was reeled in
@@ -1057,6 +1067,7 @@ namespace Hearthwoven.Panel
             var c = input.ShallowCopy();
             c.Events = ev; c.DamageSinceInstall = new DamageTally(); c.BiomeSinceInstall = new BiomeTally(); c.BiomeFromUtc = null;
             c.Character = Game(DeedLog.Counters); c.PiecesPlaced = Game(DeedLog.Placed); c.Harvested = Game(DeedLog.Picked);
+            if (c.Character != null && c.Character.TryGetValue(DeedLog.CargoTotal, out var cargo)) ev.CargoMeters[SharedPart] = cargo;   // 0.8.5: the cargo carried in the window, all items (Together)
             c.EnemyKills = null;   // the kills per foe: no Deeds page reads them
             c.ItemsPickedUp = new Dictionary<string, float>(ev.PickedUp); c.ItemsCrafted = new Dictionary<string, float>(ev.Made);
             c.Baseline = null; c.ExactAtBaseline = null; c.BaselineAt = null; c.Book = null;
@@ -1079,7 +1090,7 @@ namespace Hearthwoven.Panel
         /// <summary>"Pieces placed are counted per day from 10 Oct: this window counts them from then." The line of a page whose window
         /// begins before a counter it reads was kept per day.</summary>
         public static string KeptFromLine(string what, DateTime from, DateTime today) => what + " counted per day from " + ShortDate(from, today) + ": this window counts them from then.";
-        public const string NoDaysFood = "Fellow players' records have no days: choose All to see who enjoyed your food.",
+        public const string NoDaysFood = "Fellow players' records have no days: choose All to see who enjoyed your food.",   // their copies are older than 0.8.5 (FoodDaysLines)
                             NoDaysGear = "Fellow players' records have no days: choose All to see who put your gear to good use.",
                             NoDaysTaming = "Born near you (the server's book) and your longest lead have no days: choose All to see them.";
 
@@ -1092,9 +1103,11 @@ namespace Hearthwoven.Panel
         {
             var plate = PlateOf(view); if (plate == null) return;
             var items = plate.Items;
-            bool Numbers(IEnumerable<Block> bs) => (bs ?? Enumerable.Empty<Block>()).Any(b => b != null && b.Kind != "ladders" && b.Kind != "empty" && ((b.Src == SrcPc || b.Src == SrcCharacter) || Numbers(b.Items)));
+            bool Numbers(IEnumerable<Block> bs) => (bs ?? Enumerable.Empty<Block>()).Any(b => b != null && b.Kind != "ladders" && b.Kind != "empty" && ((b.Src == SrcPc || b.Src == SrcCharacter || b.Src == SrcFellows) || Numbers(b.Items)));   // 0.8.5: Who enjoyed has days too
             if (!Numbers(items)) { items.RemoveAll(b => b.Kind == "empty"); items.Insert(0, DayEmpty(day, w)); }
-            void Line(string text) => items.Add(new Block { Kind = "note", Text = text });
+            if (day.Window.Shared != null) return;   // 0.8.5: a fellow's shared days, which say what they hold in their own line (FellowDayLines)
+            // a fellow's book (0.8.5: their Session and 10 min to 3 h) speaks of them, and what has no minutes there shows in All
+            void Line(string text) => items.Add(new Block { Kind = "note", Text = all.IsSelf ? text : Voice(all, text).Replace("Today and longer windows", "All") });
             var today = day.Window.To;
             void Kept(string counter, string what)
             {
@@ -1112,7 +1125,7 @@ namespace Hearthwoven.Panel
             else switch (page)
             {
                 case "cooking":
-                    if (FoodAxis(all) != null) Line(NoDaysFood);
+                    foreach (var l in FoodDaysLines(all)) Line(l);   // 0.8.5: who enjoyed comes from the fellows' shared days; a copy without them says so
                     if (Placed(all, "feast").Values.Sum() > 0) Kept(DayHistory.PlacedPrefix, "Feasts set out are");
                     break;
                 case "building": Kept(DayHistory.PlacedPrefix, "Pieces built are"); break;

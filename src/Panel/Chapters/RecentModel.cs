@@ -10,7 +10,8 @@ namespace Hearthwoven.Panel
     /// what grew. Your own: the short windows and Session from this session's DeedLog (minute buckets), the day windows from the day history
     /// (InWindow, the running session's unsaved part included), All from the since-install tallies. A fellow's (B33, Joost 2026-10-10: "Session"
     /// is YOUR session's span): Session and the short windows from what reached this PC from them while you played (FellowTrail), the short
-    /// ones only when their copies come timed (live updates); All from their shared since-install totals; days are not shared. Since last time
+    /// ones only when their copies come timed (live updates); All from their shared since-install totals; their days not (0.8.5: a copy shares a
+    /// few numbers per day for the Deeds pages, DeedsDays.cs, not what grew kind by kind). Since last time
     /// from their copy now minus the mark this PC kept (FellowMarks).
     /// </summary>
     public static partial class PanelModel
@@ -45,7 +46,7 @@ namespace Hearthwoven.Panel
         public static TimeWindow[] RecentWindows => AllWindows;   // a property: AllWindows is set in another part of this class (WindowsModel.cs)
 
         /// <summary>The lines a fellow's window says when it cannot be told (B33).</summary>
-        public const string FellowNoDays = "Other players' days are not shared: choose Session or All for them.", RecentNotOn = "not on this session";
+        public const string FellowNoDays = "Recent does not show other players' days: choose Session or All for them.", RecentNotOn = "not on this session", FellowNotPlaying = "not playing now";
         // a fellow's book never says "you" (CoherenceWorld): the start of your session is said as its time, "since 21:40"
         public static string FellowNotTimed(PanelInput f) => OlderThan(f, NeedsLive) ? OlderLine(f, "10 min to 3 h fill in")   // their Hearthwoven sends no live updates (0.8.2, I: the one line form)
                                                            : f != null && f.ServerLive ? Name(f) + "'s Hearthwoven is older: choose Session."   // the server is live, their copy is not
@@ -58,7 +59,7 @@ namespace Hearthwoven.Panel
         /// <summary>Whether a Recent window can be chosen on this book: yours as every page (WindowOpen); a fellow's Session, their All when they
         /// share since-install totals, the short windows when their copies come timed (B33); never their days.</summary>
         public static bool RecentOpen(PanelInput input, TimeWindow w) =>
-            input != null && (input.IsSelf ? WindowOpen(input, w) : w == TimeWindow.Session || (w == TimeWindow.SinceInstall && input.SharedSinceInstall) || (IsShortWindow(w) && input.Timed));
+            input != null && (input.IsSelf ? WindowOpen(input, w) : w == TimeWindow.Session || (w == TimeWindow.SinceInstall && input.SharedSinceInstall) || (IsShortWindow(w) && FellowLive(input)));   // 0.8.5: Battle's live rule
 
         /// <summary>What grew in a window: your own book (input.IsSelf), else RecentOfFellow.</summary>
         public static RecentView RecentOf(PanelInput input, TimeWindow w)
@@ -125,6 +126,8 @@ namespace Hearthwoven.Panel
                 return v;
             }
             if (w != TimeWindow.Session && !fellow.Timed) { v.Shown = false; v.Why = FellowNotTimed(fellow); return v; }
+            // 0.8.5: 10 min to 3 h only while their copy is live (FellowLive, 90 s: Battle's rule, so their pages, the group's and Battle agree)
+            if (w != TimeWindow.Session && !FellowLive(fellow)) { v.Shown = false; v.Why = FellowShortWhy(fellow); v.Row = FellowNotPlaying; return v; }
             var trail = fellow.Trail;
             if (trail == null) { v.Shown = false; v.Why = FellowWaiting(fellow); return v; }
             var from = w == TimeWindow.Session ? fellow.ViewerSessionStartUtc : Cutoff(w, fellow.NowUtc);

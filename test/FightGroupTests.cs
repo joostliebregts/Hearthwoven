@@ -301,6 +301,20 @@ static class FightGroupTests
         Check(refused.Count == 0 && window.Count == 12 && window.Max() <= LiveDelta.MaxPacked,
               "FG bytes: each 10 s update of the busy Queen fight is one message the 0.8.1 server keeps (JSON object, base and seq, nothing private, no identity key), at most " + (window.Count > 0 ? window.Max() : 0) +
               " bytes packed since the last full copy (limit " + LiveDelta.MaxPacked + ")" + (refused.Count > 0 ? ": refused " + string.Join(", ", refused) : ""));
+
+        // ---------- 0.8.5: Hildir's minibosses are boss fights, flagged by the game or not ----------
+        // Geirrhafa's raid copy hits and is hit with the game's boss flag off (as the hooks pass Character.IsBoss); a Fenring Cultist is no boss
+        {
+            var rec = new BattleRecorder(); var at = new Spot(1200f, 160f, 3400f);
+            var geir = new FoeId(-90001, 1); var cultist = new FoeId(-90001, 2);
+            for (int s = 0; s < 60; s += 5) rec.Dealt(T(s), geir, "Fenring_Cultist_Hildir_nochest", "$enemy_fenringcultist_hildir", "Mountain", new HitData.DamageTypes { m_fire = 50 }, false, at);
+            rec.Dealt(T(400), cultist, "Fenring_Cultist", "$enemy_fenringcultist", "Mountain", new HitData.DamageTypes { m_fire = 50 }, false, new Spot(2200f, 160f, 3400f));
+            var bossFights = rec.BossFights();
+            var book = FightAdapter.Build(new List<FightSide> { FightSide.Of(rec, "Rowan") }, null, null, T(500));
+            Check(bossFights.Count == 1 && bossFights[0].Bosses.SequenceEqual(new[] { geir }) && book.Fights.Count(f => f.Kind == FightKind.Boss) == 1 &&
+                  book.Fights.First(f => f.Kind == FightKind.Boss).Boss == "Fenring_Cultist_Hildir_nochest" && BattleRecorder.IsBoss(false, null, "$enemy_skeletonfire") && !BattleRecorder.IsBoss(false, "Skeleton", "$enemy_skeleton"),
+                  "FG Hildir's miniboss starts a boss fight with the game's boss flag off (Geirrhafa's raid copy, by prefab; Brenna by name token); a Fenring Cultist starts none");
+        }
         return fails;
     }
 }

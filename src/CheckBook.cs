@@ -33,6 +33,7 @@ namespace Hearthwoven
             new KeyValuePair<string, string>("procreate-hook", "stand near tamed animals that can breed (boars, wolves, lox)"),
             new KeyValuePair<string, string>("egg-hook", "stand near a fertilised egg lying by a fire"),
             new KeyValuePair<string, string>("born", "see a tamed young born or hatched within 40 m of you"),
+            new KeyValuePair<string, string>("stoker-hook", "with the smelter mod: open a Stoker's Chest that feeds a smelter (opening it makes your PC its host) and stay near"),
             new KeyValuePair<string, string>("filter-key", "open the panel on Deeds > Crafting (or Building, Battle) and press the filter key"),
             new KeyValuePair<string, string>("snapshot-final", "log out to the main menu (the line comes at logout)"),
             new KeyValuePair<string, string>("perf", "play a minute, open the book (H) and page through it (one 'perf' line a minute: the panel, page refresh and hook cost per frame)"),

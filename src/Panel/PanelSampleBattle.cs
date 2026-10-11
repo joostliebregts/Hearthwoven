@@ -132,6 +132,46 @@ namespace Hearthwoven.Panel
             if (p.IsSelf) p.SessionOnly = new SessionEvents { Blocks = blocks, Parries = parries };
         }
 
+        /// <summary>
+        /// 0.8.5: the book right after a restart (KeptFights): its evening's battle record kept as an earlier session that ended <paramref name="ago"/>
+        /// before the book's new now, Edda and Tor beside you in its newest fight with their own parts (their PCs' records of the same creatures, as
+        /// their shared feeds carried them), through the kept file and the fight adapter as in game. This session: nothing fought yet, or (above 0)
+        /// two Greydwarfs <paramref name="fightMinutesAgo"/> minutes ago.
+        /// </summary>
+        public static PanelInput Restarted(PanelInput evening, TimeSpan ago, int fightMinutesAgo = 0)
+        {
+            var book = evening.ShallowCopy();
+            var end = evening.NowUtc; book.NowUtc = end + ago; book.SessionStartUtc = book.NowUtc.AddMinutes(-(fightMinutesAgo + 5));
+            bool Shares(string n) => SampleWorld.Everyone.Any(e => string.Equals(e, n, StringComparison.OrdinalIgnoreCase));
+            var fellows = new List<FightSide>();
+            var last = evening.Battle?.Fights().FirstOrDefault();
+            if (last != null)
+                foreach (var (name, d) in new[] { (SampleWorld.Edda, new HitData.DamageTypes { m_slash = 70 }), (SampleWorld.Tor, new HitData.DamageTypes { m_blunt = 55 }) })
+                {
+                    var rec = new BattleRecorder();
+                    foreach (var e in last.Entries.OrderBy(x => x.StartUtc)) rec.Dealt(e.StartUtc.AddSeconds(2), e.Id, e.Kind, e.Token, e.Biome, d);
+                    rec.Tick(end);
+                    fellows.Add(FightSide.Of(FeedShare.From(rec, Shares), name, "k-" + name, end));
+                }
+            const string world = "Sample-1";
+            var kept = new KeptFights { PlayerId = book.PlayerId.ToString(CultureInfo.InvariantCulture), Name = book.PlayerName ?? "" };
+            kept.Record(KeptFights.Take(world, "s0", evening.SessionStartUtc ?? end.AddHours(-3), end, evening.Battle, book.PlayerName, Shares, fellows), end);
+            book.KeptSessions = KeptFights.FromJson(kept.ToJson(end)).Earlier(world, "s1", book.NowUtc);   // as the totals load it: every fight ended, tagged with its session
+            var now = new BattleRecorder();
+            for (uint i = 0; fightMinutesAgo > 0 && i < 2; i++)
+            {
+                var id = new FoeId(book.PlayerId, 9001 + i); var at = book.NowUtc.AddMinutes(-fightMinutesAgo).AddSeconds(9 * i);
+                now.Dealt(at, id, "Greydwarf", "$enemy_greydwarf", "BlackForest", new HitData.DamageTypes { m_slash = 60 + 20 * i });
+                now.Received(at.AddSeconds(2), id, "Greydwarf", "$enemy_greydwarf", "BlackForest", new HitData.DamageTypes { m_blunt = 9 });
+                now.Killed(at.AddSeconds(5), "$enemy_greydwarf", 1); now.Destroyed(at.AddSeconds(5.5), id);
+            }
+            now.Tick(book.NowUtc);
+            book.Battle = now;
+            var fights = FightAdapter.Build(new List<FightSide> { FightSide.Of(now, book.PlayerName) }, book.BossLog, null, book.NowUtc, null, book.KeptSessions);
+            book.Fights = fights.Fights.Count > 0 ? fights : null;
+            return book;
+        }
+
         /// <summary>What a book's record puts in its shared copy (FoeShare), as Plugin does: this session and since recording began.</summary>
         public static FoeShare ShareOf(PanelInput own) =>
             own?.Battle == null ? null : new FoeShare { Session = own.Battle.Counts(null), Since = own.FoesSince, FromUtc = own.FoesFromUtc };

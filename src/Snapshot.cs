@@ -15,7 +15,8 @@ namespace Hearthwoven
                                    IEnumerable<SkillInfo> skills, string world, DamageTally damage, string session = "", SessionEvents events = null, EventLog log = null, bool share = false,
                                    SessionEvents eventsSinceInstall = null, DamageTally damageSinceInstall = null, BiomeTally biomeSinceInstall = null, System.DateTime? biomeFromUtc = null, FeatsLedger feats = null,
                                    IDictionary<string, float> dealtByDay = null, IEnumerable<string> knownBiomes = null, string copyId = null, FoeShare foes = null, FeedShare feed = null,
-                                   IDictionary<string, Dictionary<string, float>> dayDealt = null, string logBefore = null)
+                                   IDictionary<string, Dictionary<string, float>> dayDealt = null, string logBefore = null,
+                                   IDictionary<string, Dictionary<string, Dictionary<string, float>>> dayDeeds = null)
         {
             // Absolute values only: a resend after a reconnect or crash replaces, never adds.
             var j = new Json().Open()
@@ -74,6 +75,13 @@ namespace Hearthwoven
                 foreach (var kv in dayDealt) if (kv.Value != null && kv.Value.Count > 0) j.Dict(kv.Key, kv.Value);
                 j.Close();
             }
+            // 0.8.5: your Deeds per local day, the last 30 days: per family the parts each Deeds page's hero and first bar show (PanelModel.DayDeeds:
+            // wood and ore brought in, pieces built per hammer tab, dishes, plantings, fish, the game's craft, farm, fish and taming counters),
+            // so a fellow's Deeds pages and the group's work on Today, 7 days and 30 days. Written whenever the day history is loaded, also empty,
+            // so a reader can tell "nothing done" from an older Hearthwoven; nested per day, so a live update carries only today's amounts that
+            // changed (and a part name new today). Each family's part names stand once, a day holds its amounts in that order. An older reader
+            // ignores the key
+            Panel.PanelModel.WriteDayDeeds(j, dayDeeds);
             // the bests behind some feats (Heavy Keel's load, Long Lead's lead): number, day and biome, never a place
             feats?.WriteSharedBests(j);
             // the biomes this character found (0.7: the group feats' gate counts fellows' lands too; GROUP-FEATS.md 1.3): the game's own record mapped

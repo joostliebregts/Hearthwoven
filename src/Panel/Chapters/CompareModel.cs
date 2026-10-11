@@ -19,12 +19,33 @@ namespace Hearthwoven.Panel
     /// older than the history's day rows (30 days: rows are kept per day for DayHistory.DayRows days), a fellow's book (they share no days).
     /// A comparison never mixes a game total with a count from install (the 0.7 "one recorded total" rule): both periods come from the day rows,
     /// and a block whose source differs between the two periods is left as it is.
+    /// 0.8.5 (work/hearthwoven-0.8.5/proto/4-compare, A and C; Joost: "I don't actually know what it's showing me and how I compare to something
+    /// else"): the page's title says the pair ("Woodcutting, today against yesterday"), the strip a one-line legend drawn as the bars are ("solid
+    /// bar: today", "thin outline: yesterday"), and a greyed chip in a day window says when it opens ("Compare opens 14 Oct") with its reason as one
+    /// line in the strip. The chip opens a small menu of what to compare against, kept per page (PanelState.CompareWith, PanelPrefs): the stretch
+    /// just before (yesterday, the 7 before), the same stretch earlier (the same day last week; the same 7 days 4 weeks back, as far as the day rows
+    /// reach), or your best (the day, or the 7 days, with the most of the page's hero number in your day history), and Off. An option the history
+    /// does not reach yet is greyed with its reason; a chosen option that is greyed shows the stretch just before until it opens.
     /// </summary>
     public static partial class PanelModel
     {
         public const string CompareId = "compare", CompareLabel = "Compare", CompareRowsKind = "comparerows";
-        /// <summary>The click target of the Compare chip (Follow): on and off.</summary>
+        /// <summary>The click target of Together's Compare chip (Follow): on and off.</summary>
         public const string CompareTarget = "compare:toggle";
+        /// <summary>0.8.5: the click target of the heading's Compare chip (Follow): its menu opens and closes.</summary>
+        public const string CompareMenuTarget = "compare:menu";
+        /// <summary>0.8.5: a click outside the open menu (Follow): the menu closes, nothing else changes (never opens it, unlike the chip).</summary>
+        public const string CompareCloseTarget = "compare:close";
+        /// <summary>0.8.5: a menu option's click target: this, the page ("Deeds/woodcutting"), "=", the option's id.</summary>
+        public const string ComparePickTarget = "compare:pick=";
+        /// <summary>0.8.5: what a page compares against: the stretch just before (the default), the same stretch earlier, your best; Off ends it.</summary>
+        public const string CompareLastId = "last", CompareSameId = "same", CompareBestId = "best", CompareOffId = "off";
+        /// <summary>0.8.5: the menu under the chip (PanelView.CompareMenu) and its rows.</summary>
+        public const string CompareMenuKind = "comparemenu", CompareOptionKind = "compareoption", CompareOffLabel = "Off";
+        /// <summary>0.8.5: the legend in the strip, drawn as the bars are: "solid bar: today", "thin outline: yesterday".</summary>
+        public const string CompareSolidWords = "solid bar:", CompareOutlineWords = "thin outline:";
+        /// <summary>0.8.5: the key line's entry while the menu is open (W/S walk its options, Enter picks one).</summary>
+        public const string CompareMenuKeys = "[W/S·Enter] Choose";
         /// <summary>The change mark's arrows and words (never green or red: the mark does not judge).</summary>
         public const string CompareUp = "▲ ", CompareDown = "▼ ", CompareNew = "new", CompareSame = "same", CompareUnderOne = "<1 %";
         /// <summary>The bar colour of a row that is a thing, not an item or a damage type (a tree, a weapon, a foe): the ranking's gold.</summary>
@@ -32,13 +53,14 @@ namespace Hearthwoven.Panel
         /// <summary>At most this many rows per block; the rest as "Other (n kinds)", as the bar form folds.</summary>
         public const int CompareMaxRows = 9;
 
-        /// <summary>The greyed chip's reason on All, Session and the short windows (Joost, 0.8.1: "needs a day window" confused; plain words now).</summary>
-        public const string CompareNeedsDay = "Compare sets today beside yesterday, or 7 days beside the 7 before. Pick Today or 7 days.";
+        /// <summary>The greyed chip's reason on All, Session and the short windows (Joost, 0.8.1: "needs a day window" confused; plain words now).
+        /// 0.8.5: one short line, so its tag under the chip covers little.</summary>
+        public const string CompareNeedsDay = "Compare works on Today and 7 days.";
         public const string CompareOwnBook = "Compare works in your own book.";
         public const string CompareArmourLine = "What your armor stopped is shown for this period only.";
         /// <summary>0.8, with the Everyone chip (PICKS.md section 3: only Battle > Damage By player compares the group, from the fellows' damage
-        /// dealt per day): the greyed chip's reason on every other group page.</summary>
-        public const string CompareEveryoneOff = "Not while Everyone is on: fellow players share totals, not days, so there is no earlier stretch to set beside the group's. Battle > Damage compares the group, player by player.";
+        /// dealt per day): the greyed chip's reason on every other group page. 0.8.5: one line, as the strip shows it.</summary>
+        public const string CompareEveryoneOff = "With Everyone on, only Battle > Damage compares: fellow players share totals, not days.";
         /// <summary>Battle > Damage By foe while comparing: the damage per foe kind is compared, the "×N" and the marks are not.</summary>
         public const string CompareByFoeLine = "The ×N and the marks show with Compare off.";
 
@@ -51,6 +73,17 @@ namespace Hearthwoven.Panel
             public string Why;
             /// <summary>The first day it works (the dated reason); null when it works, or never will in this window.</summary>
             public DateTime? OpensOn;
+            /// <summary>0.8.5: what it compares against (CompareLastId, CompareSameId, CompareBestId); on CompareOf's answer, every option of the
+            /// menu with its own periods (null while the chip is greyed: there is no menu then, or when not asked for). Short: a greyed option's
+            /// reason in the menu, where its dates would stand ("opens 15 Oct").</summary>
+            public string With = CompareLastId;
+            public List<ComparePeriods> Options;
+            public string Short;
+            /// <summary>0.8.5: a greyed chip's reason as the strip's one line, short enough for it beside the strip's right end (the chip says the
+            /// date itself: "Needs 14 full days; your history starts on 1 Oct."); null: none.</summary>
+            public string Line;
+            /// <summary>How many days the period before ends before this one does: 1 for yesterday, 7 for the same day last week.</summary>
+            public int Back => (To - BeforeTo).Days;
         }
 
         /// <summary>The pages that offer Compare: the day-window pages with addable numbers (Deeds' pages but Overview and Recent, Battle Damage and
@@ -62,7 +95,37 @@ namespace Hearthwoven.Panel
 
         /// <summary>"yesterday", "the 7 before": what the number before is, where it stands beside a number now, and the compare rows' column head
         /// over it. 0.8.1 (Joost): the heads name the periods, not "now" and "before".</summary>
-        public static string BeforeLabel(TimeWindow w) => w == TimeWindow.Today ? "yesterday" : "the " + DaysOf(w) + " before";
+        public static string BeforeLabel(TimeWindow w) => CompareWords(w, CompareLastId).label;
+
+        /// <summary>
+        /// 0.8.5: an option's words. Menu: its row in the menu ("The same day last week"); Title: the page's title after "against" ("your best
+        /// day"); Label: after a number before ("from 20 on your best day", "135 on your best day"); Head: the compare rows' column head.
+        /// </summary>
+        public static (string menu, string title, string label, string head) CompareWords(TimeWindow w, string with)
+        {
+            if (w == TimeWindow.Today)
+                switch (with)
+                {
+                    case CompareSameId: return ("The same day last week", "the same day last week", "on the same day last week", "last week");
+                    case CompareBestId: return ("Your best day", "your best day", "on your best day", "best day");
+                    default: return ("Yesterday", "yesterday", "yesterday", "yesterday");
+                }
+            var n = DaysOf(w);
+            switch (with)
+            {
+                case CompareSameId: return ("The same " + n + " days last month", "the same " + n + " days last month", "in the same " + n + " days last month", "last month");
+                case CompareBestId: return ("Your best " + n + " days", "your best " + n + " days", "in your best " + n + " days", "best " + n + " days");
+                default: return ("The " + n + " before", "the " + n + " before", "the " + n + " before", "the " + n + " before");
+            }
+        }
+
+        /// <summary>0.8.5: the period before, short: "Wed 7 Oct" for a day, "4 to 10 Sep" for more.</summary>
+        public static string CompareDates(ComparePeriods p, DateTime today) =>
+            p.BeforeFrom == p.BeforeTo ? p.BeforeTo.ToString("ddd ", Inv) + ShortDate(p.BeforeTo, today) : DayRange(p.BeforeFrom, p.BeforeTo, today);
+
+        /// <summary>0.8.5: the legend's thin outline in words: "yesterday", "the 7 before"; an earlier stretch with its dates ("your best day, Sun 4 Oct").</summary>
+        public static string CompareThenWords(ComparePeriods p, DateTime today) =>
+            p.With == CompareLastId ? CompareWords(p.Window, p.With).title : CompareWords(p.Window, p.With).title + ", " + CompareDates(p, today);
 
         /// <summary>"today", "these 7 days": the compare rows' column head over the numbers now.</summary>
         public static string NowLabel(TimeWindow w) => w == TimeWindow.Today ? "today" : "these " + DaysOf(w) + " days";
@@ -78,6 +141,9 @@ namespace Hearthwoven.Panel
         /// <summary>"7 days against the 7 before", "today against yesterday".</summary>
         static string Against(TimeWindow w) => w == TimeWindow.Today ? "today against yesterday" : DaysOf(w) + " days against the " + DaysOf(w) + " before";
 
+        /// <summary>0.8.5: the pair in the page's title, after the page's name and window: "today against yesterday", "last 7 days against your best 7 days".</summary>
+        public static string ComparePair(string window, ComparePeriods p) => window + " against " + CompareWords(p.Window, p.With).title;
+
         /// <summary>A day range, short: "4 to 10 Oct", "27 Sep to 3 Oct"; one day: "10 Oct".</summary>
         public static string DayRange(DateTime from, DateTime to, DateTime today)
         {
@@ -86,10 +152,14 @@ namespace Hearthwoven.Panel
             return head + " to " + ShortDate(to, today);
         }
 
-        /// <summary>The plate's first line while comparing: "7 days, 4 to 10 Oct, against the 7 days before, 27 Sep to 3 Oct."</summary>
-        public static string CompareLine(ComparePeriods p, DateTime today) =>
-            p.Window == TimeWindow.Today ? "Today, " + ShortDate(p.To, today) + ", against yesterday, " + ShortDate(p.BeforeTo, today) + "."
-            : DaysOf(p.Window) + " days, " + DayRange(p.From, p.To, today) + ", against the " + DaysOf(p.Window) + " days before, " + DayRange(p.BeforeFrom, p.BeforeTo, today) + ".";
+        /// <summary>The plate's first line while comparing: "7 days, 4 to 10 Oct, against the 7 days before, 27 Sep to 3 Oct." (0.8.5: "against your
+        /// best day, 4 Oct"; About these numbers holds it, under "Compared").</summary>
+        public static string CompareLine(ComparePeriods p, DateTime today)
+        {
+            var title = p.With == CompareLastId && p.Window != TimeWindow.Today ? "the " + DaysOf(p.Window) + " days before" : CompareWords(p.Window, p.With).title;
+            return p.Window == TimeWindow.Today ? "Today, " + ShortDate(p.To, today) + ", against " + title + ", " + ShortDate(p.BeforeTo, today) + "."
+                : DaysOf(p.Window) + " days, " + DayRange(p.From, p.To, today) + ", against " + title + ", " + DayRange(p.BeforeFrom, p.BeforeTo, today) + ".";
+        }
 
         // ---------- the change mark ----------
 
@@ -214,7 +284,7 @@ namespace Hearthwoven.Panel
             }
         }
 
-        static ComparePeriods Greyed(ComparePeriods p, string why) { p.Open = false; p.Why = why; return p; }
+        static ComparePeriods Greyed(ComparePeriods p, string why, string line = null) { p.Open = false; p.Why = why; p.Line = line; return p; }
 
         /// <summary>
         /// Whether this page compares and the two periods: null when the page offers no Compare. The window is the one the page shows; a day
@@ -228,8 +298,7 @@ namespace Hearthwoven.Panel
             TimeWindow? w;
             if (sw != null)
             {
-                // the window Together shows (a greyed day window pressed shows All): on All its window row holds its long caption ("All: recorded
-                // from 1 October") and the chip would cut it, so Together offers Compare on its other windows only
+                // the window Together shows (a greyed day window pressed shows All): Compare needs a period before it, so not on All
                 var shown = (sw.Items ?? new List<Block>()).FirstOrDefault(v => v.Selected)?.Id;
                 w = Enum.TryParse(shown ?? "", out TimeWindow chosen) && Enum.IsDefined(typeof(TimeWindow), chosen) ? chosen : TimeWindow.SinceInstall;
                 if (w == TimeWindow.SinceInstall) return null;
@@ -241,18 +310,20 @@ namespace Hearthwoven.Panel
                 if (w == TimeWindow.SinceInstall && IsDayWindow(state.Window) && view.Windows.Any(c => c.Id == state.Window.ToString())) w = state.Window;   // a greyed day window pressed (B17)
             }
             var p = new ComparePeriods { Window = w ?? TimeWindow.SinceInstall };
-            if (!input.IsSelf) return Greyed(p, (input.DayDealt != null ? Name(input) + "'s copy shares damage dealt per day, not the day history Compare reads. "   // 0.9: their Damage has days now
-                                                                         : Name(input) + " shares totals, not days, so there is no earlier stretch to set beside this one. ") + CompareOwnBook);
+            if (!input.IsSelf) return Greyed(p, (input.DayDeeds != null ? Name(input) + "'s copy shares a few numbers per day, not the day history Compare reads. "   // 0.8.5: their Deeds pages have days too
+                                                 : input.DayDealt != null ? Name(input) + "'s copy shares damage dealt per day, not the day history Compare reads. "   // 0.9: their Damage has days now
+                                                                         : Name(input) + " shares totals, not days, so there is no earlier stretch to set beside this one. ") + CompareOwnBook, CompareOwnBook);
             // 0.8 the Everyone chip: the group's page compares only on Battle > Damage, By player (each fellow's damage dealt per day)
             var group = ShowsEveryone(input, state, view.Page) || view.EveryoneOn;   // Meals draws its own group view (MealsModel.cs)
-            if (group && !(view.Active == Chapter.Battle && view.Page == "damage")) return Greyed(p, CompareEveryoneOff);
+            if (group && !(view.Active == Chapter.Battle && view.Page == "damage")) return Greyed(p, CompareEveryoneOff, "With Everyone on, only Battle > Damage compares.");
             if (!w.HasValue || !IsDayWindow(w.Value)) return Greyed(p, CompareNeedsDay);
             var n = DaysOf(w.Value);
             var today = LocalToday(input);
             p.To = today; p.From = today.AddDays(1 - n); p.BeforeTo = p.From.AddDays(-1); p.BeforeFrom = p.From.AddDays(-n);
             if (2 * n > DayHistory.DayRows)   // the pair would reach past the day rows (they fold into weeks after DayRows days): never fair
-                return Greyed(p, "Your history keeps single days for " + DayHistory.DayRows + " days, so " + Against(w.Value) + " cannot be shown. Pick Today or 7 days.");
-            if (input.History == null) return Greyed(p, "Your day history is not loaded yet.");
+                return Greyed(p, "Your history keeps single days for " + DayHistory.DayRows + " days, so " + Against(w.Value) + " cannot be shown. Pick Today or 7 days.",
+                              "Single days are kept for " + DayHistory.DayRows + " days: pick Today or 7 days.");
+            if (input.History == null) return Greyed(p, "Your day history is not loaded yet.", "Your day history is not loaded yet.");
             var first = input.History.FirstDay(today);
             var from = DayRowsFrom(input.History, today);
             var counter = CompareCounter(input, view.Active, view.Page);
@@ -263,17 +334,153 @@ namespace Hearthwoven.Panel
                 p.OpensOn = from.AddDays(2 * n - 1);
                 var since = from > first ? "This page is counted per day from " + ShortDate(from, today) : "Your history on this PC starts on " + ShortDate(first, today);
                 return Greyed(p, "Compare opens on " + ShortDate(p.OpensOn.Value, today) + ". " + since + "; " + Against(w.Value) +
-                                 (w == TimeWindow.Today ? " needs yesterday too." : " needs " + 2 * n + " full days."));
+                                 (w == TimeWindow.Today ? " needs yesterday too." : " needs " + 2 * n + " full days."),
+                              (w == TimeWindow.Today ? "Needs yesterday too" : "Needs " + 2 * n + " full days") + "; " + (from > first ? "this page counts days from " : "your history starts on ") + ShortDate(from, today) + ".");
             }
             if (sw != null || group)   // Together, and Everyone's Battle > Damage: every fellow who shares carries their damage dealt per day (the last 30 days of their copy) back to the period before
             {
-                var shortOf = FiresidePeople(input).Where(f => !f.Input.IsSelf).Where(f => f.Input.DealtByDay == null ||
-                    Local(input, f.Input.LastRecordedUtc ?? f.Input.ReceivedUtc ?? input.NowUtc).Date.AddDays(-29) > p.BeforeFrom).Select(f => f.Name).ToList();
+                var shortOf = ShortOf(input, p.BeforeFrom);
                 if (shortOf.Count > 0)
-                    return Greyed(p, "Compare needs each player's days back to " + ShortDate(p.BeforeFrom, today) + ": " + JoinNames(shortOf) + (shortOf.Count == 1 ? "'s copy does" : "'s copies do") + " not reach that far.");
+                    return Greyed(p, "Compare needs each player's days back to " + ShortDate(p.BeforeFrom, today) + ": " + JoinNames(shortOf) + (shortOf.Count == 1 ? "'s copy does" : "'s copies do") + " not reach that far.",
+                                  JoinNames(shortOf) + (shortOf.Count == 1 ? "'s copy does" : "'s copies do") + " not reach back to " + ShortDate(p.BeforeFrom, today) + ".");
             }
             p.Open = true;
-            return p;
+            return sw != null ? p : Choose(input, state, view, p, from, group);   // Together's own chip turns on and off; the heading's chip has the menu
+        }
+
+        // the fellows whose shared damage per day (the last 30 days of their copy) does not reach back to a day
+        static List<string> ShortOf(PanelInput input, DateTime from) => FiresidePeople(input).Where(f => !f.Input.IsSelf).Where(f => f.Input.DealtByDay == null ||
+            Local(input, f.Input.LastRecordedUtc ?? f.Input.ReceivedUtc ?? input.NowUtc).Date.AddDays(-29) > from).Select(f => f.Name).ToList();
+
+        /// <summary>0.8.5: the page whose comparison choice this is ("Deeds/woodcutting"), as PanelState.CompareWith keeps it.</summary>
+        public static string ComparePageOf(PanelView view) => view.Active + "/" + view.Page;
+
+        /// <summary>0.8.5: what this page compares against as chosen (CompareLastId when nothing was chosen).</summary>
+        public static string CompareChoice(PanelState s, PanelView view) => s.CompareWith.TryGetValue(ComparePageOf(view), out var w) && Array.IndexOf(CompareChoices, w) >= 0 ? w : CompareLastId;
+        static readonly string[] CompareChoices = { CompareLastId, CompareSameId, CompareBestId };
+
+        // an option's two periods: the period now as the default's, the period before ending back days before it ends
+        static ComparePeriods OptionOf(ComparePeriods last, string with, int back)
+        {
+            var n = DaysOf(last.Window);
+            var o = new ComparePeriods { Window = last.Window, From = last.From, To = last.To, With = with, Open = true };
+            o.BeforeTo = last.To.AddDays(-back); o.BeforeFrom = o.BeforeTo.AddDays(1 - n);
+            return o;
+        }
+
+        /// <summary>
+        /// 0.8.5: the page's comparison as chosen (the default when its choice is greyed) with every option of the menu: the stretch just before,
+        /// the same stretch earlier (a day: 7 days back; 7 days: 28 days back, so the weekdays match and the day rows still hold it), and your best.
+        /// The best is worked out only when it is chosen or the menu is open (it builds the page once per day of the history: BestOf).
+        /// </summary>
+        static ComparePeriods Choose(PanelInput input, PanelState state, PanelView view, ComparePeriods last, DateTime from, bool group)
+        {
+            var n = DaysOf(last.Window); var today = last.To;
+            var asked = CompareChoice(state, view);
+            var same = OptionOf(last, CompareSameId, n == 1 ? 7 : 28);
+            if (same.BeforeFrom < from)
+            {
+                same.Open = false; same.OpensOn = from.AddDays(same.Back + n - 1);
+                same.Short = "opens " + ShortDate(same.OpensOn.Value, today);
+                same.Why = CompareWords(last.Window, CompareSameId).menu + " opens on " + ShortDate(same.OpensOn.Value, today) + ": your day history does not reach " + ShortDate(same.BeforeFrom, today) + " yet.";
+            }
+            else if (group && ShortOf(input, same.BeforeFrom) is List<string> shortOf && shortOf.Count > 0)
+            {
+                same.Open = false; same.Short = "copies too short";
+                same.Why = "Compare needs each player's days back to " + ShortDate(same.BeforeFrom, today) + ": " + JoinNames(shortOf) + (shortOf.Count == 1 ? "'s copy does" : "'s copies do") + " not reach that far.";
+            }
+            ComparePeriods best = null;
+            if (group) { best = OptionOf(last, CompareBestId, n); best.Open = false; best.Short = "your own book only"; best.Why = "Your best day is read from your own day history, not the group's."; }
+            else if (asked == CompareBestId || state.CompareMenu) best = BestOf(input, state, view, last, from);
+            var options = new List<ComparePeriods> { last, same };
+            if (best != null) options.Add(best);
+            var pick = options.FirstOrDefault(o => o.With == asked && o.Open) ?? last;
+            pick.Options = options;
+            return pick;
+        }
+
+        /// <summary>
+        /// 0.8.5: your best stretch before this one: the n days (one, or seven) with the most of the page's main number (its hero's: "trees felled")
+        /// in your day history, ending before this period begins; the latest on a tie. A day the hero's first number is missing on (no tree felled,
+        /// only axe hits) counts 0: the same number is read on every day. Greyed when no such stretch counted any yet.
+        /// </summary>
+        static ComparePeriods BestOf(PanelInput input, PanelState state, PanelView view, ComparePeriods last, DateTime from)
+        {
+            var n = DaysOf(last.Window); var today = last.To;
+            var o = OptionOf(last, CompareBestId, n);
+            var counts = DayCounts(input, state, view, from, today.AddDays(-1));   // every day before today: Today and 7 days share them
+            // the main number: the one most days lead their hero with (a day without a tree felled leads with its axe hits: Hero drops an empty
+            // first number), else the page's own now; the same number on every day
+            var main = counts.Values.Select(d => d.Keys.FirstOrDefault()).Where(k => k != null).GroupBy(k => k).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal).Select(g => g.Key).FirstOrDefault()
+                       ?? HeroNumbers(view, input, last.Window).Select(x => x.key).FirstOrDefault();
+            double top = 0; DateTime? end = null;
+            for (var e = from.AddDays(n - 1); e <= today.AddDays(-n); e = e.AddDays(1))
+            {
+                double sum = 0;
+                for (int k = 0; k < n; k++) if (main != null && counts.TryGetValue(e.AddDays(-k), out var day) && day.TryGetValue(main, out var v)) sum += v;
+                if (sum > 0 && sum >= top) { top = sum; end = e; }
+            }
+            if (end == null)
+            {
+                o.Open = false; o.Short = "none yet";
+                o.Why = "No earlier " + (n == 1 ? "day" : n + " days") + " in your day history counted any " + (main ?? "of this page's number") + " yet.";
+                return o;
+            }
+            o.BeforeTo = end.Value; o.BeforeFrom = end.Value.AddDays(1 - n);
+            return o;
+        }
+
+        // the page's hero numbers on each day from one day to another (your day history, each day built as Today seen from that day), by their
+        // title without its plural ("tree felled"), kept while the page, its choices and the history stay the same: the days before today do not change
+        static string dayCountsKey; static Dictionary<DateTime, Dictionary<string, double>> dayCounts; static DayHistory dayCountsHistory;
+        /// <summary>0.8.5: how many single days were built to find a best day (Dev and the tests: once per page while nothing it reads changed).</summary>
+        public static int CompareDayBuilds { get; private set; }
+
+        static Dictionary<DateTime, Dictionary<string, double>> DayCounts(PanelInput input, PanelState state, PanelView view, DateTime from, DateTime to)
+        {
+            var key = CompareCacheKey(input, state, view, TimeWindow.Today, to) + "|days|" + DayHistory.DayKey(from);
+            if (dayCounts != null && key == dayCountsKey && ReferenceEquals(dayCountsHistory, input.History)) return dayCounts;
+            var s = (PanelState)CopyOf.Invoke(state, null);
+            s.Compare = false; s.CompareTip = false; s.CompareMenu = false; s.WaitAt = null; s.WaitView = null; s.Window = TimeWindow.Today; s.WindowPicked = true;
+            var today = LocalToday(input);
+            var d = new Dictionary<DateTime, Dictionary<string, double>>();
+            for (var day = from; day <= to; day = day.AddDays(1))
+            {
+                var at = BeforeInput(input, TimeWindow.Today, (today - day).Days);
+                var numbers = new Dictionary<string, double>();
+                foreach (var (title, amount) in HeroNumbers(BuildView(at, s), at, TimeWindow.Today)) if (!numbers.ContainsKey(title)) numbers[title] = amount;
+                d[day] = numbers;
+                CompareDayBuilds++;
+            }
+            dayCountsKey = key; dayCounts = d; dayCountsHistory = input.History;
+            return d;
+        }
+
+        /// <summary>0.8.5: the page's hero numbers in order, each by its title without the plural ("tree felled") with its amount (Battle > Damage:
+        /// the damage dealt its comparison shows as the hero); none when the page has no hero, a number not recorded or not an amount left out.</summary>
+        static IEnumerable<(string key, double amount)> HeroNumbers(PanelView v, PanelInput at, TimeWindow w)
+        {
+            var blocks = CloneTop(v.Blocks); BattleHeroes(blocks, at, w);
+            var hero = Shown(blocks).FirstOrDefault(b => b != null && b.Kind == "hero");
+            if (hero == null) yield break;
+            foreach (var x in new[] { hero }.Concat((hero.Items ?? new List<Block>()).Where(i => i.Kind == "number")))
+            {
+                if (x.Unrecorded || string.IsNullOrEmpty(x.Value) || string.IsNullOrEmpty(x.Title)) continue;
+                var a = Amount(x.Value);
+                if (!double.IsNaN(a) && a > 0) yield return (Loose(x.Title), a);
+            }
+        }
+
+        /// <summary>The day each option of the page's menu compares with, worked out as the menu shows them (the tests' way in): option id to its
+        /// period before, or null when greyed. The menu need not be open.</summary>
+        public static Dictionary<string, (DateTime from, DateTime to)?> CompareOptionPeriods(PanelInput input, PanelState state)
+        {
+            var s = (PanelState)CopyOf.Invoke(state, null); s.CompareMenu = true;
+            var view = BuildView(input, s);
+            var p = CompareOf(input, s, view);
+            var d = new Dictionary<string, (DateTime, DateTime)?>();
+            foreach (var o in p?.Options ?? new List<ComparePeriods>()) d[o.With] = o.Open ? (o.BeforeFrom, o.BeforeTo) : ((DateTime, DateTime)?)null;
+            return d;
         }
 
         // ---------- the period before ----------
@@ -283,9 +490,13 @@ namespace Hearthwoven.Panel
         /// exactly N days earlier across a clock change), and nothing of this session (the running session's unsaved part, its log, its armour
         /// minutes): InWindow then sums that period's day rows, every page reads it as it reads a day window.
         /// </summary>
-        public static PanelInput BeforeInput(PanelInput input, TimeWindow w)
+        public static PanelInput BeforeInput(PanelInput input, TimeWindow w) => BeforeInput(input, w, DaysOf(w));
+
+        /// <summary>0.8.5: the same, seen from <paramref name="back"/> days back (the period before ends that many days before today: 7 for the same
+        /// day last week, any number for your best day).</summary>
+        public static PanelInput BeforeInput(PanelInput input, TimeWindow w, int back)
         {
-            var n = DaysOf(w);
+            var n = back;
             var target = LocalToday(input).AddDays(-n);
             var c = input.ShallowCopy();
             c.NowUtc = input.NowUtc.AddDays(-n);
@@ -300,10 +511,12 @@ namespace Hearthwoven.Panel
         /// <summary>How many times the period before was built (Dev and the tests: once per page while nothing it reads changed).</summary>
         public static int CompareBeforeBuilds { get; private set; }
 
-        static string CompareCacheKey(PanelInput input, PanelState state, PanelView view, ComparePeriods p)
+        static string CompareCacheKey(PanelInput input, PanelState state, PanelView view, ComparePeriods p) => CompareCacheKey(input, state, view, p.Window, p.BeforeTo) + "|" + DayHistory.DayKey(p.To);
+
+        static string CompareCacheKey(PanelInput input, PanelState state, PanelView view, TimeWindow w, DateTime day)
         {
             var b = new StringBuilder();
-            b.Append(view.Active).Append('|').Append(view.Page).Append('|').Append(state.Player).Append('|').Append(p.Window).Append('|').Append(DayHistory.DayKey(p.To))
+            b.Append(view.Active).Append('|').Append(view.Page).Append('|').Append(state.Player).Append('|').Append(w).Append('|').Append(DayHistory.DayKey(day))
              .Append('|').Append(input.History?.Rows.Count).Append('|').Append(input.PlayerName);
             foreach (var kv in state.View.OrderBy(kv => kv.Key, StringComparer.Ordinal)) b.Append('|').Append(kv.Key).Append('=').Append(kv.Value);
             foreach (var kv in state.Facets.OrderBy(kv => kv.Key, StringComparer.Ordinal)) b.Append('|').Append(kv.Key).Append('=').Append(string.Join(",", kv.Value.ToArray()));
@@ -319,8 +532,8 @@ namespace Hearthwoven.Panel
             var key = CompareCacheKey(input, state, view, p);
             if (compareBefore != null && key == compareKey && ReferenceEquals(compareHistory, input.History)) return compareBefore;
             var s = (PanelState)CopyOf.Invoke(state, null);
-            s.Compare = false; s.CompareTip = false; s.WaitAt = null; s.WaitView = null;
-            var before = BuildView(BeforeInput(input, p.Window), s);
+            s.Compare = false; s.CompareTip = false; s.CompareMenu = false; s.WaitAt = null; s.WaitView = null;
+            var before = BuildView(BeforeInput(input, p.Window, p.Back), s);
             CompareBeforeBuilds++;
             compareKey = key; compareBefore = before; compareHistory = input.History;
             return before;
@@ -338,7 +551,7 @@ namespace Hearthwoven.Panel
 
         // ---------- the merge ----------
 
-        sealed class CompareCtx { public string BeforeLabel; public PanelInput Now, Before; public TimeWindow Window; }
+        sealed class CompareCtx { public string BeforeLabel, BeforeHead; public PanelInput Now, Before; public TimeWindow Window; }
 
         /// <summary>
         /// Build's last step on a page that offers Compare: the chip (view.Compare, or Together's own beside its window chips), its reason when
@@ -346,16 +559,37 @@ namespace Hearthwoven.Panel
         /// </summary>
         static void CompareFinish(PanelInput input, PanelState state, PanelView view)
         {
+            // 0.8.5: the menu belongs to the page it was opened on: another page (a chapter key, the list) shuts it
+            if (state.CompareMenu && state.Here != null && (state.Here.Chapter != view.Active || state.Here.Page != view.Page || state.Here.About || (state.Here.Player ?? "") != (state.Player ?? ""))) { state.CompareMenu = false; state.CompareCursor = -1; }
             var p = CompareOf(input, state, view);
+            if (p == null || !p.Open) { state.CompareMenu = false; state.CompareCursor = -1; }   // and a page or window where Compare cannot open
             if (p == null) return;
             var on = state.Compare && p.Open;
-            var chip = new Choice { Id = CompareId, Label = CompareLabel, Selected = on, Disabled = !p.Open };
+            var today = LocalToday(input);
             var sw = TogetherDealtSwitch(TogetherOf(view));
             if (sw != null && view.Active == Chapter.Company) sw.Chip = new Block { Kind = "chip", Id = CompareId, Title = CompareLabel, Selected = on, Tone = p.Open ? null : OffTone, Text = p.Open ? null : p.Why, Open = state.CompareTip && !p.Open };
-            else { view.Compare = chip; view.CompareWhy = p.Open ? null : p.Why; view.CompareTip = state.CompareTip && !p.Open; }
+            else
+            {
+                // 0.8.5 (A): greyed in a day window, the chip says when it opens and its reason is one line in the strip (CompareNote), no tag over the
+                // page; on All and the session's windows the short reason stays the chip's tag, under it while the pointer is on it
+                // (a tag before the title, Everyone's or a fellow's book, leaves the heading no room for the longer chip: the date leads the line then)
+                var dayShown = view.ShownWindow.HasValue && IsDayWindow(view.ShownWindow.Value);
+                var dated = !p.Open && p.OpensOn.HasValue && dayShown; var tagged = view.EveryoneOn || !input.IsSelf;
+                var opens = dated ? "opens " + ShortDate(p.OpensOn.Value, today) : null;
+                view.Compare = new Choice { Id = CompareId, Label = dated && !tagged ? CompareLabel + " " + opens : CompareLabel, Selected = on, Disabled = !p.Open };
+                view.CompareWhy = p.Open ? null : p.Why;
+                view.CompareNote = !p.Open && dayShown && p.Line != null ? (dated && tagged ? CompareLabel + " " + opens + ": " + char.ToLowerInvariant(p.Line[0]) + p.Line.Substring(1) : p.Line) : null;
+                view.CompareTip = state.CompareTip && !p.Open && view.CompareNote == null;
+                if (p.Open) CompareKeys(state, view, p, today);
+            }
             if (!on) return;
             var before = BeforeView(input, state, view, p);
-            var x = new CompareCtx { BeforeLabel = BeforeLabel(p.Window), Now = input, Before = BeforeInput(input, p.Window), Window = p.Window };
+            var words = CompareWords(p.Window, p.With);
+            var x = new CompareCtx { BeforeLabel = words.label, BeforeHead = words.head, Now = input, Before = BeforeInput(input, p.Window, p.Back), Window = p.Window };
+            // 0.8.5 (A): the pair in the page's title where the title says its window (Everyone's page leaves it to the chips: its tag takes the
+            // room, PICKS: the heading never truncates), the legend in the strip
+            if (view.Compare != null && !string.IsNullOrEmpty(view.HeadingWindow)) view.HeadingWindow = ComparePair(view.HeadingWindow, p);
+            view.CompareNow = NowLabel(p.Window); view.CompareThen = CompareThenWords(p, today);
             view.Comparing = true;
             BattleHeroes(view.Blocks, input, p.Window); var beforeBlocks = CloneTop(before.Blocks); BattleHeroes(beforeBlocks, x.Before, p.Window);
             CompareMerge(view.Blocks, beforeBlocks, x);
@@ -372,7 +606,7 @@ namespace Hearthwoven.Panel
                 if (empty != null && hero != null && !plate.Items.Any(b => b.Kind == "hero"))
                     plate.Items.Insert(plate.Items.IndexOf(empty) + 1, new Block { Kind = "note", Text = Cap(x.BeforeLabel) + ": " + hero.Value + " " + hero.Title + "." });
                 if (input.History != null && input.History.Rows.Any(r => r.IsDay && r.Clipped && r.Start >= p.BeforeFrom && r.Start <= p.BeforeTo))
-                    plate.Items.Add(new Block { Kind = "note", Text = "A very full day in " + x.BeforeLabel + " kept only its largest kinds: a few small ones may be missing there." });
+                    plate.Items.Add(new Block { Kind = "note", Text = "A very full day in " + words.title + " kept only its largest kinds: a few small ones may be missing there." });
             }
         }
 
@@ -422,7 +656,7 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>The merge alone, as a compared page does it (the tests' way in): the period before's blocks into now's.</summary>
-        public static void CompareBlocks(List<Block> now, List<Block> before, TimeWindow w) => CompareMerge(now, before, new CompareCtx { BeforeLabel = BeforeLabel(w), Window = w });
+        public static void CompareBlocks(List<Block> now, List<Block> before, TimeWindow w) => CompareMerge(now, before, new CompareCtx { BeforeLabel = BeforeLabel(w), BeforeHead = BeforeLabel(w), Window = w });
 
         /// <summary>Merges the period before into the blocks of now, in place: each block finds its twin by kind, id, title and the section it
         /// stands in (CompareBlock says what each kind becomes). A block with no twin had nothing in the period before.</summary>
@@ -580,7 +814,7 @@ namespace Hearthwoven.Panel
             }).ToList();
             var cmp = new Block { Kind = CompareRowsKind, Id = b.Id, Icon = keepCap && b.Kind != "dmgmix" ? b.Icon : null, Title = keepCap ? b.Title : null, Value = keepCap ? b.Value : null, Note = keepCap ? (b.Kind == "sources" ? b.Text : b.Note) : null,
                                   Text = head ?? (keepCap ? null : b.Title), Src = b.Src, Source = b.Source, Items = items,
-                                  NowHead = NowLabel(x.Window), BeforeHead = x.BeforeLabel };   // the column heads name the periods ("today", "yesterday")
+                                  NowHead = NowLabel(x.Window), BeforeHead = x.BeforeHead ?? x.BeforeLabel };   // the column heads name the periods ("today", "yesterday"; 0.8.5: "best day")
             if (total && keepCap && string.IsNullOrEmpty(cmp.Value) && kind != "time") cmp.Value = NAtLeast(rows.Sum(r => r.n));   // the foes' sum, as the cap's total
             if (!string.IsNullOrEmpty(cmp.Value) && keepCap)
             {
@@ -608,6 +842,81 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>Every player-visible string the comparison adds (for AllText).</summary>
-        static IEnumerable<string> CompareText(PanelView v) => new[] { v.Compare?.Label, v.CompareWhy };
+        static IEnumerable<string> CompareText(PanelView v) => new[] { v.Compare?.Label, v.CompareWhy, v.CompareNote, v.CompareNow, v.CompareThen }
+            .Concat(v.CompareMenu == null ? new string[0] : new[] { v.CompareMenu.Title }.Concat(v.CompareMenu.Items.SelectMany(o => new[] { o.Title, o.Value, o.Text })));
+
+        // ---------- 0.8.5: the menu, its keys ----------
+
+        /// <summary>The menu's link for an option of a page: ComparePickTarget, the page, "=", the option.</summary>
+        public static string ComparePickLink(string page, string option) => ComparePickTarget + page + "=" + option;
+
+        // the chip's key in the key line ("[J] Compare"), and while the menu is open its rows (CompareMenu) and the keys that walk them
+        static void CompareKeys(PanelState state, PanelView view, ComparePeriods p, DateTime today)
+        {
+            if (!string.IsNullOrEmpty(state.CompareKey) && !state.ShowAbout)
+            {
+                var back = view.Keys.IndexOf("[Backspace] Back");
+                var key = "[" + state.CompareKey + "] " + CompareLabel;
+                if (back >= 0) view.Keys.Insert(back, key); else view.Keys.Add(key);
+            }
+            if (!state.CompareMenu || p.Options == null) return;
+            var page = ComparePageOf(view);
+            var on = state.Compare;
+            var items = p.Options.Select(o => new Block
+            {
+                Kind = CompareOptionKind, Id = o.With, Title = CompareWords(o.Window, o.With).menu, Value = o.Open ? CompareDates(o, today) : null,
+                Selected = on && o.With == p.With, Tone = o.Open ? null : OffTone, Text = o.Open ? null : o.Short, Note = o.Open ? ComparePickLink(page, o.With) : null,
+            }).ToList();
+            items.Add(new Block { Kind = CompareOptionKind, Id = CompareOffId, Title = CompareOffLabel, Selected = !on, Note = ComparePickLink(page, CompareOffId) });
+            if (state.CompareCursor == -2) state.CompareCursor = Math.Max(0, items.FindIndex(i => i.Selected));   // opened by its key: on the option chosen now
+            var cursor = state.CompareCursor >= 0 && state.CompareCursor < items.Count && items[state.CompareCursor].Tone != OffTone ? state.CompareCursor : -1;
+            if (cursor >= 0) items[cursor].Open = true;   // the keys' place in the menu
+            view.CompareMenu = new Block { Kind = CompareMenuKind, Title = "Compare " + NowLabel(p.Window) + " against", Items = items };
+            var at = view.Keys.IndexOf("[W/S] Page");
+            if (at >= 0) view.Keys[at] = CompareMenuKeys; else view.Keys.Insert(Math.Min(1, view.Keys.Count), CompareMenuKeys);
+        }
+
+        /// <summary>0.8.5: an option chosen in the menu (ComparePickTarget): Off turns Compare off; any other turns it on, kept for its page (the
+        /// stretch just before is the default, kept as no entry). The menu closes.</summary>
+        public static void ComparePick(PanelState s, string pageAndOption)
+        {
+            var eq = (pageAndOption ?? "").LastIndexOf('=');
+            s.CompareMenu = false; s.CompareCursor = -1;
+            if (eq <= 0) return;
+            string page = pageAndOption.Substring(0, eq), option = pageAndOption.Substring(eq + 1);
+            if (option == CompareOffId) { s.Compare = false; return; }
+            if (Array.IndexOf(CompareChoices, option) < 0) return;
+            s.Compare = true;
+            if (option == CompareLastId) s.CompareWith.Remove(page); else s.CompareWith[page] = option;
+        }
+
+        /// <summary>0.8.5: the compare key (and the pad's X): the menu opens on the option the page compares with now, or closes. false when the page
+        /// has no open Compare chip.</summary>
+        public static bool CompareKeyPressed(PanelState s, PanelView v)
+        {
+            if (v?.Compare == null || v.Compare.Disabled) return false;
+            if (s.CompareMenu) { s.CompareMenu = false; s.CompareCursor = -1; return true; }
+            s.CompareMenu = true; s.CompareTip = false;
+            s.CompareCursor = -2;   // the next build puts it on the chosen option (CompareMenuFocus)
+            return true;
+        }
+
+        /// <summary>0.8.5: W/S in the open menu: the next option that can be chosen (greyed ones are skipped), round. false when the menu is shut.</summary>
+        public static bool CompareMenuStep(PanelState s, PanelView v, int d)
+        {
+            var items = v?.CompareMenu?.Items; if (!s.CompareMenu || items == null || items.Count == 0) return false;
+            var at = items.FindIndex(i => i.Open); if (at < 0) at = items.FindIndex(i => i.Selected);
+            for (int k = 1; k <= items.Count; k++) { var i = ((at + d * k) % items.Count + items.Count) % items.Count; if (items[i].Tone != OffTone) { s.CompareCursor = i; return true; } }
+            return false;
+        }
+
+        /// <summary>0.8.5: Enter in the open menu: the option under the keys is chosen (ComparePick). false when there is none.</summary>
+        public static bool CompareMenuChoose(PanelState s, PanelView v)
+        {
+            var item = v?.CompareMenu?.Items?.FirstOrDefault(i => i.Open) ?? v?.CompareMenu?.Items?.FirstOrDefault(i => i.Selected);
+            if (!s.CompareMenu || item?.Note == null) return false;
+            ComparePick(s, item.Note.Substring(ComparePickTarget.Length));
+            return true;
+        }
     }
 }

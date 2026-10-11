@@ -9,16 +9,97 @@ namespace Hearthwoven.Panel
     /// Cargo carried (Voyages > Cargo, and Company > Together as a category): item-metres of what lay in the ship you
     /// steered or the cart you pulled, per item (SessionEvents.CargoMeters, Cargo.Add); and Born in your care (Deeds >
     /// Taming): tamed animals born or hatched within 40 m of you while your PC hosted them (SessionEvents.BornInCare).
-    /// Both are Hearthwoven's own counts since install (Src "pc"). No new block kinds: hero, composition, itemgrid, note.
+    /// Both are Hearthwoven's own counts since install (Src "pc"). Block kinds: hero, composition, itemgrid, note, and 0.8.5's sum.
     /// </summary>
     public static partial class PanelModel
     {
         public const string CargoCarried = "Cargo carried", AverageLoad = "Usually aboard", BornTitle = "Born in your care";
-        /// <summary>The honest line under Cargo carried: whose cart or ship, and that a winding route is longer than the straight line counted.</summary>
-        public const string CargoLine = "at the helm or pulling a cart · straight line, so the real figure is higher";
-        /// <summary>fix4-rest: the one line under the Cargo carried bar says first what the unit is in plain words, then the honest line ("item-km: 1 item carried 1 km · at the helm ...").</summary>
-        public static string CargoNote(double total) => CargoUnit(total) + ": " + CargoUnitWords(total) + " · " + CargoLine;
         public const string ItemMetresUnit = "item-meters", ItemKmUnit = "item-km";
+
+        /// <summary>0.8.5 (Joost: say what counts, in one line): what Cargo carried counts, in the section's own line. The 10 s samples and the
+        /// teleport that counts nothing stay in Cargo.cs; the straight line is said once, in the sum's caption.</summary>
+        public static string CargoCounts(PanelInput input) =>
+            "Counts what is in the ship's or cart's own hold, only while " + (input.IsSelf ? "you steer or pull it." : Name(input) + " steers or pulls it.");
+        /// <summary>The same line on Everyone's Cargo, for every player's own count.</summary>
+        public const string CargoCountsGroup = "Counts what is in the ship's or cart's own hold, only while one of you steers or pulls it.";
+
+        /// <summary>What the unit is, the sum's caption first: "item-km: items aboard × km, on a straight line." (the line alone when there is no sum).
+        /// The book's one explanation of item-km: Company > Together's cargo chip says it in these words too (0.8.5).</summary>
+        public static string CargoUnitLine(double total) => CargoUnit(total) + ": items aboard × " + (total >= 1000 ? "km" : "meters") + ", on a straight line.";
+
+        /// <summary>0.8.5 the block kind of the small sum under a cargo bar (VoyagesHallUi.CargoSum, the preview's cargoSum).</summary>
+        public const string SumKind = "sum";
+        public const string SumLoadIcon = "vocab:cargo-mark", SumDistanceIcon = "vocab:list-sailing";
+
+        /// <summary>
+        /// 0.8.5 item-km as a small sum (Joost's wish, variants A and C of proto/5-item-km, combined): "[crate] 100 × [ship] 4.1 km = 410
+        /// item-km" for one item, from the player's own numbers. The load is how many of the item were aboard on average (Cargo.AverageAboard:
+        /// its item-metres divided by the distance it travelled with some of it aboard), the distance is that distance, the result is its part
+        /// of the bar; load × distance is the item-metres exactly, so the sum holds before rounding. It is an average over the km, never one
+        /// trip: the mod keeps no trips. Where the rounding of the load (a whole number) and the distance (as Km rounds it) would make the sum
+        /// read wrong (100 × 3.7 km beside 369), the distance gets a decimal more, then the load, until the sum as shown holds. The two terms;
+        /// null without a distance (a copy from before the distances were kept): never guessed.
+        /// </summary>
+        static List<Block> SumTerms(double itemMetres, double stretch, double total)
+        {
+            if (!(itemMetres > 0) || !(stretch > 0) || !(total > 0)) return null;
+            var km = total >= 1000; var distance = km ? stretch / 1000 : stretch; var first = km && distance < 100 ? 1 : 0;
+            var avg = Cargo.AverageAboard(itemMetres, stretch);
+            var result = CargoNumber(itemMetres, total);
+            string load = null, far = null;
+            foreach (var (a, d) in new[] { (0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 2) })
+            {
+                load = Fixed(avg, a); far = Fixed(distance, first + d);
+                if (CargoNumber(ParseCount(load) * ParseCount(far) * (km ? 1000 : 1), total) == result) break;
+            }
+            return new List<Block> { new Block { Kind = "term", Icon = SumLoadIcon, Value = load, Src = SrcPc, Source = TagMeasured },
+                                     new Block { Kind = "term", Icon = SumDistanceIcon, Value = far + (km ? " km" : " m"), Src = SrcPc, Source = TagMeasured } };
+        }
+
+        /// <summary>A: the one sum under the bar, for the item carried most, its caption saying what the unit is and whose item it is
+        /// (<paramref name="most"/>: "the item you carried most"). null without a distance.</summary>
+        public static Block CargoSum(string id, string item, double itemMetres, double stretch, double total, string most)
+        {
+            var terms = SumTerms(itemMetres, stretch, total);
+            if (terms == null) return null;
+            return new Block
+            {
+                Kind = SumKind, Id = id, Title = CargoUnit(total), Value = CargoNumber(itemMetres, total), Src = SrcPc, Source = TagMeasured, Items = terms,
+                Text = CargoUnitLine(total) + " For " + item + ", " + most + ", " + terms[0].Value + " aboard on average:",
+            };
+        }
+
+        /// <summary>0.8.5 C: Usually aboard as sums, the block kind (VoyagesHallUi.CargoSumRows, the preview's cargoSumRows) and its closing word.</summary>
+        public const string SumRowsKind = "sumrows", SumRowKind = "sumrow", SumTogether = "together";
+
+        /// <summary>
+        /// C: Usually aboard as a sum per item, so the reader sees item-km add up: a row per item, largest first as the bar has them, in the
+        /// bar's colour, its picture and name, load × distance = its part (SumTerms; an item without a distance gives its part alone). Compact:
+        /// as many rows as a half island holds (IslandHalfRows), the rest in one "Other (n kinds)" row with their part together (five items: five
+        /// rows, an Other row for one would save nothing). The block's Value is the hero's total ("together 640 item-km"), so the rows add up
+        /// to it (each rounded as the bar's legend is). null when no item has a distance (a copy from before the distances were kept).
+        /// </summary>
+        static Block CargoSumRows(PanelInput input, Block bar, double total)
+        {
+            var items = CargoItems(input);
+            var stretch = input.Events?.CargoStretch ?? new Dictionary<string, float>();
+            var shown = items.Count > IslandHalfRows + 1 ? items.Take(IslandHalfRows).ToList() : items;
+            var rows = new List<Block>();
+            foreach (var kv in shown)
+            {
+                stretch.TryGetValue(kv.Key, out var s);
+                rows.Add(new Block { Kind = SumRowKind, Id = kv.Key, Icon = "item:" + kv.Key, Title = Who(input, kv.Key), Colour = bar?.Items?.FirstOrDefault(p => p.Id == kv.Key)?.Colour,
+                                     Value = CargoNumber(kv.Value, total), Items = SumTerms(kv.Value, s, total), Src = SrcPc, Source = TagMeasured });
+            }
+            if (!rows.Any(r => r.Items != null)) return null;
+            var rest = items.Skip(shown.Count).ToList();
+            if (rest.Count > 0)
+                rows.Add(new Block { Kind = SumRowKind, Id = FoldId, Title = FoldLabel(rest.Count), Colour = BarOtherColour, Value = CargoNumber(rest.Sum(kv => kv.Value), total), Src = SrcPc, Source = TagMeasured });
+            return new Block { Kind = SumRowsKind, Title = CargoUnit(total), Value = CargoNumber(total, total), Text = SumTogether, Items = rows, Src = SrcPc, Source = TagMeasured };
+        }
+
+        /// <summary>A number with <paramref name="decimals"/> places, grouped as every count is ("1 234.5").</summary>
+        static string Fixed(double v, int decimals) => decimals <= 0 ? N(v) : Math.Round(v, decimals).ToString("#,0." + new string('0', decimals), Grouped);
 
         // ---------- cargo ----------
 
@@ -40,9 +121,6 @@ namespace Hearthwoven.Panel
 
         /// <summary>The unit a total reads in: item-metres up to 1 000, item-km above (no k or M: the word list keeps km as the one abbreviation).</summary>
         public static string CargoUnit(double total) => total >= 1000 ? ItemKmUnit : ItemMetresUnit;
-
-        /// <summary>What the unit means, said once under the number it measures (fix2-rest, the review: "item-km" is jargon): one item carried one km (or one metre).</summary>
-        public static string CargoUnitWords(double total) => total >= 1000 ? "1 item carried 1 km" : "1 item carried 1 m";
 
         /// <summary>A value of item-metres in the unit chosen for <paramref name="scale"/> (the total it belongs to), number only: "2 070", "60", "0.3", "840".</summary>
         public static string CargoNumber(double itemMetres, double scale)
@@ -81,34 +159,9 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>
-        /// Per item, how much was aboard on average and over how far (item-metres / the distance travelled with some of it aboard):
-        /// "550 · Iron Scrap · 2.6 km aboard". The big number is the average load, never a count of trips or items moved, which the
-        /// mod cannot know. null = no distances (a copy from before the distances were kept).
-        /// </summary>
-        /// <summary>The line under an average load (live-polish, review 5: "over 4.1 km in all" read as a second, unrelated number): how far
-        /// that item was carried in all, said as a verb, "carried 4.1 km".</summary>
-        public static string LoadLine(double metres) => "carried " + Distance(metres);
-
-        public static Block CargoLoads(PanelInput input)
-        {
-            var stretch = input.Events?.CargoStretch ?? new Dictionary<string, float>();
-            var tint = ItemTint(input);
-            var tiles = new List<Block>();
-            foreach (var kv in CargoItems(input))
-            {
-                stretch.TryGetValue(kv.Key, out var s);
-                var avg = Cargo.AverageAboard(kv.Value, s);
-                if (avg <= 0) continue;
-                tiles.Add(new Block { Kind = "item", Id = kv.Key, Icon = "item:" + kv.Key, Title = Who(input, kv.Key), Value = N(avg), Value2 = LoadLine(s), Src = SrcPc, Source = TagMeasured, Colour = Legible(tint(kv.Key)) });   // live-polish (review 5): read with the heading as one sentence, "Usually aboard: 100 Wood, carried 4.1 km"
-                if (tiles.Count == TileTop) break;
-            }
-            return tiles.Count == 0 ? null : new Block { Kind = "itemgrid", Src = SrcPc, Source = TagMeasured, Items = tiles };
-        }
-
-        /// <summary>
-        /// The Cargo carried section of Voyages > Cargo: the item-metres as the hero with the bar by item beside the average loads (and, when
-        /// the ledger holds one, Heavy Keel's heaviest load as one more tile of the same grid, named as a record), and one honest line that
-        /// says first what the unit is. Nothing when nothing was carried (no ghosts).
+        /// The Cargo carried section of Voyages > Cargo: the item-metres as the hero with the bar by item and, under it, the one sum for the item
+        /// carried most (or the unit's line alone); beside them Usually aboard as a sum per item that adds up to the hero (CargoSumRows) and,
+        /// when the ledger holds one, Heavy Keel's heaviest load as a tile, named as a record. Nothing when nothing was carried (no ghosts).
         /// </summary>
         static void CargoGroup(PanelView view, PanelInput input, bool dayWindow = false)
         {
@@ -116,18 +169,24 @@ namespace Hearthwoven.Panel
             var keel = dayWindow ? null : HeavyKeelTile(input);   // a record, not a count of the window
             if (total <= 0 && keel == null) return;
             if (total <= 0) { view.Blocks.Add(Section(HeaviestLoad)); view.Blocks.Add(new Block { Kind = "itemgrid", Src = SrcPc, Source = TagMeasured, Items = new List<Block> { keel } }); return; }   // a best without the metres behind it: the record alone
-            view.Blocks.Add(Section(CargoCarried));
+            view.Blocks.Add(new Block { Kind = "section", Title = CargoCarried, Text = CargoCounts(input) });   // 0.8.5: what counts, in the section's own line
             var bar = CargoComposition(input);
-            var loads = CargoLoads(input);
-            var averages = loads != null;
-            if (keel != null) { if (loads == null) loads = new Block { Kind = "itemgrid", Src = SrcPc, Source = TagMeasured, Items = new List<Block>() }; loads.Items.Add(keel); }
+            var rows = CargoSumRows(input, bar, total);
+            // Heavy Keel's heaviest load, a record: under the sums one compact line (as the longest lead on Taming), not a tile that adds a row of
+            // its own; without the sums the tile, the column's one block
+            var keelBlock = keel == null ? null : rows != null ? new Block { Kind = "stat", Tone = Compact, Id = keel.Id, Icon = keel.Icon, Value = keel.Value, Title = keel.Title, Text = keel.Value2, Src = keel.Src, Source = keel.Source }
+                                                               : new Block { Kind = "itemgrid", Src = SrcPc, Source = TagMeasured, Items = new List<Block> { keel } };
+            // 0.8.5 A: the sum under the bar, for the item carried most (largest first); without its distance, the unit's line alone
+            var top = CargoItems(input).First();
+            float stretch = 0; input.Events?.CargoStretch?.TryGetValue(top.Key, out stretch);
+            var sum = CargoSum(top.Key, Who(input, top.Key), top.Value, stretch, total, "the item " + (input.IsSelf ? "you" : Name(input)) + " carried most");
             var hero = Hero((CargoNumber(total, total), CargoUnit(total), SrcPc, null));
             // 0.7 rule C6: the cargo counter group's own start (LocalTotals.StartCargo), on every block this PC counted
-            DateCargo(input, hero); DateCargo(input, bar); DateCargo(input, loads);
+            DateCargo(input, hero); DateCargo(input, bar); DateCargo(input, rows); DateCargo(input, sum); DateCargo(input, keelBlock);
             if (bar != null) bar.Tone = Thin;
             Columns(view,
-                Stretch(v => { Add(v, hero); if (bar != null) { bar.Title = null; bar.Value = null; v.Blocks.Add(bar); } v.Blocks.Add(new Block { Kind = "note", Text = CargoNote(total) }); }),   // the unit and the honest line under the bar they qualify: above the fold with it
-                Stretch(v => { if (loads != null) { if (averages) v.Blocks.Add(Section(AverageLoad)); v.Blocks.Add(loads); } }));
+                Stretch(v => { Add(v, hero); if (bar != null) { bar.Title = null; bar.Value = null; v.Blocks.Add(bar); } v.Blocks.Add(sum ?? new Block { Kind = "note", Text = CargoUnitLine(total) }); }),   // the unit and its sum under the bar they explain: above the fold with it
+                Stretch(v => { if (rows != null) { v.Blocks.Add(Section(AverageLoad)); v.Blocks.Add(rows); } Add(v, keelBlock); }));
         }
 
         /// <summary>Rule C6 (0.7): every block this PC counted in a cargo group carries the cargo group's own start, so its label says "from 8 October".</summary>

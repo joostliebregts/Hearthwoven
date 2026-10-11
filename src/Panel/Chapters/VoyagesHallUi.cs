@@ -17,6 +17,60 @@ namespace Hearthwoven.Panel
     {
         // PersonTint (a player's colour by name) lives in CompanyUi.cs; both chapters share it
 
+        // ----- the cargo sums (0.8.5, CargoModel.CargoSum and CargoSumRows; the preview's cargoSum and cargoSumRows, PanelLayout.Sum) -----
+
+        // one sum's line: "[crate] 100 × [ship] 4.1 km = 410", the unit after the result when given; both pictures in the book's gold line ink
+        // (the ship's white line mask too). Without terms (Other, or an item without a distance) the result alone
+        static void SumLine(RectTransform parent, List<Block> terms, string result, string unit, float icon, float gap)
+        {
+            var line = Line(parent, gap);
+            terms = terms ?? new List<Block>();
+            for (int i = 0; i < terms.Count; i++)
+            {
+                if (i > 0) Keeps(Label(line, "×", PanelLayout.Sum.Text, PanelLook.Muted));
+                var term = Line(line, PanelLayout.Sum.IconGap);
+                foreach (var im in Marker(term, terms[i].Icon, icon).GetComponentsInChildren<Image>()) im.color = PanelLook.Gold;
+                Keeps(Label(term, terms[i].Value, PanelLayout.Sum.Text, PanelLook.Text, style: FontStyles.Bold));
+            }
+            if (terms.Count > 0) Keeps(Label(line, "=", PanelLayout.Sum.Text, PanelLook.Muted));
+            var r = Line(line, PanelLayout.Sum.UnitGap);
+            Keeps(Label(r, result, PanelLayout.Sum.Text, PanelLook.Gold, style: FontStyles.Bold));
+            if (!string.IsNullOrEmpty(unit)) Keeps(Label(r, unit, PanelLayout.Sum.Text, PanelLook.Muted));
+        }
+
+        // A: the one sum under the bar, its caption at the floor above it
+        static void CargoSum(RectTransform col, Block b)
+        {
+            var box = VStack(col, PanelLayout.Sum.CaptionGap);
+            if (!string.IsNullOrEmpty(b.Text)) Label(box, b.Text, PanelLayout.Sum.Caption, PanelLook.Muted);
+            SumLine(box, b.Items, b.Value, b.Title, PanelLayout.Sum.Icon, PanelLayout.Sum.Gap);
+        }
+
+        // C: Usually aboard as a sum per item, a row each (the item tiles' dark ground and their colour's edge, picture, name, the sum at the
+        // right end), then a hairline and "together 640 item-km" right-aligned under the results
+        static void CargoSumRows(RectTransform col, Block b)
+        {
+            var stack = VStack(col, PanelLayout.Sum.RowGap);
+            foreach (var r in b.Items ?? new List<Block>())
+            {
+                var row = Kit(stack, r.Title, "meter-track").rectTransform;
+                var h = row.gameObject.AddComponent<HorizontalLayoutGroup>(); Layout(h, PanelLayout.Sum.RowTermGap, TextAnchor.MiddleLeft);
+                h.padding = new RectOffset((int)PanelLayout.Sum.RowPad, (int)PanelLayout.Sum.RowPad, 0, 0);
+                Size(row, -1, PanelLayout.Sum.RowH);
+                Edge(row, r.Colour);
+                if (!string.IsNullOrEmpty(r.Icon)) Pic(row, r.Icon, PanelLayout.Sum.RowPic);
+                var name = OneLine(Label(row, r.Title, PanelLayout.Sum.Name, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft));
+                Size(name, 0, -1).flexibleWidth = 1;   // the name gives way (an ellipsis), the sum keeps its width
+                SumLine(row, r.Items, r.Value, null, PanelLayout.Sum.RowIcon, PanelLayout.Sum.RowTermGap);
+            }
+            Size(Img(stack, "Rule", null, PanelLook.Rule), -1, 1);
+            var total = Line(stack, PanelLayout.Sum.UnitGap, TextAnchor.MiddleRight);
+            total.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, (int)PanelLayout.Sum.RowPad, 0, 0);
+            Keeps(Label(total, b.Text, PanelLayout.Text.Small, PanelLook.Muted));
+            Keeps(Label(total, b.Value, PanelLayout.Sum.Total, PanelLook.Gold, style: FontStyles.Bold));
+            Keeps(Label(total, b.Title, PanelLayout.Text.Small, PanelLook.Muted));
+        }
+
         // ----- ledger (fix2 7, the dense ledger of r4voy-hall-a): one compact row per station or trader, its name on the left,
         // its items as inline chips (picture, count, name; a thin edge in its colour; fuel marked) flowing right and wrapping;
         // a rule between rows, no tall tiles -----
@@ -31,7 +85,7 @@ namespace Hearthwoven.Panel
             // the kitchen ledger (Cooking) adds a source line under a row's name (Text) and the row's total at the right (Value, Note)
             var lined = rows.Any(r => !string.IsNullOrEmpty(r.Text)); var totals = rows.Any(r => !string.IsNullOrEmpty(r.Value));
             // Hall's rows (Trader, Smelters) are bigger than the kitchen's (fix-rest: they left the lower half of the plate empty at 11 to 13 px)
-            float chipH = lined ? LedgerChipH : 38, pic = lined ? LedgerPic : 28, nSize = lined ? 16 : 19, tSize = lined ? 13 : 15, rowSize = lined ? 16 : 19, nameBase = lined ? LedgerNameW : 180;
+            float chipH = lined ? LedgerChipH : 38, pic = lined ? LedgerPic : 28, nSize = lined ? PanelLayout.Text.Body : PanelLayout.Text.Count, tSize = lined ? PanelLayout.Text.Floor : PanelLayout.Text.Small, rowSize = lined ? PanelLayout.Text.Body : PanelLayout.Text.Count, nameBase = lined ? LedgerNameW : 180;
             var nameW = lined ? LedgerWideNameW : nameBase;
             var room = Column - nameW - 12 - (totals ? LedgerTotalW + 12 : 0);
             foreach (var r in rows)
@@ -43,8 +97,8 @@ namespace Hearthwoven.Panel
                     // live-polish (in game the left column was empty): TMP's ellipsis drops a whole line whose box is lower than the
                     // font's line, so the 18/15 px boxes under 17/14 px text showed nothing; each line gets its font's height (LineBox)
                     var name = VStack(row, 0); Size(name, nameW, -1);
-                    Size(OneLine(Label(name, r.Title, 17, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold)), nameW, LineBox(17));
-                    if (!string.IsNullOrEmpty(r.Text)) Size(OneLine(Label(name, r.Text, 14, PanelLook.Faint, align: TextAlignmentOptions.TopLeft)), nameW, LineBox(13));
+                    Size(OneLine(Label(name, r.Title, PanelLayout.Text.Name, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold)), nameW, PanelLayout.Ledger.NameLine);
+                    if (!string.IsNullOrEmpty(r.Text)) Size(OneLine(Label(name, r.Text, PanelLayout.Text.Floor, PanelLook.Faint, align: TextAlignmentOptions.TopLeft)), nameW, PanelLayout.Ledger.SourceLine);   // the 14 px it draws (it asked for a 13 px box)
                 }
                 else
                 {
@@ -63,8 +117,8 @@ namespace Hearthwoven.Panel
                     if (!string.IsNullOrEmpty(c.Icon)) { Pic(chip, c.Icon, pic); w += pic + 5; }
                     var n = Label(chip, c.Value, nSize, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft); n.textWrappingMode = TextWrappingModes.NoWrap; w += n.preferredWidth + 5;
                     var t = Label(chip, c.Title, tSize, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); t.textWrappingMode = TextWrappingModes.NoWrap; w += t.preferredWidth;
-                    if (c.Tone == PanelModel.FuelTone) { var f = Label(chip, PanelModel.FuelTone, 14, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic); f.textWrappingMode = TextWrappingModes.NoWrap; w += 5 + f.preferredWidth; }
-                    if (Labelled(c)) { var s = Since(chip, 14, c); w += 5 + s.preferredWidth; }
+                    if (c.Tone == PanelModel.FuelTone) { var f = Label(chip, PanelModel.FuelTone, PanelLayout.Text.Floor, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic); f.textWrappingMode = TextWrappingModes.NoWrap; w += 5 + f.preferredWidth; }
+                    if (Labelled(c)) { var s = Since(chip, PanelLayout.Text.Floor, c); w += 5 + s.preferredWidth; }
                     w = Mathf.Min(Mathf.Ceil(w), room);
                     Size(chip, w, chipH);
                     Edge(chip, c.Colour);
@@ -74,12 +128,12 @@ namespace Hearthwoven.Panel
                 if (totals)
                 {
                     var tot = VStack(row, 0); Size(tot, LedgerTotalW, chipH);
-                    Size(Label(tot, r.Value, 24, PanelLook.Text, align: TextAlignmentOptions.MidlineRight, style: FontStyles.Bold), LedgerTotalW, 28);
-                    if (!string.IsNullOrEmpty(r.Note)) Size(Label(tot, r.Note, 14, PanelLook.Faint, align: TextAlignmentOptions.TopRight), LedgerTotalW, 15);
+                    Size(Label(tot, r.Value, PanelLayout.Text.Heading, PanelLook.Text, align: TextAlignmentOptions.MidlineRight, style: FontStyles.Bold), LedgerTotalW, 28);
+                    if (!string.IsNullOrEmpty(r.Note)) Size(Label(tot, r.Note, PanelLayout.Text.Floor, PanelLook.Faint, align: TextAlignmentOptions.TopRight), LedgerTotalW, 15);
                 }
                 if (!islanded) { var rule = Img(stack, "Rule", null, PanelLook.Rule); Size(rule, -1, 1); }   // no divider lines in an island (Joost, part 4)
             }
-            if (Labelled(b)) Since(col, 14, b);
+            if (Labelled(b)) Since(col, PanelLayout.Text.Floor, b);
         }
 
         // ----- journey: how far did I travel? one line, legs by km; the leg's number over it, each segment's under it -----
@@ -107,22 +161,23 @@ namespace Hearthwoven.Panel
                     var head = Node("Leg", area); head.Box(x, 0, Mathf.Max(w, 200), LegHead - 6);
                     Layout(head.gameObject.AddComponent<HorizontalLayoutGroup>(), 8, TextAnchor.LowerLeft);
                     if (!string.IsNullOrEmpty(leg.Icon)) Marker(head, leg.Icon, 28);
-                    var v = Label(head, leg.Value, 28, PanelLook.Text, style: FontStyles.Bold); v.textWrappingMode = TextWrappingModes.NoWrap;
-                    var t = Label(head, leg.Title, 16, PanelLook.Text); t.textWrappingMode = TextWrappingModes.NoWrap;
+                    var v = Label(head, leg.Value, PanelLayout.Text.Big, PanelLook.Text, style: FontStyles.Bold); v.textWrappingMode = TextWrappingModes.NoWrap;
+                    var t = Label(head, leg.Title, PanelLayout.Text.Body, PanelLook.Text); t.textWrappingMode = TextWrappingModes.NoWrap;
                 }
                 var segs = leg.Items.Where(s => s.Fraction > 0).ToList(); var sum = segs.Sum(s => s.Fraction); float sx = x;
                 foreach (var s in segs)
                 {
                     var sw = w * s.Fraction / sum;
-                    var seg = Fill(area, "Segment", Hex(s.Colour, PanelLook.Accent)); seg.rectTransform.Box(sx, lineTop, Mathf.Max(2f, sw - 1), JourneyLine);
-                    Marks(seg.rectTransform, s.Tone, sw - 1);
+                    var tone = Hex(s.Colour, PanelLook.Accent);
+                    var seg = Fill(area, "Segment", tone); seg.rectTransform.Box(sx, lineTop, Mathf.Max(2f, sw - 1), JourneyLine);
+                    Marks(seg.rectTransform, s.Tone, sw - 1, tone);
                     if (!string.IsNullOrEmpty(s.Title))
                     {
                         // under its own segment; never over a neighbour's (PanelModel.LabelPositions, after the loop)
                         var lab = VStack(area, 0); lab.Box(sx, lineTop + JourneyLine + 4, 140, SegLabel - 4);
-                        var n = Label(lab, s.Value, 18, s.Id == "helm" ? PanelLook.Gold : s.Id == "passenger" ? PassengerInk : PanelLook.Text, style: FontStyles.Bold);
+                        var n = Label(lab, s.Value, PanelLayout.Text.Row, s.Id == "helm" ? PanelLook.Gold : s.Id == "passenger" ? PassengerInk : PanelLook.Text, style: FontStyles.Bold);
                         n.textWrappingMode = TextWrappingModes.NoWrap; Size(n, -1, 22);
-                        var tt = Label(lab, s.Title, 14, PanelLook.Muted); tt.textWrappingMode = TextWrappingModes.NoWrap; Size(tt, -1, 16);
+                        var tt = Label(lab, s.Title, PanelLayout.Text.Floor, PanelLook.Muted); tt.textWrappingMode = TextWrappingModes.NoWrap; Size(tt, -1, 16);
                         placed.Add((lab, sx, Mathf.Ceil(Mathf.Max(n.preferredWidth, tt.preferredWidth)) + 4));
                     }
                     sx += sw;
@@ -131,14 +186,14 @@ namespace Hearthwoven.Panel
             }
             var at = PanelModel.LabelPositions(placed.Select(p => p.start).ToArray(), placed.Select(p => p.width).ToArray(), Column, 16);
             for (int i = 0; i < placed.Count; i++) placed[i].box.Box(at[i], lineTop + JourneyLine + 4, placed[i].width, SegLabel - 4);
-            if (Labelled(b)) Since(col, 14, b);
+            if (Labelled(b)) Since(col, PanelLayout.Text.Floor, b);
         }
 
         // the line's texture, placed once: a foot path's ticks, a run's dash, the sea's crests (tiny rects, no curves)
-        static void Marks(RectTransform seg, string tone, float w)
+        static void Marks(RectTransform seg, string tone, float w, Color under)
         {
             if (w < 12) return;
-            var ink = new Color(0.95f, 0.89f, 0.71f, 0.85f);
+            var ink = PanelWash.Toward(new Color(0.95f, 0.89f, 0.71f, 0.85f), under);   // the mirror's .jy-tick and .jy-crest over the segment, as the game draws them
             switch (tone)
             {
                 case "dots":
@@ -148,7 +203,8 @@ namespace Hearthwoven.Panel
                     Fill(seg, "Dash", ink).rectTransform.Box(4, JourneyLine / 2 - 1, w - 8, 2);
                     break;
                 case "crest":
-                    for (int i = 0, n = Mathf.FloorToInt(w / 18); i < n; i++) Fill(seg, "Crest", new Color(0.86f, 0.93f, 1f, 0.8f)).rectTransform.Box((i + 0.5f) * w / n - 1.5f, JourneyLine / 2 - 1.5f, 3, 3);
+                    var crest = PanelWash.Toward(new Color(0.86f, 0.93f, 1f, 0.8f), under);
+                    for (int i = 0, n = Mathf.FloorToInt(w / 18); i < n; i++) Fill(seg, "Crest", crest).rectTransform.Box((i + 0.5f) * w / n - 1.5f, JourneyLine / 2 - 1.5f, 3, 3);
                     break;
             }
         }
@@ -172,8 +228,8 @@ namespace Hearthwoven.Panel
                 var cell = VStack(line, 4); Size(cell, w, CrewHead + 4 + CrewBar + (i + per < people.Count ? CrewLineGap : 0));
                 var head = Line(cell, 8); Size(head, -1, CrewHead);
                 Marker(head, p.Icon, 26);
-                var name = Label(head, p.Title, 19, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft); name.textWrappingMode = TextWrappingModes.NoWrap; name.overflowMode = TextOverflowModes.Ellipsis; Size(name, -1, -1).flexibleWidth = 1;
-                var v = Label(head, p.Value, 19, PanelLook.Text, align: TextAlignmentOptions.MidlineRight); v.textWrappingMode = TextWrappingModes.NoWrap; Size(v, Mathf.Ceil(v.preferredWidth) + 2, -1);
+                var name = Label(head, p.Title, PanelLayout.Text.Count, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft); name.textWrappingMode = TextWrappingModes.NoWrap; name.overflowMode = TextOverflowModes.Ellipsis; Size(name, -1, -1).flexibleWidth = 1;
+                var v = Label(head, p.Value, PanelLayout.Text.Count, PanelLook.Text, align: TextAlignmentOptions.MidlineRight); v.textWrappingMode = TextWrappingModes.NoWrap; Size(v, Mathf.Ceil(v.preferredWidth) + 2, -1);
                 var track = Kit(cell, "Track", "meter-track"); Size(track, -1, CrewBar);
                 // whose helm, when the model knows it per fellow (Items: helm -> share); else the bar in the fellow's colour
                 var helm = (p.Items ?? new List<Block>()).Where(h => h.Fraction > 0).ToList();
@@ -184,7 +240,7 @@ namespace Hearthwoven.Panel
                     else { float x = 0, all = helm.Sum(h => h.Fraction); foreach (var h in helm) { var r = Fill(fill, "Helm", Hex(h.Colour, PersonTint(h.Title))).rectTransform; r.anchorMin = new Vector2(x, 0); x += h.Fraction / all; r.anchorMax = new Vector2(x, 1); r.offsetMin = r.offsetMax = Vector2.zero; } }
                 }
             }
-            if (Labelled(b)) Since(col, 14, b);
+            if (Labelled(b)) Since(col, PanelLayout.Text.Floor, b);
         }
 
         // ----- compass: time at the far edge. Codex's rose (arm-free ring), four amber arms from home, names outside -----
@@ -216,8 +272,8 @@ namespace Hearthwoven.Panel
         static void EdgeName(RectTransform area, Block arm, float x, float top, float w, TextAlignmentOptions align)
         {
             if (arm == null) return;
-            var name = Label(area, arm.Title, 15, PanelLook.Text, align: align); name.rectTransform.Box(x, top, w, 20); name.textWrappingMode = TextWrappingModes.NoWrap;
-            var v = Label(area, arm.Value, 16, PanelLook.Gold, style: FontStyles.Bold, align: align); v.rectTransform.Box(x, top + 20, w, 22); v.textWrappingMode = TextWrappingModes.NoWrap;
+            var name = Label(area, arm.Title, PanelLayout.Text.Small, PanelLook.Text, align: align); name.rectTransform.Box(x, top, w, 20); name.textWrappingMode = TextWrappingModes.NoWrap;
+            var v = Label(area, arm.Value, PanelLayout.Text.Body, PanelLook.Gold, style: FontStyles.Bold, align: align); v.rectTransform.Box(x, top + 20, w, 22); v.textWrappingMode = TextWrappingModes.NoWrap;
         }
 
         // ----- biometiles: the biomes found, one tile each in its colour with Codex's emblem; wraps at the column's edge -----
@@ -238,7 +294,7 @@ namespace Hearthwoven.Panel
                 tile.rectTransform.Box(i % perLine * (BioW + BioGap), i / perLine * (BioH + BioGap), BioW, BioH);
                 VocabImg(tile.transform, "Emblem", VocabName(t.Icon) ?? PanelLook.BiomeEmblem(t.Id), Color.white).rectTransform.Box(8, (BioH - 30) / 2, 30, 30);
                 var ink = t.Tone == "dark-text" ? DarkInk : t.Tone == "light-text" ? LightInk : PanelLook.BiomeInk(t.Id);
-                var name = Label(tile.transform, t.Title, 15, ink, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft);
+                var name = Label(tile.transform, t.Title, PanelLayout.Text.Small, ink, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft);
                 name.rectTransform.Box(44, 0, BioW - 48, BioH); name.textWrappingMode = TextWrappingModes.NoWrap; name.overflowMode = TextOverflowModes.Ellipsis;
             }
         }

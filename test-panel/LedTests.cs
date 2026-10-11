@@ -24,9 +24,11 @@ static class LedTests
 
         // ---------- Voyages > Sailing: Heavy Keel's best load ----------
         var sail = Every(PanelModel.Content(Page(rowan, Chapter.Voyages, "cargo"))).ToList();
-        var tile = sail.FirstOrDefault(b => b.Kind == "item" && b.Id == "heavykeel");
-        Check(tile != null && tile.Value == "140" && tile.Src == "pc" && tile.Title == "Heaviest load" && tile.Value2 == "metal and ore, 2 km",
-              "cargo: one tile in the grid of loads, named as a record: 140, Heaviest load, metal and ore over 2 km, Hearthwoven's own count: " + tile?.Title + " / " + tile?.Value2);
+        var tile = sail.FirstOrDefault(b => b.Id == "heavykeel");
+        var keelLine = sail.Any(b => b.Kind == PanelModel.SumRowsKind);   // 0.8.5: under Usually aboard's sums one compact line; without the sums a tile
+        Check(tile != null && tile.Value == "140" && tile.Src == "pc" && tile.Title == "Heaviest load" && (keelLine ? tile.Text : tile.Value2) == "metal and ore, 2 km" &&
+              (keelLine ? tile.Kind == "stat" && tile.Tone == PanelModel.Compact : tile.Kind == "item"),
+              "cargo: Heavy Keel's best beside the loads, named as a record (one compact line under the sums): 140, Heaviest load, metal and ore over 2 km, Hearthwoven's own count: " + tile?.Kind + " " + tile?.Title + " / " + (tile?.Text ?? tile?.Value2));
         var allText = PanelModel.AllText(Page(rowan, Chapter.Voyages, "cargo")).ToList();
         Check(!allText.Any(t => t.Contains("at least") || t.Contains("—") || t.Contains("–")) && sail.Where(b => b.Id == "heavykeel").Distinct().Count() == 1,
               "cargo: the tile's words follow the word list (no dash, no \"at least\"), once: " + string.Join(" | ", allText.Where(t => t.Contains("at least") || t.Contains("—") || t.Contains("–"))) + " x" + sail.Count(b => b.Id == "heavykeel"));
@@ -39,13 +41,13 @@ static class LedTests
         var tame = Every(PanelModel.Content(Page(rowan, Chapter.Deeds, "taming"))).ToList();
         var section = tame.FirstOrDefault(b => b.Kind == "section" && b.Title == "Animals led");
         var longest = tame.FirstOrDefault(b => b.Kind == "stat" && b.Title == "longest lead");
-        var line = section?.Text == "straight line, while your PC hosted them" ? section : null;   // fix4: the honest line rides on the section heading
+        var line = Texts(Page(rowan, Chapter.Deeds, "taming")).FirstOrDefault(t => t.Contains("straight line") && t.Contains("your PC"));   // fix4: the honest line (how and where it was measured)
         Check(section != null && section.Value == "6.8 km" && section.Src == "pc" && longest != null && longest.Value == "2.3 km" && longest.Src == "pc" && longest.Text.StartsWith("Wolf · ") && line != null,
               "taming: Animals led with the metres walked by tamed animals following you (6.8 km, the sum over animals), the longest lead (2.3 km, a wolf), labelled \"while your PC hosted them\"");
         Check(PanelModel.LedTotal(rowan) == 6800 && PanelModel.BestOf(rowan, "ledBestMeters").Value.What == "Wolf", "taming: the total is the sum over animals, the longest lead is one animal's");
         var finchT = Every(PanelModel.Content(Page(finch, Chapter.Deeds, "taming", s => s.Player = "Finch"))).ToList();
         Check(finchT.Any(b => b.Kind == "section" && b.Title == "Animals led" && b.Value == "3.1 km") && finchT.Any(b => b.Kind == "stat" && b.Title == "longest lead" && b.Value == "2.4 km" && b.Text.StartsWith("Boar")) &&
-              finchT.Any(b => b.Kind == "section" && b.Title == "Animals led" && b.Text == "straight line, while Finch's PC hosted them"),
+              Texts(Page(finch, Chapter.Deeds, "taming", s => s.Player = "Finch")) is var finchWords && finchWords.Any(t => t.Contains("straight line") && t.Contains("Finch's PC")) && !finchWords.Any(t => t.Contains("your PC")),
               "taming: a fellow's book says whose PC (never \"you\") and shows the best they shared");
         var small = new PanelInput { PlayerName = "Rowan", IsSelf = true, Character = new Dictionary<string, float>(), Events = new SessionEvents(), DisplayName = _ => null };
         small.Events.LedMeters["Boar"] = 640f;

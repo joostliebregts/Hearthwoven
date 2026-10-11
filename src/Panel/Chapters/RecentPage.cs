@@ -39,11 +39,13 @@ namespace Hearthwoven.Panel
         public const string RecentFellowsLine = "Other players: what they did while you were playing too.", RecentFellowsAllLine = "Other players: their totals as they last shared them.";
         /// <summary>Why a fellow's Recent greys some chips, on the plate (as DeedsWindowsLine on the other Deeds pages; B33).</summary>
         public static string RecentWindowsLine(PanelInput input) =>
-            input.Timed ? Name(input) + "'s days are not shared" : Name(input) + "'s numbers arrive only every few minutes, and days are not shared";
+            (input.Timed && !FellowLive(input) ? FellowShortWhy(input) + " " : "") +   // 0.8.5: 10 min to 3 h only while they play (Battle's rule)
+            Name(input) + (input.Timed ? "'s " : "'s numbers arrive only every few minutes, and their ") +
+            (input.DayDeeds != null ? "days are shared for the other Deeds pages, not for Recent" : "days are not shared");   // 0.8.5: a copy shares a few numbers per day
         /// <summary>About these numbers on Recent (B29, Joost 2026-10-10: the old lines were not understood): labels and lines for a player.</summary>
         public const string AboutYouLabel = "You", AboutOthersLabel = "Other players",
                             AboutYou = "10 min to Session: what you did since you started playing this time. Today to 30 days: the days saved on this computer. All: everything since you installed Hearthwoven.",
-                            AboutOthers = "Only what they did while you were playing too, as it reached you. 10 min to 3 h need a server that sends live updates. Their days are not shared; All shows their totals.";
+                            AboutOthers = "Only what they did while you were playing too, as it reached you. 10 min to 3 h need a server that sends live updates. Recent does not show their days; All shows their totals.";
         public const string RecentFoesNoDays = "Which foes is kept for this session only: 7 days counts them.";
 
         /// <summary>The families of the You view, in reading order: (id, heading). The ids are RecentModel's families or a part of one
@@ -132,8 +134,7 @@ namespace Hearthwoven.Panel
                     if (key == KillsTotal) return "vocab:list-foes";
                     var boss = Bosses.FirstOrDefault(b => b.token == key);
                     if (boss.trophy != null) return "item:" + boss.trophy;
-                    var bare = key.StartsWith("$enemy_", StringComparison.Ordinal) ? key.Substring(7) : key;
-                    return bare.Length == 0 ? "" : TrophyOf(input, char.ToUpperInvariant(bare[0]) + bare.Substring(1));
+                    return TrophyOf(input, FoeGroup(input, key));   // 0.8.5: the kill token's kind by the game's data or the alias table ("$enemy_babyseeker" is the Seeker Brood), not by spelling
                 default: return "item:" + key;
             }
         }

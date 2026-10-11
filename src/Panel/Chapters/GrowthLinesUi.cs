@@ -15,7 +15,7 @@ namespace Hearthwoven.Panel
     public partial class PanelUi
     {
         const float SparkW = 4, SparkGap = 2, SparkH = 14;
-        static readonly Color SparkGold = new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.85f), SparkMark = new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.35f);
+        static readonly Color SparkGold = PanelWash.SparkBar.Game, SparkMark = PanelWash.SparkMark.Game;   // the mirror's .spark as the game draws it (PanelWash.cs)
 
         static RectTransform Spark(RectTransform parent, Block spark, bool stacked, bool caption = true)
         {

@@ -53,7 +53,8 @@ namespace Hearthwoven.Panel
                 foreach (var id in Chosen(state, filter, d.Id).Where(id => d.Options.All(o => o.Id != id)).ToList())
                     d.Options.Add(new FacetOption { Id = id, Label = labelOf(d.Id, id) });
             var folded = dealt.GroupBy(r => (r.Biome ?? "", r.Other ?? "", r.Cause ?? "", r.Type ?? ""))
-                              .Select(g => new DamageRow { Biome = g.Key.Item1, Other = g.Key.Item2, Cause = g.Key.Item3, Type = g.Key.Item4, Dir = "dealt", Amount = g.Sum(x => x.Amount) }).ToList();
+                              .Select(g => new DamageRow { Biome = g.Key.Item1, Other = g.Key.Item2, Cause = g.Key.Item3, Type = g.Key.Item4, Dir = "dealt", Amount = g.Sum(x => x.Amount),
+                                                           Measured = g.Sum(x => x.Measured), After = g.Sum(x => x.After) }).ToList();   // 0.8.5: with their after
             var items = new List<FacetItem>();
             for (int i = 0; i < folded.Count; i++)
             {
@@ -97,6 +98,7 @@ namespace Hearthwoven.Panel
             var line = chosen.Count == 0 ? "" : chosen.Count + " of " + tiles.Count + " biomes";
             res.Bar.Text = line; res.Bar.Items.First(b => b.Kind == "applied").Text = line;
             res.Bar.Tone = "inline";
+            var key = StripKey(tiles); if (key != null) res.Bar.Items.Add(key);
             strip.Id = filter;
             var row = res.Bar.Items.First(b => b.Kind == "facet");
             foreach (var chip in row.Items)
@@ -107,6 +109,20 @@ namespace Hearthwoven.Panel
             }
             return res.Bar;
         }
+
+        /// <summary>
+        /// 0.8.5 (variant A): the strip's marks explained on its filter's line, at the right end (Kind StripKeyKind, Items Kind "mark": Icon, Title):
+        /// the death mark when a tile holds a fall, the boss mark when one holds a boss. The strip of a filter draws no key of its own (PanelUi.BiomeStrip),
+        /// so its island ends on one line: the filter and the key. null when no tile has a mark.
+        /// </summary>
+        static Block StripKey(List<Block> tiles)
+        {
+            var marks = new List<Block>();
+            if (tiles.Any(t => t.Count > 0)) marks.Add(new Block { Kind = "mark", Icon = "vocab:death", Title = DiedHere });
+            if (tiles.Any(t => (t.Items ?? new List<Block>()).Any(x => x.Kind == "boss"))) marks.Add(new Block { Kind = "mark", Icon = "vocab:boss-mark", Title = BossDefeated });
+            return marks.Count == 0 ? null : new Block { Kind = StripKeyKind, Items = marks };
+        }
+        public const string StripKeyKind = "stripkey";
 
         static List<DamageRow> InBiomes(List<DamageRow> rows, ICollection<string> chosen) => chosen.Count == 0 ? rows : rows.Where(r => chosen.Contains(r.Biome)).ToList();
         static List<EventLog.Death> InBiomes(List<EventLog.Death> deaths, ICollection<string> chosen) => chosen.Count == 0 ? deaths : deaths.Where(d => chosen.Contains(d.Biome)).ToList();

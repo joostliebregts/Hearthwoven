@@ -48,6 +48,7 @@ namespace Hearthwoven.Panel
         static readonly Dictionary<string, Sprite> pieceIcons = new Dictionary<string, Sprite>();
         static readonly Dictionary<string, PanelModel.RockData> rocks = new Dictionary<string, PanelModel.RockData>();   // Deeds: Mining (prefab a pickaxe hits -> its rock)
         static readonly Dictionary<string, string> trees = new Dictionary<string, string>();   // Deeds: Woodcutting (tree, log or log half -> its tree)
+        static readonly Dictionary<string, string> foeKin = new Dictionary<string, string>();   // Battle (0.8.5): creature prefab -> the main prefab of its name
         static bool ready;
 
         public static string ItemKind(string token) { Ensure(); return token != null && items.TryGetValue(token, out var k) ? k : null; }
@@ -57,6 +58,10 @@ namespace Hearthwoven.Panel
         public static PanelModel.RockData Rock(string prefab) { Ensure(); return prefab != null && rocks.TryGetValue(prefab, out var r) ? r : null; }
         /// <summary>The tree a tree, log or log half prefab is or fell from ("AshlandsTreeLogHalf1" -> a Scorched Tree's prefab); null = not known.</summary>
         public static string TreeOf(string prefab) { Ensure(); return prefab != null && trees.TryGetValue(prefab, out var t) ? t : null; }
+        /// <summary>0.8.5: the main prefab of every creature the game gives this one's name ("Draugr_Ranged" -> "Draugr", PanelModel.FoeKinOf), so
+        /// a foe is one row by its name; a kill token -> the main prefab of its creatures ("$enemy_babyseeker" -> "SeekerBrood"); null = no other
+        /// creature has its name (it is its own row), or no creature has the token.</summary>
+        public static string FoeKin(string prefab) { Ensure(); return prefab != null && foeKin.TryGetValue(prefab, out var k) ? k : null; }
         /// <summary>A planted piece's harvest: the item prefab its grown plant's Pickable yields ("Barley"); null = not a crop.</summary>
         public static string CropOf(string token) { Ensure(); return token != null && crops.TryGetValue(token, out var k) ? k : null; }
         /// <summary>The game's item type of an item token ("OneHandedWeapon"); null = not known.</summary>
@@ -279,10 +284,13 @@ namespace Hearthwoven.Panel
                     var kind = PanelModel.GatherKindOf(component, mods.m_chop.ToString(), mods.m_pickaxe.ToString());
                     if (kind != null && table != null) drops.Add(new KeyValuePair<DropTable, string>(table, kind));
                 }
+                var creatures = new List<(string prefab, string name, string token)>();   // every creature, the name it shows and its name token (0.8.5: the kin map)
                 foreach (var go in ZNetScene.instance.m_prefabs)
                 {
                     if (!go) continue;
                     Piece(go);
+                    var character = go.GetComponent<Character>();
+                    if (character && !string.IsNullOrEmpty(character.m_name)) creatures.Add((go.name, LocalizedName(character.m_name), character.m_name));
                     var log = go.GetComponent<TreeLog>(); if (log) Gather(log.m_dropWhenDestroyed, "TreeLog", log.m_damages);
                     var standing = go.GetComponent<TreeBase>();
                     if (standing) { trees[go.name] = go.name; if (standing.m_logPrefab && !fell.ContainsKey(standing.m_logPrefab.name)) fell[standing.m_logPrefab.name] = go.name; }
@@ -361,7 +369,8 @@ namespace Hearthwoven.Panel
                     var m = PanelModel.PieceMainMaterial(recipe);
                     if (m != null) pieceMats[kv.Key] = m;
                 }
-                Debug.Log("[Hearthwoven] panel game data: " + items.Count + " items, " + pieces.Count + " pieces, " + gather.Count + " gathered kinds");
+                foreach (var kv in PanelModel.FoeKinOf(creatures)) foeKin[kv.Key] = kv.Value;
+                Debug.Log("[Hearthwoven] panel game data: " + items.Count + " items, " + pieces.Count + " pieces, " + gather.Count + " gathered kinds, " + creatures.Count + " creatures");
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel game data: " + e.Message); }
         }

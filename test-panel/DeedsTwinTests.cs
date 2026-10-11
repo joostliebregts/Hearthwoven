@@ -25,24 +25,18 @@ static class DeedsTwinTests
         fails = 0;
         var keep = input.Fellows; var keepE = edda.Fellows;
         input.Fellows = new List<PanelInput> { edda }; edda.Fellows = new List<PanelInput> { input };
-        var twin = Twin(input);
 
         // Building, Groundwork and Crafting (0.7 rule B, REDESIGN-RULES.md part 5 G2): the game's counter is the number and the since-install
         // twins are gone; their asserts moved to test-panel/RecordedMakeTests.cs (one per page)
 
-        // ---------- every twin page: since install adds up to at most the character's, in both zones, on the sample; a fellow has none ----------
-        // 0.7: all six twin pages are migrated (G2: building, groundwork, crafting; G3: farming, fishing, taming): no since-install zone, the
-        // page is the recorded page; the per-page sums live in RecordedMakeTests.cs and RecordedFieldTests.cs
-        foreach (var page in new[] { "building", "groundwork", "crafting", "farming", "fishing", "taming" })
-        {
-            var mine = Show(twin, page);
-            Check(mine.Recorded && Zone(mine, "pc") == null && Zone(mine, "character") == null && !PanelModel.AllText(mine).Any(t => t.Contains("since install")),
-                  page + " twin (0.7): the recorded page, no since-install zone and no \"since install\" anywhere");
-            var theirs = Twin(input); theirs.IsSelf = false; theirs.PlayerName = "Edda";
-            var tv = Show(theirs, page);
-            Check(!PanelModel.AllText(tv).Any(t => t.Contains("Counting since") || t.Contains("since install")) && Zone(tv, "pc") == null && tv.AboutNumbers == null,
-                  page + " twin (0.7): a fellow's page says nothing about counting since your install and has no About these numbers box");
-        }
+        // ---------- the twin pages in a fellow's hands: their copy carries no baseline dates ----------
+        // 0.7: all six twin pages are migrated (G2: building, groundwork, crafting; G3: farming, fishing, taming); your own twin's words are in the
+        // text sweep (PanelTextTests, the twin among its samples) and its sums in RecordedMakeTests.cs and RecordedFieldTests.cs. A fellow's
+        // copy with baselines taken still follows the every-page rule for a fellow's book (PropertyTests): no dates, no box, never "since install"
+        var theirs = Twin(input); theirs.IsSelf = false; theirs.PlayerName = "Edda";
+        var twinFaults = new[] { "building", "groundwork", "crafting", "farming", "fishing", "taming" }
+            .SelectMany(page => PropertyTests.Fellow(new PropertyTests.Page("Edda", false, "Deeds/" + page, null, Show(theirs, page), null)).Concat(Says(Show(theirs, page), "Counting since") ? new[] { "Counting since" } : new string[0]).Select(f => page + ": " + f)).ToList();
+        Check(twinFaults.Count == 0, "twins (0.7): a fellow's six twin pages say nothing about counting since your install, carry no dates and no box, and name Edda's book" + (twinFaults.Count > 0 ? ": " + twinFaults[0] : ""));
 
         // ---------- the in-game sample (Dev.SampleData) carries the twins too ----------
         var full = PanelSample.Full(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));

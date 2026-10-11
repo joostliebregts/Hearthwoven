@@ -26,9 +26,9 @@ namespace Hearthwoven.Panel
                 var h = rows * RecentCellH + (rows - 1) * RecentRowGap + 2 * RecentPad;
                 var box = Node("Player", col); Size(box, Column, h);
                 Marker(box, p.Icon, 38, layout: false).Box(0, RecentPad + (RecentCellH - 38) / 2, 38, 38);
-                OneLine(Label(box, p.Title, 20, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft)).rectTransform.Box(52, RecentPad, RecentNameW - 52, RecentCellH);
+                OneLine(Label(box, p.Title, PanelLayout.Text.Lead, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft)).rectTransform.Box(52, RecentPad, RecentNameW - 52, RecentCellH);
                 if (!string.IsNullOrEmpty(p.Note))   // "+3 more": what grew beyond the grid, quiet under the name; a click shows every gain (0.8.2)
-                    MoreLink(OneLine(Label(box, p.Note, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic)), p.NoteLink != null ? link?.Invoke(p.NoteLink) : null).rectTransform.Box(52, RecentPad + RecentCellH, RecentNameW - 52, 20);
+                    MoreLink(OneLine(Label(box, p.Note, PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic)), p.NoteLink != null ? link?.Invoke(p.NoteLink) : null).rectTransform.Box(52, RecentPad + RecentCellH, RecentNameW - 52, 20);
                 for (int k = 0; k < items.Count; k++)
                 {
                     var i = items[k];
@@ -37,12 +37,12 @@ namespace Hearthwoven.Panel
                     if (!string.IsNullOrEmpty(i.Icon)) { Pic(box, i.Icon, RecentPicSize).Box(x, cy + (RecentCellH - RecentPicSize) / 2, RecentPicSize, RecentPicSize); x += RecentPicSize + 8; }
                     if (!string.IsNullOrEmpty(i.Value))
                     {
-                        var value = OneLine(Label(box, i.Value, 18, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold));
+                        var value = OneLine(Label(box, i.Value, PanelLayout.Text.Row, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold));
                         var vw = Mathf.Ceil(value.preferredWidth) + 2;
                         value.rectTransform.Box(x, cy, vw, RecentCellH); x += vw + 6;
                     }
                     var quiet = !string.IsNullOrEmpty(i.Value) || i.Unrecorded || i.Tone == "quiet";
-                    var name = Unrecorded(Label(box, i.Title, quiet ? 15 : 17, quiet ? PanelLook.Muted : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft,
+                    var name = Unrecorded(Label(box, i.Title, quiet ? PanelLayout.Text.Small : PanelLayout.Text.Name, quiet ? PanelLook.Muted : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft,
                                                 style: i.Tone == "quiet" ? FontStyles.Italic : FontStyles.Normal), i, 15);
                     name.overflowMode = TextOverflowModes.Ellipsis; name.maxVisibleLines = 2;   // a long name takes a second line, never "St..."
                     name.rectTransform.Box(x, cy, Mathf.Max(40f, right - x), RecentCellH);

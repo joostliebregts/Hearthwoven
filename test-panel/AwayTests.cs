@@ -20,17 +20,39 @@ static class AwayTests
     {
         var w = PanelSample.Full(now);
         w.PreviousSessionEndUtc = w.SessionStartUtc.Value.AddHours(-awayHours);
+        var grew = w.Fellows.ToDictionary(f => f.PlayerName, f => 1 - kept);
         w.Fellows = w.Fellows.Where(f => who.Contains(f.PlayerName)).ToList();
+        // 0.8.5 (While away on one screen with five fellows): a name the sample has no book for is a fresh copy of one of the sample's three,
+        // renamed, that grew a share of what that one grew (Ylva as Edda at half, Bryn as Tor at a third, Sigrid as Finch at two thirds)
+        var spare = who.Where(n => !grew.ContainsKey(n)).ToList();
+        if (spare.Count > 0)
+        {
+            var copies = SampleWorld.Make(now).copies;
+            foreach (var n in spare)
+            {
+                var (from, part) = Extra.TryGetValue(n, out var e) ? e : (SampleWorld.Edda, 0.5);
+                var f = copies[from]; f.PlayerName = n; grew[n] = (1 - kept) * part;
+                w.Fellows.Add(f); copies = SampleWorld.Make(now).copies;   // the next one from a fresh world: no copy is shared
+            }
+        }
         foreach (var f in w.Fellows)
         {
             f.ReceivedUtc = now.AddMinutes(-3);
             if (f.PlayerName == firstTime) { f.SeenBefore = null; continue; }
             var m = FellowMarks.Of(f, w.PreviousSessionEndUtc.Value.AddMinutes(-20));
-            foreach (var k in m.Values.Keys.ToList()) m.Values[k] = (float)Math.Floor(m.Values[k] * kept);
+            foreach (var k in m.Values.Keys.ToList()) m.Values[k] = (float)Math.Floor(m.Values[k] * (1 - grew[f.PlayerName]));
             f.SeenBefore = m;
         }
         return w;
     }
+
+    /// <summary>The sample's further names (BRIEF: sample names only) and whose record each is a copy of, with the share of that one's growth.</summary>
+    static readonly Dictionary<string, (string from, double part)> Extra = new Dictionary<string, (string, double)>
+    {
+        [SampleWorld.Ylva] = (SampleWorld.Edda, 0.5), ["Bryn"] = (SampleWorld.Tor, 1 / 3.0), ["Sigrid"] = (SampleWorld.Finch, 2 / 3.0),
+    };
+    /// <summary>Five fellows, the most While away shows on one screen; six, the first that scrolls.</summary>
+    public static readonly string[] Five = { SampleWorld.Edda, SampleWorld.Finch, SampleWorld.Tor, SampleWorld.Ylva, "Bryn" }, Six = Five.Concat(new[] { "Sigrid" }).ToArray();
 
     static PanelState AwayState() => new PanelState { Chapter = Chapter.Company, Page = { [Chapter.Company] = PanelModel.AwayPage } };
 
@@ -84,7 +106,21 @@ static class AwayTests
         var pcts = rows.Select(r => int.Parse(r.Value.Replace(" %", ""))).ToList();
         var shares = rows.Select(r => Parts(r).Sum(p => (double)p.Fraction)).ToList();
         Check(pcts.Sum() == 100 && pcts.All(p => p > 0) && Math.Abs(shares.Sum() - 1) < 0.001,
-              "away page: the fellows' shares (each total counted equally) add up to 100 % and to the whole track: " + string.Join(", ", pcts));
+              "away page: the fellows' shares (each total weighs the same) add up to 100 % and to the whole track: " + string.Join(", ", pcts));
+        // 0.8.5 the damage-row grammar: each part says its fellow's share of that one total in the line under the bar ("built 35 %"), and a
+        // total's shares over the fellows add up to 100; the rows share one scale (the largest share fills the track); five fellows the same
+        foreach (var (name, page) in new[] { ("three", rows), ("five", Rows(Scenario(now, 72, Five, 0.8))) })
+        {
+            var parts = page.SelectMany(r => Parts(r).Select(p => (row: r, p))).ToList();
+            var byTotal = parts.GroupBy(x => x.p.Id).Select(g => (id: g.Key, sum: g.Sum(x => int.Parse(x.p.Text.Replace(" %", ""))))).ToList();
+            var words = parts.Select(x => PanelModel.DamageLineWords(PanelModel.BarFormOf(Parts(x.row).ToList(), true).Rows.Single(r => r.Part == x.p))).ToList();
+            Check(page.Count == (name == "five" ? 5 : 3) && byTotal.All(t => t.sum == 100) && words.All(w => Regex.IsMatch(w, @"^(built|foes|stone|wood|dishes) \d+ %$")) &&
+                  page.Max(r => r.Fraction) == 1 && page.All(r => r.Fraction > 0 && r.Fraction <= 1) && page.Sum(r => int.Parse(r.Value.Replace(" %", ""))) == 100 &&
+                  // About these numbers says it: the percent before a bar is the average of the percents under it (a total not added to is 0)
+                  page.All(r => Math.Abs(int.Parse(r.Value.Replace(" %", "")) - Parts(r).Sum(p => int.Parse(p.Text.Replace(" %", ""))) / (double)Totals(Scenario(now, 72, name == "five" ? Five : new[] { "Edda", "Finch", "Tor" }, 0.8)).Items.Count) <= 1),
+                  "away page, " + name + " fellows: a part's line says that fellow's share of its total (" + words.First() + "), each total's shares add up to 100 (" +
+                  string.Join(", ", byTotal.Select(t => t.id + " " + t.sum)) + "), the rows on one scale (the largest full), a row's percent the average of its line's");
+        }
         var colourOf = totals.Items.ToDictionary(t => t.Id, t => t.Colour);
         Check(rows.SelectMany(Parts).All(p => colourOf.TryGetValue(p.Id, out var c) && c == p.Colour) && colourOf.Values.Distinct().Count() == colourOf.Count,
               "away page: each total keeps one colour, on its hero line and in every fellow's bar");
@@ -92,8 +128,8 @@ static class AwayTests
         // grateful use: your food and gear they used, from their own record (another fellow's things are not "for you"); one kind shows its own
         // picture, several the food-shared or gear-shared mark with the sum (the prototype's bowl x 4, axe x 1)
         string You(Block r) => string.Join(", ", Chips(r).Select(c => c.Title + " " + c.Value));
-        // (Edda's ×5 holds one serving of the Meadows feast you made and Tor set out: a teamwork feast is its maker's, 0.8)
-        Check(You(rows[0]) == "Your food ×5, Bronze Axe ×1" && You(rows[1]) == "Your food ×4, Your gear ×2" && You(rows[2]) == "Your food ×5, Wood Shield ×1" &&
+        // (Edda's ×6 holds one serving of the Meadows feast you made and Tor set out: a teamwork feast is its maker's, 0.8)
+        Check(You(rows[0]) == "Your food ×6, Bronze Axe ×1" && You(rows[1]) == "Your food ×5, Your gear ×2" && You(rows[2]) == "Your food ×6, Wood Shield ×1" &&   // 0.8.5: they ate more of your soup and wraps (the sample's Today)
               rows[0].Items.Single(c => c.Title == "Bronze Axe").Icon.StartsWith("item:") && Page(three).Single(b => b.Kind == PanelModel.AwayRowsKind).Text == PanelModel.AwayForYou,
               "away page: For you counts your food and gear they enjoyed or put to good use, never another fellow's: " + string.Join(" | ", rows.Select(You)));
 
@@ -115,15 +151,15 @@ static class AwayTests
         // first time a fellow shares: a quiet row; the other told as usual
         var first = Scenario(now, 30, new[] { "Edda", "Tor" }, 0.95, firstTime: "Tor");
         var firstRows = Rows(first);
-        Check(Totals(first).Title.StartsWith("You were away 30 hours, since ") && firstRows.Select(r => r.Title).SequenceEqual(new[] { "Edda", "Tor" }) &&
+        Check(Totals(first).Title is string awayFor && awayFor.Contains("30 hours") && awayFor.Contains("since") && firstRows.Select(r => r.Title).SequenceEqual(new[] { "Edda", "Tor" }) &&
               firstRows[1].Kind == PanelModel.AwayQuietKind && firstRows[1].Text == PanelModel.AwayFirstLine && !Parts(firstRows[1]).Any() && firstRows[1].Value == null &&
-              firstRows[0].Kind == PanelModel.AwayFellowKind && firstRows[0].Value == "100 %",
-              "away page: a fellow seen for the first time gets the quiet first-time row, no bar, no per cent; the other has the whole share");
+              firstRows[0].Kind == PanelModel.AwayFellowKind && firstRows[0].Value == "100 %" && firstRows[0].Tone == PanelModel.DamageNoLineTone && rows.All(r => r.Tone == null),
+              "away page: a fellow seen for the first time gets the quiet first-time row, no bar, no per cent; the other has the whole share, and their bar no line of 100 % entries (with three fellows every bar keeps its line)");
 
         // nothing grew: a quiet row with the date; no totals, so no 0
         var still = Scenario(now, 72, new[] { "Finch" }, 1.0);
         var stillRow = Rows(still).Single();
-        Check(stillRow.Kind == PanelModel.AwayQuietKind && stillRow.Text.StartsWith("Nothing new since ") && Totals(still).Items.Count == 0 && Page(still).Single(b => b.Kind == PanelModel.AwayRowsKind).Title == null,
+        Check(stillRow.Kind == PanelModel.AwayQuietKind && stillRow.Text.Contains("Nothing new") && Totals(still).Items.Count == 0 && Page(still).Single(b => b.Kind == PanelModel.AwayRowsKind).Title == null,
               "away page: a fellow whose record did not grow: one quiet line 'Nothing new since <date>', no totals and no share caption");
 
         // your own book only: the entry is not on a fellow's Company list; Company still opens on Fireside

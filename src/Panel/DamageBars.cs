@@ -50,8 +50,10 @@ namespace Hearthwoven.Panel
                 var t = types[k]; var cells = t.Items ?? new List<Block>(); var parts = new List<Block>();
                 for (int c = 0; c < cells.Count && c < cols.Count; c++)
                     if (cells[c].Fraction > 0)
-                        parts.Add(new Block { Kind = "part", Id = cols[c].Id, Title = cols[c].Title, Icon = cols[c].Icon, Colour = cols[c].Colour, Value = cells[c].Value, Fraction = (float)(cells[c].Fraction / sums[k]) });
-                rows.Add(new Block { Kind = "source", Id = t.Id, Title = t.Title, Icon = t.Icon, Colour = t.Colour, Tone = "type", Value = t.Value, Fraction = max > 0 ? (float)(sums[k] / max) : 0, Src = t.Src, Source = t.Source, Items = parts });
+                        parts.Add(new Block { Kind = "part", Id = cols[c].Id, Title = cols[c].Title, Icon = cols[c].Icon, Colour = cols[c].Colour, Value = cells[c].Value, Fraction = (float)(cells[c].Fraction / sums[k]),
+                                              Tone = cells[c].Tone, Value2 = cells[c].Value2, Fraction2 = cells[c].Fraction2, Earlier = cells[c].Earlier, Note = cells[c].Note, Whole = cells[c].Whole });   // 0.8.5: a cell's after (AfterPart)
+                rows.Add(new Block { Kind = "source", Id = t.Id, Title = t.Title, Icon = t.Icon, Colour = t.Colour, Tone = "type", Value = t.Value, Fraction = max > 0 ? (float)(sums[k] / max) : 0, Src = t.Src, Source = t.Source, Items = parts,
+                                     Text = t.Text });   // 0.8.5: the line's closing words ("73 % got through")
             }
             return rows;
         }
@@ -93,10 +95,15 @@ namespace Hearthwoven.Panel
         /// colour filled from the left by what got through (Fraction2 of the part); Value what got through (in the fill), Value2 what your armor
         /// stopped (in the outline), Text its line words, the share stopped ("20 %").</summary>
         public const string DamageStoppedTone = "stopped";
+        /// <summary>0.8.5: a damage row without its share line (row Tone): its parts' words show on the page's tag instead. While away with one
+        /// fellow (Joost: every entry said "100 %"; the bar with its counts is enough).</summary>
+        public const string DamageNoLineTone = "noline";
         public static bool IsStoppedPart(BarRow r) => r?.Part?.Tone == DamageStoppedTone;
 
-        /// <summary>A damage row's line entry: the part's name and its share of the row ("Slash 64 %"); a stopped part its share stopped ("Poison 20 %").</summary>
-        public static string DamageLineWords(BarRow r) => r.Title + " " + (IsStoppedPart(r) ? r.Part.Text : r.Share);
+        /// <summary>A damage row's line entry: the part's name and its share of the row ("Slash 64 %"); a part that carries share words of its own
+        /// (Text) says those: a part of What your armor stopped its share stopped ("Poison 20 %"), a fellow's part on While away their share of that
+        /// total ("built 35 %"); a part of damage dealt with its after (AfterPart, no Text) its share of the row, as before.</summary>
+        public static string DamageLineWords(BarRow r) => r.Title + " " + (!string.IsNullOrEmpty(r.Part?.Text) ? r.Part.Text : r.Share);
 
         /// <summary>
         /// What pointing at a part of a damage bar shows, on every part (0.8.2, Joost in game: "that mouse over should always be visible on all
@@ -108,15 +115,16 @@ namespace Hearthwoven.Panel
         {
             if (r == null) return "";
             bool Some(string v) => !string.IsNullOrEmpty(v) && v != "0";
-            if (IsStoppedPart(r)) return Some(r.Value) || Some(r.Part.Value2) ? DamageSwapWords(r, Some(r.Value), Some(r.Part.Value2)) : r.Title;
+            if (IsStoppedPart(r)) return Some(r.Value) || Some(r.Part.Value2) || r.Part.Note != null ? DamageSwapWords(r, Some(r.Value), Some(r.Part.Value2)) : r.Title;
             return string.IsNullOrEmpty(r.Value) ? r.Title : r.Title + " " + r.Value;
         }
 
         /// <summary>The entry's words on hover when its part was too narrow for its number ("Frost 37"); a stopped part the numbers its fill or its
-        /// outline could not hold ("Pierce 12 got through", "Pierce 6 stopped", or both).</summary>
+        /// outline could not hold ("Pierce 12 got through", "Pierce 6 stopped", or both), then (0.8.5) its faded piece's words ("300 from before 12 October").</summary>
         public static string DamageSwapWords(BarRow r, bool throughHidden = true, bool stoppedHidden = false) =>
             !IsStoppedPart(r) ? r.Title + " " + r.Value
-            : r.Title + " " + string.Join(", ", new[] { throughHidden ? r.Value + " " + ArmourKeyThrough : null, stoppedHidden ? r.Part.Value2 + " " + ArmourStoppedWord : null }.Where(x => x != null));
+            : r.Title + " " + (r.Part.Whole != null ? r.Part.Whole + ": " : "") +   // 0.8.5: damage dealt says what you swung first ("Slash 1 670: 770 got through")
+              string.Join(", ", new[] { throughHidden ? r.Value + " " + ArmourKeyThrough : null, stoppedHidden ? r.Part.Value2 + " " + ArmourStoppedWord : null, r.Part.Note }.Where(x => x != null));
 
         /// <summary>The widest number a list of rows on one scale holds, for its number column, worked out from the first of them (By weapon's rows
         /// are blocks of their own, drawn one at a time; the renderer keeps the width for the run, REVIEW-081 #6): the largest total, at most this

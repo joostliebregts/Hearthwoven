@@ -21,7 +21,7 @@ namespace Hearthwoven.Panel
         // battle-answers: weakness is a cream cell with a "+" (gold stays "damage dealt" in the whole chapter, and "chosen" on chips)
         static readonly Color BtWeak = new Color32(0xf3, 0xec, 0xdc, 0xff), BtResist = new Color32(0x8a, 0x86, 0x80, 0xff), BtImmune = new Color32(0xe0, 0x82, 0x6a, 0xff),
             BtNormal = new Color32(0xf3, 0xec, 0xdc, 0xff), BtWeakChip = new Color32(0xb3, 0xae, 0xa4, 0xff), BtWeakInk = new Color32(0x2a, 0x1d, 0x10, 0xff), BtCell = new Color(0f, 0f, 0f, 0.30f),
-            BtDealtBar = new Color32(0xa9, 0xa0, 0x8c, 0xff), BtDark = new Color(0f, 0f, 0f, 0.45f), BtLine = new Color(0.42f, 0.32f, 0.2f, 0.28f), BtTrack = new Color(0.42f, 0.32f, 0.2f, 0.45f), BtSlot = new Color(0.17f, 0.13f, 0.098f, 1f);
+            BtDealtBar = new Color32(0xa9, 0xa0, 0x8c, 0xff), BtDark = new Color(0f, 0f, 0f, 0.45f), BtLine = PanelWash.Line.Game, BtTrack = PanelWash.BattleTrack.Game, BtSlot = new Color(0.17f, 0.13f, 0.098f, 1f);
 
         /// <summary>Draws one Battle block (DrawVocab hands these kinds over).</summary>
         internal static void BattleBlock(RectTransform col, Block b, Func<string, Action> link)
@@ -41,9 +41,9 @@ namespace Hearthwoven.Panel
                 case "armour": BattleArmour(col, b); break;   // 0.7: Defence > Your armour
                 case "deathstrip": BattleDeathStrip(col, b); break;
                 case "deaths": BattleDeathList(col, b); break;
-                case "deathrows": BattleDeathRows(col, b); break;
+                case "deathrows": BattleDeathRows(col, b, link); break;
             }
-            if (Labelled(b) && b.Kind != "dmgmix") Since(col, 14, b);   // a page without a time window: counted on this PC since install (the weapons' list says it once, after its last row)
+            if (Labelled(b) && b.Kind != "dmgmix") Since(col, PanelLayout.Text.Floor, b);   // a page without a time window: counted on this PC since install (the weapons' list says it once, after its last row)
         }
 
         // ----- small absolute-layout helpers: a row of fixed height in the column, its children placed by Box -----
@@ -91,7 +91,7 @@ namespace Hearthwoven.Panel
         static void BtCaption(RectTransform col, string title, string qualifier)
         {
             var head = Line(col, 8);
-            var t = Label(head, (title ?? "").ToUpperInvariant(), 14, PanelLook.Muted); t.characterSpacing = 8; t.textWrappingMode = TextWrappingModes.NoWrap;
+            var t = Label(head, (title ?? "").ToUpperInvariant(), PanelLayout.Text.Floor, PanelLook.Muted); t.characterSpacing = 8; t.textWrappingMode = TextWrappingModes.NoWrap;
             if (!string.IsNullOrEmpty(qualifier)) { var q = Label(head, qualifier, PanelLook.MinText, PanelLook.Muted); q.textWrappingMode = TextWrappingModes.NoWrap; }
         }
 
@@ -112,7 +112,7 @@ namespace Hearthwoven.Panel
         // the "one item" tint (B41, Joost 2026-10-10: "a visual indicator that it is one item, without explicitly making it look like a card"): a very
         // faint warm tint with rounded corners, no edge; the open foe on Foes and the feed's cards. Its padding: the ranking's
         const int BtBandPadX = 12, BtBandPadBottom = 12;
-        static readonly Color BtBand = new Color(0.95f, 0.91f, 0.84f, 0.045f);
+        static readonly Color BtBand = PanelWash.Band.Game;   // the mirror's .bt-band as the game draws it (PanelWash.cs)
 
         // ----- Foes, by foe: trophy and name, the dealt bar, the best arrow, one meter per damage type (0.7); a click opens the foe's ranking -----
 
@@ -128,7 +128,7 @@ namespace Hearthwoven.Panel
         // A row that opens ends in the opens mark (OpensMark), BtOpensRight in from its end; every row keeps its room (BtOpensW) so the columns stay put
         const float BtOpensRight = 4, BtOpensW = BtOpensRight + PanelLook.ChevronW + 4;
         const float BtMeterW = 38, BtMeterH = 8, BtMeterGap = 2;   // four whole 8 px parts
-        static readonly Color BtMeterTrack = new Color(0.20f, 0.155f, 0.115f, 1f), BtRowHover = new Color(0.95f, 0.91f, 0.84f, 0.035f);
+        static readonly Color BtMeterTrack = new Color(0.20f, 0.155f, 0.115f, 1f), BtRowHover = PanelWash.RowHover.Game;
 
         // a part of the meter: square, or rounded on its outer side only (the meter is one thing split into four; VOCABULARY.md): the rounded
         // sprite, its inner half covered square in the same colour
@@ -223,12 +223,13 @@ namespace Hearthwoven.Panel
                 var cursor = row.Note == PanelModel.CursorNote;   // 0.8: the keys' cursor (Chapters/FoesKeys.cs): the focus ring, the factors shown
                 if (cursor) { FocusRing(r, 0); foeCursorRow = holder == col ? r : holder; }
                 BtMarker(r, row.Icon, 0, 9, 22);
-                BtText(r, row.Title, 30, 0, BtFoeName - BtFoeNamePad, BtFoeRow, 16, PanelLook.Text);
+                BtText(r, row.Title, 30, 0, BtFoeName - BtFoeNamePad, BtFoeRow, PanelLayout.Text.Body, PanelLook.Text);
                 var w = Mathf.Max(2f, Mathf.Clamp01(row.Fraction) * BtFoeBar);
                 var split = cells.Where(i => i.Kind == "part").ToList();
-                var total = BtText(r, row.Value, BtFoeName + w + BtFoeNumGap, 0, BtFoeDealt - w - BtFoeNumGap, BtFoeRow, 16, PanelLook.Text, style: FontStyles.Bold);
+                var total = BtText(r, row.Value, BtFoeName + w + BtFoeNumGap, 0, BtFoeDealt - w - BtFoeNumGap, BtFoeRow, PanelLayout.Text.Body, PanelLook.Text, style: FontStyles.Bold);
                 RectTransform dealt = null;
                 if (split.Count > 0) dealt = GroupDealtBar(r, split, BtFoeName, (BtFoeRow - BtFoeDealtH) / 2, w, total.gameObject);   // 0.8.2 Everyone: the bar split in the players' colors
+                else if (row.Text != null) dealt = AfterDealtBar(r, row, BtFoeName, (BtFoeRow - BtFoeDealtH) / 2, w, total.gameObject);   // 0.8.5: with its after
                 else Fill(r, "Dealt", PanelLook.Dealt).rectTransform.Box(BtFoeName, (BtFoeRow - BtFoeDealtH) / 2, w, BtFoeDealtH);   // gold = dealt, as on every Battle page
                 var arrow = cells.FirstOrDefault(i => i.Kind == "arrow");
                 if (arrow != null)
@@ -272,6 +273,27 @@ namespace Hearthwoven.Panel
             return bar;
         }
 
+        /// <summary>0.8.5: your Dealt bar with its after (PanelModel.AfterPart on the row: Fraction2 the fill, Earlier the faded piece): the bar is its
+        /// gold outline (PanelLook.DamageEdge), filled from the left by what got through after a faded piece for hits from before it was recorded.
+        /// Pointing at it rings it and the page's tag says its numbers in the total's place (Text: "490 got through, 180 stopped"), as GroupDealtBar's.
+        /// Two images more than the plain bar at most (the fill, the faded piece); returns the bar, which the row draws last.</summary>
+        static RectTransform AfterDealtBar(RectTransform row, Block foe, float x, float top, float w, GameObject total)
+        {
+            var bar = Node("Dealt", row); bar.Box(x, top, w, BtFoeDealtH);
+            var seg = RoundedPart(bar, "Part", Color.clear, raycast: true); seg.pixelsPerUnitMultiplier = DrRadiusScale; seg.rectTransform.Box(0, 0, w, BtFoeDealtH);
+            if (PanelLook.DamageEdge) { seg.sprite = PanelLook.DamageEdge; seg.type = Image.Type.Sliced; seg.color = PanelLook.Dealt; }
+            var e = Mathf.Clamp01(foe.Earlier); var ew = e <= 0 ? 0 : Mathf.Max(1, w * e);
+            var fw = Mathf.Clamp(w * Mathf.Clamp01(foe.Fraction2), foe.Fraction2 > 0 ? 1 : 0, Mathf.Max(0, w - ew));
+            if (ew > 0) { var early = RoundedPart(seg.transform, "Earlier", Faded(PanelLook.Dealt)); early.pixelsPerUnitMultiplier = DrRadiusScale; early.rectTransform.Box(0, 0, ew, BtFoeDealtH); }
+            if (fw > 0) { var fill = RoundedPart(seg.transform, "Fill", PanelLook.Dealt); fill.pixelsPerUnitMultiplier = DrRadiusScale; fill.rectTransform.Box(ew, 0, fw, BtFoeDealtH); }
+            var hover = row.gameObject.AddComponent<BarHover>(); hover.Init(1);
+            hover.Parts[0] = seg.rectTransform; var hp = seg.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = 0;
+            hover.TagOver(PageTag(row), bar, new[] { foe.Text }, new[] { w + BtFoeNumGap - HoverTag.Pad }, (BtFoeDealtH - PanelModel.DamageBar - HoverTag.Rise) / 2, 0, BtFoeDealt + BtFoeArrow, centred: false);
+            hover.TagHides = total;
+            HoverRing(bar, hover);
+            return bar;
+        }
+
         /// <summary>Who hit it (PanelModel.WhoHit): its caption and the window's words, then one island of damage rows, a row per player on one scale
         /// (DamageRowsUi.cs: the top player fills the track, zero at a quarter of it, the types inside where their numbers fit).</summary>
         static void WhoHitIsland(RectTransform box, Block who, float inner)
@@ -299,7 +321,7 @@ namespace Hearthwoven.Panel
         static void BattleRanking(RectTransform parent, Block rk)
         {
             var rows = (rk.Items ?? new List<Block>()).Where(r => r.Kind == "rankrow").ToList();
-            var who = (rk.Items ?? new List<Block>()).FirstOrDefault(r => r.Kind == PanelModel.WhoHitKind);   // 0.8.2 Everyone: who hit it, first
+            var who = (rk.Items ?? new List<Block>()).FirstOrDefault(r => r.Kind == PanelModel.WhoHitKind || r.Kind == PanelModel.YourHitsKind);   // 0.8.2 Everyone: who hit it, first; 0.8.5 your own book: your hits on it
             if (rows.Count == 0 && who == null) return;
             var box = VStack(parent, 6);
             box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(BtBandPadX, BtBandPadX, 4, BtBandPadBottom);
@@ -307,7 +329,7 @@ namespace Hearthwoven.Panel
             if (who != null) WhoHitIsland(box, who, inner);
             if (rows.Count == 0) return;
             // one number column for the whole detail, as wide as its widest number, so every bar starts at one x and keeps one scale
-            var measure = Label(box, "", 15, PanelLook.Text, style: FontStyles.Bold); measure.textWrappingMode = TextWrappingModes.NoWrap;
+            var measure = Label(box, "", PanelLayout.Text.Small, PanelLook.Text, style: FontStyles.Bold); measure.textWrappingMode = TextWrappingModes.NoWrap;
             float numW = 24;
             foreach (var v in rows.SelectMany(r => r.Items ?? new List<Block>()).SelectMany(g => g.Items ?? new List<Block>()).Select(i => i.Value))
                 if (!string.IsNullOrEmpty(v)) { measure.text = v; numW = Mathf.Max(numW, Mathf.Ceil(measure.preferredWidth) + 2); }
@@ -332,7 +354,7 @@ namespace Hearthwoven.Panel
             var isl = Node("Island", area); isl.Box(x, 0, w, h); IslandGround(isl.gameObject);
             var ink = g.Tone == PanelModel.RankWorstTone ? PanelLook.Muted : PanelLook.Text;
             float gx = x + IslandPad, gw = w - 2 * IslandPad, y = IslandPad;
-            var head = BtText(area, g.Title, gx, y, gw, BtRankHead, 15, ink, style: FontStyles.Bold);
+            var head = BtText(area, g.Title, gx, y, gw, BtRankHead, PanelLayout.Text.Small, ink, style: FontStyles.Bold);
             var hw = Mathf.Min(gw, Mathf.Ceil(head.preferredWidth) + 2); head.rectTransform.sizeDelta = new Vector2(hw, head.rectTransform.sizeDelta.y);
             if (!string.IsNullOrEmpty(g.Text)) BtText(area, g.Text, gx + hw + 8, y, Mathf.Max(0, gw - hw - 8), BtRankHead, PanelLook.MinText, PanelLook.Faint, TextAlignmentOptions.MidlineRight);
             y += BtRankHead + 6;
@@ -344,10 +366,10 @@ namespace Hearthwoven.Panel
                 var st = BtText(line, it.Text, 0, 0, gw, BtRankName, PanelLook.MinText, PanelLook.Faint, TextAlignmentOptions.MidlineRight, FontStyles.Italic);
                 var sw = Mathf.Min(gw, Mathf.Ceil(st.preferredWidth) + 2); var sr = st.rectTransform;
                 sr.anchoredPosition = new Vector2(gw - sw, sr.anchoredPosition.y); sr.sizeDelta = new Vector2(sw, sr.sizeDelta.y);
-                BtText(line, it.Title, 0, 0, Mathf.Max(0, gw - sw - 8), BtRankName, 15, ink);
+                BtText(line, it.Title, 0, 0, Mathf.Max(0, gw - sw - 8), BtRankName, PanelLayout.Text.Small, ink);
                 // the expected damage before the bar, the bar on the detail's one scale (no share line: the parts' colours and numbers say it)
                 var bar = Node("Bar", line); bar.Box(0, BtRankBarTop, gw, PanelModel.DamageTrack + PanelModel.DamageInner + PanelModel.DamageTrue);
-                BtText(bar, it.Value, 0, 0, numW, PanelModel.DamageTrack, 15, ink, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
+                BtText(bar, it.Value, 0, 0, numW, PanelModel.DamageTrack, PanelLayout.Text.Small, ink, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
                 var form = PanelModel.BarFormOf((it.Items ?? new List<Block>()).Where(i => i.Kind == "part").ToList(), true);
                 if (form.Rows.Count > 0) DamageBar(bar, form, null, it.Fraction, false, numW + BtRankNumGap, gw - numW - BtRankNumGap, shares: false);
                 y += BtRankLine;
@@ -377,7 +399,7 @@ namespace Hearthwoven.Panel
         {
             var rows = (b.Items ?? new List<Block>()).Where(i => i.Kind == "dmgtype").ToList();
             if (rows.Count == 0) return;
-            if (!string.IsNullOrEmpty(b.Note)) Label(col, b.Note, 14, PanelLook.Muted);   // where the classification comes from
+            if (!string.IsNullOrEmpty(b.Note)) Label(col, b.Note, PanelLayout.Text.Floor, PanelLook.Muted);   // where the classification comes from
             // a column nobody fills is dropped; the others take the width their tags need (one line per row where it fits), the rest is shared
             var all = new[] { ("strong", PanelModel.StrongAgainst, BtWeak), ("normal", PanelModel.NormalOn, PanelLook.Muted), ("weak", PanelModel.WeakAgainst, BtWeakChip), ("none", PanelModel.NoEffectOn, BtImmune) };   // 0.7: from the type's side, "normal" its own column
             var shown = all.Where(a => rows.Any(r => (r.Items ?? new List<Block>()).Any(i => i.Kind == "foe" && i.Tone == a.Item1))).ToArray();
@@ -408,8 +430,8 @@ namespace Hearthwoven.Panel
             for (int c = 0; c < tones.Length; c++) { at += BtFtGap; xs[c] = at; at += colW[c]; }
 
             var h = BtRow(col, 30);
-            BtText(h, PanelModel.TypeDealtHead, 0, 0, BtFtType, 30, 14, PanelLook.Muted);
-            for (int c = 0; c < shown.Length; c++) BtText(h, shown[c].Item2, xs[c], 0, colW[c], 30, 14, shown[c].Item3);
+            BtText(h, PanelModel.TypeDealtHead, 0, 0, BtFtType, 30, PanelLayout.Text.Floor, PanelLook.Muted);
+            for (int c = 0; c < shown.Length; c++) BtText(h, shown[c].Item2, xs[c], 0, colW[c], 30, PanelLayout.Text.Floor, shown[c].Item3);
             BtRect(h, "Rule", PanelLook.Rule, 0, 29, Column, 1);
 
             foreach (var row in rows)
@@ -432,8 +454,8 @@ namespace Hearthwoven.Panel
                 Size(r, -1, height);
                 var colour = BtColour(row);
                 BtIcon(r, row.Icon, colour, 0, (height - 18) / 2, 18);
-                var name = BtText(r, row.Title, 24, 0, BtFtType - 24, height, 17, colour, style: FontStyles.Bold);
-                if (!string.IsNullOrEmpty(row.Value)) BtText(r, row.Value, 24 + Mathf.Min(name.preferredWidth, 80f) + 6, 0, 56, height, 14, BtNormal);
+                var name = BtText(r, row.Title, 24, 0, BtFtType - 24, height, PanelLayout.Text.Name, colour, style: FontStyles.Bold);
+                if (!string.IsNullOrEmpty(row.Value)) BtText(r, row.Value, 24 + Mathf.Min(name.preferredWidth, 80f) + 6, 0, 56, height, PanelLayout.Text.Floor, BtNormal);
                 BtRect(r, "Rule", BtLine, 0, height - 1, Column, 1);
             }
             measure.gameObject.SetActive(false); Destroy(measure.gameObject);
@@ -443,15 +465,45 @@ namespace Hearthwoven.Panel
 
         static void BattleGuard(RectTransform col, Block b, Func<string, Action> link = null)
         {
+            if (b.Tone == PanelModel.GuardLineTone) { BattleGuardLine(col, b, link); return; }
             var row = Line(col, 12, TextAnchor.LowerLeft);
-            Label(row, b.Value, 50, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+            Label(row, b.Value, PanelLayout.Text.Guard, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
             Size(VocabImg(row, "Block", "block-mark", PanelLook.Gold), 24, 24);
-            Label(row, b.Title, 20, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
+            Label(row, b.Title, PanelLayout.Text.Lead, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
             Size(Node("Gap", row), 32, 1);
-            Label(row, b.Value2, 50, PanelLook.Gold, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+            Label(row, b.Value2, PanelLayout.Text.Guard, PanelLook.Gold, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
             Size(VocabImg(row, "Parry", "parry-spark", PanelLook.Gold), 24, 24);
-            Label(row, b.Text, 20, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
+            Label(row, b.Text, PanelLayout.Text.Lead, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
             HeadSkills(row, PanelModel.SkillsOf(b), link, 28, 10);   // 0.8: the Blocking skill at the row's right end, as a hero's skill (SkillsBesideUi.cs)
+        }
+
+        // ----- Overview: the window's blocks and parries (0.8.5, Joost: "why does it show this button here, rather than stats"): one quiet line under
+        // What hurt you in the guard row's form at a small size, each number bold with its mark and word, the Blocking skill at the right end where the
+        // line has room for it, the whole line a click to Defense ending in the opens mark (PanelModel.GuardLine). Only the way there when the window
+        // keeps no minutes of them -----
+        const float BtGlIcon = 18, BtGlGap = 6, BtGlApart = 18, BtGlSkill = 22;
+        static void BattleGuardLine(RectTransform col, Block b, Func<string, Action> link)
+        {
+            var line = Line(col, BtGlGap);
+            line.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, (int)(OpensRight + OpensRoom), 0, 0);   // clear of the opens mark
+            if (string.IsNullOrEmpty(b.Value)) Label(line, b.Title, PanelLayout.Text.Name, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            else
+            {
+                Size(VocabImg(line, "Block", "block-mark", PanelLook.Gold), BtGlIcon, BtGlIcon);
+                Label(line, b.Value, PanelLayout.Text.Lead, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+                Label(line, b.Title, PanelLayout.Text.Small, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+                Size(Node("Gap", line), BtGlApart - BtGlGap, 1);
+                Size(VocabImg(line, "Parry", "parry-spark", PanelLook.Gold), BtGlIcon, BtGlIcon);
+                Label(line, b.Value2, PanelLayout.Text.Lead, PanelLook.Gold, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+                Label(line, b.Text, PanelLayout.Text.Small, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+                var before = line.childCount;
+                HeadSkills(line, PanelModel.SkillsOf(b), link, BtGlSkill);   // the Blocking skill, as on Defense, while it fits
+                LayoutRebuilder.ForceRebuildLayoutImmediate(line);
+                if (LayoutUtility.GetPreferredWidth(line) > Column)
+                    for (int i = line.childCount - 1; i >= before; i--) { var c = line.GetChild(i).gameObject; c.SetActive(false); Destroy(c); }
+            }
+            var hit = line.gameObject.AddComponent<Image>(); hit.color = Color.clear;
+            var go = link?.Invoke(b.Id); if (go != null) ClickTarget(hit, go, opens: true);   // the way to Defense: the whole line, the opens mark at its end
         }
 
         // ----- Defense: damage received per source (ISC-22): per source its trophy, name and total, then the shared bar with its list
@@ -470,7 +522,7 @@ namespace Hearthwoven.Panel
             else
             {
                 var head = Line(col, 8);
-                var t = Label(head, (b.Title ?? "").ToUpperInvariant(), 14, PanelLook.Muted); t.characterSpacing = 8; t.textWrappingMode = TextWrappingModes.NoWrap;
+                var t = Label(head, (b.Title ?? "").ToUpperInvariant(), PanelLayout.Text.Floor, PanelLook.Muted); t.characterSpacing = 8; t.textWrappingMode = TextWrappingModes.NoWrap;
                 if (!string.IsNullOrEmpty(b.Text)) { var q = Label(head, b.Text, PanelLook.MinText, PanelLook.Muted); q.textWrappingMode = TextWrappingModes.NoWrap; }
                 Node("Rest", head).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
                 PipKeyLine(head, key);
@@ -525,7 +577,7 @@ namespace Hearthwoven.Panel
             // the bar is its own pointer target, clear (as DamageBar's outlined parts): no object of its own for it
             var seg = RoundedPart(r, "Bar", Color.clear, raycast: true); seg.pixelsPerUnitMultiplier = DrRadiusScale;
             seg.rectTransform.Box(trackX, (PanelModel.DamageTrack - PanelModel.DamageBar) / 2, w, PanelModel.DamageBar);
-            StoppedPart(seg.transform, form.Rows[0], w, Hex(form.Rows[0].Colour, PanelLook.Muted));
+            StoppedPart(seg, form.Rows[0], w, Hex(form.Rows[0].Colour, PanelLook.Muted));
             // 0.8.2: pointing at it rings it and the page's tag over it says its numbers, as every damage bar's part (PanelModel.DamageHoverWords)
             var hover = r.gameObject.AddComponent<BarHover>(); hover.Init(1);
             hover.Parts[0] = seg.rectTransform; var hp = seg.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = 0;
@@ -543,7 +595,7 @@ namespace Hearthwoven.Panel
                 var sw = Node("Swatch", key); Size(sw, 22, 14);
                 if (outline) BtHollow(sw, PanelLook.Muted, 0, 0, 22, 14);
                 if (fill > 0) BtRect(sw, "Fill", PanelLook.Muted, 0, 0, fill, 14);
-                Label(key, words, 14, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+                Label(key, words, PanelLayout.Text.Floor, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
             }
             Entry(PanelModel.ArmourKeyWhole, 9, true);
             Entry(PanelModel.ArmourKeyThrough, 22, false);
@@ -578,75 +630,118 @@ namespace Hearthwoven.Panel
             }
         }
 
-        // ----- Deaths: where you fell, wider where you fell more, a death mark and the time per fall above the tile -----
+        // ----- Deaths: where you fell (0.8.5, a friend's idea Joost liked: the tiles grow; proto/3-deaths-height variant B). Each found biome's tile is a
+        // column in its land's colour, taller where you fell more (PanelModel.FellHeight, the one rule the preview draws too), the time of each fall
+        // in it while they fit (PanelModel.FellDated), else the death mark and the count over its name, the name at its foot (two lines when the
+        // tile is narrow). On All one tile more at the end, a dashed edge round "12 no place", and under the strip the line that says why -----
 
-        const float BtFellTile = 38, BtFellLine = 18;
+        const float BtFellMark = 14, BtFellMarkGap = 5, BtFellNamePad = 2, BtDash = 6, BtDashGap = 4, BtDashLine = 2, BtFellDim = 0.4f;
+        static readonly Color BtFellMarkLight = new Color32(0xd9, 0xcc, 0xab, 0xff), BtNoPlaceEdge = PanelWash.NoPlaceEdge.Game;
 
         static void BattleDeathStrip(RectTransform col, Block b)
         {
             var tiles = (b.Items ?? new List<Block>()).Where(t => t.Kind == "biome").ToList();
             if (tiles.Count == 0) return;
             BtCaption(col, b.Title, b.Note);
-            // as tall as the most falls over one tile (a count alone is one line)
-            Func<Block, List<string>> linesOf = t =>
-            {
-                var falls = (t.Items ?? new List<Block>()).Where(d => d.Kind == "death").ToList();
-                if (t.Count == 0) return new List<string>();
-                return falls.Count == t.Count && t.Count <= 3 ? falls.Select(d => d.Value).ToList() : new List<string> { t.Count.ToString() };
-            };
-            var BtStack = Mathf.Max(1, tiles.Max(t => linesOf(t).Count)) * BtFellLine + 8;
-            var strip = BtRow(col, BtStack + BtFellTile);
-            int n = tiles.Count; const float Gap = 4;
-            var apart = n > 1 && PanelLook.BiomeKey(tiles[n - 1].Id) == "ocean" ? 10f : 0f;
-            var weight = tiles.Sum(t => Mathf.Max(1f, t.Fraction));
-            var avail = Column - Gap * (n - 1) - apart;
-            float x = 0;
+            var dated = PanelModel.FellDated(tiles); var most = Mathf.Max(1, tiles.Max(t => t.Count));
+            var none = b.Count > 0; int k = tiles.Count + (none ? 1 : 0);
+            var sea = tiles.Count > 1 && PanelLook.BiomeKey(tiles[tiles.Count - 1].Id) == "ocean" ? PanelLayout.Fell.Apart : 0f;   // the sea apart from the journey
+            var w = Mathf.Min(PanelLayout.Fell.TileMax, (Column - PanelLayout.Fell.Gap * (k - 1) - sea - (none ? PanelLayout.Fell.Apart : 0)) / k);
+            var tall = tiles.Max(t => PanelModel.FellHeight(t.Count, most, dated));
+            var strip = BtRow(col, tall);
             var picked = tiles.Any(t => t.Selected);   // the Biome row's choice: the chosen tile gets a gold edge, the others step back (as on the overview)
-            for (int i = 0; i < n; i++)
+            float x = 0, foot = PanelLayout.Fell.Foot;
+            for (int i = 0; i < tiles.Count; i++)
             {
                 var t = tiles[i];
-                if (i == n - 1) x += apart;
+                if (i == tiles.Count - 1) x += sea;
                 var held = Node("Col", strip); held.Stretch();
-                if (picked && !t.Selected) held.gameObject.AddComponent<CanvasGroup>().alpha = 0.4f;
-                var w = avail * Mathf.Max(1f, t.Fraction) / weight;
-                // the falls, newest on top; more than fit: one mark with the count
-                var lines = linesOf(t);
-                for (int j = 0; j < lines.Count; j++)
+                if (picked && !t.Selected) held.gameObject.AddComponent<CanvasGroup>().alpha = BtFellDim;
+                var h = PanelModel.FellHeight(t.Count, most, dated); var top = tall - h;
+                if (t.Selected) Img(held, "Chosen", null, PanelLook.Gold).rectTransform.Box(x - 2, top - 2, w + 4, h + 4);
+                Fill(held, "Tile", Hex(t.Colour, PanelLook.BiomeTile(t.Id))).rectTransform.Box(x, top, w, h);
+                var dark = t.Tone == "dark-text"; var ink = dark ? DarkInk : LightInk; var mark = dark ? DarkInk : BtFellMarkLight;
+                if (dated)
                 {
-                    var row = Node("Fall", held); row.Box(x, BtStack - 4 - (lines.Count - j) * BtFellLine, w, BtFellLine);
-                    Layout(row.gameObject.AddComponent<HorizontalLayoutGroup>(), 3, TextAnchor.MiddleCenter);
-                    Size(VocabImg(row, "Death", "death", Color.white), 16, 16);
-                    Label(row, lines[j], 14, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
+                    var falls = (t.Items ?? new List<Block>()).Where(d => d.Kind == "death").ToList();   // newest first, from the top
+                    for (int j = 0; j < falls.Count; j++) FellLine(held, falls[j].Value, x, top + j * PanelLayout.Fell.Line, w, PanelLayout.Fell.Line, ink, mark);
                 }
-                if (t.Selected) Img(held, "Chosen", null, PanelLook.Gold).rectTransform.Box(x - 2, BtStack - 2, w + 4, BtFellTile + 4);
-                Fill(held, "Tile", Hex(t.Colour, PanelLook.BiomeTile(t.Id))).rectTransform.Box(x, BtStack, w, BtFellTile);
-                var ink = t.Tone == "dark-text" ? DarkInk : LightInk;
-                BtText(held, t.Title, x + 2, BtStack, w - 4, BtFellTile, 14, ink, TextAlignmentOptions.Center, FontStyles.Bold);
-                x += w + Gap;
+                else if (t.Count > 0) FellLine(held, t.Count.ToString(), x, top + h - foot - PanelLayout.Fell.CountLine, w, PanelLayout.Fell.CountLine, ink, mark);
+                var name = BtText(held, t.Title, x + BtFellNamePad, tall - foot, w - 2 * BtFellNamePad, foot, PanelLayout.Text.Floor, ink, TextAlignmentOptions.Center, FontStyles.Bold);
+                name.textWrappingMode = TextWrappingModes.Normal;   // "Black Forest" on two lines in a narrow tile, never cut
+                x += w + PanelLayout.Fell.Gap;
             }
-            Spacer(col, 8);
+            if (none)
+            {
+                x += PanelLayout.Fell.Apart;
+                var held = Node("NoPlace", strip); held.Stretch();
+                if (picked) held.gameObject.AddComponent<CanvasGroup>().alpha = BtFellDim;
+                BtDashed(held, BtNoPlaceEdge, x, tall - foot, w, foot);
+                var words = Node("Words", held); words.Box(x, tall - foot, w, foot);
+                Layout(words.gameObject.AddComponent<HorizontalLayoutGroup>(), BtFellMarkGap, TextAnchor.MiddleCenter);
+                Label(words, b.Count.ToString(), PanelLayout.Text.Floor, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+                Label(words, PanelModel.NoPlaceWords, PanelLayout.Text.Floor, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            }
+            if (!string.IsNullOrEmpty(b.Text)) Label(col, b.Text, PanelLayout.Text.Floor, PanelLook.Muted).textWrappingMode = TextWrappingModes.Normal;   // why some falls have no place
+        }
+
+        // a fall in its tile: the death mark and its time (or a tile's count), centred, bold, in the ink that reads on the land's colour
+        static void FellLine(RectTransform parent, string text, float x, float top, float w, float h, Color ink, Color mark)
+        {
+            var row = Node("Fall", parent); row.Box(x, top, w, h);
+            Layout(row.gameObject.AddComponent<HorizontalLayoutGroup>(), BtFellMarkGap, TextAnchor.MiddleCenter);
+            Size(VocabImg(row, "Death", "death", mark), BtFellMark, BtFellMark);
+            Label(row, text, PanelLayout.Text.Floor, ink, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+        }
+
+        // a dashed edge round a box (the falls with no place: a tile with nothing known in it), once per page
+        static void BtDashed(RectTransform parent, Color colour, float x, float top, float w, float h)
+        {
+            for (float d = 0; d < w; d += BtDash + BtDashGap)
+            {
+                var len = Mathf.Min(BtDash, w - d);
+                BtRect(parent, "Dash", colour, x + d, top, len, BtDashLine); BtRect(parent, "Dash", colour, x + d, top + h - BtDashLine, len, BtDashLine);
+            }
+            for (float d = 0; d < h; d += BtDash + BtDashGap)
+            {
+                var len = Mathf.Min(BtDash, h - d);
+                BtRect(parent, "Dash", colour, x, top + d, BtDashLine, len); BtRect(parent, "Dash", colour, x + w - BtDashLine, top + d, BtDashLine, len);
+            }
         }
 
         // ----- Deaths: per fall the killer's trophy, when and where, the last 10 seconds by type (totals, not a timeline) -----
 
         const float BtDzRow = 70, BtDzPic = 46, BtDzInfo = 168, BtDzTot = 64, BtHitMax = 0.16f;   // the largest hit: 16 % of the strip
 
-        // ----- Overview: the window's deaths, one row each, aligned columns: picture, how many, from what with when under it
-        // (the overview's half column is too narrow for the times beside the words) -----
-        const float BtDrRow = 48, BtDrPic = 30, BtDrNum = 50;
-        static void BattleDeathRows(RectTransform col, Block b)
+        // ----- Overview: the window's falls (0.8.5, variant A; Joost: "Overview should fit in one screen"): the caption with how many and in what order,
+        // then one line each, aligned: the killer's picture, the death mark and how many, from what, the newest one's time at the right end; past
+        // PanelModel.OverviewFallRows a last line that opens Deaths. None: the caption and "No deaths yet" -----
+        const float BtFlRow = 26, BtFlGap = 2, BtFlPic = 22, BtFlCol = 10, BtFlMark = 14, BtFlCount = 24, BtFlMarkGap = 4, BtFlHeadGap = 8;
+        static void BattleDeathRows(RectTransform col, Block b, Func<string, Action> link)
         {
-            foreach (var d in (b.Items ?? new List<Block>()).Where(i => i.Kind == "death"))
+            var head = Line(col, BtFlHeadGap);
+            Sect(head, b.Title, b.Value);
+            if (!string.IsNullOrEmpty(b.Note)) Label(head, b.Note, PanelLayout.Text.Floor, PanelLook.Faint).textWrappingMode = TextWrappingModes.NoWrap;
+            var items = b.Items ?? new List<Block>();
+            if (items.Count == 0) { if (!string.IsNullOrEmpty(b.Text)) Label(col, b.Text, PanelLayout.Text.Body, PanelLook.Muted, style: FontStyles.Italic); return; }
+            var list = VStack(col, BtFlGap);
+            float xm = BtFlPic + BtFlCol, xt = xm + BtFlMark + BtFlMarkGap + BtFlCount + BtFlCol;
+            foreach (var d in items)
             {
-                var r = BtRow(col, BtDrRow);
-                if ((d.Icon ?? "").StartsWith("vocab:")) BtIcon(r, d.Icon, string.IsNullOrEmpty(d.Colour) ? Color.white : BtColour(d), 2, 11, BtDrPic - 4);
-                else BtMarker(r, d.Icon, 0, 9, BtDrPic);
-                BtIcon(r, "death", Color.white, BtDrPic + 6, 17, 14);   // the death mark before the count
-                BtText(r, d.Value, BtDrPic + 6 + 18, 0, BtDrNum - 18, BtDrRow, 20, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
-                float xt = BtDrPic + 6 + BtDrNum + 10;
-                BtText(r, d.Title, xt, 4, Column - xt, 22, 17, PanelLook.Text);
-                BtText(r, d.Text, xt, 26, Column - xt, 16, PanelLook.MinText, PanelLook.Muted);
-                BtRect(r, "Rule", BtLine, 0, BtDrRow - 1, Column, 1);
+                var r = BtRow(list, BtFlRow);
+                if (d.Kind == "more")   // the falls past the lines: a click opens Deaths
+                {
+                    var more = BtText(r, d.Title, xt, 0, Column - xt, BtFlRow, PanelLayout.Text.Name, PanelLook.Muted, style: FontStyles.Italic);
+                    var go = link?.Invoke(d.Id); if (go != null) { more.raycastTarget = true; ClickTarget(more, go, opens: true); }   // the opens mark at the line's end
+                    continue;
+                }
+                if ((d.Icon ?? "").StartsWith("vocab:")) BtIcon(r, d.Icon, string.IsNullOrEmpty(d.Colour) ? Color.white : BtColour(d), 0, (BtFlRow - BtFlPic) / 2, BtFlPic);
+                else { BtRect(r, "Slot", BtSlot, 0, (BtFlRow - BtFlPic) / 2, BtFlPic, BtFlPic); BtMarker(r, d.Icon, 0, (BtFlRow - BtFlPic) / 2, BtFlPic); }
+                BtIcon(r, "death", Color.white, xm, (BtFlRow - BtFlMark) / 2, BtFlMark);   // the death mark before the count
+                BtText(r, d.Value, xm + BtFlMark + BtFlMarkGap, 0, BtFlCount, BtFlRow, PanelLayout.Text.Name, PanelLook.Text, style: FontStyles.Bold);
+                var when = BtText(r, d.Text, xt, 0, Column - xt, BtFlRow, PanelLayout.Text.Floor, PanelLook.Muted, TextAlignmentOptions.MidlineRight);
+                var tw = Mathf.Ceil(when.preferredWidth) + 2;
+                BtText(r, d.Title, xt, 0, Mathf.Max(0, Column - xt - tw - BtFlCol), BtFlRow, PanelLayout.Text.Name, PanelLook.Text);   // a long cause gives way, never the time
             }
         }
 
@@ -662,8 +757,8 @@ namespace Hearthwoven.Panel
                 var r = BtRow(col, BtDzRow);
                 BtRect(r, "Slot", BtSlot, 0, 12, BtDzPic, BtDzPic);
                 BtMarker(r, d.Icon, 3, 15, BtDzPic - 6);
-                BtText(r, d.Title, BtDzPic + 14, 6, BtDzInfo, 22, 19, PanelLook.Text);
-                BtText(r, d.Text, BtDzPic + 14, 28, BtDzInfo, 18, 14, PanelLook.Muted);
+                BtText(r, d.Title, BtDzPic + 14, 6, BtDzInfo, 22, PanelLayout.Text.Count, PanelLook.Text);
+                BtText(r, d.Text, BtDzPic + 14, 28, BtDzInfo, 18, PanelLayout.Text.Floor, PanelLook.Muted);
                 var mini = Node("Types", r); mini.Box(BtDzPic + 14, 48, BtDzInfo, 16);
                 Layout(mini.gameObject.AddComponent<HorizontalLayoutGroup>(), 5, TextAnchor.MiddleLeft);
                 var parts = d.Items ?? new List<Block>();
@@ -695,7 +790,7 @@ namespace Hearthwoven.Panel
                 BtIcon(r, "death", Color.white, xb + wb - 14, 44, 14);
                 if (!string.IsNullOrEmpty(d.Value))
                 {
-                    BtText(r, d.Value, Column - BtDzTot, 8, BtDzTot, 28, 24, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
+                    BtText(r, d.Value, Column - BtDzTot, 8, BtDzTot, 28, PanelLayout.Text.Heading, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
                     BtText(r, PanelModel.ReceivedWord, Column - BtDzTot, 36, BtDzTot, 14, PanelLook.MinText, PanelLook.Faint, TextAlignmentOptions.MidlineRight);
                 }
                 BtRect(r, "Rule", BtLine, 0, BtDzRow - 1, Column, 1);

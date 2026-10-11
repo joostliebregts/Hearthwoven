@@ -239,7 +239,7 @@ namespace Hearthwoven.Panel
             // the page holds the button and, only while open, the lines (view.AboutNumbers keeps them all for the tests and the key line)
             var shown = new Block { Kind = box.Kind, Id = box.Id, Title = box.Title, Open = state.ShowNumbers, Selected = state.ShowNumbers,
                                     KeyCap = string.IsNullOrEmpty(state.NumbersKey) ? null : state.NumbersKey, Items = state.ShowNumbers ? box.Items : null };
-            list.Insert(list.FindIndex(b => b.Kind == "hero") + 1, shown);
+            list.Insert(list.FindIndex(b => b.Kind == "hero" || b.Kind == AwayTotalsKind) + 1, shown);   // While away's totals are its hero
         }
 
         /// <summary>The numbers key in the key line, right before the About key: only on a page that has the box.</summary>
@@ -353,11 +353,21 @@ namespace Hearthwoven.Panel
         // the skill stays at the right end of the hero's row, HeroLines puts it there, and the About button rides in the title strip) ----------
 
 
-        /// <summary>The page's "About these numbers" button when the plate also has a title strip (featband) to carry it, else null.</summary>
+        /// <summary>The page's "About these numbers" button when the plate also has a title strip (featband) to carry it, else null; not when the
+        /// page's own head line carries it (HeadAbout).</summary>
         public static Block StripAbout(Block plate)
         {
             var items = plate?.Items ?? new List<Block>();
-            return items.Any(b => b.Kind == "featband") ? items.FirstOrDefault(b => b.Kind == "aboutnumbers") : null;
+            return items.Any(b => b.Kind == "featband") && HeadAbout(plate) == null ? items.FirstOrDefault(b => b.Kind == "aboutnumbers") : null;
+        }
+
+        /// <summary>0.8.5 (While away and Together on one screen): the page's "About these numbers" button when the page's own top line carries it
+        /// at its right end, so the page spends no row on it: the head line of While away's totals, the last line of Together's category chips;
+        /// else null. Open, its box comes under While away's totals (PlaceAboutNumbers), over Together's island.</summary>
+        public static Block HeadAbout(Block plate)
+        {
+            var items = plate?.Items ?? new List<Block>();
+            return items.Any(b => b.Kind == AwayTotalsKind || b.Kind == "together") ? items.FirstOrDefault(b => b.Kind == "aboutnumbers") : null;
         }
 
         /// <summary>The page's view switch that shares the top row (B38): the plate's first switch; null = none.</summary>

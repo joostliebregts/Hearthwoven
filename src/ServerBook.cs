@@ -8,7 +8,7 @@ using System.Text;
 namespace Hearthwoven
 {
     /// <summary>
-    /// The server's book (0.6), pure C# so the tests run it without the game. Two things only the server can see whole:
+    /// The server's book (0.6), pure C# so the tests run it without the game. Three things only the server can see whole:
     ///
     /// Cargo loaded and unloaded (FEASIBILITY-06 option A, a real evening's iron haul): for every ship and cart (never a chest:
     /// chests are storage, not transport) a first-in-first-out list of lots. A put adds a lot (item, count, where, who); a take
@@ -20,6 +20,16 @@ namespace Hearthwoven
     ///
     /// Born near (FEASIBILITY-06 section 2, the server watcher): a tamed young animal appearing for the first time is a
     /// birth or a hatch, credited to every player within NearRange metres as "born near", never "bred by".
+    ///
+    /// Fed by Stoker's Chests (0.8.5): a chest that a mod empties by itself (SmelterUpgrades' Stoker's Chest, ChestWatch kind "feeder") puts
+    /// ore and fuel into the stations near it, on whichever PC hosts the chest. Every one of those takes passes the server exactly once, as an
+    /// "auto-feed" line of the chest log (ChestLedger: sent by the chest's own PC, nobody at it), whoever hosts it and whatever Hearthwoven
+    /// that PC runs (or none). The server counts them for the whole world (ChestFed, item prefab -> count, from FedFrom): nobody's own work.
+    /// Rebuilt once from the chest logs the server already holds (ReplayFed, on its first start with 0.8.5; FedReplayed marks it done). Lines
+    /// before 0.8.5 carry no owner and an unopened pull by a craft-from-chest mod was logged as auto-feed too, so there the host is inferred:
+    /// a chest's lines from one PC in one moment (PullSpan) between two lines of another PC (within FeedWindow) are a pull; a stretch at the
+    /// feeder's pace is that PC hosting the chest a while, and a line holding more than a feeder takes at once (FeedLineMax) is a pull too.
+    /// 0.8.5 lines say "fromOwner".
     ///
     /// Bounded: at most MaxCarriers ships and carts (the one untouched longest goes first), MaxLots lots per carrier (the oldest
     /// goes first; its cargo then has no start and counts nothing), MaxKinds items or creatures per player and table, MaxPlayers
@@ -46,9 +56,26 @@ namespace Hearthwoven
         long clock;
         /// <summary>When the cargo book begins (its first ship or cart event) and when births began to be watched; null = not yet.</summary>
         public DateTime? CargoFrom, BornFrom;
+        /// <summary>Fed by Stoker's Chests (0.8.5): item prefab ("Coal", "IronScrap", "Wood") -> how many the chests put into the stations, the
+        /// whole world's, counted from <see cref="FedFrom"/> (null: nothing counted yet).</summary>
+        public readonly Dictionary<string, double> ChestFed = new Dictionary<string, double>();
+        public DateTime? FedFrom;
+        /// <summary>The chest logs' feeding was read into ChestFed once (ReplayFed): never again for this book.</summary>
+        public bool FedReplayed;
+        /// <summary>A replayed run of one PC's lines between two of another PC's lines of the same chest, this close in time (FeedWindow) and
+        /// all within one moment (PullSpan), is a pull (ReplayFed); a longer run is that PC hosting the chest a while (the feeder takes every 3 s:
+        /// the real logs of 8 to 11 October hold 79 such lines, all hosting, none a one-moment run).</summary>
+        public static readonly TimeSpan FeedWindow = TimeSpan.FromMinutes(10), PullSpan = TimeSpan.FromSeconds(2);
+        /// <summary>The most of one item a replayed line from before 0.8.5 can hold and still be the feeder's (ReplayFed); more is a pull. The
+        /// feeder (SmelterUpgrades 1.1.5, SmelterFeeder.Tick, IntervalSeconds 3) takes one item per call, one fuel and one ore per station in
+        /// its 8 m range, every 3 s; the chest's change reaches the server (ChestWatch) within 0.05 s (ZDOMan sends changed objects every
+        /// 0.05 s), so a line is one tick: at most one item of a kind per station the chest reaches. 8: twice the most stations of one kind
+        /// a chest of the group reaches (coal into two smelters and two blast furnaces), for a second tick in the line when the network is
+        /// slow; the real logs of 8 to 11 October hold 1 to 3 per line.</summary>
+        public const int FeedLineMax = 8;
         /// <summary>Top-level keys a newer Hearthwoven wrote (0.8, RESILIENCE item 4): kept as read and written back with every save.</summary>
         public readonly Dictionary<string, object> Extra = new Dictionary<string, object>();
-        static readonly HashSet<string> KnownKeys = new HashSet<string> { "version", "clock", "cargoFrom", "bornFrom", "carriers", "players" };
+        static readonly HashSet<string> KnownKeys = new HashSet<string> { "version", "clock", "cargoFrom", "bornFrom", "carriers", "players", "chestFed", "fedFrom", "fedReplayed" };
         /// <summary>Grows with every credit (not saved): a reader can tell that something changed.</summary>
         public int Version { get; private set; }
 
@@ -93,6 +120,47 @@ namespace Hearthwoven
             }
             from.Lots.RemoveAll(l => l.Count <= 0);
             return booked;
+        }
+
+        /// <summary>One chest-log event (ChestWatch, ServerBookHooks.Chest): a Stoker's Chest's auto-feed counts into ChestFed; anything else is
+        /// ignored. Returns whether it counted.</summary>
+        public bool Fed(string kind, string action, string item, int count, DateTime t)
+        {
+            if (kind != "feeder" || action != "auto-feed" || count <= 0 || string.IsNullOrEmpty(item)) return false;
+            if (FedFrom == null || t < FedFrom) FedFrom = t;
+            if (!ChestFed.ContainsKey(item) && ChestFed.Count >= MaxKinds) return false;
+            ChestFed.TryGetValue(item, out var o); ChestFed[item] = o + count;
+            Version++;
+            return true;
+        }
+
+        /// <summary>The world's part of the server's answer (0.8.5): {"chestFed":{item:n},"fedFrom":"..."}, items by prefab (as the smelters'
+        /// own count keys them) or named by <paramref name="itemName"/>; null when nothing is counted yet.</summary>
+        public string WorldJson(Func<string, string> itemName = null)
+        {
+            if (ChestFed.Count == 0) return null;
+            var merged = new Dictionary<string, double>();
+            foreach (var kv in ChestFed) { var k = itemName?.Invoke(kv.Key) ?? kv.Key; merged.TryGetValue(k, out var o); merged[k] = o + kv.Value; }
+            var b = new StringBuilder("{\"chestFed\":");
+            WriteDict(b, merged.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(SharedKinds));
+            if (FedFrom.HasValue) b.Append(",\"fedFrom\":").Append(Json.Q(Iso(FedFrom.Value)));
+            return b.Append('}').ToString();
+        }
+
+        /// <summary>What a client reads back from WorldJson: the world's Stoker's Chest feeding by item, and since when.</summary>
+        public class World
+        {
+            public readonly Dictionary<string, double> ChestFed = new Dictionary<string, double>();
+            public DateTime? FedFrom;
+            public double ChestFedTotal => ChestFed.Values.Where(v => v > 0).Sum();
+
+            public static World Read(Dictionary<string, object> o)
+            {
+                if (o == null) return null;
+                var w = new World { FedFrom = Date(MiniJson.Str(o, "fedFrom")) };
+                foreach (var kv in MiniJson.Obj(o, "chestFed") ?? new Dictionary<string, object>()) if (kv.Value is double v && v > 0 && w.ChestFed.Count < MaxKinds) w.ChestFed[kv.Key] = v;
+                return w.ChestFed.Count == 0 ? null : w;
+            }
         }
 
         /// <summary>A tamed young animal appeared: one birth for every player key in <paramref name="near"/> (each once).</summary>
@@ -194,6 +262,9 @@ namespace Hearthwoven
             var b = new StringBuilder("{\"version\":").Append(FormatVersion).Append(",\"clock\":").Append(clock.ToString(CultureInfo.InvariantCulture));
             if (CargoFrom.HasValue) b.Append(",\"cargoFrom\":").Append(Json.Q(Iso(CargoFrom.Value)));
             if (BornFrom.HasValue) b.Append(",\"bornFrom\":").Append(Json.Q(Iso(BornFrom.Value)));
+            if (FedFrom.HasValue) b.Append(",\"fedFrom\":").Append(Json.Q(Iso(FedFrom.Value)));
+            if (ChestFed.Count > 0) { b.Append(",\"chestFed\":"); WriteDict(b, ChestFed); }
+            if (FedReplayed) b.Append(",\"fedReplayed\":true");
             b.Append(",\"carriers\":{");
             bool first = true;
             foreach (var kv in carriers)
@@ -231,7 +302,9 @@ namespace Hearthwoven
             if (!(MiniJson.Parse(json) is Dictionary<string, object> root)) return null;
             var version = MiniJson.Num(root, "version");
             if (version < 1 || version > FormatVersion) return null;
-            var book = new ServerBook { clock = (long)MiniJson.Num(root, "clock"), CargoFrom = Date(MiniJson.Str(root, "cargoFrom")), BornFrom = Date(MiniJson.Str(root, "bornFrom")) };
+            var book = new ServerBook { clock = (long)MiniJson.Num(root, "clock"), CargoFrom = Date(MiniJson.Str(root, "cargoFrom")), BornFrom = Date(MiniJson.Str(root, "bornFrom")), FedFrom = Date(MiniJson.Str(root, "fedFrom")) };
+            foreach (var e in MiniJson.Obj(root, "chestFed") ?? new Dictionary<string, object>()) if (e.Value is double v && v > 0 && book.ChestFed.Count < MaxKinds) book.ChestFed[e.Key] = v;
+            book.FedReplayed = root.TryGetValue("fedReplayed", out var fr) && fr is bool done && done;
             foreach (var kv in MiniJson.Obj(root, "carriers") ?? new Dictionary<string, object>())
             {
                 if (!(kv.Value is Dictionary<string, object> co) || book.carriers.Count >= MaxCarriers) continue;
@@ -330,10 +403,29 @@ namespace Hearthwoven
             }
         }
 
+        /// <summary>The server's first start with 0.8.5 (ServerBookHooks.Start): the Stoker's Chest feeding this world's chest logs already hold, once.</summary>
+        public ReplayResult ReplayFedLogs(string root, string worldName, out int files, string worldUid = null)
+        {
+            lock (DailyLogs.Gate)
+            {
+                var list = DailyLogs.Files(root, "chests");
+                files = list.Count;
+                return ReplayFed(list.SelectMany(DailyLogs.ReadLines), worldName, worldUid);
+            }
+        }
+
         // ---------- rebuilt once from the chest logs ----------
 
-        /// <summary>What a replay did, for the server log. OtherWorld: ship and cart lines left out because another world wrote them.</summary>
-        public class ReplayResult { public int Lines, Applied, RolledBack, Unreadable, OtherWorld; }
+        /// <summary>What a replay did, for the server log. OtherWorld: ship and cart lines left out because another world wrote them.
+        /// Pulls: Stoker's Chest lines left out as a craft-from-chest mod's pull (ReplayFed).</summary>
+        public class ReplayResult
+        {
+            public int Lines, Applied, RolledBack, Unreadable, OtherWorld;
+            /// <summary>ReplayFed: Stoker's Chest lines left out as a pull, by the moment rule (PullSpan) and by the count guard (FeedLineMax).</summary>
+            public int Pulls, PullsTooMany;
+            /// <summary>The earliest time a line read carries: the first day the logs reach.</summary>
+            public DateTime? First;
+        }
 
         /// <summary>
         /// The chest log's lines in order (all days, oldest first). Events are held until the next "world-saved" marker and dropped at a
@@ -348,7 +440,62 @@ namespace Hearthwoven
         /// 0.8) of this world's name belong to the first id a marker names for that name (the world that ran when the server got 0.8),
         /// or to <paramref name="worldUid"/> when none does.
         /// </summary>
-        public ReplayResult Replay(IEnumerable<string> lines, string world = null, string worldUid = null)
+        public ReplayResult Replay(IEnumerable<string> lines, string world = null, string worldUid = null) =>
+            Replay(lines, world, worldUid, o => IsCarrier(MiniJson.Str(o, "kind")), Apply);
+
+        /// <summary>
+        /// Fed by Stoker's Chests from the chest log (B5), once per book: the "auto-feed" lines, by the same world and rollback rules as
+        /// Replay, that are the chest's own PC's. A 0.8.5 line says so ("fromOwner"); an older one does not, and a craft-from-chest mod's
+        /// unopened pull was logged as auto-feed too: per chest, a line from one PC between two of another PC's within FeedWindow is a pull,
+        /// every other line the host's (only one PC hosts a chest at a time, and it sends a line each time the stations take something).
+        /// Sets FedReplayed, so it never runs twice; a book that already did it changes nothing.
+        /// </summary>
+        public ReplayResult ReplayFed(IEnumerable<string> lines, string world = null, string worldUid = null)
+        {
+            if (FedReplayed) return new ReplayResult();
+            var fed = new List<Dictionary<string, object>>();
+            var r = Replay(lines, world, worldUid, o => MiniJson.Str(o, "kind") == "feeder" && MiniJson.Str(o, "action") == "auto-feed", fed.Add);
+            var host = HostLines(fed);
+            r.Applied = 0;
+            for (int i = 0; i < fed.Count; i++)
+            {
+                if (!host[i]) { r.Pulls++; continue; }
+                if (!fed[i].ContainsKey("fromOwner") && MiniJson.Num(fed[i], "count") > FeedLineMax) { r.Pulls++; r.PullsTooMany++; continue; }   // more than a feeder takes at once
+                if (Fed("feeder", "auto-feed", MiniJson.Str(fed[i], "item"), (int)MiniJson.Num(fed[i], "count"), Date(MiniJson.Str(fed[i], "t")) ?? DateTime.UtcNow)) r.Applied++;
+            }
+            FedReplayed = true;
+            return r;
+        }
+
+        /// <summary>Which of a chest log's auto-feed lines (in order) are the hosting PC's: "fromOwner" where the line says; else per chest, a
+        /// run of one PC's lines in one moment (PullSpan) between two lines of the chest's host (the PC whose last run went on longer than a
+        /// moment; within FeedWindow) is a pull, every other line a host's.</summary>
+        static bool[] HostLines(List<Dictionary<string, object>> lines)
+        {
+            var host = new bool[lines.Count];
+            string Who(int i) => MiniJson.Str(lines[i], "playerKey") + "|" + MiniJson.Num(lines[i], "playerId").ToString(CultureInfo.InvariantCulture);
+            DateTime When(int i) => Date(MiniJson.Str(lines[i], "t")) ?? DateTime.MinValue;
+            foreach (var chest in Enumerable.Range(0, lines.Count).GroupBy(i => MiniJson.Str(lines[i], "containerId")))
+            {
+                // the chest's lines as runs of one PC each, in order
+                var runs = new List<List<int>>();
+                foreach (var i in chest) { if (runs.Count > 0 && Who(runs[runs.Count - 1][0]) == Who(i)) runs[runs.Count - 1].Add(i); else runs.Add(new List<int> { i }); }
+                string hosting = null;   // the PC whose last run went on longer than a moment: the chest's host at that time
+                for (int k = 0; k < runs.Count; k++)
+                {
+                    var run = runs[k];
+                    int before = k > 0 ? runs[k - 1][runs[k - 1].Count - 1] : -1, after = k + 1 < runs.Count ? runs[k + 1][0] : -1;
+                    var moment = When(run[run.Count - 1]) - When(run[0]) <= PullSpan;
+                    var pull = moment && before >= 0 && after >= 0 && Who(before) == Who(after) && Who(before) == hosting &&
+                               When(run[0]) - When(before) <= FeedWindow && When(after) - When(run[run.Count - 1]) <= FeedWindow;
+                    foreach (var i in run) host[i] = lines[i].TryGetValue("fromOwner", out var fo) && fo is bool own ? own : !pull;
+                    if (!moment) hosting = Who(run[0]);
+                }
+            }
+            return host;
+        }
+
+        ReplayResult Replay(IEnumerable<string> lines, string world, string worldUid, Func<Dictionary<string, object>, bool> wanted, Action<Dictionary<string, object>> apply)
         {
             var r = new ReplayResult();
             var held = new List<Dictionary<string, object>>();
@@ -361,18 +508,19 @@ namespace Hearthwoven
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 r.Lines++;
                 if (!(MiniJson.Parse(line) is Dictionary<string, object> o)) { r.Unreadable++; continue; }
+                if (Date(MiniJson.Str(o, "t")) is DateTime at && (r.First == null || at < r.First)) r.First = at;
                 var marker = MiniJson.Str(o, "marker");
                 var named = MiniJson.Str(o, "world", null);
                 var uid = MiniJson.Str(o, "worldUid", null); if (uid == "") uid = null;
                 if (marker == "world-saved")
                 {
                     if (named != null) { segment = named; segmentUid = uid; }
-                    if (Mine()) { foreach (var e in held) Apply(e); r.Applied += held.Count; } else r.OtherWorld += held.Count;
+                    if (Mine()) { foreach (var e in held) apply(e); r.Applied += held.Count; } else r.OtherWorld += held.Count;
                     held.Clear(); continue;
                 }
                 if (marker == "server-start") { if (Mine()) r.RolledBack += held.Count; else r.OtherWorld += held.Count; held.Clear(); segment = named; segmentUid = uid; continue; }
                 if (marker.Length > 0) continue;
-                if (IsCarrier(MiniJson.Str(o, "kind"))) held.Add(o);
+                if (wanted(o)) held.Add(o);
             }
             if (Mine()) r.RolledBack += held.Count; else r.OtherWorld += held.Count;
             return r;

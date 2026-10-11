@@ -140,8 +140,43 @@ static class ServerBookTests
         Check(r.Applied == 2 && r.RolledBack == 2 && r.Unreadable == 1 && Deliv(b11, "222", "IronScrap") == 0 && Deliv(b11, "333", "IronScrap") == 60000 && Sent(b11, "111", "IronScrap") == 60000 && b11.LotsIn("9:1") == 0,
               "SB rebuild: the chest logs replayed with C12: a take a restart rolled back is not booked, the take after it is; lines after the last save are dropped; chests and broken lines ignored");
 
+        // 0.8.5 B5: the Stoker's Chest feeding the chest logs already hold, read once on the server's first start with 0.8.5. Lines before 0.8.5
+        // carry no owner: a line from another PC between two of the host's is a pull (AzuCraftyBoxes); a 0.8.5 line says "fromOwner"
+        string F(string t, string who, string item, int count, string action = "auto-feed", string fromOwner = null) =>
+            "{\"t\":\"" + t + "\",\"player\":\"P\",\"playerId\":" + who + ",\"playerKey\":\"Steam_" + who + "\",\"via\":\"unattended\",\"container\":\"smx_feeder_chest\",\"kind\":\"feeder\",\"containerId\":\"7:7\",\"x\":0,\"z\":0,\"item\":\"" +
+            item + "\",\"maker\":\"\",\"quality\":1,\"action\":\"" + action + "\",\"count\":" + count + (fromOwner != null ? ",\"fromOwner\":" + fromOwner : "") + "}";
+        var fedLog = new List<string> {
+            M("2026-10-10T17:00:00Z", "server-start"),
+            F("2026-10-10T18:00:00Z", "111", "Coal", 1), F("2026-10-10T18:00:03Z", "111", "IronScrap", 1),
+            F("2026-10-10T18:00:30Z", "222", "IronScrap", 5),                        // another PC's unopened pull, logged as auto-feed before 0.8.5
+            F("2026-10-10T18:00:45Z", "111", "IronScrap", 20),                       // more than a feeder takes at once (FeedLineMax): a pull, whoever sent it
+            F("2026-10-10T18:01:00Z", "111", "Coal", 1),
+            F("2026-10-10T18:01:10Z", "222", "Wood", 1), F("2026-10-10T18:01:13Z", "222", "Wood", 1),   // the other PC hosting a while (the feeder's 3 s pace): its own
+            F("2026-10-10T18:01:30Z", "111", "Coal", 1),
+            F("2026-10-10T18:02:00Z", "333", "Wood", 1, fromOwner: "true"),         // 0.8.5: the chest's own PC (a new host)
+            F("2026-10-10T18:02:10Z", "222", "Wood", 4, "take", "false"),           // 0.8.5: a pull is a take, never feeding
+            M("2026-10-10T18:30:00Z", "world-saved"),
+            F("2026-10-10T18:40:00Z", "333", "Wood", 1, fromOwner: "true"),         // after the last save: rolled back with the world
+        };
+        var b12 = new ServerBook();
+        var fr = b12.ReplayFed(fedLog);
+        var again = b12.ReplayFed(fedLog); var reloaded = ServerBook.FromJson(b12.ToJson()); var third = reloaded.ReplayFed(fedLog);
+        double Fed(ServerBook b, string item) => b.ChestFed.TryGetValue(item, out var v) ? v : 0;
+        Check(fr.Applied == 7 && fr.Pulls == 2 && fr.PullsTooMany == 1 && fr.First == new DateTime(2026, 10, 10, 17, 0, 0, DateTimeKind.Utc) && Fed(b12, "Coal") == 3 && Fed(b12, "IronScrap") == 1 && Fed(b12, "Wood") == 3 && b12.FedFrom == new DateTime(2026, 10, 10, 18, 0, 0, DateTimeKind.Utc) &&
+              b12.FedReplayed && again.Applied == 0 && Fed(b12, "Coal") == 3 && reloaded.FedReplayed && third.Applied == 0 && Fed(reloaded, "IronScrap") == 1,
+              "SB B5 replay: the chest logs' Stoker's Chest feeding read once: the hosts' lines count (3 coal, 1 scrap, 3 wood: also another PC hosting a while, and a 0.8.5 owner's line), another PC's one-moment pull between the host's lines, a line of 20 (more than a feeder takes at once) and a take do not, a line after the last save is rolled back; never a second time, also after a save (" +
+              string.Join(", ", b12.ChestFed.Select(kv => kv.Key + " " + kv.Value)) + "; " + fr.Pulls + " pulls, " + fr.PullsTooMany + " by the count)");
+
         // the real log of the 8 Oct iron haul, when it is on this machine (totals only, never names)
         var dir = Environment.GetEnvironmentVariable("HW_REAL_CHESTS") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ValheimReport", "hearthwoven");
+        // 0.8.5 B5: what the replay would read from the real logs on this machine (totals only), measured, not checked: the folder grows daily
+        var fedFiles = Directory.Exists(dir) ? Directory.GetFiles(dir, "chests-2026*.jsonl").OrderBy(f => f, StringComparer.Ordinal).ToList() : new List<string>();
+        if (fedFiles.Count > 0)
+        {
+            var realFed = new ServerBook(); var fx = realFed.ReplayFed(fedFiles.SelectMany(f => File.ReadLines(f)));
+            System.Console.WriteLine($"MEASURED real chest log, Stoker's Chests ({fedFiles.Count} files): {fx.Applied} feeding lines counted ({realFed.ChestFed.Values.Sum():0} items: " +
+                                     string.Join(", ", realFed.ChestFed.OrderByDescending(kv => kv.Value).Select(kv => kv.Key + " " + kv.Value)) + $"), {fx.Pulls} left out as a pull ({fx.PullsTooMany} by the count guard), {fx.RolledBack} rolled back, from {fx.First:yyyy-MM-dd}");
+        }
         // the 8 Oct log by name: the daily report job adds a day to this folder each day (from 9 Oct they name the server's world), so "every file there" moves
         var files = Directory.Exists(dir) ? Directory.GetFiles(dir, "chests-20261008.jsonl").ToList() : new List<string>();
         if (files.Count > 0)

@@ -148,9 +148,10 @@ namespace Hearthwoven.Panel
             p.CropOf = t => t == "$piece_sapling_carrot" ? "Carrot" : t == "$piece_sapling_barley" ? "Barley" : t == "$piece_sapling_turnip" ? "Turnip" : null;
             p.ItemType = t => t != null && Types.TryGetValue(t, out var k) ? k : null;
             p.MainMaterial = t => t != null && Materials.TryGetValue(t, out var k) ? k : null;
+            p.PieceTab = BuildingSample.TabOf; p.PieceMaterial = BuildingSample.MaterialOf;   // 0.8.5: every PC's game data names the hammer's tabs (Rowan's hall fills them)
             p.DishType = t => t != null && Dishes.TryGetValue(t, out var d) ? d.type : null;
             p.DishBoost = t => t != null && Dishes.TryGetValue(t, out var d) ? d.boost : null;
-            p.Foe = PanelSample.SampleFoe; p.Arrows = PanelSample.SampleArrows;
+            p.Foe = PanelSample.SampleFoe; p.FoeKin = PanelSample.SampleFoeKin; p.Arrows = PanelSample.SampleArrows;
             p.RecipeKnown = self ? (Func<string, bool>)(t => PanelSample.SampleRecipes.Contains(t)) : null;
             if (self) { p.Gear = PanelSample.SampleGear; p.Owned = t => PanelSample.SampleOwned.Contains(t); }   // the Foes ranking (0.7)
             p.ToLocal = t => t.AddHours(2);
@@ -214,6 +215,7 @@ namespace Hearthwoven.Panel
             // shared Last fight) Rowan and Ylva, who does not share, so Edda's copy says another player
             foreach (var kv in owns) BattleSample.Session(kv.Value, now, (kv.Key == Rowan ? new[] { Edda, Tor } : Everyone.Where(n => n != kv.Key)).ToArray(), kv.Key == Rowan ? new[] { Edda, Tor, Finch } : kv.Key == Edda ? new[] { Rowan, Ylva } : null);
             foreach (var kv in owns) BattleSample.Guard(kv.Value);   // 0.8.2: blocks and parries per minute, and the session's tally
+            foreach (var kv in owns) DealtAfterLog(kv.Value);   // 0.8.5: each hit after the foe's armor in the log (shared: the copies have it)
             // the feats come from the counters (and from what the others shared), so every book is first sent without them
             Dictionary<string, PanelInput> Copies() => owns.ToDictionary(kv => kv.Key, kv => Share(kv.Value, now));
             var copies = Copies();
@@ -221,6 +223,7 @@ namespace Hearthwoven.Panel
             foreach (var kv in owns) History(kv.Value, now);   // the day history (HISTORY-06.md), worked out from the same lists as the totals
             foreach (var kv in owns) RecentSample.Session(kv.Value);   // 0.7 Deeds > Recent: this session's minute log, today's row spread over the session (PanelSampleRecent.cs)
             foreach (var kv in owns) ArmourSample(kv.Value, now);   // 0.7: the armour ledger, from what each of them received (never shared: the copies have none)
+            foreach (var kv in owns) DealtAfterSample(kv.Value, now);   // 0.8.5: the dealt ledger, from what each of them dealt (never shared)
             foreach (var kv in owns) DeedsSample(kv.Value, now);   // 0.7: this session's deeds per minute (the Deeds pages' short windows), from the same day rows
             foreach (var kv in owns) Derive(kv.Value, now);
             foreach (var kv in owns) { kv.Value.Feats.MarkSeen(PanelModel.IsGroupFeat); if (kv.Key == Rowan) kv.Value.Feats.Seen = Math.Max(0, kv.Value.Feats.Seen - 2); }   // two earned tiers of Rowan's own not opened yet: the gold dots
@@ -231,7 +234,7 @@ namespace Hearthwoven.Panel
                 kv.Value.Fellows = others.Select(n => copies[n]).ToList();
             }
             foreach (var f in copies.Values) { f.ViewerName = Rowan; f.PlayerNames = owns[Rowan].PlayerNames; }
-            RecentSample.Fellows(owns[Rowan]);   // B33: what reached Rowan's PC from each fellow this session (PanelSampleRecent.cs)
+            RecentSample.Fellows(owns[Rowan], n => owns.TryGetValue(n, out var o) && o.History != null ? o.History.Sum(PanelModel.LocalToday(o), PanelModel.LocalToday(o)) : null);   // B33: what reached Rowan's PC from each fellow this session, today's row of their own day history (PanelSampleRecent.cs)
             return (owns, copies);
         }
 
@@ -251,18 +254,18 @@ namespace Hearthwoven.Panel
         /// <summary>
         /// 0.8.2 (I): a copy as an older Hearthwoven sends it, from this build's: "mod" says the version, and what came later is left out. 0.6.5 (the
         /// release before 0.8.1): no lands found, no live updates (copyId), no foe counts, feast records, recovered materials or Stoker feeding, no
-        /// feed, no block minutes; 0.8.1: no feed, no block minutes. Neither splits its days by weapon and type (0.9, dayDealt). Only these two are in
-        /// the wild (0.7 and 0.8.0 were never released alone).
+        /// feed, no block minutes; 0.8.1: no feed, no block minutes. Neither splits its days by weapon and type (0.9, dayDealt). These two and 0.8.3
+        /// are in the wild (0.7, 0.8.0 and 0.8.2 were never released alone); 0.8.3 shares everything but its Deeds days (0.8.5, dayDeeds).
         /// </summary>
         public static string OlderJson(string json, string version)
         {
             if (!(LiveDelta.Parse(json) is Dictionary<string, object> root)) return json;
             root["mod"] = version;
-            var old = version == "0.6.5";
-            foreach (var k in old ? new[] { "knownBiomes", "copyId", "foes", "battleFeed", "dayDealt" } : new[] { "battleFeed", "dayDealt" }) root.Remove(k);
+            var old = version == "0.6.5"; var v083 = version == "0.8.3";
+            foreach (var k in old ? new[] { "knownBiomes", "copyId", "foes", "battleFeed", "dayDealt", PanelModel.DayDeedsKey } : v083 ? new[] { PanelModel.DayDeedsKey } : new[] { "battleFeed", "dayDealt", PanelModel.DayDeedsKey }) root.Remove(k);
             if (old) foreach (var m in new[] { "measuredThisSession", "measuredSinceInstall" })
                 if (root.TryGetValue(m, out var o) && o is Dictionary<string, object> d) foreach (var f in new[] { "chestFed", "setOutFeastMadeBy", "ateFromFeastAt", "recovered" }) d.Remove(f);
-            if (root.TryGetValue("measuredLog", out var l) && l is Dictionary<string, object> ld) ld.Remove("guard");
+            if (root.TryGetValue("measuredLog", out var l) && l is Dictionary<string, object> ld) { if (!v083) ld.Remove("guard"); ld.Remove("after"); ld.Remove("afterFrom"); }   // 0.8.5: no after either; 0.8.3 keeps its block minutes
             return LiveDelta.Write(root);
         }
 
@@ -289,7 +292,8 @@ namespace Hearthwoven.Panel
             var json = Snapshot.Build(Plugin.Version, own.PlayerId, own.PlayerName, stats, skills, "Midgard", own.Session, "s1", own.Events, own.Log, true,
                                       own.Events, own.DamageSinceInstall, own.BiomeSinceInstall, own.BiomeFromUtc, own.Feats,
                                       own.History?.DealtByDay(PanelModel.LocalToday(own), 30), own.KnownBiomes, foes: BattleSample.ShareOf(own), feed: BattleSample.FeedOf(own),
-                                      dayDealt: own.History?.DayDealt(PanelModel.LocalToday(own), 30));   // their damage dealt per day (0.9: also by weapon kind and type), the lands they found, the foes they fought (0.8) and their battle feed (0.8.2), as the game sends them
+                                      dayDealt: own.History?.DayDealt(PanelModel.LocalToday(own), 30),   // their damage dealt per day (0.9: also by weapon kind and type), the lands they found, the foes they fought (0.8) and their battle feed (0.8.2), as the game sends them
+                                      dayDeeds: PanelModel.DayDeeds(own.History, PanelModel.LocalToday(own), 30, null, own));   // 0.8.5: their Deeds per day, sorted by their own game data
             return json;
         }
 
@@ -518,8 +522,10 @@ namespace Hearthwoven.Panel
                     if (kv.Value <= 0) continue;
                     if (kv.Key.StartsWith(DayHistory.PlacedPrefix)) Spread(DeedLog.Placed, kv.Key.Substring(DayHistory.PlacedPrefix.Length), kv.Value * share, true);
                     else if (kv.Key.StartsWith(DayHistory.PickedPrefix)) Spread(DeedLog.Picked, kv.Key.Substring(DayHistory.PickedPrefix.Length), kv.Value * share, true);
-                    else if (Array.IndexOf(DeedLog.CounterStats, kv.Key) >= 0) Spread(DeedLog.Counters, kv.Key, kv.Value * share, true);
+                    else if (Array.IndexOf(DeedLog.CounterStats, kv.Key) >= 0) Spread(DeedLog.Counters, kv.Key, kv.Value * share, kv.Key != "DistanceSail");   // metres: spread evenly
                 }
+                var cargo = row.Events.CargoMeters.Values.Sum(v => (double)v);   // 0.8.5: the cargo carried, all items (DeedLog.CargoTotal, Together's minutes)
+                if (cargo > 0) Spread(DeedLog.Counters, DeedLog.CargoTotal, cargo * share, false);
             }
             var ev = new SessionEvents(); var game = new Dictionary<string, float>(); var log = new DeedLog();
             var families = ev.Named().ToDictionary(n => n.Key, n => n.Value);
@@ -586,6 +592,62 @@ namespace Hearthwoven.Panel
             }
             foreach (var kv in p.Log.Hits) { var k = kv.Key.Split('|'); if (k.Length >= 3 && k[2] == "taken") { minutes.Hits.TryGetValue(k[0], out var o); minutes.Hits[k[0]] = o + kv.Value; } }
             p.ArmourMinutes = minutes;
+        }
+
+        // ---------- 0.8.5: damage dealt after the foe's armor (AfterArmour.cs) ----------
+
+        /// <summary>The game's factor for a type on a sample foe (PanelSample.SampleFoe's modifiers; a kind without sample data takes it as is). No
+        /// world level in the sample: the foe's resistances are all of its armor.</summary>
+        static float AfterFactor(string foe, string type)
+        {
+            var d = PanelSample.SampleFoe(foe);
+            return d != null && d.Modifiers.TryGetValue(type, out var m) ? PanelModel.Multiplier(m) : 1f;
+        }
+        static bool AfterFoe(string foe) => !string.IsNullOrEmpty(foe) && foe != "Player";   // a hit on a player has none (their armor is not known)
+
+        /// <summary>Every hit of the book's log on a foe with its after (EventLog.After), as AddAfter keeps it: from the log's first ten minutes on.</summary>
+        static void DealtAfterLog(PanelInput p)
+        {
+            if (p.Log == null) return;
+            string first = null;
+            foreach (var kv in p.Log.Damage)
+            {
+                var k = kv.Key.Split('|');   // time|biome|dir|foe|cause|type
+                if (k.Length < 6 || k[2] != "dealt" || !AfterFoe(k[3]) || Array.IndexOf(PanelModel.BattleTypes, k[5]) < 0) continue;
+                p.Log.After[kv.Key] = kv.Value * AfterFactor(k[3], k[5]);
+                if (first == null || string.CompareOrdinal(k[0], first) < 0) first = k[0];
+            }
+            if (first != null) p.Log.AfterFrom = first.Substring(0, 15) + "0" + first.Substring(16);
+        }
+
+        /// <summary>A dealt tally ("foe|skill|type") as the dealt ledger keeps it: Before as dealt, After by the foe's factor (Incoming unused).</summary>
+        static ArmourTally DealtAfterOf(Dictionary<string, float> dealt, int hits)
+        {
+            var t = new ArmourTally { Hits = hits };
+            foreach (var kv in dealt)
+            {
+                var k = kv.Key.Split('|');
+                if (k.Length < 3 || !AfterFoe(k[0]) || Array.IndexOf(PanelModel.BattleTypes, k[2]) < 0 || kv.Value <= 0) continue;
+                t.Before[kv.Key] = kv.Value; var a = kv.Value * AfterFactor(k[0], k[2]); if (a > 0) t.After[kv.Key] = a;
+            }
+            return t;
+        }
+
+        /// <summary>A book's dealt ledger (0.8.5), as ArmourSample builds the armour one: recorded from an evening two days ago (later than the
+        /// install: All and 7 days show the faded piece of the hits from before), the day rows from then on, this session from its own tally.
+        /// Saved up to now (nothing pending).</summary>
+        static void DealtAfterSample(PanelInput p, DateTime now)
+        {
+            if (p.History == null || p.Session == null) return;
+            Func<DateTime, DateTime> local = t => p.ToLocal != null ? p.ToLocal(t) : t.ToLocalTime();
+            var today = local(now).Date; var fromDay = today.AddDays(-2);
+            var from = DateTime.SpecifyKind(fromDay.AddHours(19) - (local(now) - now), DateTimeKind.Utc);
+            var book = new ArmourBook { FromUtc = from, LastSession = "s1" };
+            foreach (var r in p.History.Rows.Where(r => r.IsDay && r.Start >= fromDay)) { var t = DealtAfterOf(r.Damage.Dealt, r.Damage.HitsDealt); if (!t.Empty) book.Days.Add((r.Period, t)); }
+            p.DealtArmourSession = DealtAfterOf(p.Session.Dealt, p.Session.HitsDealt);
+            book.Last = ArmourTally.Sum(p.DealtArmourSession);
+            p.DealtArmourBook = book; p.DealtArmourFromUtc = from;
+            p.DealtArmourSince = book.Sum(fromDay, today);
         }
 
         static void Skill(PanelInput p, string skill, float level, float progress) { p.SkillLevels[skill] = level; p.SkillProgress[skill] = progress; }
@@ -825,16 +887,16 @@ namespace Hearthwoven.Panel
             foreach (var kv in new Dictionary<string, float> { ["$item_bread"] = 21, ["$item_fishwraps"] = 10, ["$item_chest_leather"] = 1, ["$item_hammer"] = 1, ["$item_pickaxe_antler"] = 1 }) p.ItemsCrafted[kv.Key] = kv.Value;
             foreach (var kv in new Dictionary<string, float> { ["$piece_woodwall"] = 52, ["$piece_woodfloor2x2"] = 38, ["$piece_levelground"] = 30,
                                                                 ["$piece_workbench_ext1"] = 1, ["$piece_workbench_ext2"] = 1, ["$piece_cauldron_ext1_spice"] = 1 }) p.PiecesPlaced[kv.Key] = kv.Value;   // her workbench and cauldron grew (The Workshop Grows)
-            foreach (var kv in new Dictionary<string, float> { ["$item_wood"] = 640, ["$item_stone"] = 410, ["$item_ironscrap"] = 1880, ["$item_copperore"] = 120, ["$item_coal"] = 420 }) p.ItemsPickedUp[kv.Key] = kv.Value;
+            foreach (var kv in new Dictionary<string, float> { ["$item_wood"] = 640, ["$item_finewood"] = 80, ["$item_stone"] = 410, ["$item_ironscrap"] = 1880, ["$item_copperore"] = 120, ["$item_coal"] = 420 }) p.ItemsPickedUp[kv.Key] = kv.Value;
             foreach (var kv in new Dictionary<string, float> { ["$enemy_greydwarf"] = 41, ["$enemy_draugr"] = 55 }) p.EnemyKills[kv.Key] = kv.Value;
             var ev = p.Events;
             ev.Blocks = 46; ev.Parries = 9;
-            Add(ev.PickedUp, "$item_wood", 90); Add(ev.PickedUp, "$item_stone", 60); Add(ev.PickedUp, "$item_ironscrap", 410);
-            Add(ev.ChopHits, "Beech1", 24); Add(ev.ChopHits, "FirTree", 16); Add(ev.Felled, "Beech1", 5); Add(ev.Felled, "FirTree", 3);
+            Add(ev.PickedUp, "$item_wood", 120); Add(ev.PickedUp, "$item_finewood", 30); Add(ev.PickedUp, "$item_stone", 60); Add(ev.PickedUp, "$item_ironscrap", 410);
+            Add(ev.ChopHits, "Beech1", 60); Add(ev.ChopHits, "FirTree", 40); Add(ev.Felled, "Beech1", 12); Add(ev.Felled, "FirTree", 10);   // 0.8.5: enough that her Today has trees too (a tenth of her play is today)
             Add(ev.PickaxeHits, "rock4_copper", 70); Add(ev.MapShared, "piece_cartographytable", 1);
             Add(ev.Made, "$item_bread", 8); Add(ev.Made, "$item_fishwraps", 4);   // 12 dishes since install
             Add(ev.Spent, "Haldor", 150); Add(ev.Bought, "Haldor|FishingBait", 15);
-            Add(ev.AteFoodMadeBy, "Rowan|CarrotSoup", 4); Add(ev.AteFoodMadeBy, "Rowan|FishWraps", 2); Add(ev.AteFoodMadeBy, "Tor|CookedMeat", 3);
+            Add(ev.AteFoodMadeBy, "Rowan|CarrotSoup", 10); Add(ev.AteFoodMadeBy, "Rowan|FishWraps", 2); Add(ev.AteFoodMadeBy, "Tor|CookedMeat", 3);   // 0.8.5: enough carrot soup that some of it is today
             Add(ev.AteFromFeastOf, RowanId + "|FeastMeadows", 5); Add(ev.AteFromFeastOf, RowanId + "|FeastBlackforest", 3);
             // teamwork (0.8, B22): three servings from the Meadows feast Rowan made and Tor set out at the shore camp (Tor's record says who made it)
             Add(ev.AteFromFeastOf, TorId + "|FeastMeadows", 3); Add(ev.AteFromFeastAt, TorId + "|FeastMeadows|" + TeamworkFeast, 3);
@@ -845,7 +907,7 @@ namespace Hearthwoven.Panel
             ev.CargoMeters["$item_wood"] = 450000f; ev.CargoStretch["$item_wood"] = 3000f;
             Add(ev.CartMeters, "Cart", 1800);
             Add(ev.Battle, "EnemyHits", 14);
-            Add(ev.SkillPractice, "Run", 210); Add(ev.SkillPractice, "Pickaxes", 70); Add(ev.SkillPractice, "WoodCutting", 40); Add(ev.SkillPractice, "Axes", 14);
+            Add(ev.SkillPractice, "Run", 210); Add(ev.SkillPractice, "Pickaxes", 70); Add(ev.SkillPractice, "WoodCutting", 100); Add(ev.SkillPractice, "Axes", 14);
             Add(ev.SkillPractice, "Blocking", 46); Add(ev.SkillPractice, "Cooking", 12); Add(ev.SkillPractice, "Swim", 36); Add(ev.SkillPractice, "Jump", 14);
             Skill(p, "Run", 41, 0.35f); Skill(p, "Jump", 19, 0.6f); Skill(p, "Swim", 22, 0.5f); Skill(p, "Axes", 24, 0.2f); Skill(p, "WoodCutting", 27, 0.45f);
             Skill(p, "Pickaxes", 29, 0.7f); Skill(p, "Blocking", 14, 0.55f); Skill(p, "Cooking", 12, 0.3f); Skill(p, "Fishing", 6, 0.1f);
@@ -886,7 +948,7 @@ namespace Hearthwoven.Panel
             ev.Blocks = 12; ev.Parries = 1;
             Add(ev.PickedUp, "$item_wood", 40); Add(ev.PickedUp, "$item_copperore", 30);
             Add(ev.ChopHits, "FirTree", 6); Add(ev.Felled, "FirTree", 1); Add(ev.PickaxeHits, "rock4_copper", 30); Add(ev.MapShared, "piece_cartographytable", 6);
-            Add(ev.AteFoodMadeBy, "Tor|CookedMeat", 5); Add(ev.AteFoodMadeBy, "Rowan|FishWraps", 3); Add(ev.AteFoodMadeBy, "Rowan|CarrotSoup", 2);
+            Add(ev.AteFoodMadeBy, "Tor|CookedMeat", 5); Add(ev.AteFoodMadeBy, "Rowan|FishWraps", 10); Add(ev.AteFoodMadeBy, "Rowan|CarrotSoup", 2);   // 0.8.5: fish wraps today too
             Add(ev.AteFromFeastOf, RowanId + "|FeastMeadows", 3); Add(ev.AteFromFeastOf, RowanId + "|FeastBlackforest", 3);
             Add(ev.EquippedGearMadeBy, "Edda|ArmorLeatherChest", 1); Add(ev.EquippedGearMadeBy, "Rowan|Bow", 1); Add(ev.EquippedGearMadeBy, "Rowan|HelmetLeather", 1);
             ev.LedMeters["Boar"] = 4900f; ev.LedMeters["Wolf"] = 3600f;
@@ -942,7 +1004,7 @@ namespace Hearthwoven.Panel
             ev.Blocks = 1940; ev.Parries = 560;
             Add(ev.PickedUp, "$item_wood", 70); Add(ev.ChopHits, "Beech1", 28); Add(ev.Felled, "Beech1", 5); Add(ev.PickaxeHits, "rock4_copper", 40); Add(ev.Repairs, "woodwall", 14);
             Add(ev.Made, "$item_cookedmeat", 20); Add(ev.Made, "$item_boarjerky", 9);   // 29 dishes since install
-            Add(ev.AteFoodMadeBy, "Rowan|CarrotSoup", 6); Add(ev.AteFoodMadeBy, "Rowan|Bread", 2);
+            Add(ev.AteFoodMadeBy, "Rowan|CarrotSoup", 12); Add(ev.AteFoodMadeBy, "Rowan|Bread", 2);   // 0.8.5: some of it today
             Add(ev.AteFromFeastOf, RowanId + "|FeastMeadows", 4); Add(ev.AteFromFeastOf, RowanId + "|FeastBlackforest", 3);
             Add(ev.SetOutFeastMadeBy, Rowan + "|FeastMeadows|" + TeamworkFeast, 1);   // he set out a Meadows feast Rowan made (teamwork, 0.8)
             Add(ev.EquippedGearMadeBy, "Rowan|ShieldWood", 1);

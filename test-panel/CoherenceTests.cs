@@ -133,8 +133,11 @@ static partial class CoherenceTests
         {
             string Read(params string[] p) => System.IO.File.ReadAllText(System.IO.Path.Combine(new[] { src }.Concat(p).ToArray()));
             var ui = Read("src", "Panel", "PanelUi.cs"); var look = Read("src", "Panel", "PanelLook.cs"); var html = Read("src", "Panel", "preview", "panel-preview.html");
-            Check(ui.Contains("t.fontSize = Mathf.Max(size, PanelLook.MinText);") && System.Text.RegularExpressions.Regex.IsMatch(look, @"public const float MinText = 1[3-9]f;"),
-                  "text: every Label is at least PanelLook.MinText (13 px at 1080p), the one shared floor");
+            // the floor as a number (13 px or more), and the text helpers lift every size to it whatever their names (no one line of code pinned)
+            var floor = System.Text.RegularExpressions.Regex.Match(look, @"\bMinText\s*=\s*(\d+(?:\.\d+)?)f?\b");
+            var lifted = System.Text.RegularExpressions.Regex.Matches(ui, @"\.fontSize\s*=\s*Mathf\.Max\([^;]*\bPanelLook\.MinText\b[^;]*\)").Count;
+            Check(floor.Success && double.Parse(floor.Groups[1].Value, CultureInfo.InvariantCulture) >= 13 && lifted >= 1,
+                  "text: every Label is at least PanelLook.MinText (" + floor.Groups[1].Value + " px at 1080p), the one shared floor (" + lifted + " text helpers lift to it)");
             var small = System.Text.RegularExpressions.Regex.Matches(html, @"font-size:(\d+(?:\.\d+)?)px").Cast<System.Text.RegularExpressions.Match>().Where(m => double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) < 13).Select(m => m.Value).Distinct().ToList();
             Check(small.Count == 0, "text: the preview draws nothing under 13 px" + (small.Count > 0 ? ": " + string.Join(", ", small) : ""));
             double Lum(string hex) { double L(int i) { var c = Convert.ToInt32(hex.Substring(i, 2), 16) / 255.0; return c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4); } return 0.2126 * L(1) + 0.7152 * L(3) + 0.0722 * L(5); }
@@ -149,23 +152,29 @@ static partial class CoherenceTests
             // fixed h keeps h at least 1.2 x the drawn size (the MinText floor applied)
             var chapterSrc = System.IO.Directory.GetFiles(System.IO.Path.Combine(src, "src", "Panel"), "*.cs", System.IO.SearchOption.AllDirectories).Select(f => System.IO.File.ReadAllText(f)).ToList();
             var minText = double.Parse(System.Text.RegularExpressions.Regex.Match(look, @"MinText = (\d+(?:\.\d+)?)f").Groups[1].Value, CultureInfo.InvariantCulture);
-            var lowBoxes = chapterSrc.SelectMany(s => System.Text.RegularExpressions.Regex.Matches(s, @"Size\(OneLine\(Label\([^,]+,[^,]+,\s*(\d+(?:\.\d+)?|PanelLook\.MinText)\b[^;]*?\)\),\s*[^,;]+,\s*(\d+(?:\.\d+)?)\)").Cast<System.Text.RegularExpressions.Match>())
-                .Where(m => double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture) < 1.2 * Math.Max(minText, m.Groups[1].Value == "PanelLook.MinText" ? minText : double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)))
+            var lowBoxes = chapterSrc.SelectMany(s => System.Text.RegularExpressions.Regex.Matches(s, @"Size\(OneLine\(Label\([^,]+,[^,]+,\s*(\d+(?:\.\d+)?|PanelLook\.MinText|PanelLayout\.Text\.\w+)\b[^;]*?\)\),\s*[^,;]+,\s*(\d+(?:\.\d+)?)\)").Cast<System.Text.RegularExpressions.Match>())
+                .Where(m => double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture) < 1.2 * Math.Max(minText, m.Groups[1].Value == "PanelLook.MinText" ? minText :
+                    m.Groups[1].Value.StartsWith("PanelLayout.Text.", StringComparison.Ordinal) ? Convert.ToDouble(typeof(PanelLayout.Text).GetField(m.Groups[1].Value.Substring(17)).GetValue(null)) :   // 0.8.5: a size from the layout table
+                    double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)))
                 .Select(m => m.Value.Length > 90 ? m.Value.Substring(0, 90) : m.Value).ToList();
             // live-polish: the keyboard focus is one soft rounded gold ring (the vocab sprite, sliced), drawn by one helper everywhere, shown only after
             // a key press (focus-visible): a click, the wheel and a mouse move hide it, opening the panel starts without it; the bridge does the same
             var all = string.Join(" ", chapterSrc); var manifest = Read("src", "Panel", "vocab", "kit-additions.json");
             var ringEntry = System.Text.RegularExpressions.Regex.Match(manifest, @"""focus-ring\.png""\s*:\s*\{[^}]*""border""\s*:\s*\[\s*14\s*,\s*14\s*,\s*14\s*,\s*14\s*\]");
+            // how the ring is used, not the lines that use it: one helper draws it (no other ring), three kinds of mouse use hide it (a click, the
+            // wheel, a mouse move), opening the book starts without it, and the preview shows it only after a key press (body.kbd) from the same sprite
+            bool Has(string text, string pattern) => System.Text.RegularExpressions.Regex.IsMatch(text, pattern);
             Check(ringEntry.Success && System.IO.File.Exists(System.IO.Path.Combine(src, "src", "Panel", "vocab", "focus-ring.png")) &&
-                  System.Text.RegularExpressions.Regex.Matches(all, @"FocusRing\(").Count >= 4 && !all.Contains("Brackets(") && !all.Contains("Ring(img.rectTransform, PanelLook.Focus)") &&
-                  all.Contains("if (e != null) PanelUi.SetKeyFocus(false);") && all.Contains("if (!Mathf.Approximately(d, 0f)) SetKeyFocus(false);") && all.Contains("KeyFocus = false; pointerKnown = false;") &&
-                  html.Contains("body.kbd .fcard.sel::after, body.kbd .fb-chip.cur::after, body.kbd .b2-col.cur .b2-tile::after") && html.Contains("-webkit-mask-box-image:url(../vocab/focus-ring.png) 14 / 14px") && !html.Contains(".fb-chip.cur { box-shadow"),
+                  System.Text.RegularExpressions.Regex.Matches(all, @"\bFocusRing\(").Count >= 4 && !Has(all, @"\bBrackets\(") && !Has(all, @"\bRing\([^;]*PanelLook\.Focus\)") &&
+                  System.Text.RegularExpressions.Regex.Matches(all, @"\bSetKeyFocus\(\s*false\s*\)").Count >= 3 && Has(all, @"\bKeyFocus\s*=\s*false\b") &&
+                  new[] { @"\.fcard\.sel::after", @"\.fb-chip\.cur::after", @"\.b2-tile::after" }.All(sel => Has(html, @"body\.kbd [^{]*" + sel)) &&
+                  Has(html, @"mask-box-image:\s*url\([^)]*focus-ring\.png\)\s*14\b") && !Has(html, @"\.fb-chip\.cur\s*\{\s*box-shadow"),
                   "focus: one soft rounded ring (vocab focus-ring, sliced 14) on chips, biome tiles and feat cards, shown only after a key press, in the panel and the bridge");
             // 0.8.1 (Joost sailing: the rudder, the wind, the hotbar and another mod's clock drew over the book): the book's canvas is on top, every
             // canvas of its own (the reason tags) sits relative to it, never at a fixed order the book would cover, and the game's own windows close it
             var fixedOrders = chapterSrc.SelectMany(s => System.Text.RegularExpressions.Regex.Matches(s, @"sortingOrder\s*=\s*\d+").Cast<System.Text.RegularExpressions.Match>().Select(m => m.Value)).ToList();
-            Check(fixedOrders.Count == 0 && System.Text.RegularExpressions.Regex.IsMatch(ui, @"const int BookOrder = [1-3]\d{4};") && ui.Contains("canvas.sortingOrder = BookOrder;") &&
-                  ui.Contains("if (GameOnTop()) { Close(); return; }") && ui.Contains("static bool CanOpen() => !GameOnTop()"),
+            Check(fixedOrders.Count == 0 && Has(ui, @"\bBookOrder\s*=\s*[1-3]\d{4}\b") && Has(ui, @"\bsortingOrder\s*=\s*BookOrder\b") &&
+                  Has(ui, @"if\s*\(\s*GameOnTop\(\)\s*\)\s*\{?\s*Close\(\)") && Has(ui, @"\bCanOpen\(\)\s*=>\s*!GameOnTop\(\)"),
                   "on top: the book's canvas is above the HUD, its tags sit relative to it (fixed orders: " + (fixedOrders.Count == 0 ? "none" : string.Join(", ", fixedOrders)) + "), the game's own windows close it and keep it shut");
             // 0.8.1 (reviewer, a BLOCKER in game): our own patch makes the trader's IsVisible true while the book is open, so GameOnTop took the book for
             // a trader and closed it on the next frame. What decides whether the book gives way (CanOpen, GameOnTop) never calls a method this mod

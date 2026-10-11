@@ -123,14 +123,13 @@ static class RichTextTests
                                "its tags from the UI and model text literal (sample world, samples, Feats fixture, real data)" + (hits.Count > 0 ? ": " + hits.Count + ", e.g. " + string.Join(" | ", hits.Take(3)) : ""));
 
         // ---------- the UI source: tags only through Rich, rich text only through the map ----------
-        var src = SrcDir();
-        Check(src != null, "source: the mod's source folder is found");
-        if (src == null) return fails;
+        var src = SrcDir();   // a source folder not found reads no file: the checks below fail on it, none is skipped
         var literal = new Regex("\"(?:[^\"\\\\\\n]|\\\\.)*\"");
         var call = new Regex(@"\b(RichLabel|SetRich|BtRich)\(");
         var tagLiterals = new List<string>(); var badSwitch = new List<string>(); var noKind = new List<string>(); var markupUse = new List<string>();
         var named = new HashSet<string>();
-        foreach (var file in Directory.GetFiles(Path.Combine(src, "src", "Panel"), "*.cs", SearchOption.AllDirectories).Where(f => Path.GetFileName(f) != "RichText.cs").OrderBy(f => f, StringComparer.Ordinal))
+        var uiFiles = src == null ? new List<string>() : Directory.GetFiles(Path.Combine(src, "src", "Panel"), "*.cs", SearchOption.AllDirectories).Where(f => Path.GetFileName(f) != "RichText.cs").OrderBy(f => f, StringComparer.Ordinal).ToList();
+        foreach (var file in uiFiles)
         {
             var lines = File.ReadAllLines(file); var rel = Path.GetRelativePath(src, file);
             for (int n = 0; n < lines.Length; n++)
@@ -150,7 +149,7 @@ static class RichTextTests
                 }
             }
         }
-        Check(tagLiterals.Count == 0, "source: no tag written in the UI outside Rich (src/Panel/RichText.cs)" + (tagLiterals.Count > 0 ? ": " + string.Join(" | ", tagLiterals.Take(4)) : ""));
+        Check(uiFiles.Count > 0 && tagLiterals.Count == 0, "source: no tag written in the UI outside Rich (src/Panel/RichText.cs; " + uiFiles.Count + " files read)" + (tagLiterals.Count > 0 ? ": " + string.Join(" | ", tagLiterals.Take(4)) : ""));
         Check(badSwitch.Count == 0, "source: rich text is never switched on by hand: only false (PanelUi.Label) or PanelRich.On(kind)" + (badSwitch.Count > 0 ? ": " + string.Join(" | ", badSwitch.Take(4)) : ""));
         Check(markupUse.Count == 3, "source: a Rich string reaches a label only inside RichLabel, SetRich and BtRich (3 uses of .Markup): " + string.Join(", ", markupUse));
         Check(noKind.Count == 0, "source: every RichLabel, SetRich and BtRich call names its block kind as a literal" + (noKind.Count > 0 ? ": " + string.Join(" | ", noKind.Take(4)) : ""));
@@ -159,7 +158,7 @@ static class RichTextTests
               (unlisted.Count > 0 ? "; not in the map: " + string.Join(", ", unlisted) : "") + (unused.Count > 0 ? "; in the map, drawn nowhere: " + string.Join(", ", unused) : ""));
 
         // ---------- the HTML bridge reads the same map ----------
-        var html = File.ReadAllText(Path.Combine(src, "src", "Panel", "preview", "panel-preview.html"));
+        var html = src == null ? "" : File.ReadAllText(Path.Combine(src, "src", "Panel", "preview", "panel-preview.html"));
         var bridge = Regex.Matches(html, "\\brich\\(\"([a-z]+)\"|\\blayered\\([^()\\n]*?,\\s*\"([a-z]+)\"\\)").Select(m => m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value).ToHashSet();
         Check(html.Contains("window.PANEL_RICH") && bridge.SetEquals(PanelRich.Kinds), "bridge: panel-preview.html draws markup only through rich(kind, ...) on the map from preview-data.js, for the same kinds (" + string.Join(", ", bridge.OrderBy(k => k)) + ")");
         return fails;

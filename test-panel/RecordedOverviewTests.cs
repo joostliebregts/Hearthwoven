@@ -31,18 +31,17 @@ static class RecordedOverviewTests
         var stone = cards.Single(c => c.Title == "Stonebreaker");
         var open = Show(input, Chapter.Deeds, s => s.ShowNumbers = true);
         var box = Walk(open.Blocks).SingleOrDefault(b => b.Kind == "aboutnumbers");
-        Check(over.Recorded && !Walk(over.Blocks).Any(b => b.Kind == "zone") && over.Scope == null && cards.Count >= 2 &&
+        Check(over.Recorded && !Walk(over.Blocks).Any(b => b.Kind == "zone") && cards.Count >= 2 &&
               wood.Value == "410" && (wood.Items == null || wood.Items.Count == 0) && wood.Src == PanelModel.SrcCharacter &&
               stone.Src == PanelModel.SrcCharacter && (stone.Items == null || stone.Items.Count == 0) &&
               PanelModel.AllText(over).Count(t => t == PanelModel.EarlierIncomplete) == 1 &&
               !PanelModel.AllText(over).Any(t => t.Contains("since install") || t.Contains("before install") || t.Contains("faded") || t.Contains("in all ·")),
-              "overview 0.7: one number per card (410 trees felled, 2 134 stone and ore, both your character's), no class C line, no zone, no scope line, one \"Earlier counts may be incomplete.\"");
-        Check(box != null && box.Items.Count >= 3 && box.Items[0].Title.StartsWith("Before ") && box.Items[1].Title.StartsWith("From ") && box.Items[2].Title == "Additional details" &&
-              box.Items[1].Text.StartsWith("Hearthwoven also counted every tree, pickup, planting and dish on this PC.") && over.Keys.Contains("[Y] Numbers"),
-              "overview 0.7, About these numbers: Before, From and Additional details lines; Y opens it on the Deeds overview");
-        var eddaOver = Show(edda, Chapter.Deeds);
-        Check(eddaOver.Scope != null && eddaOver.Scope.StartsWith("Edda") && !eddaOver.Scope.Contains("since install") && eddaOver.AboutNumbers == null,
-              "overview 0.7, Edda's book: \"Edda, as of ...\" as her scope (rule E), no box");
+              "overview 0.7: one number per card (410 trees felled, 2 134 stone and ore, both your character's), no class C line, no zone, one \"Earlier counts may be incomplete.\"");
+        var boxLines = box?.Items ?? new List<Block>();
+        Check(boxLines.Any(l => l.Title.StartsWith("Before ")) && boxLines.Any(l => l.Title.StartsWith("From ") && new[] { "tree", "pickup", "planting", "dish", "this PC" }.All(l.Text.Contains)) &&
+              boxLines.Any(l => l.Title == PanelModel.DetailsLabel) && over.Keys.Contains("[Y] Numbers"),
+              "overview 0.7, About these numbers: Before, From (what this PC also counted: trees, pickups, plantings, dishes) and Additional details lines; Y opens it on the Deeds overview");
+        // (Edda's book: PropertyTests' a fellow's book, over every page; her "as of" date: Program.cs, K3 scope)
 
         // ---------- Feats (hard case 15): the date words come from the feat's own start: the 0.6 feats from the feats group, the rest from the install ----------
         var inst = now.AddDays(-6).AddHours(16);

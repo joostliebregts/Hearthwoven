@@ -22,7 +22,7 @@ static class RecordedBattleTests
         // the first block with this title, anywhere on the page (a switch holds its views, a view holds the blocks)
         Block Named(PanelView v, string title) => Deep(PanelModel.Content(v)).FirstOrDefault(b => b.Title == title);
         IEnumerable<Block> Deep(IEnumerable<Block> bs) => bs.SelectMany(b => new[] { b }.Concat(Deep(b.Items ?? new List<Block>())));
-        int Incomplete(PanelView v) => PanelModel.AllText(v).Count(t => t == PanelModel.EarlierIncomplete);
+        int Incomplete(PanelView v) => TimesSaid(v, PanelModel.EarlierIncomplete);
         bool NoSinceInstall(PanelView v) => !PanelModel.AllText(v).Any(t => t.IndexOf("since install", StringComparison.OrdinalIgnoreCase) >= 0);
 
         var world = PanelSample.Full(now);
@@ -30,13 +30,14 @@ static class RecordedBattleTests
         // Overview on All (0.7): the biome strip counted on this PC; no heading window; the About box with its three lines
         var overview = Show(world, "overview");
         var strip = First(overview, "biomes");
-        Check(overview.Recorded && overview.HeadingWindow == null && NoSinceInstall(overview) && overview.AboutNumbers?.Items?.Count == 3 &&
+        var overviewBox = overview.AboutNumbers?.Items ?? new List<Block>();
+        Check(overview.Recorded && overview.ShownWindow == TimeWindow.SinceInstall && NoSinceInstall(overview) && overviewBox.Any(l => l.Title.StartsWith("Before ")) && overviewBox.Any(l => l.Title.StartsWith("From ")) && overviewBox.Any(l => l.Title == PanelModel.DetailsLabel) &&
               strip != null && strip.Src == PanelModel.SrcPc && Incomplete(overview) == 0,
-              "battle 0.7, overview on All: the biome strip counted on this PC, no since install, no heading window, the About box with three lines");
+              "battle 0.7, overview on All: the page shows All, the biome strip counted on this PC, no since install, the About box with its Before, From and details lines");
 
         // Damage on All: the since-install totals (no biome on All), the Biome line says why, the grid counted on this PC
         var damage = Show(world, "damage");
-        Check(damage.Recorded && damage.HeadingWindow == null && NoSinceInstall(damage) &&
+        Check(damage.Recorded && damage.ShownWindow == TimeWindow.SinceInstall && NoSinceInstall(damage) &&
               Deep(PanelModel.Content(damage)).Any(b => b.Kind == "filterbar" && (b.Items ?? new List<Block>()).Any(i => i.Title == PanelModel.DamageAllBiomeNote)) && Deep(PanelModel.Content(damage)).Where(b => b.Kind == "dmgmix").Any() && Deep(PanelModel.Content(damage)).Where(b => b.Kind == "dmgmix").All(b => b.Src == PanelModel.SrcPc),
               "battle 0.7, damage on All: the totals since the install counted on this PC, the Biome line says no biome on All, no since install word");
 
@@ -52,22 +53,23 @@ static class RecordedBattleTests
         var stopped = Named(armour, PanelModel.ArmourStopped);
         var ledger = Named(armour, PanelModel.ArmourByType);
         // 0.8.1: the stopped count is the view's one bar inside the type block, whose caption says the ledger's "Recorded from" date
-        Check(stopped != null && ledger != null && stopped.From.HasValue && ledger.From == stopped.From && ledger.Text == PanelModel.ArmourFromLine(world) &&
-              ledger.Items.Contains(stopped) && ledger.Text == PanelModel.RecordedFromLine(world, stopped.From.Value),
+        Check(stopped != null && ledger != null && stopped.From.HasValue && ledger.From == stopped.From && PanelModel.ArmourFromLine(world) == PanelModel.RecordedFromLine(world, stopped.From.Value) &&
+              Says(armour, PanelModel.RecordedFromLine(world, stopped.From.Value)),
               "battle 0.7, defence Your armour: the stopped count and the armour rows carry the ledger's own date, the same as its \"Recorded from\" line");
 
         // Your armour on All has its own box (MERGE-NOTES G5: the chapter's box spoke of foes, hits and deaths there); Received keeps the chapter's
-        Check(armour.AboutNumbers?.Items?.Count == PanelModel.ArmourAbout.Length && armour.AboutNumbers.Items[0].Title == PanelModel.FromLabel(world, world.ArmourFromUtc ?? world.SessionStartUtc ?? world.NowUtc) &&
-              armour.AboutNumbers.Items.Skip(1).Select(l => l.Title).SequenceEqual(PanelModel.ArmourAbout.Skip(1).Select(l => l.title)) &&
+        var armourBox = armour.AboutNumbers?.Items ?? new List<Block>();
+        Check(armourBox.Any(l => l.Title == PanelModel.FromLabel(world, world.ArmourFromUtc ?? world.SessionStartUtc ?? world.NowUtc)) &&
+              PanelModel.ArmourAbout.Skip(1).All(a => armourBox.Any(l => l.Title == a.title)) &&
               defence.AboutNumbers?.Items?.Any(l => l.Text == PanelModel.BattleBefore) == true,
               "battle 0.7, Your armour: its own About these numbers (the armour lines, the first under the ledger's date); Received keeps the chapter's box");
 
         // Deaths on All: the lifetime count is one sum (rule A) with the earlier counts note in its slot; the death list stays this session's
         var deaths = Show(world, "deaths");
         var lifetime = First(deaths, "hero");
-        Check(deaths.Recorded && lifetime != null && lifetime.Title == "deaths" && lifetime.Src == PanelModel.SrcCharacter && lifetime.Note == null && PanelModel.AboutText(deaths).Contains(PanelModel.EarlierIncomplete) &&
+        Check(deaths.Recorded && lifetime != null && lifetime.Title == "deaths" && lifetime.Src == PanelModel.SrcCharacter && lifetime.Note == null &&
               PanelModel.Content(deaths).Any(b => b.Kind == "deaths") && NoSinceInstall(deaths) && Incomplete(deaths) == 1,
-              "battle 0.7, deaths on All: the lifetime deaths are one sum with \"Earlier counts may be incomplete.\" in About these numbers (0.8 layout D+), no since install, the list stays this session's");
+              "battle 0.7, deaths on All: the lifetime deaths are one sum with \"Earlier counts may be incomplete.\" once, no since install, the list stays this session's");
 
         // Foes on All: hits on foes are one sum (rule A), the earlier counts note once for the page, By foe is counted on this PC
         var foes = Show(world, "foes");
@@ -75,16 +77,7 @@ static class RecordedBattleTests
         Check(foes.Recorded && hits != null && hits.Src == PanelModel.SrcCharacter && Incomplete(foes) == 1 && NoSinceInstall(foes) &&
               PanelModel.Content(foes).Any(b => b.Kind == "foetable" && b.Src == PanelModel.SrcPc),
               "battle 0.7, foes on All: hits on foes are one sum (Src character) with the earlier counts note once; By foe counted on this PC; no since install");
-
-        // A short window keeps its texts and carries no dates and no box (rule W.1)
-        var session = Show(world, "overview", TimeWindow.Session);
-        Check(!PanelModel.Content(session).Any(b => !string.IsNullOrEmpty(b.RecordedFrom)) && session.HeadingRecordedFrom == null && session.AboutNumbers == null,
-              "battle 0.7, a short window (This session): no dates, no box (rule W.1)");
-
-        // A fellow's book on All: no box, whose copy it is, never since install
-        var eddaFoes = Show(edda, "foes");
-        Check(eddaFoes.AboutNumbers == null && NoSinceInstall(eddaFoes) && (eddaFoes.Scope ?? "").Contains("Edda"),
-              "battle 0.7, a fellow's Foes on All: no box, no since install, whose copy it is");
+        // (a short window's no dates and no box, and a fellow's book: PropertyTests' rule W.1 and a fellow's book, over every page)
         return fails;
     }
 }

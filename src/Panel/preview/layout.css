@@ -1,0 +1,187 @@
+/* Generated from src/Panel/PanelLayout.cs by KsPanelTest --dump (test-panel/LayoutTests.cs). Do not edit: change the table. */
+:root {
+  /* Text */
+  --text-floor: 14px;
+  --text-small: 15px;
+  --text-body: 16px;
+  --text-name: 17px;
+  --text-row: 18px;
+  --text-count: 19px;
+  --text-lead: 20px;
+  --text-band: 21px;
+  --text-title: 22px;
+  --text-heading: 24px;
+  --text-page: 26px;
+  --text-big: 28px;
+  --text-stat: 30px;
+  --text-wordmark: 32px;
+  --text-card: 38px;
+  --text-axis: 48px;
+  --text-guard: 50px;
+  /* Frame */
+  --frame-w: 1180px;
+  --frame-h: 760px;
+  --frame-inset: 32px;
+  --frame-list-w: 190px;
+  --frame-head-top: 144px;
+  --frame-list-top: 180px;
+  --frame-foot: 72px;
+  --frame-tab-top: 77px;
+  --frame-tab-h: 52px;
+  --frame-tab-inset: 70px;
+  --frame-tab-gap: 8px;
+  --frame-tab-icon: 26px;
+  --frame-tab-icon-gap: 8px;
+  --frame-top-row: 44px;
+  --frame-logo-left: 64px;
+  --frame-logo-h: 60px;
+  --frame-wordmark-left: 66px;
+  --frame-owner-left: 385px;
+  --frame-owner-w: 300px;
+  --frame-owner-h: 44px;
+  --frame-players-right: 64px;
+  --frame-players-h: 48px;
+  --frame-players-gap: 8px;
+  --frame-players-w: 620px;
+  --frame-players-wide-w: 810px;
+  --frame-list-row: 40px;
+  --frame-list-gap: 8px;
+  --frame-key-room: 40px;
+  --frame-content-gap: 22px;
+  --frame-content-right: 40px;
+  --frame-content-w: 889px;
+  --frame-keycap: 24px;
+  --frame-logo-top: 14px;
+  --frame-owner-top: 22px;
+  --frame-players-top: 20px;
+  /* Heading */
+  --heading-h: 36px;
+  --heading-scope-top: 38px;
+  --heading-scope-h: 26px;
+  --heading-list-title-h: 30px;
+  --heading-icon: 26px;
+  --heading-icon-top: 5px;
+  --heading-chip-gap: 4px;
+  --heading-two-at: 20px;
+  --heading-two-size: 18px;
+  --heading-two-spacing: -22px;
+  --heading-two-top: -3px;
+  --heading-two-h: 42px;
+  --heading-blocks: 76px;
+  --heading-blocks-gap: 10px;
+  /* Plate */
+  --plate-top: 36px;
+  --plate-inset: 4px;
+  --plate-pad-x: 24px;
+  --plate-pad-top: 8px;
+  --plate-pad-bottom: 10px;
+  --plate-gap: 14px;
+  --plate-full-pad-top: 12px;
+  --plate-full-gap: 10px;
+  --plate-column: 840px;
+  /* Island */
+  --island-pad: 14px;
+  --island-inner: 6px;
+  --island-pair-gap: 14px;
+  --island-radius: 10px;
+  --island-hero-top: 8px;
+  --island-hero-bottom: 10px;
+  --island-narrow: 500px;
+  /* Hero */
+  --hero-size: 67px;
+  --hero-label: 26px;
+  --hero-second: 43px;
+  --hero-second-label: 20px;
+  --hero-rule-gap: 34px;
+  --hero-number-gap: 14px;
+  --hero-words-gap: 8px;
+  /* Bar */
+  --bar-height: 22px;
+  --bar-thin: 22px;
+  --bar-tall: 24px;
+  --bar-gap: 4px;
+  --bar-min-part: 6px;
+  --bar-to-list: 10px;
+  --bar-after: 0px;
+  --bar-head-line: 18px;
+  --bar-number: 15px;
+  /* Legend */
+  --legend-row: 22px;
+  --legend-row-gap: 6px;
+  --legend-column-gap: 36px;
+  --legend-cell-gap: 8px;
+  --legend-gap: 10px;
+  --legend-swatch: 12px;
+  --legend-swatch-gap: 8px;
+  --legend-name: 14px;
+  --legend-number: 15px;
+  --legend-share: 14px;
+  /* Chip */
+  --chip-height: 26px;
+  --chip-pad: 11px;
+  --chip-icon: 18px;
+  --chip-icon-left: 9px;
+  --chip-icon-room: 32px;
+  --chip-window-pad: 8px;
+  --chip-text: 14px;
+  /* Section */
+  --section-text: 14px;
+  --section-total: 15px;
+  /* Columns */
+  --columns-gap: 34px;
+  --columns-stack: 12px;
+  /* Keys */
+  --keys-side: 64px;
+  --keys-bottom: 22px;
+  --keys-height: 30px;
+  --keys-text: 15px;
+  /* Focus */
+  --focus-inset: 8px;
+  --focus-gap: 2px;
+  /* Empty */
+  --empty-gap: 2px;
+  /* Filter */
+  --filter-label-w: 128px;
+  --filter-chip-h: 24px;
+  --filter-chip-gap: 4px;
+  --filter-text: 14px;
+  /* Sort */
+  --sort-height: 28px;
+  --sort-gap: 6px;
+  /* Fell */
+  --fell-foot: 36px;
+  --fell-line: 24px;
+  --fell-room: 132px;
+  --fell-count-line: 22px;
+  --fell-tile-max: 150px;
+  --fell-gap: 4px;
+  --fell-apart: 12px;
+  /* Link */
+  --link-height: 32px;
+  /* Feed */
+  --feed-session-gap: 10px;
+  /* Sum */
+  --sum-icon: 24px;
+  --sum-gap: 10px;
+  --sum-icon-gap: 7px;
+  --sum-unit-gap: 5px;
+  --sum-caption-gap: 4px;
+  --sum-row-h: 36px;
+  --sum-row-gap: 6px;
+  --sum-row-pad: 10px;
+  --sum-row-pic: 26px;
+  --sum-row-icon: 20px;
+  --sum-row-term-gap: 7px;
+  --sum-text: 16px;
+  --sum-caption: 14px;
+  --sum-name: 17px;
+  --sum-total: 20px;
+  /* Ledger */
+  --ledger-name-line: 23px;
+  --ledger-source-line: 19px;
+  /* Feats */
+  --feats-card: 52px;
+  --feats-row-gap: 6px;
+  --feats-column-gap: 8px;
+  --feats-grid-room: 226px;
+}

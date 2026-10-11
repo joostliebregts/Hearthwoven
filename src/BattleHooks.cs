@@ -20,22 +20,39 @@ namespace Hearthwoven
     /// hook, your deaths from ClientHooks' death hook; once a second Watch reads whether you are in an interior and which (dungeon runs) and the
     /// bosses loaded here (their health, for boss fights a fellow started).
     ///
-    /// Battle.DealtAfterArmour (off by default, a developer setting; ARMOUR-SCOPE.md section 7): your damage after the foe's resistances and
-    /// armour, measured where the game applies them, on the PC that controls the foe. When that PC is yours it is recorded here; when it is a
-    /// fellow player's with the setting on too, that PC sends it to you (one small message per hit). Off: none of these hooks is patched
-    /// (Prepare), nothing is measured or sent. Read when the game starts.
+    /// 0.8.5: your damage after the foe's resistances and armor is worked out at each hit on your PC (AfterOf, AfterArmour.cs) and kept beside it
+    /// (the log's After, the dealt ledger). Battle.DealtAfterArmour (off by default, a developer setting) is now its check: where the game applies
+    /// them, on a foe this PC controls, it compares the game's own numbers with the ones worked out at your hit and logs the first CheckLines (0.8
+    /// recorded them here and had a fellow's PC send its own per hit: blind to foes a PC without the setting controls, ARMOUR-SCOPE.md section 7).
+    /// Off: none of its hooks is patched (Prepare), nothing is measured. Read when the game starts.
     /// </summary>
     static class BattleHooks
     {
         static ConfigEntry<bool> dealtAfterArmour;
-        /// <summary>Battle.DealtAfterArmour as the game started (the hooks are patched only then).</summary>
+        /// <summary>Battle.DealtAfterArmour as the game started (the check's hooks are patched only then).</summary>
         internal static bool DealtAfterArmour => dealtAfterArmour != null && dealtAfterArmour.Value;
-        internal const string DealtRpc = "Hearthwoven_DealtArmour";
 
         internal static void Bind(ConfigFile config)
         {
             dealtAfterArmour = config.Bind("Battle", "DealtAfterArmour", false,
-                "Developer tool: measure the damage you deal after the foe's resistances and armor, on the PC that controls the foe (yours, or a fellow player's with this setting on too, which sends it to you). Takes effect at the next game start. Off for players.");
+                "Developer tool: checks the damage after the foe's resistances and armor that Hearthwoven works out at each of your hits against the game's own numbers, on foes your PC controls (play alone for the most). Logs the first " + CheckLines + " hits. Takes effect at the next game start. Off for players.");
+        }
+
+        /// <summary>
+        /// 0.8.5: your hit on <paramref name="target"/> (<paramref name="before"/>: as you swung it) after the foe's resistances and armor, worked out on
+        /// your PC (AfterArmour.Of) with the game's own data: its damage modifiers (Character.GetDamageModifiers: the creature's, the weak spot's when
+        /// the hit struck one, hit.m_weakSpot as Character.Damage set it, and the effects on it this PC knows), the world level and its armor per
+        /// level. null for a player (their armor is not known here). One boxed copy of the modifiers (GetDamageModifiers, as the game makes per hit)
+        /// and a few multiplications; nothing is sent.
+        /// </summary>
+        internal static HitData.DamageTypes? AfterOf(Character target, HitData hit, HitData.DamageTypes before)
+        {
+            if (hit == null || target == null || target is Player) return null;
+            var spots = target.m_weakSpots; var i = hit.m_weakSpot;
+            var spot = spots != null && i >= 0 && i < spots.Length ? spots[i] : null;   // Character.GetWeakSpot
+            var after = AfterArmour.Of(before, target.GetDamageModifiers(spot), Game.m_worldLevel, Game.instance ? Game.instance.m_worldLevelEnemyBaseAC : 100);
+            if (DealtAfterArmour) Compare(target, before, after);
+            return after;
         }
 
         static FoeId Of(ZDOID z) => new FoeId(z.UserID, z.ID);
@@ -181,8 +198,9 @@ namespace Hearthwoven
         /// builds every dungeon, 5000 m above its entrance); which one is the location of that zone (Location.GetZoneLocation, the game's own lookup
         /// for a point inside), named by its prefab ("Crypt2") and its own label when it has one (m_discoverLabel, "$location_dvergrboss"), looked
         /// up only when the zone changes. Boss fights: every boss loaded here
-        /// (Character.GetAllCharacters, the game's list on this PC; IsBoss), its health left (GetHealthPercentage: the creature's network record,
-        /// synced to every PC) and place. Reads only; no allocation but the place name once per interior.
+        /// (Character.GetAllCharacters, the game's list on this PC; IsBoss, 0.8.5: or one of Hildir's minibosses, BattleRecorder.IsBoss), its health
+        /// left (GetHealthPercentage: the creature's network record, synced to every PC) and place. Reads only; no allocation but the place name once
+        /// per interior.
         /// </summary>
         static void Watch(BattleRecorder rec, DateTime utc)
         {
@@ -205,7 +223,7 @@ namespace Hearthwoven
             for (int i = 0; i < all.Count; i++)
             {
                 var c = all[i];
-                if (c == null || !c.IsBoss() || c.IsDead() || !Foe(c)) continue;
+                if (c == null || !BattleRecorder.IsBoss(c.IsBoss(), null, c.m_name) || c.IsDead() || !Foe(c)) continue;   // 0.8.5: Hildir's minibosses by their token, flagged or not
                 var z = c.GetZDOID(); if (z.IsNone()) continue;
                 rec.BossSeen(utc, Of(z), Prefab(c), c.m_name, c.GetHealthPercentage(), SpotOf(c));
             }
@@ -243,11 +261,14 @@ namespace Hearthwoven
             }
         }
 
-        // ---------- Battle.DealtAfterArmour: your damage after the foe's resistances and armour, on the foe's PC ----------
+        // ---------- Battle.DealtAfterArmour: the check of AfterOf where the game applies the foe's resistances and armor ----------
 
+        internal const int CheckLines = 30;
+        struct Seen { public int Frame; public ZDOID Foe; public HitData.DamageTypes Incoming, After; }
+        static Seen seen;   // your last hit on a foe this PC controls as the game worked it out (inside Character.Damage, before AfterOf runs on it)
         sealed class FoeMark { public HitData Hit; public Character Target; public bool Resisted; public HitData.DamageTypes Incoming, Before; }
         static FoeMark foeHit;   // a player's hit on a creature this PC controls, in flight inside RPC_Damage; null for every other hit
-        static bool firstLogged;
+        static int checkedHits;
 
         [HarmonyPatch(typeof(Character), "RPC_Damage")]
         static class MarkFoeHit
@@ -295,29 +316,50 @@ namespace Hearthwoven
                     var m = foeHit;
                     if (m == null || !m.Resisted || !ReferenceEquals(hit, m.Hit) || __instance != m.Target) return;
                     m.Resisted = false;   // one record per hit
-                    Measured(__instance, hit, m);
+                    Check(__instance, hit, m);
                 }
                 catch (Exception e) { HookGuard.Fail(e, "BattleHooks.FoeAfterArmour.Prefix"); }
             }
         }
 
-        /// <summary>A player's hit on a foe this PC controls, measured: kept here when it is yours, sent to that player's PC when it is a fellow player's.</summary>
-        static void Measured(Character target, HitData hit, FoeMark m)
+        /// <summary>Your hit on a foe this PC controls, as the game worked it out: kept for AfterOf, which runs on the same hit right after (the game
+        /// handles a hit on a foe this PC controls inside Character.Damage, in the same frame).</summary>
+        static void Check(Character target, HitData hit, FoeMark m)
         {
-            var attacker = hit.GetAttacker() as Player;
-            if (attacker == null) return;
-            var after = AfterArmour(m.Before, hit.m_damage, Game.m_worldLevel, Game.instance ? Game.instance.m_worldLevelEnemyBaseAC : 100);
-            var kind = Prefab(target); var skill = hit.m_skill.ToString();
-            if (attacker == Player.m_localPlayer) RecordDealt(kind, skill, m.Incoming, m.Before, after, "this PC");
-            else SendDealt(hit.m_attacker.UserID, kind, skill, m.Incoming, m.Before, after);
+            if (checkedHits >= CheckLines || !(hit.GetAttacker() is Player p) || p != Player.m_localPlayer) return;
+            seen = new Seen { Frame = Time.frameCount, Foe = target.GetZDOID(), Incoming = m.Incoming,
+                              After = MeasuredAfter(m.Before, hit.m_damage, Game.m_worldLevel, Game.instance ? Game.instance.m_worldLevelEnemyBaseAC : 100) };
+        }
+
+        /// <summary>AfterOf's numbers for a hit against the game's for the same hit (the same frame, the same foe): each type's share left after the
+        /// foe (game: after / what reached its resistances; Hearthwoven: after / before). A sneak attack or a staggered foe raises both of the game's
+        /// numbers alike, so the shares still agree. One line per hit for the first CheckLines.</summary>
+        static void Compare(Character target, HitData.DamageTypes before, HitData.DamageTypes after)
+        {
+            var s = seen;
+            if (checkedHits >= CheckLines || s.Frame != Time.frameCount || s.Foe != target.GetZDOID()) return;
+            seen = default;
+            float[] i = ArmourTally.Of(s.Incoming), g = ArmourTally.Of(s.After), b = ArmourTally.Of(before), a = ArmourTally.Of(after);
+            var parts = new List<string>(); var same = true;
+            string F(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+            for (int k = 0; k < ArmourTally.Types.Length; k++)
+            {
+                if (!(b[k] > 0) && !(i[k] > 0)) continue;
+                double mine = b[k] > 0 ? a[k] / b[k] : 0, theirs = i[k] > 0 ? g[k] / i[k] : 0;
+                var differs = Math.Abs(mine - theirs) > 0.01; if (differs) same = false;
+                parts.Add(ArmourTally.Types[k] + " " + F(mine) + (differs ? " (game " + F(theirs) + ")" : ""));
+            }
+            if (parts.Count == 0) return;
+            checkedHits++;
+            Debug.Log("[Hearthwoven] Battle.DealtAfterArmour check " + checkedHits + "/" + CheckLines + ": " + Prefab(target) + ", share left after the foe: " + string.Join(", ", parts.ToArray()) + (same ? " (same as the game)" : " DIFFERS"));
         }
 
         /// <summary>
-        /// The hit after the foe's armour. At ApplyDamage the game has already taken fire, spirit and poison out of the hit (they become burning
-        /// and poison on the foe), after armour scaled every type by one ratio (HitData.DamageTypes.ApplyArmor). So: no world level, no armour
+        /// The hit after the foe's armour as the game holds it at ApplyDamage: it has already taken fire, spirit and poison out of the hit (they become
+        /// burning and poison on the foe), after armour scaled every type by one ratio (HitData.DamageTypes.ApplyArmor). So: no world level, no armour
         /// (after = before); else the ratio the remaining types show, and only for a hit of fire, spirit or poison alone the game's own formula.
         /// </summary>
-        internal static HitData.DamageTypes AfterArmour(HitData.DamageTypes before, HitData.DamageTypes now, int worldLevel, int baseAc)
+        internal static HitData.DamageTypes MeasuredAfter(HitData.DamageTypes before, HitData.DamageTypes now, int worldLevel, int baseAc)
         {
             var a = now;
             float ratio = 1f;
@@ -333,54 +375,6 @@ namespace Hearthwoven
             return a;
         }
 
-        const int MaxDealtKeys = 3000;
-        static void RecordDealt(string kind, string skill, HitData.DamageTypes incoming, HitData.DamageTypes before, HitData.DamageTypes after, string where)
-        {
-            if (Plugin.DealtArmour.Keys > MaxDealtKeys) return;   // bounded: a flood of invented kinds stops here
-            if (Plugin.DealtArmour.Add(kind, skill, incoming, before, after)) Plugin.DealtArmourMinutes.Add(DateTime.UtcNow, incoming, before, after);
-            if (!firstLogged) { firstLogged = true; Debug.Log("[Hearthwoven] Battle.DealtAfterArmour: first hit measured after the foe's armour (" + kind + ", measured on " + where + ")"); }
-        }
-
-        static void SendDealt(long peer, string kind, string skill, HitData.DamageTypes incoming, HitData.DamageTypes before, HitData.DamageTypes after)
-        {
-            if (peer == 0L || ZRoutedRpc.instance == null || Panel.SampleMode.On) return;
-            var pkg = new ZPackage();
-            pkg.Write(1); pkg.Write(kind ?? "?"); pkg.Write(skill ?? "?");
-            Write(pkg, incoming); Write(pkg, before); Write(pkg, after);
-            ZRoutedRpc.instance.InvokeRoutedRPC(peer, DealtRpc, pkg);   // a PC without the handler (setting off, no Hearthwoven) ignores it quietly
-        }
-
-        static void Write(ZPackage p, HitData.DamageTypes d) { foreach (var v in ArmourTally.Of(d)) p.Write(v); }
-        static HitData.DamageTypes Read(ZPackage p)
-        {
-            float R() { var v = p.ReadSingle(); return Json.IsFinite(v) && v > 0f && v < 1e5f ? v : 0f; }
-            return new HitData.DamageTypes { m_blunt = R(), m_slash = R(), m_pierce = R(), m_fire = R(), m_frost = R(), m_lightning = R(), m_poison = R(), m_spirit = R() };
-        }
-
-        [HarmonyPatch(typeof(ZRoutedRpc), MethodType.Constructor, typeof(bool))]
-        static class RegisterDealt
-        {
-            static bool Prepare() => DealtAfterArmour;
-            static void Postfix(ZRoutedRpc __instance)
-            {
-                try { __instance.Register<ZPackage>(DealtRpc, OnDealt); }
-                catch (Exception e) { HookGuard.Fail(e, "BattleHooks.RegisterDealt.Postfix"); }
-            }
-        }
-
-        static void OnDealt(long sender, ZPackage pkg)
-        {
-            try
-            {
-                if (pkg == null || pkg.ReadInt() != 1) return;
-                var kind = pkg.ReadString(); var skill = pkg.ReadString();
-                if (string.IsNullOrEmpty(kind) || kind.Length > 64 || skill == null || skill.Length > 32) return;
-                var i = Read(pkg); var b = Read(pkg); var a = Read(pkg);
-                RecordDealt(kind, skill, i, b, a, "a fellow player's PC");
-            }
-            catch (Exception e) { HookGuard.Fail(e, "BattleHooks.OnDealt"); }
-        }
-
         // ---------- the panel ----------
 
         /// <summary>The battle record into the panel's input (PanelUi.Gather): the recorder ticked to now, the book, the counts and the dates.</summary>
@@ -390,14 +384,17 @@ namespace Hearthwoven
             {
                 var rec = Plugin.Battle; Wire(rec); rec.Tick(DateTime.UtcNow);
                 input.Battle = rec; input.BossLog = Plugin.BossLog; input.FoeBook = Plugin.FoeBook; input.FoesSince = Plugin.FoesSince; input.FoesPending = Plugin.FoesPending(); input.FoesFromUtc = Plugin.FoesFromUtc;
-                if (DealtAfterArmour) { input.DealtArmourSession = Plugin.DealtArmour; input.DealtArmourMinutes = Plugin.DealtArmourMinutes; }
+                input.KeptSessions = Plugin.EarlierFights;   // 0.8.5: the fights of earlier sessions (KeptFights), for the feed
+                // 0.8.5: your damage after the foe's armor, every window (the log's After serves 10 min .. Session)
+                input.DealtArmourSession = Plugin.DealtArmour; input.DealtArmourSince = Plugin.DealtArmourSince; input.DealtArmourBook = Plugin.DealtArmourBook;
+                input.DealtArmourPending = Plugin.DealtArmourPending(); input.DealtArmourFromUtc = Plugin.DealtArmourFromUtc;
             }
             catch (Exception e) { HookGuard.Fail(e, "BattleHooks.Into"); }
-            // 0.9: the fight pages' book (FightAdapter): this session's group fights, boss fights and runs from every record, then the saved ones;
-            // none at all: null, and Last fight keeps its 0.8 page
+            // 0.9: the fight pages' book (FightAdapter): this session's group fights, boss fights and runs from every record, then the saved ones
+            // (0.8.5: and the kept group fights of earlier sessions); none at all: null, and Last fight keeps its 0.8 page
             try
             {
-                var book = FightAdapter.Build(Plugin.FightSides(), Plugin.BossLog, Plugin.RunLog, DateTime.UtcNow, PlaceName);
+                var book = FightAdapter.Build(Plugin.FightSides(), Plugin.BossLog, Plugin.RunLog, DateTime.UtcNow, PlaceName, Plugin.EarlierFights);
                 input.Fights = book.Fights.Count > 0 ? book : null;
             }
             catch (Exception e) { input.Fights = null; HookGuard.Fail(e, "BattleHooks.Into fights"); }
@@ -408,7 +405,7 @@ namespace Hearthwoven
         static string PlaceName(string kind, string token)
         {
             if (string.IsNullOrEmpty(token) || Localization.instance == null) return null;
-            var name = Localization.instance.Localize(token);
+            var name = Panel.PanelRich.Untagged(Localization.instance.Localize(token));   // 0.8.5: a game name without its color tags
             return string.IsNullOrEmpty(name) || name.StartsWith("$") || name.StartsWith("[") ? null : name;
         }
     }

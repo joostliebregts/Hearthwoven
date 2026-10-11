@@ -20,7 +20,7 @@ namespace Hearthwoven.Panel
         /// <summary>One foe kind in a window: how many separate foes and what became of them, and the damage both ways by type.</summary>
         public sealed class FoeKindRow
         {
-            public string Kind;                 // the foe's prefab ("Troll"), the key of every Battle page
+            public string Kind;                 // the foe's prefab ("Troll"), the key of every Battle page; 0.8.5: the main prefab of its name (FoeGroup)
             /// <summary>Whether the window has counts at all (false: a fellow's short window, an older fellow's copy): then no "×N", not "×0".</summary>
             public bool Counted;
             /// <summary>"×N" on the Damage page: separate foes of the kind you fought in the window (FoeCounts.Count.Separate).</summary>
@@ -39,9 +39,12 @@ namespace Hearthwoven.Panel
 
         /// <summary>
         /// The foes per kind in a window, or null when the window has none recorded (a fellow's short or day window; your day window before the
-        /// day history; no recorder). Fighting is the running session's (a foe still in the fight is neither defeated nor got away).
+        /// day history; no recorder). Fighting is the running session's (a foe still in the fight is neither defeated nor got away). 0.8.5: keyed
+        /// as the rows are, by the game's name (FoeGroup): the kinds of one name counted together.
         /// </summary>
-        public static FoeCounts FoeCountsIn(PanelInput input, TimeWindow w)
+        public static FoeCounts FoeCountsIn(PanelInput input, TimeWindow w) => ByFoeName(input, FoeCountsByPrefab(input, w));
+
+        static FoeCounts FoeCountsByPrefab(PanelInput input, TimeWindow w)
         {
             if (input == null) return null;
             if (!input.IsSelf)
@@ -110,8 +113,9 @@ namespace Hearthwoven.Panel
             foreach (var d in WindowDamageRows(input, w))
             {
                 if (d.Amount <= 0 || string.IsNullOrEmpty(d.Other)) continue;
-                if (d.Dir == "dealt" && BattleTypes.Contains(d.Type)) { var r = Row(d.Other); Bump(r.Dealt, d.Type, d.Amount); r.DealtTotal += d.Amount; }
-                else if (d.Dir == "taken" && ReceivedTypes.Contains(d.Type)) { var r = Row(d.Other); Bump(r.Received, d.Type, d.Amount); r.ReceivedTotal += d.Amount; }
+                var kind = FoeGroup(input, d.Other);   // 0.8.5: by the game's name, as the counts
+                if (d.Dir == "dealt" && BattleTypes.Contains(d.Type)) { var r = Row(kind); Bump(r.Dealt, d.Type, d.Amount); r.DealtTotal += d.Amount; }
+                else if (d.Dir == "taken" && ReceivedTypes.Contains(d.Type)) { var r = Row(kind); Bump(r.Received, d.Type, d.Amount); r.ReceivedTotal += d.Amount; }
             }
             return rows.Values.OrderByDescending(r => r.DealtTotal).ThenByDescending(r => r.ReceivedTotal).ThenBy(r => r.Kind, StringComparer.Ordinal).ToList();
         }

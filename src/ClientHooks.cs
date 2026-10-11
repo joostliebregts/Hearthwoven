@@ -51,19 +51,40 @@ namespace Hearthwoven
         [HarmonyPatch(typeof(Character), nameof(Character.Damage))]
         static class DamageDealt
         {
-            static void Prefix(Character __instance, HitData hit) => Safe(() =>
+            static void Prefix(Character __instance, HitData hit, out DealtHit __state)
             {
-                if (hit != null && Local(hit.GetAttacker()) && !Local(__instance))
+                DealtHit d = null;
+                Safe(() =>
                 {
-                    var target = Prefab(__instance);
-                    Plugin.Session.AddDealt(target, hit.m_skill.ToString(), hit.m_damage);
-                    // every hit, also on a foe another PC owns (the game's EnemyHits/PlayerHits miss those: owner trap)
-                    SessionEvents.Add(Plugin.Events.Battle, __instance is Player ? "PlayerHits" : "EnemyHits");
-                    Plugin.Log.AddDamage(DateTime.UtcNow, Biome(), true, target, hit.m_skill.ToString(), hit.m_damage);
-                    BattleHooks.Dealt(__instance, target, hit);   // 0.8: this foe as its own creature (count per kind, battle feed)
-                }
+                    if (hit != null && Local(hit.GetAttacker()) && !Local(__instance))
+                    {
+                        var target = Prefab(__instance); var skill = hit.m_skill.ToString();
+                        Plugin.Session.AddDealt(target, skill, hit.m_damage);
+                        // every hit, also on a foe another PC owns (the game's EnemyHits/PlayerHits miss those: owner trap)
+                        SessionEvents.Add(Plugin.Events.Battle, __instance is Player ? "PlayerHits" : "EnemyHits");
+                        var utc = DateTime.UtcNow; var biome = Biome();
+                        Plugin.Log.AddDamage(utc, biome, true, target, skill, hit.m_damage);
+                        BattleHooks.Dealt(__instance, target, hit);   // 0.8: this foe as its own creature (count per kind, battle feed)
+                        if (!(__instance is Player)) d = new DealtHit { Utc = utc, Biome = biome, Target = target, Skill = skill, Before = hit.m_damage };   // its after in the postfix
+                    }
+                });
+                __state = d;
+            }
+
+            // 0.8.5: the same hit after the foe's resistances and armor, worked out on this PC (BattleHooks.AfterOf) once the game has found the weak spot
+            // it struck (Character.Damage sets hit.m_weakSpot; the foe's own PC gets a copy of the hit, so this one is as you swung it): beside its
+            // before in the log and in the dealt ledger. A player has none: their armor is not known on this PC.
+            static void Postfix(Character __instance, HitData hit, DealtHit __state) => Safe(() =>
+            {
+                if (__state == null) return;
+                var after = BattleHooks.AfterOf(__instance, hit, __state.Before);
+                if (!after.HasValue) return;
+                Plugin.Log.AddAfter(__state.Utc, __state.Biome, __state.Target, __state.Skill, __state.Before, after.Value);
+                Plugin.DealtArmour.Add(__state.Target, __state.Skill, default, __state.Before, after.Value);   // the dealt ledger: before and after of the same hits
             });
         }
+        /// <summary>A hit of yours on a creature between DamageDealt's prefix (where its before is kept) and its postfix (its after).</summary>
+        sealed class DealtHit { public DateTime Utc; public string Biome, Target, Skill; public HitData.DamageTypes Before; }
 
         // Damage you take: runs on your own PC after resistances and armour.
         [HarmonyPatch(typeof(Character), nameof(Character.ApplyDamage))]

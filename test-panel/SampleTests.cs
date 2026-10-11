@@ -97,8 +97,9 @@ static class SampleTests
         var companyPages = new[] { "fireside", "together", "food", "gear" };
         var firstRound = companyPages.Select(p => RenderLike("", Chapter.Company, p)).ToList();
         var secondRound = companyPages.Select(p => RenderLike("", Chapter.Company, p)).ToList();   // Render runs every 2 s
-        Check(firstRound.Concat(secondRound).All(v => !PanelModel.Content(v).Any(b => b.Kind == "empty") && v.Players.Select(p => p.Label).SequenceEqual(new[] { "Rowan", "Edda", "Finch", "Tor" }) && v.ShareNote == null),
-              "in-game path: render after render, every Company page is filled and the chips show Rowan, Edda, Finch and Tor (self.Fellows cleared each time)");
+        Check(firstRound.Concat(secondRound).All(v => !PanelModel.Content(v).Any(b => b.Kind == "empty") && v.Players.Select(p => p.Label).SequenceEqual(new[] { "Rowan", "Edda", "Finch", "Tor" }) &&
+                                                       !new[] { PanelModel.ShareWaitingNote, PanelModel.ShareOffNote, PanelModel.SoloNote, PanelModel.JoiningNote }.Any(n => Says(v, n))),
+              "in-game path: render after render, every Company page is filled, the chips show Rowan, Edda, Finch and Tor and no line says sharing is off or waiting (self.Fellows cleared each time)");
         var asEdda = RenderLike("Edda", Chapter.Company, "fireside");
         Check(asEdda.Players.Single(p => p.Selected).Label == "Edda" && !PanelModel.Content(asEdda).Any(b => b.Kind == "empty") && RenderLike("", Chapter.Company, "fireside").Players[0].Selected,
               "in-game path: a fellow's chip opens their book, and back to Rowan keeps the Company filled");

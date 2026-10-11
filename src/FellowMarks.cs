@@ -92,7 +92,13 @@ namespace Hearthwoven
             var d = new Dictionary<string, Dictionary<string, float>>();
             if (copy.SharedSinceInstall && copy.Events != null)
                 foreach (var fam in copy.Events.Named()) if (Array.IndexOf(DeedLog.EventFamilies, fam.Key) >= 0 && fam.Value.Count > 0) d[fam.Key] = new Dictionary<string, float>(fam.Value);
-            var game = DeedLog.GameKeys(copy.Character, copy.PiecesPlaced, copy.Harvested, copy.EnemyKills);
+            var stats = copy.Character;
+            if (copy.SharedSinceInstall && copy.Events != null && copy.Events.CargoMeters.Count > 0)   // 0.8.5: their cargo since install, all items (DeedLog.CargoTotal)
+            {
+                stats = new Dictionary<string, float>(copy.Character ?? new Dictionary<string, float>());
+                stats[DeedLog.CargoTotal] = copy.Events.CargoMeters.Values.Where(v => v > 0).Sum();
+            }
+            var game = DeedLog.GameKeys(stats, copy.PiecesPlaced, copy.Harvested, copy.EnemyKills);
             foreach (var kv in game)
             {
                 var bar = kv.Key.IndexOf('|'); var fam = kv.Key.Substring(0, bar);

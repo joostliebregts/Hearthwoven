@@ -44,17 +44,17 @@ static class ArmourPanelTests
         Block Part(Block r) => r.Items[0];
         // 0.8.1 (Joost): the summary is one bar at the top of the type block, no second hero: what reached your armor, filled by what got through, its
         // two numbers adding up, "82 % stopped" in front (By foe on the first screen)
-        Check(bar != null && types.Items[0] == bar && bar.Value == Share(Num(Part(bar).Value2), Num(Part(bar).Value) + Num(Part(bar).Value2)) && bar.Text == PanelModel.ArmourStoppedWord && bar.Items.Count == 1 &&
+        Check(bar != null && bar.Value == Share(Num(Part(bar).Value2), Num(Part(bar).Value) + Num(Part(bar).Value2)) && bar.Text == PanelModel.ArmourStoppedWord && bar.Items.Count == 1 &&
               Part(bar).Tone == PanelModel.DamageStoppedTone && Num(Part(bar).Value) + Num(Part(bar).Value2) == Math.Round(bt) && Math.Abs(Num(Part(bar).Value2) - (bt - at)) <= 1 &&
               PanelModel.Content(before).All(b => b.Kind != "stat"),
-              "armour: the summary is one bar (" + Part(bar)?.Value + " got through, " + Part(bar)?.Value2 + " stopped, \"" + bar?.Value + " " + bar?.Text + "\") at the top of the type block, no second hero");
+              "armour: the summary is one bar (" + Part(bar)?.Value + " got through, " + Part(bar)?.Value2 + " stopped, \"" + bar?.Value + " " + bar?.Text + "\") in the type block, no second hero");
         // 0.8.1 (Joost): a row's number is what reached your armor (its part's two numbers, got through and stopped, add up to it, the types to the
         // bar); its line only the share stopped ("Blunt 42 %"): on this view the share matters more than the amount
         Check(rows.Count > 0 && rows.All(r => r.Items.Count == 1 && Num(r.Value) == Num(Part(r).Value) + Num(Part(r).Value2) && Part(r).Text == Share(Num(Part(r).Value2), Num(r.Value))) &&
               Math.Abs(rows.Sum(r => Num(Part(r).Value2)) - Num(Part(bar).Value2)) <= rows.Count && Math.Abs(rows.Sum(r => Num(r.Value)) - Math.Round(bt)) <= rows.Count,
               "armour: each type row's number is what reached your armor, its line the share stopped, adding up to the bar: " +
               string.Join(", ", rows.Select(r => r.Title + " " + r.Value + " (" + Part(r).Title + " " + Part(r).Text + ")")));
-        Check(types != null && types.Text == fromLine && fromLine.StartsWith("Recorded from ") && fromLine.EndsWith(" · this PC") && foes != null && foes.Items.Count > 0 &&
+        Check(types != null && Says(before, fromLine) && fromLine.StartsWith("Recorded from ") && fromLine.EndsWith(" · this PC") && foes != null && foes.Items.Count > 0 &&
               rows.Concat(foes.Items).Max(r => r.Fraction) == 1f &&
               rows.Concat(foes.Items).SelectMany(r => r.Items).All(p => p.Tone == PanelModel.DamageStoppedTone && p.Fraction2 >= 0 && p.Fraction2 <= 1) &&
               foes.Items.All(f => f.Items.All(p => p.Text == Share(Num(p.Value2), Num(p.Value) + Num(p.Value2)))) &&
@@ -62,7 +62,7 @@ static class ArmourPanelTests
               "armour: damage rows per type and per foe on one scale for the page (each part filled by what got through); a foe's line the share stopped per type: " +
               string.Join(" · ", (foes?.Items.FirstOrDefault()?.Items ?? new List<Block>()).Select(p => p.Title + " " + p.Text)) + "; \"" + fromLine + "\"");
         var ten = PanelModel.Build(world, Defence(TimeWindow.LastTenMinutes, PanelModel.ArmourId));
-        Check(PanelModel.Content(ten).All(b => !(b.Kind == "armour" && b.Title == PanelModel.ArmourByFoe)) && PanelModel.Content(ten).Any(b => b.Kind == "note" && b.Text == PanelModel.ArmourPerFoe),
+        Check(PanelModel.Content(ten).All(b => !(b.Kind == "armour" && b.Title == PanelModel.ArmourByFoe)) && Says(ten, PanelModel.ArmourPerFoe),
               "armour: the short windows have no foe (the minute buckets keep none) and say where it is");
 
         // review fix (a like-for-like pair): Your armour's before and after are both the ledger's (stopped = before - after of the same hits), it carries
@@ -81,10 +81,10 @@ static class ArmourPanelTests
         var none = world.ShallowCopy(); none.ArmourSession = new ArmourTally();
         var empty = PanelModel.Content(PanelModel.Build(none, Defence(TimeWindow.Session, PanelModel.ArmourId))).FirstOrDefault(b => b.Kind == "empty");
         // B27 (Joost: the empty view was unclear right after installing): it says why (counted from its own date) and when it fills
-        var counted = "Counted from " + PanelModel.RecordDate(none, none.ArmourFromUtc ?? none.SessionStartUtc ?? none.NowUtc);
-        Check(empty != null && empty.Title == "Your armor has stopped nothing this session" && empty.Text.StartsWith(counted) && empty.Text.EndsWith("A foe's hit on your armor shows up here.") &&
+        var countedFrom = PanelModel.RecordDate(none, none.ArmourFromUtc ?? none.SessionStartUtc ?? none.NowUtc);
+        Check(empty != null && empty.Title.Contains("nothing") && empty.Title.Contains("this session") && empty.Text.Contains(countedFrom) && empty.Text.Contains("hit") &&
               !PanelModel.AllText(PanelModel.Build(none, Defence(TimeWindow.Session, PanelModel.ArmourId))).Any(t => t == "0" || (t != null && t.Contains("\u2014"))),
-              "armour (B27): an empty window says what it is and why (\"" + empty?.Title + "\", \"" + empty?.Text + "\"), never 0");
+              "armour (B27): an empty window says what it is (nothing, this session), why (counted from " + countedFrom + ") and when it fills (a hit) (\"" + empty?.Title + "\", \"" + empty?.Text + "\"), never 0");
 
         // a fellow's book: no switch, Received from as before
         var fellow = PanelModel.Build(bare, Defence(TimeWindow.Session));

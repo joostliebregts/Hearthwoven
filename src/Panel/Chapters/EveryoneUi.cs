@@ -40,7 +40,7 @@ namespace Hearthwoven.Panel
             var wide = rows.Where(r => r.Kind == PanelModel.GroupMemberKind && !string.IsNullOrEmpty(r.Value2) && r.Value2.Length > 5).Select(r => r.Value2).ToList();
             if (wide.Count > 0)
             {
-                var probe = Label(col, "", 22, PanelLook.Gold, style: FontStyles.Bold); probe.textWrappingMode = TextWrappingModes.NoWrap;
+                var probe = Label(col, "", PanelLayout.Text.Title, PanelLook.Gold, style: FontStyles.Bold); probe.textWrappingMode = TextWrappingModes.NoWrap;
                 foreach (var w in wide) pctW = Mathf.Max(pctW, Mathf.Ceil(probe.GetPreferredValues(w).x) + 4);
                 UnityEngine.Object.DestroyImmediate(probe.gameObject);
             }
@@ -49,17 +49,17 @@ namespace Hearthwoven.Panel
             {
                 var cap = Node("Caption", col); Size(cap, Column, 20);
                 if (!string.IsNullOrEmpty(b.Title) || !string.IsNullOrEmpty(b.Value)) { var head = Line(cap, 8); head.Box(barX, 0, numX + GroupNumW - barX, 20); Sect(head, b.Title, b.Value); }   // the island heading style, with its total
-                if (!string.IsNullOrEmpty(b.Text)) { var s = Label(cap, b.Text, 14, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.MidlineRight); s.characterSpacing = 14; OneLine(s).rectTransform.Box(pctX - 20, 0, pctW + 20, 20); }
+                if (!string.IsNullOrEmpty(b.Text)) { var s = Label(cap, b.Text, PanelLayout.Text.Floor, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.MidlineRight); s.characterSpacing = 14; OneLine(s).rectTransform.Box(pctX - 20, 0, pctW + 20, 20); }
             }
-            var track = new Color(PanelLook.Edge.r, PanelLook.Edge.g, PanelLook.Edge.b, 0.22f);
+            var track = PanelWash.GroupTrack.Game;
             foreach (var r in rows)
             {
                 var box = Node("Player", col); Size(box, Column, GroupRowH);
                 Marker(box, r.Icon, GroupShield, layout: false).Box(0, (GroupRowH - GroupShield) / 2, GroupShield, GroupShield);
                 // the name and when, on one line: too long for both, "as of 8 Oct 00:27" says "8 Oct 00:27" (PanelModel.GroupNoteFit); still too long, the name
                 // gives way, never the date (the shield and colour still say who it is; 0.8.1 review 1)
-                var name = OneLine(Label(box, r.Title, 18, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft));
-                var note = string.IsNullOrEmpty(r.Note) ? null : OneLine(Label(box, r.Note, 14, PanelLook.Faint, style: FontStyles.Italic, align: TextAlignmentOptions.MidlineLeft));
+                var name = OneLine(Label(box, r.Title, PanelLayout.Text.Row, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft));
+                var note = string.IsNullOrEmpty(r.Note) ? null : OneLine(Label(box, r.Note, PanelLayout.Text.Floor, PanelLook.Faint, style: FontStyles.Italic, align: TextAlignmentOptions.MidlineLeft));
                 float room = barX - GroupColGap / 2 - 48, nameNeed = Mathf.Ceil(name.preferredWidth) + 2, noteW = 0f;   // the name, 8 px, the note
                 if (note)
                 {
@@ -72,10 +72,10 @@ namespace Hearthwoven.Panel
                 {
                     Img(box, "Track", null, track).rectTransform.Box(barX, (GroupRowH - GroupTrackH) / 2, barW, GroupTrackH);
                     RoundedPart(box, "Bar", Hex(r.Colour, PanelLook.Accent)).rectTransform.Box(barX, (GroupRowH - PanelModel.BarFormBar) / 2, Mathf.Max(6f, barW * Mathf.Clamp01(r.Fraction)), PanelModel.BarFormBar);
-                    OneLine(Label(box, r.Value, 18, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineRight)).rectTransform.Box(numX, (GroupRowH - 28) / 2, GroupNumW, 28);
-                    OneLine(Label(box, r.Value2, 22, PanelLook.Gold, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineRight)).rectTransform.Box(pctX, (GroupRowH - 30) / 2, pctW, 30);
+                    OneLine(Label(box, r.Value, PanelLayout.Text.Row, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineRight)).rectTransform.Box(numX, (GroupRowH - 28) / 2, GroupNumW, 28);
+                    OneLine(Label(box, r.Value2, PanelLayout.Text.Title, PanelLook.Gold, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineRight)).rectTransform.Box(pctX, (GroupRowH - 30) / 2, pctW, 30);
                 }
-                else OneLine(Label(box, r.Text, 16, PanelLook.Muted, style: FontStyles.Italic, align: TextAlignmentOptions.MidlineLeft)).rectTransform.Box(barX, (GroupRowH - 24) / 2, Column - barX, 24);
+                else OneLine(Label(box, r.Text, PanelLayout.Text.Body, PanelLook.Muted, style: FontStyles.Italic, align: TextAlignmentOptions.MidlineLeft)).rectTransform.Box(barX, (GroupRowH - 24) / 2, Column - barX, 24);
             }
         }
 
@@ -92,7 +92,7 @@ namespace Hearthwoven.Panel
         void EveryoneChip(PanelView v)
         {
             var rule = Node("EveryoneRule", players); var rl = rule.gameObject.AddComponent<LayoutElement>(); rl.minWidth = rl.preferredWidth = 1; rl.minHeight = rl.preferredHeight = 30;
-            Img(rule, "Line", null, new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.35f)).rectTransform.Stretch();
+            Img(rule, "Line", null, PanelWash.EveryoneRule.Game).rectTransform.Stretch();
             var on = v.EveryoneOn; var off = !string.IsNullOrEmpty(v.EveryoneWhy) && !on;
             var img = Kit(players, PanelModel.EveryoneLabel, on ? "row-selected" : "row", raycast: true);
             var le = img.gameObject.AddComponent<LayoutElement>(); le.minHeight = le.preferredHeight = 48;
@@ -105,7 +105,7 @@ namespace Hearthwoven.Panel
                 x += EveryoneIconParts[k] * unit + 2;
             }
             const float textX = 14 + EveryoneIconW + 10;
-            var label = Label(img.transform, PanelModel.EveryoneLabel, off ? 16 : 18, on ? PanelLook.Gold : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
+            var label = Label(img.transform, PanelModel.EveryoneLabel, off ? PanelLayout.Text.Body : PanelLayout.Text.Row, on ? PanelLook.Gold : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft);
             label.textWrappingMode = TextWrappingModes.NoWrap; label.rectTransform.Stretch();
             label.rectTransform.offsetMin = new Vector2(textX, off ? 48 / 2 - 4 : 0); label.rectTransform.offsetMax = new Vector2(-16, off ? -3 : 0);
             TextMeshProUGUI sub = null;
@@ -137,8 +137,8 @@ namespace Hearthwoven.Panel
             if (root) { canvas.sortingLayerID = root.rootCanvas.sortingLayerID; canvas.sortingOrder = root.rootCanvas.sortingOrder + 10; }
             var group = tag.gameObject.AddComponent<CanvasGroup>(); group.ignoreParentGroups = true; group.blocksRaycasts = false; group.interactable = false;
             Img(tag, "Ground", null, new Color(0.03f, 0.025f, 0.02f, 0.96f)).rectTransform.Stretch();
-            Edge(tag, new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.5f));
-            var t = Label(tag, why, 15, PanelLook.Text, align: TextAlignmentOptions.TopLeft);
+            Edge(tag, PanelWash.TagEdge.Game);
+            var t = Label(tag, why, PanelLayout.Text.Small, PanelLook.Text, align: TextAlignmentOptions.TopLeft);
             t.rectTransform.Stretch(); t.rectTransform.offsetMin = new Vector2(12, 8); t.rectTransform.offsetMax = new Vector2(-12, -8);
             var w = Mathf.Min(EveryoneTagW, Mathf.Ceil(t.GetPreferredValues(why).x) + 24 + 2);   // one short sentence: as wide as it is, up to EveryoneTagW
             var h = Mathf.Ceil(t.GetPreferredValues(why, w - 24, 0).y) + 16;
@@ -150,9 +150,9 @@ namespace Hearthwoven.Panel
         // "Everyone" before the page's title (as the book chip of a fellow's book): a 1 px gold edge, gold at 16 %, 15 px bold; returns its width
         float EveryoneTag(RectTransform row, float x)
         {
-            var bg = Img(row, PanelModel.EveryoneLabel, null, new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.16f));
+            var bg = Img(row, PanelModel.EveryoneLabel, null, PanelWash.EveryoneTag.Game);
             Edge(bg.rectTransform, PanelLook.Gold);
-            var t = Label(bg.transform, PanelModel.EveryoneLabel, 15, PanelLook.Gold, style: FontStyles.Bold, align: TextAlignmentOptions.Center);
+            var t = Label(bg.transform, PanelModel.EveryoneLabel, PanelLayout.Text.Small, PanelLook.Gold, style: FontStyles.Bold, align: TextAlignmentOptions.Center);
             t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Stretch();
             var w = Mathf.Ceil(t.preferredWidth) + 20;
             bg.rectTransform.Box(x, 5, w, 26);

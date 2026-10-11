@@ -100,5 +100,21 @@ namespace Hearthwoven.Panel
 
         /// <summary>The first tag in the text, for a report line ("" when none).</summary>
         public static string FirstTag(string text) { var m = string.IsNullOrEmpty(text) ? null : Tag.Match(text); return m != null && m.Success ? m.Value : ""; }
+
+        // a whole TMP tag: Tag's start up to its '>' (Untagged)
+        static readonly Regex WholeTag = new Regex(@"</?(?:b|i|u|s|color|colour|size|alpha|mark|noparse|sprite|font|material|sup|sub|link|align|cspace|indent|line-height|line-indent|margin|mspace|nobr|page|pos|rotate|smallcaps|space|style|voffset|width|lowercase|uppercase|allcaps|br|gradient)(?:[\s=/][^<>]*)?>|<#[0-9A-Fa-f]{3,8}>",
+                                                   RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// 0.8.5: a name the game gives, as the book shows it: its TMP tags taken out and the spaces around it trimmed (Hildir's minibosses come
+        /// as "&lt;color=orange&gt;Brenna&lt;/color&gt; "; the game's own labels draw the color, the book's are plain). "&lt;3" and "&lt;Boar&gt;" are no
+        /// tags and stay. The one function every game name passes before a page shows it (PanelModel.Named, the kin map, a dungeon's name).
+        /// Text without a tag or outer space comes back as it came (no copy).
+        /// </summary>
+        public static string Untagged(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            return (text.IndexOf('<') < 0 ? text : WholeTag.Replace(text, "")).Trim();
+        }
     }
 }

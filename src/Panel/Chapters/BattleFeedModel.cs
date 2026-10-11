@@ -96,7 +96,15 @@ namespace Hearthwoven.Panel
         public static Block DealtFoes(PanelInput input, IEnumerable<DamageRow> rows, TimeWindow w, bool counted = true)
         {
             var dealt = DealtRows(rows);
-            var all = dealt.GroupBy(r => r.Other).Select(g => (key: g.Key, total: g.Sum(r => (double)r.Amount), types: g.GroupBy(r => r.Type).ToDictionary(x => x.Key, x => x.Sum(r => (double)r.Amount))))
+            // per foe (0.8.5: one row per name the game gives, FoeGroup) its damage by type and (0.8.5) each type's after (AfterPart), in one pass
+            var byFoe = new Dictionary<string, (Dictionary<string, double> types, Dictionary<string, DealtAmount> after)>();
+            foreach (var r in dealt)
+            {
+                var foe = FoeGroup(input, r.Other) ?? "";
+                if (!byFoe.TryGetValue(foe, out var f)) byFoe[foe] = f = (new Dictionary<string, double>(), new Dictionary<string, DealtAmount>());
+                Bump(f.types, r.Type, r.Amount); BumpDealt(f.after, r.Type, r);
+            }
+            var all = byFoe.Select(kv => (key: kv.Key, total: kv.Value.types.Values.Sum(), types: kv.Value.types, after: kv.Value.after))
                            .Where(x => x.total > 0).OrderByDescending(x => x.total).ThenBy(x => x.key, StringComparer.Ordinal).ToList();
             if (all.Count == 0) return null;
             var counts = counted ? FoeCountsIn(input, w) : null;
@@ -104,22 +112,24 @@ namespace Hearthwoven.Panel
             var shown = fold ? all.Take(RowTop - 1).ToList() : all;
             if (fold)
             {
-                var rest = all.Skip(RowTop - 1).ToList(); var types = new Dictionary<string, double>();
-                foreach (var r in rest) foreach (var kv in r.types) Bump(types, kv.Key, kv.Value);
-                shown.Add((FoldId, rest.Sum(r => r.total), types));
+                var rest = all.Skip(RowTop - 1).ToList(); var types = new Dictionary<string, double>(); var after = new Dictionary<string, DealtAmount>();
+                foreach (var r in rest) { foreach (var kv in r.types) Bump(types, kv.Key, kv.Value); foreach (var kv in r.after) after[kv.Key] = (after.TryGetValue(kv.Key, out var o) ? o : default) + kv.Value; }
+                shown.Add((FoldId, rest.Sum(r => r.total), types, after));
             }
-            var max = shown.Max(x => x.total); var restCount = all.Count - (RowTop - 1);
+            var max = shown.Max(x => x.total); var restCount = all.Count - (RowTop - 1); var earlier = EarlierWords(input, w);
             var foes = new List<Block>();
             foreach (var s in shown)
             {
                 var c = s.key == FoldId ? null : counts?.Get(s.key);
                 var parts = Parts(s.types, s.total);
+                foreach (var p in parts) if (s.after.TryGetValue(p.Id, out var a)) AfterPart(p, a, earlier);
                 var pips = c == null ? null : Pips(c.Defeated, c.GotAway, c.Fighting);
                 if (pips != null) parts.Add(pips);
                 foes.Add(SourcePicture(input, new Block
                 {
                     Kind = "source", Id = s.key, Title = s.key == FoldId ? OthersLabel(restCount) : Who(input, s.key), Value = NAtLeast(s.total), Fraction = (float)(s.total / max),
                     Value2 = c == null ? null : Badge(c.Separate), Src = SrcPc, Source = TagMeasured, Items = parts,
+                    Text = ThroughLine(s.after.Values.Aggregate(new DealtAmount(), (x, y) => x + y)),   // 0.8.5: the line's closing words
                 }, s.types));
             }
             var key = PipKey(foes.Select(f => f.Items.FirstOrDefault(i => i.Kind == "pips")));
@@ -197,6 +207,53 @@ namespace Hearthwoven.Panel
             return (int)t.TotalHours + " h ago";
         }
 
+        // ---------- 0.8.5: fights of earlier sessions (KeptFights) ----------
+
+        /// <summary>Your fights of earlier sessions in this world (PanelInput.KeptSessions), newest first: the feed lists them under this session's;
+        /// none on a fellow's book (their copy carries this session's feed only).</summary>
+        public static List<FoeFight> KeptFightsOf(PanelInput input) =>
+            input != null && input.IsSelf && input.KeptSessions != null ? input.KeptSessions.SelectMany(s => s.Fights).ToList() : new List<FoeFight>();
+
+        /// <summary>A fight that ended before this session began: yours kept from an earlier session, or a fellow's from before you came in.</summary>
+        public static bool BeforeThisSession(PanelInput input, DateTime endUtc)
+        {
+            var from = input == null ? null : input.IsSelf ? input.SessionStartUtc : input.ViewerSessionStartUtc;
+            return from.HasValue && endUtc < from.Value;
+        }
+
+        /// <summary>How long ago in plain words (the book's time words, AwayLength): "45 minutes ago", "3 hours ago", "2 days ago".</summary>
+        public static string AgoWords(TimeSpan t) => AwayLength(t) + " ago";
+
+        /// <summary>A moment as people say it, in your own time: "at 18:05" (today), "yesterday 21:12", "Thursday 21:12" (within the week), "28 Sep 21:12".</summary>
+        static string DayClock(PanelInput input, DateTime utc)
+        {
+            var d = Local(input, utc); var today = Local(input, input.NowUtc).Date; var days = (today - d.Date).Days; var clock = d.ToString("HH:mm", Inv);
+            return days <= 0 ? "at " + clock : days == 1 ? "yesterday " + clock : days < 7 ? d.ToString("dddd", Inv) + " " + clock : ShortDate(d, today) + " " + clock;
+        }
+
+        /// <summary>
+        /// When Last fight's fight was, for its head (Joost: "show your last fight, but indicate that it was x hours/days ago"): one of this session
+        /// as before, the time of day first ("21:12 · 4 min · 5 min ago"); one that ended before this session began how long ago first, in plain
+        /// words, then when ("3 hours ago, at 18:05 · 4 min", "2 days ago, Thursday 21:12 · 4 min").
+        /// </summary>
+        public static string FightWhen(PanelInput input, DateTime startUtc, DateTime endUtc, string length) =>
+            BeforeThisSession(input, endUtc) ? AgoWords(input.NowUtc - endUtc) + ", " + DayClock(input, startUtc) + " · " + length
+                                             : Clock(input, startUtc, false) + " · " + length + " · " + Ago(input.NowUtc - endUtc);
+
+        /// <summary>The feed's quiet line over an earlier session's fights: its day and its span in your own time, "Yesterday, 20:05 to 23:40",
+        /// "Earlier today, 14:10 to 15:02", "Thursday, 20:05 to 23:40", "28 Sep, 20:05 to 23:40".</summary>
+        public static string SessionWords(PanelInput input, KeptSession s)
+        {
+            var from = s.FromUtc > DateTime.MinValue ? s.FromUtc : s.Fights.Select(f => f.StartUtc).DefaultIfEmpty(s.ToUtc).Min();
+            var a = Local(input, from); var b = Local(input, s.ToUtc); var today = Local(input, input.NowUtc).Date; var days = (today - a.Date).Days;
+            var day = days <= 0 ? "Earlier today" : days == 1 ? "Yesterday" : days < 7 ? a.ToString("dddd", Inv) : ShortDate(a, today);
+            return day + ", " + a.ToString("HH:mm", Inv) + " to " + b.ToString("HH:mm", Inv);
+        }
+
+        public const string KeptAboutTitle = "Earlier sessions";
+        public static readonly string KeptAbout = "This PC keeps your newest " + KeptFights.MaxFoes + " foes of earlier sessions in this world, up to " + KeptFights.MaxAge.Days +
+                                                  " days back, and the parts of the fellow players who shared those fights, as their copies showed them then.";
+
         static string Names(IList<string> names) => names.Count == 0 ? "" : names.Count == 1 ? names[0] : string.Join(", ", names.Take(names.Count - 1).ToArray()) + " and " + names[names.Count - 1];
 
         /// <summary>A name as a fellow's book says it (0.8.2): the viewer's own marked "Rowan (you)", as Company marks it (a fellow's book never says
@@ -270,6 +327,8 @@ namespace Hearthwoven.Panel
         public sealed class FeedPick
         {
             public DateTime? From; public Func<FoeEncounter, bool> Pass; public bool Filtered; public string Key = "";
+            /// <summary>0.8.5: a line after what is left out (your Session: where the earlier sessions' fights show); null: none.</summary>
+            public string After;
             public bool InWindow(FoeEncounter e) => !From.HasValue || e.EndUtc >= From.Value;
             public bool Shows(FoeEncounter e) => InWindow(e) && (Pass == null || Pass(e));
         }
@@ -299,10 +358,13 @@ namespace Hearthwoven.Panel
             for (int i = 0; i < shown.Count; i++)
             {
                 var fb = FightBlock(input, shown[i].f, shown[i].e, largest);
+                // 0.8.5: over the first fight shown of an earlier session, its day and span ("Yesterday, 20:05 to 23:40"), in place of a quiet time
+                var kept = shown[i].f.Kept;
+                if (kept != null && (i == 0 || shown[i - 1].f.Kept != kept)) fb.Items.Insert(0, new Block { Kind = "session", Text = SessionWords(input, kept) });
                 // the quiet time between this fight and the next one shown below it; when the window or the filter hides fights between them,
                 // the time and how many lie between. The last fight shown has none: the fight before it is not on the page (the window, the
                 // filter or the cap leaves it out; review 0.8.1 batch 6: its gap pointed out of the window, at the foot of the Timeline)
-                if (i + 1 < shown.Count)
+                if (i + 1 < shown.Count && shown[i + 1].f.Kept == kept)
                 {
                     int at = fights.IndexOf(shown[i].f), below = fights.IndexOf(shown[i + 1].f);
                     var quiet = shown[i].f.StartUtc - shown[i + 1].f.EndUtc;
@@ -312,11 +374,12 @@ namespace Hearthwoven.Panel
             }
             var leftFights = matched.Count - shown.Count; var leftFoes = matched.Sum(m => m.e.Count) - n;
             // REVIEW-08 #9: foes of this session the book no longer keeps (0.8.2: or a fellow's copy does not carry); said where the window reaches
-            // back past the oldest fight it keeps
-            var older = FeedLeftOut(input);
+            // back past the oldest fight it keeps (0.8.5: not where earlier sessions' fights go on below it)
+            var keptOn = fights.Any(f => f.Kept != null);
+            var older = keptOn ? 0 : FeedLeftOut(input);
             if (pick?.From != null && fights[fights.Count - 1].StartUtc < pick.From.Value) older = 0;
             var that = pick != null && pick.Filtered ? " that match" : "";
-            var where = that.Length > 0 ? that : narrowed ? " in this window" : older > 0 ? "" : " this session";
+            var where = that.Length > 0 ? that : narrowed || keptOn ? " in this window" : older > 0 ? "" : " this session";
             // the cap cuts only into the first fight shown (the others fit whole or not at all): its foes left out, then the earlier fights
             var cut = shown.Count == 1 ? matched[0].e.Count - shown[0].e.Count : 0; var earlier = leftFoes - cut;
             var parts = new List<string>();
@@ -326,6 +389,7 @@ namespace Hearthwoven.Panel
             if (older > 0) note = (note == null ? "" : note + " ") + "Older fights (" + N(older) + (older == 1 ? " foe" : " foes") + (input == null || input.IsSelf
                 ? ") are no longer kept: the book keeps your newest " + BattleRecorder.MaxFeed + " foes."
                 : ") are not in " + Name(input) + "'s copy: it carries the newest " + FeedShare.MaxFoes + " foes.");
+            if (!string.IsNullOrEmpty(pick?.After)) note = (note == null ? "" : note + " ") + pick.After;
             return new Block { Kind = "feed", Tone = view, Note = note, Count = matched.Count, Items = items };
         }
 
@@ -336,7 +400,8 @@ namespace Hearthwoven.Panel
         /// <summary>
         /// The feed as the page lays it out (0.8.1, Joost: every fight its own card): FeedBlock split into one "feed" block per fight (the view in
         /// Tone, the one fight in Items), each its own island (Islands.cs); between two of them a FeedLineKind line "gap" with the quiet time, and
-        /// after the last one a FeedLineKind line "note" with what is left out, both outside the islands. Empty when FeedBlock is null.
+        /// after the last one a FeedLineKind line "note" with what is left out, both outside the islands; 0.8.5: over an earlier session's first
+        /// fight a FeedLineKind line "session" with its day and span. Empty when FeedBlock is null.
         /// </summary>
         public static List<Block> FeedBlocks(Block feed)
         {
@@ -345,7 +410,9 @@ namespace Hearthwoven.Panel
             foreach (var f in feed.Items)
             {
                 var gap = (f.Items ?? new List<Block>()).FirstOrDefault(x => x.Kind == "gap");
-                if (gap != null) f.Items = f.Items.Where(x => x != gap).ToList();
+                var session = (f.Items ?? new List<Block>()).FirstOrDefault(x => x.Kind == "session");
+                if (gap != null || session != null) f.Items = f.Items.Where(x => x != gap && x != session).ToList();
+                if (session != null) list.Add(new Block { Kind = FeedLineKind, Tone = "session", Text = session.Text });
                 list.Add(new Block { Kind = "feed", Tone = feed.Tone, Count = 1, Items = new List<Block> { f } });
                 if (gap != null) list.Add(new Block { Kind = FeedLineKind, Tone = "gap", Text = gap.Text });
             }
@@ -365,44 +432,69 @@ namespace Hearthwoven.Panel
         // refreshes every 2 s, the feed changes only with a hit, a kill, a fight's end, or (a short window) a foe that leaves the window, which
         // the key's count of foes in it notes. The blocks carry no Source, so the build's later passes leave them as they are
         // (0.8.2: a fellow's shared feed is one object per copy received, read by whose book it is and who is looking)
-        static object feedRec; static int feedAt = -1; static string feedView, feedKey, feedWho; static Func<DateTime, DateTime> feedLocal; static List<Block> feedBlocks;
+        // (0.8.5: and the earlier sessions' fights it lists, which change only with a new session)
+        static object feedRec, feedKept; static int feedAt = -1; static string feedView, feedKey, feedWho; static Func<DateTime, DateTime> feedLocal; static List<Block> feedBlocks;
         static List<Block> FeedOf(PanelInput input, List<FoeFight> fights, string view, FeedPick pick)
         {
             object rec = input.IsSelf ? (object)input.Battle : input.SharedFeed;
             var at = input.IsSelf ? input.Battle?.Version ?? -1 : 0; var who = input.IsSelf ? "" : input.PlayerName + "|" + input.ViewerName;
-            if (rec != null && ReferenceEquals(rec, feedRec) && at == feedAt && view == feedView && pick.Key == feedKey && who == feedWho && feedLocal == input.ToLocal && feedBlocks != null) return feedBlocks;
+            if (rec != null && ReferenceEquals(rec, feedRec) && ReferenceEquals(input.KeptSessions, feedKept) && at == feedAt && view == feedView && pick.Key == feedKey && who == feedWho && feedLocal == input.ToLocal && feedBlocks != null) return feedBlocks;
             var b = FeedBlocks(FeedBlock(input, fights, view, pick));
-            feedRec = rec; feedAt = at; feedView = view; feedKey = pick.Key; feedWho = who; feedLocal = input.ToLocal; feedBlocks = b;
+            feedRec = rec; feedKept = input.KeptSessions; feedAt = at; feedView = view; feedKey = pick.Key; feedWho = who; feedLocal = input.ToLocal; feedBlocks = b;
             return b;
         }
 
         // ---------- the feed's window and filter (0.8.1) ----------
 
-        /// <summary>The windows the feed can show: the short ones and Session (the recorder holds this session's fights, no days, no earlier session).</summary>
+        /// <summary>The windows a fellow's feed can show: the short ones and Session (their copy holds this session's fights, no days, no earlier
+        /// session). Your own feed shows every window (0.8.5): the days and All reach back into the fights kept from earlier sessions.</summary>
         public static bool FeedWindowOpen(TimeWindow w) => IsShortWindow(w);
+        static bool FeedWindowOpen(PanelInput input, TimeWindow w) => (input != null && input.IsSelf) || FeedWindowOpen(w);
         public const string FeedDaysWhy = "The feed holds this session's fights only, not days. Session shows every fight it holds.",
                             FeedAllWhy = "The feed holds this session's fights only. Damage and Foes count earlier sessions.";
         /// <summary>0.8.2: a fellow's Session with no fight since you came in (their earlier fights lie before it).</summary>
         public static string FeedBeforeYouLine(PanelInput i) => "Session holds the fights " + SinceViewer(i) + ". Choose 3 h for " + Name(i) + "'s fights before that.";
         public const string NoFightIn = "No fight in the ", FeedLongerLine = "Choose a longer window, or Session for every fight the feed holds.",
+                            FeedLongerKept = "Choose a longer window: All shows every fight the book keeps.",
                             FeedClearLine = "Clear the filter to see every fight in this window.";
         public const string FeedFilterAboutTitle = "Window and filter";
         public const string FeedFilterAbout = "The window, Biome and Foe show only the foes that pass them: a fight then says how many of its foes show, and its damage is theirs. The newest 40 that pass are drawn.";
 
-        /// <summary>
-        /// The feed's window chips: the book's one window set (Damage's chips), the days and All greyed with their own reason. The window shown:
-        /// the book's chosen one when it is a window the feed can show and it was chosen this game (PanelState.WindowPicked); else the one the feed
-        /// last showed (FeedWindowKey, kept between sessions as its view is), else Session. Only a feed window chosen this game is noted (review
-        /// 0.8.1 batch 6: 7 days chosen on Deeds overwrote the kept 1 h, and the next session opened on Session).
-        /// </summary>
-        static TimeWindow FeedWindowChips(PanelState state, PanelView view)
+        /// <summary>0.8.5: your Session with no fight yet while earlier sessions' fights are kept: when the last one was, and the window that shows it.</summary>
+        public static string FeedEarlierLine(PanelInput input, DateTime lastEndUtc) =>
+            "Your last fight was " + AgoWords(input.NowUtc - lastEndUtc) + ". Choose " + WindowShort(FeedWindowHolding(input, lastEndUtc, AllWindows[0])) + " or a longer window to see it.";
+
+        /// <summary>Where the feed's window starts (null: no start): the short windows their cut, the days their first local midnight, a fellow's
+        /// Session yours (B33); your Session holds this session's fights only, so it needs no cut, and All none.</summary>
+        static DateTime? FeedFrom(PanelInput input, TimeWindow w) =>
+            IsDayWindow(w) ? WindowStartUtc(input, w) : Cutoff(w, input.NowUtc) ?? (w == TimeWindow.Session && !input.IsSelf ? SessionFrom(input) : null);
+
+        /// <summary>The first window from <paramref name="from"/> on (in the chips' order) that shows a fight which ended at <paramref name="endUtc"/>:
+        /// never Session (it holds this session's fights only); All always.</summary>
+        static TimeWindow FeedWindowHolding(PanelInput input, DateTime endUtc, TimeWindow from)
         {
-            var chosen = state.WindowPicked && FeedWindowOpen(state.Window);
-            TimeWindow? kept = state.View.TryGetValue(FeedWindowKey, out var k) && Enum.TryParse(k, out TimeWindow kw) && Enum.IsDefined(typeof(TimeWindow), kw) && FeedWindowOpen(kw) ? kw : (TimeWindow?)null;
-            var shown = chosen ? state.Window : kept ?? (FeedWindowOpen(state.Window) ? state.Window : TimeWindow.Session);
+            foreach (var w in AllWindows.SkipWhile(x => x != from))
+                if (w != TimeWindow.Session && (!(FeedFrom(input, w) is DateTime start) || endUtc >= start)) return w;
+            return TimeWindow.SinceInstall;
+        }
+
+        /// <summary>
+        /// The feed's window chips: the book's one window set (Damage's chips); on a fellow's book the days and All greyed with their own reason.
+        /// The window shown: the book's chosen one when it is a window the feed can show and it was chosen this game (PanelState.WindowPicked); else
+        /// the one the feed last showed (FeedWindowKey, kept between sessions as its view is), else Session. Only a feed window chosen this game is
+        /// noted (review 0.8.1 batch 6: 7 days chosen on Deeds overwrote the kept 1 h, and the next session opened on Session). 0.8.5: your own feed
+        /// with no fight yet this session and no window chosen this game opens on the first window from that one on that shows your last fight
+        /// (after a restart the feed kept Session, which holds none yet); the window kept stays as it was.
+        /// </summary>
+        static TimeWindow FeedWindowChips(PanelInput input, PanelState state, PanelView view, int liveFights, List<FoeFight> earlier)
+        {
+            var chosen = state.WindowPicked && FeedWindowOpen(input, state.Window);
+            TimeWindow? kept = state.View.TryGetValue(FeedWindowKey, out var k) && Enum.TryParse(k, out TimeWindow kw) && Enum.IsDefined(typeof(TimeWindow), kw) && FeedWindowOpen(input, kw) ? kw : (TimeWindow?)null;
+            var shown = chosen ? state.Window : kept ?? (FeedWindowOpen(input, state.Window) ? state.Window : TimeWindow.Session);
+            if (!chosen && liveFights == 0 && earlier.Count > 0) shown = FeedWindowHolding(input, earlier[0].EndUtc, shown);
             view.HasFilters = true; view.ShownWindow = shown;
             foreach (var w in AllWindows)
-                view.Windows.Add(new Choice { Id = w.ToString(), Label = WindowShort(w), Selected = w == shown, Disabled = !FeedWindowOpen(w), Why = FeedWindowOpen(w) ? null : IsDayWindow(w) ? FeedDaysWhy : FeedAllWhy });
+                view.Windows.Add(new Choice { Id = w.ToString(), Label = WindowShort(w), Selected = w == shown, Disabled = !FeedWindowOpen(input, w), Why = FeedWindowOpen(input, w) ? null : IsDayWindow(w) ? FeedDaysWhy : FeedAllWhy });
             if (chosen) state.View[FeedWindowKey] = shown.ToString();
             return shown;
         }
@@ -418,12 +510,15 @@ namespace Hearthwoven.Panel
             var biome = BiomeRow(input);
             foreach (var b in inWindow.Select(e => e.Biome).Concat(Chosen(state, FeedFilter, "biome")).Distinct().ToList())
                 if (!string.IsNullOrEmpty(b) && biome.Options.All(o => o.Id != b)) biome.Options.Add(new FacetOption { Id = b, Label = BiomeName(b) });
+            // 0.8.5: a chip per foe by the game's name (FoeGroup); a foe chosen before (one kind of a name) is that name's chip
+            var picked = Chosen(state, FeedFilter, "foe");
+            for (int i = picked.Count - 1; i >= 0; i--) { var g = FoeGroup(input, picked[i]); if (g == picked[i]) continue; if (picked.Contains(g)) picked.RemoveAt(i); else picked[i] = g; }
             var foe = new FacetDef { Id = "foe", Title = "Foe", Bar = false,
-                                     Options = inWindow.GroupBy(e => e.Kind).OrderByDescending(g => g.Count()).ThenBy(g => Who(input, g.Key), StringComparer.Ordinal).Select(g => new FacetOption { Id = g.Key, Label = Who(input, g.Key) }).ToList() };
+                                     Options = inWindow.GroupBy(e => FoeGroup(input, e.Kind)).OrderByDescending(g => g.Count()).ThenBy(g => Who(input, g.Key), StringComparer.Ordinal).Select(g => new FacetOption { Id = g.Key, Label = Who(input, g.Key) }).ToList() };
             foreach (var id in Chosen(state, FeedFilter, "foe").Where(id => foe.Options.All(o => o.Id != id)).ToList()) foe.Options.Add(new FacetOption { Id = id, Label = Who(input, id) });
             var defs = new[] { biome, foe }.Where(d => d.Options.Count >= 2 || Chosen(state, FeedFilter, d.Id).Count > 0).ToList();
             if (defs.Count == 0) return (null, false, null);
-            var items = inWindow.Select((e, i) => { var it = new FacetItem { Key = i.ToString(Inv), Weight = 1 }; it.Values["biome"] = e.Biome ?? ""; it.Values["foe"] = e.Kind ?? ""; return it; }).ToList();
+            var items = inWindow.Select((e, i) => { var it = new FacetItem { Key = i.ToString(Inv), Weight = 1 }; it.Values["biome"] = e.Biome ?? ""; it.Values["foe"] = FoeGroup(input, e.Kind) ?? ""; return it; }).ToList();
             var res = Facets(state, FeedFilter, defs, items, "foes", SrcPc, "foe", "foes", "All foes");
             var line = (res.Shown.Count < items.Count ? N(res.Shown.Count) + " of " : "") + N(items.Count) + (items.Count == 1 ? " foe" : " foes");
             res.Bar.Text = line; res.Bar.Tone = "compact";
@@ -439,7 +534,8 @@ namespace Hearthwoven.Panel
         public const string EarlierFights = "Earlier fights";
         public static readonly (string title, string text)[] FeedAbout =
         {
-            ("The feed", "Your fights this session, newest first. A fight ends after a minute without hits. Kept on this PC for this session. Fellow players who share see your newest " + FeedShare.MaxFoes + " foes; anyone who does not share is another player there."),
+            ("The feed", "Your fights, newest first: this session's, then your earlier sessions' in this world. A fight ends after a minute without hits. Session shows this session's only. This PC keeps your newest " +
+                         KeptFights.MaxFoes + " foes of earlier sessions, up to " + KeptFights.MaxAge.Days + " days back. Fellow players who share see this session's newest " + FeedShare.MaxFoes + " foes; anyone who does not share is another player there."),
             ("What became of a foe", "Defeated by you: the game counted the kill for you alone. Defeated with: fellow players hit it too. Survived: it still stood when the fight ended. Got away: the game took it away without a kill."),
             ("Damage", "Dealt is before the foe's armor, as on Damage. Received is after your armor, as on Defense."),
         };
@@ -462,18 +558,21 @@ namespace Hearthwoven.Panel
             view.Heading = FeedHeading + ", this session";
             // 0.8.2 (Joost on a fellow's book: "why no feed? I want that in"): a fellow's feed as their copy shares it; a copy from before 0.8.2 has none
             if (!input.IsSelf && input.SharedFeed == null) { view.Heading = FeedHeading; view.Blocks.Add(Empty(Name(input) + "'s feed is not shared", FeedNotShared(input))); Plate(view, "ui:chapter-battle"); return; }
-            var fights = BattleFeed(input);
-            if (fights == null || fights.Count == 0) { view.Blocks.Add(Empty(NoFightYet, input.IsSelf ? NoFightText : Name(input) + "'s fights show up here as " + Name(input) + " plays, newest first.")); Plate(view, "ui:chapter-battle"); return; }
+            var live = BattleFeed(input) ?? new List<FoeFight>(); var earlier = KeptFightsOf(input);   // 0.8.5: and your earlier sessions' (KeptFights)
+            if (live.Count == 0 && earlier.Count == 0) { view.Blocks.Add(Empty(NoFightYet, input.IsSelf ? NoFightText : Name(input) + "'s fights show up here as " + Name(input) + " plays, newest first.")); Plate(view, "ui:chapter-battle"); return; }
             // 0.8.1: the window chips (the heading follows: "Battle feed, last 30 minutes") and the Biome and Foe rows, Damage's pattern
             view.Heading = FeedHeading;
-            var w = FeedWindowChips(state, view);
+            var w = FeedWindowChips(input, state, view, live.Count, earlier);
             view.Scope = WindowLabel(w) + " · " + (input.IsSelf ? "your fights" : Name(input) + "'s fights");
-            // B33: a fellow's Session counts from when you came in (SessionFrom), as their Deaths and Received from do; the short windows are their own times
-            var from = Cutoff(w, input.NowUtc) ?? (w == TimeWindow.Session && !input.IsSelf ? SessionFrom(input) : null);   // your feed is this session's fights: no cut (0.8.2)
+            // Session is this session's fights (0.8.2: yours with no cut); the other windows reach back into the earlier sessions' (0.8.5). B33: a
+            // fellow's Session counts from when you came in (SessionFrom), as their Deaths and Received from do; the short windows are their own times
+            var fights = w == TimeWindow.Session ? live : live.Concat(earlier).ToList();
+            var from = FeedFrom(input, w);
             var inWindow = fights.SelectMany(f => f.Entries).Where(e => !from.HasValue || e.EndUtc >= from.Value).ToList();
             var (bar, narrowed, pass) = FeedFilterBar(input, state, inWindow);
             var feedPick = new FeedPick { From = from, Pass = narrowed ? pass : null, Filtered = narrowed };
             feedPick.Key = w + "|" + inWindow.Count + "|" + (narrowed ? string.Join(",", Chosen(state, FeedFilter, "biome").ToArray()) + "|" + string.Join(",", Chosen(state, FeedFilter, "foe").ToArray()) : "");
+            if (w == TimeWindow.Session && earlier.Count > 0) feedPick.After = "Session shows this session's fights only. Choose " + WindowShort(FeedWindowHolding(input, earlier[0].EndUtc, TimeWindow.Today)) + " for your earlier ones.";
             var shown = fights.Select(f => f.Entries.Count(feedPick.Shows)).Where(c => c > 0).ToList();
             AboutLines(view, FeedAboutOf(input));
             AboutLines(view, (FeedFilterAboutTitle, FeedFilterAbout));
@@ -482,7 +581,8 @@ namespace Hearthwoven.Panel
             {
                 view.Blocks.Add(narrowed ? Empty(NothingForChoice, FeedClearLine)
                     : w == TimeWindow.Session && from.HasValue ? Empty("No fight " + SinceViewer(input), FeedBeforeYouLine(input))   // a fellow's Session: none since you came in
-                    : Empty(NoFightIn + WindowLabel(w).ToLowerInvariant(), FeedLongerLine));
+                    : w == TimeWindow.Session && earlier.Count > 0 ? Empty(NoFightYet, FeedEarlierLine(input, earlier[0].EndUtc))   // 0.8.5: yours, right after a restart
+                    : Empty(NoFightIn + WindowLabel(w).ToLowerInvariant(), input.IsSelf ? FeedLongerKept : FeedLongerLine));
                 Plate(view, "ui:chapter-battle");
                 return;
             }
@@ -540,7 +640,7 @@ namespace Hearthwoven.Panel
             you.Received = f.ReceivedTotal;
             var parts = new List<FightPart> { you };
             var with = f.With();
-            var sharers = (input.Fellows ?? new List<PanelInput>()).Where(x => x != null && x != input && !SameName(x.PlayerName, input.PlayerName)).ToList();
+            var sharers = (input.Fellows ?? new List<PanelInput>()).Where(x => x != null && x != input && !SameName(x.PlayerName, input.PlayerName) && f.Kept == null).ToList();   // 0.8.5: a kept fight's minutes are in no copy now
             foreach (var fellow in sharers.Where(x => with.Any(n => SameName(n, x.PlayerName))))
             {
                 var p = PartOf(fellow, f);
@@ -567,8 +667,9 @@ namespace Hearthwoven.Panel
             view.Heading = LastFightLabel;
             // 0.8.2 ("same for last fight"): a fellow's last fight as their copy shares it; a copy from before 0.8.2 has none
             if (!input.IsSelf && input.SharedFeed == null) { view.Blocks.Add(Empty(Name(input) + "'s last fight is not shared", FeedNotShared(input))); Plate(view, "ui:chapter-battle"); return; }
-            var f = BattleFeed(input, 1)?.FirstOrDefault();
+            var f = BattleFeed(input, 1)?.FirstOrDefault() ?? KeptFightsOf(input).FirstOrDefault();   // 0.8.5: none this session yet, your last one kept from before
             if (f == null) { view.Blocks.Add(Empty(NoFightYet, input.IsSelf ? LastFightEmptyText : "After a fight, this page shows it: " + Name(input) + "'s part and the part of the fellow players near " + Name(input) + ".")); Plate(view, "ui:chapter-battle"); return; }
+            if (f.Kept != null) { view.Scope = "An earlier session · your last fight"; AboutLines(view, (KeptAboutTitle, KeptAbout)); }
             var parts = FightParts(input, f);
             var counted = parts.Where(p => p.Has).ToList(); var fellows = parts.Where(p => !p.You).ToList(); var together = counted.Count > 1;
             var dealt = counted.Sum(p => p.DealtTotal);
@@ -602,7 +703,7 @@ namespace Hearthwoven.Panel
             // damage rows: most damage first, one scale for the fight. Your own only: this PC does not know a fellow player's damage per foe
             if (fought.Count > 0)
             {
-                var kinds = fought.GroupBy(e => e.Kind).Select(g =>
+                var kinds = fought.GroupBy(e => FoeGroup(input, e.Kind)).Select(g =>   // 0.8.5: a row per foe by the game's name
                 {
                     var types = new Dictionary<string, double>();
                     foreach (var e in g) for (int t = 0; t < BattleRecorder.Types.Length; t++) if (e.Dealt[t] > 0) Bump(types, BattleRecorder.Types[t], e.Dealt[t]);
@@ -630,7 +731,7 @@ namespace Hearthwoven.Panel
                 });
             Plate(view, "ui:chapter-battle", NearLine(input, f, parts));
             var plate = view.Blocks[0];
-            plate.Pill = Clock(input, f.StartUtc, false) + " · " + (f.Open ? "still on" : FightLength(f.Length)) + (f.Open ? "" : " · " + Ago(input.NowUtc - f.EndUtc));
+            plate.Pill = f.Open ? Clock(input, f.StartUtc, false) + " · still on" : FightWhen(input, f.StartUtc, f.EndUtc, FightLength(f.Length));
             plate.Items.Insert(0, new Block { Kind = "headlink", Id = "Battle/" + FeedPage, Title = EarlierFights, Icon = FeedIcon });
         }
 
@@ -645,7 +746,7 @@ namespace Hearthwoven.Panel
             var sharing = (input.Fellows ?? new List<PanelInput>()).Where(x => x != null && x != input && !SameName(x.PlayerName, input.PlayerName)).Select(x => x.PlayerName).ToList();
             var inIt = with.Where(n => sharing.Any(s => SameName(s, n))).ToList();
             var notSharing = with.Where(n => !sharing.Any(s => SameName(s, n)) && !SameName(n, input.PlayerName)).ToList();
-            var elsewhere = sharing.Where(s => !with.Any(n => SameName(n, s))).ToList();
+            var elsewhere = f.Kept != null ? new List<string>() : sharing.Where(s => !with.Any(n => SameName(n, s))).ToList();   // 0.8.5: who shares now says nothing about an earlier session
             var near = WithWords(input, inIt.Concat(notSharing), f.Outside);
             var line = near.Length > 0 ? "Near " + Subject(input) + " in this fight: " + near + "." : "Nobody was near " + Subject(input) + " in this fight.";
             var apart = notSharing.Count + f.Outside;

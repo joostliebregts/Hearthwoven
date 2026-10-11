@@ -35,7 +35,7 @@ static class SelfCheckTests
         var cfg = new[] { "## Settings file", "[General]", "", "## Opens the radial", "# Setting type: KeyCode", "# Default value: G", "Keyboard Radial Menu = G",
                           "[Other]", "Toggle = LeftShift + G", "Name = Gandalf", "Inventory = Tab", "# Tab = G" };
         var g = CheckBook.KeyClashes("ZenDragon.Zen.ModLib.cfg", cfg, "G");
-        Check(g.Count == 2 && g[0] == "ZenDragon.Zen.ModLib.cfg [General] Keyboard Radial Menu = G" && g[1].EndsWith("(with a modifier)") && g[1].Contains("[Other] Toggle"),
+        Check(g.Count == 2 && new[] { "ZenDragon.Zen.ModLib.cfg", "General", "Keyboard Radial Menu" }.All(g[0].Contains) && !g[0].Contains("modifier") && new[] { "Other", "Toggle", "modifier" }.All(g[1].Contains),
               "filter key: the scan finds a KeyCode and a shortcut bound to G, never a word or a comment: " + string.Join(" | ", g));
         Check(CheckBook.KeyClashes("a.cfg", cfg, "Tab").Count == 1 && CheckBook.KeyClashes("a.cfg", cfg, "K").Count == 0 && CheckBook.KeyClashes("a.cfg", null, "G").Count == 0,
               "filter key: Tab found once, K not at all, no file no clash");

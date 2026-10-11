@@ -15,9 +15,9 @@ namespace Hearthwoven.Panel
     /// with this PC's game data (names, kinds, hammer tabs), as PanelUi reads it for their book.
     ///
     /// Windows: All is each fellow's last shared totals; 10 min to Session come from what reached this PC from them while you played (their
-    /// trail, B33), the short ones only when their copies come live; the day windows only for Battle's damage dealt (fellows share days for
-    /// nothing else; 0.9: by weapon kind and type, so By weapon and By type work there too), so on every other page they are greyed with one
-    /// line on the plate. A fellow whose copy cannot fill the window is named on their row and left out of the sum, and the hero says who is
+    /// trail, B33), the short ones only when their copies come live; the day windows for Battle's damage dealt (0.9: by weapon kind and type,
+    /// so By weapon and By type work there too) and, 0.8.5, the Deeds pages (each page's hero and first bar per day, DeedsDays.cs) and Voyages'
+    /// Sailing and Cargo (the voyage days: km sailed, at the helm, the cargo per item), so on the other pages they are greyed with one line on the plate. A fellow whose copy cannot fill the window is named on their row and left out of the sum, and the hero says who is
     /// in it. Pages whose numbers do not add up grey the chip with a reason
     /// (EveryoneOff). The chip's state is one flag for the whole book (PanelState.Everyone), kept in PanelPrefs: it answers "whose book am I
     /// reading" like the names beside it, which also hold across pages.
@@ -29,8 +29,9 @@ namespace Hearthwoven.Panel
         public const string GroupShareCaption = "share", GroupThisPc = "this PC", GroupLive = "live", GroupAsOf = "as of ";
         /// <summary>The chip alone (nobody else shares yet): its second line and the reason on hover.</summary>
         public const string EveryoneAloneSub = "nobody else yet", EveryoneAloneWhy = "Nobody else shares yet. The group view fills in once fellow players share too.";
-        /// <summary>The plate's line on a page whose day windows the group cannot fill (PICKS: fellows share days only for damage dealt).</summary>
-        public const string GroupDaysLine = "Today, 7 days and 30 days: fellow players share days only for damage dealt.";
+        /// <summary>The plate's line on a page whose day windows the group cannot fill (PICKS: fellows share days only for damage dealt; 0.8.5 also
+        /// for the Deeds pages, Sailing and Cargo).</summary>
+        public const string GroupDaysLine = "Today, 7 days and 30 days: fellow players share their days for damage dealt, their deeds and their voyages, not for this page.";
         /// <summary>Foes' line for the greyed day windows (0.8.2): a fellow's day is one total, not split by foe.</summary>
         public const string GroupFoesDaysLine = "Today, 7 days and 30 days: fellow players share days as one total, not per foe.";
         public const string GroupNotInSum = ", so not in this sum";
@@ -117,7 +118,12 @@ namespace Hearthwoven.Panel
         // ---------- what one player brings to a page ----------
 
         /// <summary>One part of a player's number (a wood kind, a hammer tab, a damage type), as their page's own bar shows it.</summary>
-        sealed class GroupPart { public string Id, Title, Colour, Pattern, Icon; public double Value; }
+        sealed class GroupPart
+        {
+            public string Id, Title, Colour, Pattern, Icon; public double Value;
+            /// <summary>Cargo: the metres this item travelled with some of it aboard (CargoStretch); 0 = not known (a copy before the distances).</summary>
+            public double Stretch;
+        }
 
         /// <summary>What one player brings to a group page in the window.</summary>
         sealed class GroupMeasure
@@ -149,6 +155,8 @@ namespace Hearthwoven.Panel
             public Func<double, double, string> Format;          // (value, the group's total) -> the number as shown; null = a count
             public Func<double, string> What;                    // the hero's label for this total; null = One/Many
             public Func<double, string> NoteOf;                  // a closing line that depends on the total (Cargo's unit); null = none
+            public Func<List<GroupMeasure>, double, Block> SumOf; // 0.8.5 a block under the group's bar (Cargo's sum: GroupCargoSum); null = none
+            public Func<PanelInput, List<PanelInput>, List<Block>> After;   // 0.8.5 blocks after the group's bar, from you and each player's book (Smelters' chests: GroupChests); null = none
             public Func<PanelInput, PanelInput, TimeWindow, GroupMeasure> Of;   // (the player, read with your game data; you; the window)
         }
 
@@ -166,11 +174,11 @@ namespace Hearthwoven.Panel
             Deed("mining", "Mining", "title:miner", "stone and ore brought in", "stone and ore brought in", "Stone and ore brought in, by player", "Stone and ore brought in together, by kind", "no stone or ore yet",
                  bs => (HeroNum(bs, "stone and ore brought in"), 0, Parts(bs.FirstOrDefault(b => b.Kind == "composition" && string.IsNullOrEmpty(b.Title))))),
             Deed("building", "Building", "title:builder", "piece built", "pieces built", "Pieces built, by player", "By category, together", "nothing built yet",
-                 bs => (HeroNum(bs, "piece built", "pieces built"), 0, FacetParts(bs, "tab")), partsNote: "the hammer's tab"),
+                 bs => (HeroNum(bs, "piece built", "pieces built"), 0, FacetParts(bs, "tab") ?? SharedRowParts(bs, "tab")), partsNote: "the hammer's tab"),
             Deed("groundwork", "Groundwork", "vocab:ground-lower", "groundwork stroke", "groundwork strokes", "Groundwork strokes, by player", "Groundwork together, by kind", "no groundwork yet",
                  bs => (HeroNum(bs, "groundwork strokes"), 0, Parts(bs.FirstOrDefault(b => b.Kind == "composition")))),
             Deed("crafting", "Crafting", "title:smith", "gear crafted", "gear crafted", "Gear crafted, by player", "By kind, together", "no gear crafted yet",
-                 bs => (HeroNum(bs, "gear crafted"), HeroNum(bs, "upgrade made", "upgrades made"), FacetParts(bs, "kind")), "upgrade made", "upgrades made"),
+                 bs => (HeroNum(bs, "gear crafted"), HeroNum(bs, "upgrade made", "upgrades made"), FacetParts(bs, "kind") ?? SharedRowParts(bs, "kind")), "upgrade made", "upgrades made"),
             Deed("cooking", "Cooking", "title:cook", "dish cooked", "dishes cooked", "Dishes cooked, by player", "Dishes cooked together, by kind", "nothing cooked yet",
                  bs => (HeroNum(bs, "dish cooked", "dishes cooked"), HeroNum(bs, "feast set out", "feasts set out"), Parts(bs.FirstOrDefault(b => b.Kind == "composition" && b.Title == DishesByKind))),
                  "feast set out", "feasts set out"),
@@ -201,19 +209,19 @@ namespace Hearthwoven.Panel
                 Of = (p, me, w) => BattleMeasure(p, me, w, true),
             },
             Voyage("sailing", "Sailing", "vocab:list-sailing", "km sailed", "Km sailed, by player", "Sailed together: at the helm and as passenger", "not sailed yet",
-                   bs => (HeroNum(bs, "km sailed"), JourneyParts(bs, "sail")), "Sailed counts one voyage once for each player aboard."),
+                   bs => (HeroNum(bs, "km sailed"), JourneyParts(bs, "sail")), "Sailed counts one voyage once for each player aboard.", days: true),   // 0.8.5: fellows share their voyage days
             new GroupPage
             {
                 Chapter = Chapter.Voyages, Page = "cargo", Heading = "Cargo", Icon = "vocab:cargo-mark", One = "carried", Many = "carried",
-                ByPlayer = "Cargo carried, by player", PartsTitle = "Cargo carried together, by item", None = "no cargo carried yet",
+                ByPlayer = "Cargo carried, by player", PartsTitle = "Cargo carried together, by item", None = "no cargo carried yet", Days = true,   // 0.8.5: fellows share their voyage days
                 Format = (v, total) => CargoNumber(v, total), What = total => CargoUnit(total) + " carried together",
-                NoteOf = CargoNote,
-                Of = (p, me, w) => CargoMeasure(p, me),
+                NoteOf = _ => CargoCountsGroup, SumOf = GroupCargoSum,
+                Of = (p, me, w) => IsDayWindow(w) ? CargoDays(p, me, w) : CargoMeasure(p, me),
             },
             Voyage("onfoot", "On foot", "title:explorer", "km on foot", "Km on foot, by player", "On foot together: walking and running", "no km on foot yet",
                    bs => (HeroNum(bs, "km on foot"), JourneyParts(bs, "foot")), null),
             Hall("trader", "Trader", "title:trader", "coin spent", "coins spent", "Coins spent, by player", "Coins spent together, by trader", "no coins spent yet"),
-            Hall("smelters", "Smelters", "vocab:list-smelters", "item put in", "items put in", "Put in by hand, by player", "Put in together, by kind", "nothing put in yet"),
+            Hall("smelters", "Smelters", "vocab:list-smelters", PutInOne, PutInMany, "Put in by hand, by player", "Put in together, by kind", "nothing put in yet", GroupChests),
         };
 
         // a Deeds page: each player's number from their own page in the window (DeedsPageOf), read by the page's own labels
@@ -222,34 +230,43 @@ namespace Hearthwoven.Panel
             new GroupPage
             {
                 Chapter = Chapter.Deeds, Page = page, Heading = heading, Icon = icon, One = one, Many = many, SecondOne = secondOne, SecondMany = secondMany,
-                ByPlayer = byPlayer, PartsTitle = partsTitle, PartsNote = partsNote, None = none,
+                ByPlayer = byPlayer, PartsTitle = partsTitle, PartsNote = partsNote, None = none, Days = true,   // 0.8.5: fellows share their Deeds days (DeedsDays.cs)
                 Of = (p, me, w) =>
                 {
-                    var v = DeedsPageOf(p, page, w, out var gap);
-                    if (v == null) return new GroupMeasure { In = false, Words = gap };
+                    var v = DeedsPageOf(p, page, w, me, out var gap);
+                    if (v == null) return new GroupMeasure { In = false, Words = gap, Waits = IsDayWindow(w) && OlderThan(p, NeedsDayDeeds) ? OlderLine(p, "their days fill in") : null };
                     var r = read(PageBlocks(v));
                     return new GroupMeasure { Value = r.value, Second = r.second, Parts = r.parts, LastSessionOnly = w == TimeWindow.SinceInstall && OlderCopy(p) };
                 },
             };
 
+        // a Voyages page: each player's number from their own page; 0.8.5 (days: Sailing) in a day window from their copy of those days (VoyageDays:
+        // your day history, a fellow's shared voyage days), the page read as its All
         static GroupPage Voyage(string page, string heading, string icon, string label, string byPlayer, string partsTitle, string none,
-                                Func<List<Block>, (double value, List<GroupPart> parts)> read, string note) =>
+                                Func<List<Block>, (double value, List<GroupPart> parts)> read, string note, bool days = false) =>
             new GroupPage
             {
-                Chapter = Chapter.Voyages, Page = page, Heading = heading, Icon = icon, One = label, Many = label, ByPlayer = byPlayer, PartsTitle = partsTitle, None = none, Note = note, Km = true,
+                Chapter = Chapter.Voyages, Page = page, Heading = heading, Icon = icon, One = label, Many = label, ByPlayer = byPlayer, PartsTitle = partsTitle, None = none, Note = note, Km = true, Days = days,
                 Of = (p, me, w) =>
                 {
+                    var src = p;
+                    if (IsDayWindow(w))
+                    {
+                        src = VoyageDays(p, w, me, out var gap, out var waits);
+                        if (src == null) return new GroupMeasure { In = false, Words = gap, Waits = waits };
+                    }
                     var v = new PanelView { Active = Chapter.Voyages, Page = page };
-                    Voyages(p, page, v, new PanelState { Chapter = Chapter.Voyages, Window = TimeWindow.SinceInstall });
+                    Voyages(src, page, v, new PanelState { Chapter = Chapter.Voyages, Window = TimeWindow.SinceInstall });
                     var r = read(PageBlocks(v));
-                    return new GroupMeasure { Value = r.value, Parts = r.parts, LastSessionOnly = OlderCopy(p) };
+                    return new GroupMeasure { Value = r.value, Parts = r.parts, LastSessionOnly = !IsDayWindow(w) && OlderCopy(p) };
                 },
             };
 
-        static GroupPage Hall(string page, string heading, string icon, string one, string many, string byPlayer, string partsTitle, string none) =>
+        static GroupPage Hall(string page, string heading, string icon, string one, string many, string byPlayer, string partsTitle, string none,
+                              Func<PanelInput, List<PanelInput>, List<Block>> after = null) =>
             new GroupPage
             {
-                Chapter = Chapter.Stores, Page = page, Heading = heading, Icon = icon, One = one, Many = many, ByPlayer = byPlayer, PartsTitle = partsTitle, None = none,
+                Chapter = Chapter.Stores, Page = page, Heading = heading, Icon = icon, One = one, Many = many, ByPlayer = byPlayer, PartsTitle = partsTitle, None = none, After = after,
                 Of = (p, me, w) =>
                 {
                     var v = new PanelView { Active = Chapter.Stores, Page = page };
@@ -263,24 +280,37 @@ namespace Hearthwoven.Panel
         static bool OlderCopy(PanelInput p) => p != null && !p.IsSelf && !p.SharedSinceInstall;
 
         /// <summary>
-        /// A player's own Deeds page in window <paramref name="w"/>, built by the page's own code from their copy (as Deeds builds yours, B33 for
-        /// a fellow's Session and short windows: what reached this PC from them while you played); null when the window cannot be told for them,
-        /// <paramref name="gap"/> then says why on their row.
+        /// Everyone > Smelters (0.8.5, Joost in game: the chests fed the group's smelters and the page showed one hand-fed item): what the
+        /// Stoker's Chests put in, the group's, apart from the hand count. The server's count when it counts (ServerBook.World: once, whoever
+        /// hosts a chest); else the sum of what each player's PC counted while it hosted a chest (one host per chest at a time, so the sum
+        /// counts each feed once; a PC on a Hearthwoven before 0.8.0, or none, counts nothing: the closing line says so). Nothing when no chest
+        /// feeds. Drawn as the page's other bar is, by kind (ore, fuel, wood), so it stands beside "Put in together, by kind" on one screen
+        /// (Joost's evening: the chests' tiles needed the wheel); every item is on your own book's Smelters.
         /// </summary>
-        static PanelView DeedsPageOf(PanelInput p, string page, TimeWindow w, out string gap)
+        static List<Block> GroupChests(PanelInput me, List<PanelInput> players)
         {
-            gap = null;
-            var src = p;
-            if (IsShortWindow(w))
-            {
-                src = DeedsShort(p, w, out _);
-                if (src == null) { gap = ShortGap(p, w); return null; }
-            }
-            else if (IsDayWindow(w))
-            {
-                src = p.IsSelf ? DeedsWindow(p, w) : null;
-                if (src == null) { gap = p.IsSelf ? "no days recorded yet" + GroupNotInSum : "shares no days" + GroupNotInSum; return null; }
-            }
+            if (!ChestsFeed(me) && !(players ?? new List<PanelInput>()).Any(ChestsFeed)) return null;
+            var (fed, server) = me?.World != null ? ChestFedRows(me) : (SumChestFed(players), false);
+            var bar = ChestComposition(me, fed, server ? ChestsByServer : ChestsByHosts);
+            if (bar == null) return new List<Block> { Empty(ChestsNoneYetGroup, server ? ChestsCountServer : ChestsCountHost) };
+            return server ? new List<Block> { bar } : new List<Block> { bar, new Block { Kind = "note", Text = ChestNoteHosts } };
+        }
+        static List<(string station, string item, bool fuel, double n)> SumChestFed(List<PanelInput> players) =>
+            (players ?? new List<PanelInput>()).SelectMany(p => ChestFedRows(p).rows).ToList();
+        public const string ChestsByServer = "counted once by the server", ChestsByHosts = "counted on the PCs that host them",
+                            ChestsNoneYetGroup = "Nothing fed by a Stoker's Chest yet.",
+                            ChestNoteHosts = "Nobody's own work: each chest counts on the PC of the player who hosts it, the first player near it or the last who opened it. A player on Hearthwoven 0.7 or older counts none.";
+
+        /// <summary>
+        /// A player's own Deeds page in window <paramref name="w"/>, built by the page's own code from their copy (as Deeds builds yours, B33 for
+        /// a fellow's Session and short windows: what reached this PC from them while you played; 0.8.5 a fellow's days from what they share per
+        /// day, FellowDeedsWindow, in your calendar <paramref name="me"/>); null when the window cannot be told for them, <paramref name="gap"/>
+        /// then says why on their row.
+        /// </summary>
+        static PanelView DeedsPageOf(PanelInput p, string page, TimeWindow w, PanelInput me, out string gap)
+        {
+            var src = DeedsSource(p, w, me, out gap);
+            if (src == null) return null;
             var v = new PanelView { Active = Chapter.Deeds, Page = page };
             var st = new PanelState { Chapter = Chapter.Deeds, Window = TimeWindow.SinceInstall, WindowPicked = true };
             st.Page[Chapter.Deeds] = page;
@@ -289,11 +319,33 @@ namespace Hearthwoven.Panel
             return v;
         }
 
+        /// <summary>
+        /// The copy a player's Deeds pages read in window <paramref name="w"/> (Everyone's rows, Company > Together): All their copy itself; 10 min
+        /// to Session your minute log, a fellow's trail while you play (DeedsShort); a day window your day history (DeedsWindow), a fellow's shared
+        /// days in your calendar <paramref name="me"/> (FellowDeedsWindow). null when the window cannot be told for them, <paramref name="gap"/>
+        /// then says why ("not playing now, so not in this sum").
+        /// </summary>
+        internal static PanelInput DeedsSource(PanelInput p, TimeWindow w, PanelInput me, out string gap)
+        {
+            gap = null;
+            if (IsShortWindow(w))
+            {
+                var s = DeedsShort(p, w, out _);
+                if (s == null) gap = ShortGap(p, w);
+                return s;
+            }
+            if (!IsDayWindow(w)) return p;
+            var d = p.IsSelf ? DeedsWindow(p, w) : FellowDeedsWindow(p, w, me);
+            if (d == null) gap = p.IsSelf ? "no days recorded yet" + GroupNotInSum : (OlderThan(p, NeedsDayDeeds) ? "shares no days yet" : "shares no days") + GroupNotInSum;
+            return d;
+        }
+
         /// <summary>Why a short window holds nothing from this player (RecentOfFellow's reasons, said short on their row).</summary>
         static string ShortGap(PanelInput p, TimeWindow w)
         {
             if (p.IsSelf) return "recorded from your next session on" + GroupNotInSum;
             if (w != TimeWindow.Session && !p.Timed) return "updates only every few minutes" + GroupNotInSum;
+            if (w != TimeWindow.Session && !FellowLive(p)) return FellowNotPlaying + GroupNotInSum;   // 0.8.5: Battle's live rule (RecentOfFellow)
             if (p.Trail == null) return "numbers still on their way" + GroupNotInSum;
             return RecentNotOn;   // they did not play during your session: nothing, said so
         }
@@ -368,8 +420,31 @@ namespace Hearthwoven.Panel
         static GroupMeasure CargoMeasure(PanelInput p, PanelInput me) => new GroupMeasure
         {
             Value = CargoItemMetres(p),
-            Parts = CargoItems(p).Select(kv => { var tint = ItemTint(me)(kv.Key); return new GroupPart { Id = kv.Key, Title = Who(me, kv.Key), Icon = "item:" + kv.Key, Colour = tint == null ? null : Legible(tint), Value = kv.Value }; }).ToList(),
+            Parts = CargoItems(p).Select(kv =>
+            {
+                var tint = ItemTint(me)(kv.Key); float s = 0; p.Events?.CargoStretch?.TryGetValue(kv.Key, out s);
+                return new GroupPart { Id = kv.Key, Title = Who(me, kv.Key), Icon = "item:" + kv.Key, Colour = tint == null ? null : Legible(tint), Value = kv.Value, Stretch = s };
+            }).ToList(),
         };
+
+        /// <summary>0.8.5 Cargo in a day window, item by item: yours from your day history (InWindow), a fellow's from their shared cargo days
+        /// (VoyageDays; no distances there, so the group's sum is left out rather than guessed); a copy without them left out with the older line.</summary>
+        static GroupMeasure CargoDays(PanelInput p, PanelInput me, TimeWindow w)
+        {
+            var src = VoyageDays(p, w, me, out var gap, out var waits);
+            return src == null ? new GroupMeasure { In = false, Words = gap, Waits = waits } : CargoMeasure(src, me);
+        }
+
+        /// <summary>0.8.5 the cargo sum for the whole group (CargoSum): the item carried most together, its item-metres and distances summed over
+        /// the players in the sum, so its load is the group's average aboard over every km anyone carried it. None when a player who carried it
+        /// has no distance for it (a copy from before the distances were kept): never guessed.</summary>
+        static Block GroupCargoSum(List<GroupMeasure> ms, double total)
+        {
+            var parts = ms.SelectMany(m => m.Parts ?? new List<GroupPart>()).Where(p => p.Value > 0 && !string.IsNullOrEmpty(p.Id)).ToList();
+            var top = parts.GroupBy(p => p.Id).OrderByDescending(g => g.Sum(p => p.Value)).ThenBy(g => g.Key, StringComparer.Ordinal).FirstOrDefault();
+            if (top == null || top.Any(p => !(p.Stretch > 0))) return null;
+            return CargoSum(top.Key, top.First().Title, top.Sum(p => p.Value), top.Sum(p => p.Stretch), total, "the item carried most together");
+        }
 
         // ---------- reading a player's page ----------
 
@@ -397,6 +472,9 @@ namespace Hearthwoven.Panel
         // a filter's bar, its folded "Other (n kinds)" opened: a facet bar's fold holds no kinds of its own, its row of chips has every kind with
         // its count (release-0.8.0, Joost's PC: a mod-heavy hammer folded Building's tabs, and the group's bar summed the fold's missing kinds)
         static List<GroupPart> FacetParts(List<Block> bs, string id) => Parts(FacetBarOf(bs, id), bs.FirstOrDefault(b => b.Kind == "facet" && b.Id == id));
+
+        // 0.8.5: a fellow's shared day bar standing for a filter row (DeedsDays.cs: Building's Category, Crafting's Kind), a composition with the row's id
+        static List<GroupPart> SharedRowParts(List<Block> bs, string id) => Parts(bs.FirstOrDefault(b => b.Kind == "composition" && b.Id == id));
 
         static Block AfterSection(List<Block> bs, string title, string kind)
         {
@@ -475,7 +553,7 @@ namespace Hearthwoven.Panel
             c.DisplayName = c.DisplayName ?? me.DisplayName; c.ItemKind = c.ItemKind ?? me.ItemKind; c.GatherKind = c.GatherKind ?? me.GatherKind; c.Rock = c.Rock ?? me.Rock; c.TreeOf = c.TreeOf ?? me.TreeOf; c.PieceKind = c.PieceKind ?? me.PieceKind;
             c.ItemColour = c.ItemColour ?? me.ItemColour; c.StationDish = c.StationDish ?? me.StationDish; c.CropOf = c.CropOf ?? me.CropOf; c.ItemType = c.ItemType ?? me.ItemType;
             c.MainMaterial = c.MainMaterial ?? me.MainMaterial; c.PieceTab = c.PieceTab ?? me.PieceTab; c.PieceMaterial = c.PieceMaterial ?? me.PieceMaterial;
-            c.DishType = c.DishType ?? me.DishType; c.DishBoost = c.DishBoost ?? me.DishBoost; c.ItemToken = c.ItemToken ?? me.ItemToken; c.RecipeYield = c.RecipeYield ?? me.RecipeYield; c.Foe = c.Foe ?? me.Foe;
+            c.DishType = c.DishType ?? me.DishType; c.DishBoost = c.DishBoost ?? me.DishBoost; c.ItemToken = c.ItemToken ?? me.ItemToken; c.RecipeYield = c.RecipeYield ?? me.RecipeYield; c.Foe = c.Foe ?? me.Foe; c.FoeKin = c.FoeKin ?? me.FoeKin;
             c.ViewerSessionStartUtc = c.ViewerSessionStartUtc ?? me.SessionStartUtc;
             return c;
         }
@@ -581,16 +659,24 @@ namespace Hearthwoven.Panel
             else
             {
                 if (bar != null) blocks.Add(bar);
+                if (bar != null && g.SumOf != null && total > 0 && g.SumOf(inSum.Select(k => ms[k]).ToList(), total) is Block sum) blocks.Add(sum);   // 0.8.5 Cargo's sum under the group's bar
+                if (g.After != null) blocks.AddRange(g.After(input, read) ?? new List<Block>());   // 0.8.5 Smelters: the chests' part, the group's
                 view.Blocks.AddRange(blocks);
             }
             // closing lines: whose Session, a fellow's last session on All, the page's own caveat
             var lastOnly = inSum.Where(k => ms[k].LastSessionOnly).Select(k => people[k].Name).ToList();
             if (lastOnly.Count > 0) notes.Add(JoinNames(lastOnly) + (lastOnly.Count == 1 ? " shares" : " share") + " no totals: their number is their last shared session.");
+            notes.AddRange(ms.Where(m => !m.In && m.Waits != null).Select(m => m.Waits));   // 0.8.5: a fellow left out because their Hearthwoven is older (OlderLine)
             if (w == TimeWindow.Session) notes.Add(WindowFellowSession);
             // 0.9 (Joost: Today's numbers looked unrelated to Session's): a fellow's day is their whole day, also before you came online
-            if (IsDayWindow(w) && inSum.Any(k => !people[k].Input.IsSelf)) notes.Add(DayWindowLine(w));
-            if (g.Note != null) notes.Add(g.Note);
-            if (g.NoteOf != null && total > 0) notes.Add(g.NoteOf(total));
+            var closing = new List<string>();
+            if (IsDayWindow(w) && inSum.Any(k => !people[k].Input.IsSelf)) closing.Add(DayWindowLine(w));
+            if (g.Note != null) closing.Add(g.Note);
+            if (g.NoteOf != null && total > 0) closing.Add(g.NoteOf(total));
+            // 0.8.5: Sailing and Cargo in a day window say the whole-day line and their own line as one paragraph, so the page fits one screen with
+            // four players (the Compare line at the top of a day window takes the room a second line would)
+            if (g.Chapter == Chapter.Voyages && IsDayWindow(w) && closing.Count > 1) closing = new List<string> { string.Join(" ", closing.ToArray()) };
+            notes.AddRange(closing);
             foreach (var n in notes) view.Blocks.Add(new Block { Kind = "note", Text = n });
 
             var fresh = Enumerable.Range(0, people.Count).Where(k => !people[k].Input.IsSelf).Select(k => (people[k].Name, rows[k].Note)).ToList();
@@ -669,15 +755,23 @@ namespace Hearthwoven.Panel
                 byType = new List<Block> { TopLine(topType.Value, topType.Title + " damage together, the most of any type", null), grid };
             }
             notes.AddRange(players.Where(p => p.m.Value > 0 && p.m.Waits != null).Select(p => p.m.Waits));
-            Switch(view, state, page, "group", DealtCaption, ("player", "By player", byPlayer), ("weapon", ByWeapon, byWeapon), ("type", ByType, byType));
+            // 0.8.5: By weapon and By type draw each part by the after rule where its hits have their after (a fellow's from their shared log;
+            // one who shares none: the faded piece, not split); By player stays each player's share of the group
+            var after = AnySplit(rows);
+            if (after) AboutLines(view, (AfterAboutTitle, AfterAbout(null, TimeWindow.Session)));
+            Switch(view, state, page, "group", after ? DealtAfterCaption : DealtCaption, ("player", "By player", byPlayer), ("weapon", ByWeapon, byWeapon), ("type", ByType, byType));
         }
 
         /// <summary>By type with Everyone (group-battle b): the page's damage grid (DamageGrid) with a column per player instead of a weapon kind,
         /// each headed by their shield; one bar scale for the whole grid, totals right and under, a player with none of a type an empty cell.</summary>
         static Block PlayersGrid(List<(string name, string label, GroupMeasure m)> players)
         {
-            var cell = new Dictionary<string, double>();
-            foreach (var p in players) foreach (var r in DealtRows(p.m.Rows ?? new List<DamageRow>())) { var k = r.Type + "|" + p.name; cell.TryGetValue(k, out var o); cell[k] = o + r.Amount; }
+            var cell = new Dictionary<string, double>(); var after = new Dictionary<string, DealtAmount>();   // 0.8.5: each cell's after (AfterPart)
+            foreach (var p in players) foreach (var r in DealtRows(p.m.Rows ?? new List<DamageRow>()))
+            {
+                var k = r.Type + "|" + p.name; cell.TryGetValue(k, out var o); cell[k] = o + r.Amount;
+                BumpDealt(after, k, r);
+            }
             var max = cell.Values.DefaultIfEmpty(0).Max();
             if (max <= 0) return null;
             var items = new List<Block>
@@ -695,7 +789,9 @@ namespace Hearthwoven.Panel
                 items.Add(new Block
                 {
                     Kind = "dmgtype", Id = t, Title = TypeName(t), Icon = DamageIcon(t), Colour = DamageColour(t), Value = NAtLeast(total), Src = SrcFellows, Source = TagFellows,
-                    Items = players.Select(p => { var v = Get(cell, t + "|" + p.name); return new Block { Kind = "cell", Id = p.name, Value = v > 0 ? NAtLeast(v) : "", Fraction = (float)(v / max), Colour = DamageColour(t) }; }).ToList(),
+                    Text = ThroughLine(players.Select(p => after.TryGetValue(t + "|" + p.name, out var a) ? a : default).Aggregate(new DealtAmount(), (x, y) => x + y)),
+                    Items = players.Select(p => { var v = Get(cell, t + "|" + p.name); var c = new Block { Kind = "cell", Id = p.name, Value = v > 0 ? NAtLeast(v) : "", Fraction = (float)(v / max), Colour = DamageColour(t) };
+                                                  return v > 0 && after.TryGetValue(t + "|" + p.name, out var a) ? AfterPart(c, a, NotSplitWords) : c; }).ToList(),
                 });
             }
             return new Block { Kind = "damagegrid", Title = AllTypes, Value = NAtLeast(cell.Values.Sum()), Src = SrcFellows, Source = TagFellows, Items = items };

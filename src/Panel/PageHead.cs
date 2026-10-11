@@ -18,6 +18,18 @@ namespace Hearthwoven.Panel
         /// <summary>About these numbers: the labels of the lines that moved there from the top of the plate.</summary>
         public const string AboutComparedLabel = "Compared", AboutFightLabel = "In this fight", AboutPlayersLabel = "Players", AboutEarlierLabel = "Earlier counts", AboutGrowthLabel = "Growth line";
 
+        /// <summary>
+        /// 0.8.5 (proto/4-compare A): the heading on two lines when one would shrink too far (PanelUi.Fill, the preview's fitHeading): before
+        /// " against " and after it ("Woodcutting, today" / "against yesterday"), else the page's name and its window ("Woodcutting," / "last 7
+        /// days"). second is null when the heading has no window to put on a line of its own.
+        /// </summary>
+        public static (string first, string second) HeadingLines(string heading, string window)
+        {
+            if (string.IsNullOrEmpty(window)) return (heading ?? "", null);
+            var at = window.IndexOf(" against ", StringComparison.Ordinal);
+            return at > 0 ? ((heading ?? "") + ", " + window.Substring(0, at), window.Substring(at + 1)) : ((heading ?? "") + ",", window);
+        }
+
         /// <summary>About these numbers' line for the hero's growth line: "One column per day: since 3 Oct."</summary>
         public static string GrowthAbout(string span) => "One column per day: " + span + ".";
 
@@ -46,7 +58,8 @@ namespace Hearthwoven.Panel
                 if (IsLooseText(stream[k].block)) { moved.Add(AboutLine(DetailsLabel, stream[k].block.Text)); stream[k].list.Remove(stream[k].block); }
             // the view switch's caption rides in the strip's left slot; when the strip holds feats or titles there, it explains the numbers in the box
             var top = TopSwitch(plate);
-            var titled = items.FirstOrDefault(b => b.Kind == "featband") is Block bandNow && (BandFeats(bandNow).Count > 0 || BandTitles(bandNow).Count > 0);
+            var titled = items.FirstOrDefault(b => b.Kind == "featband") is Block bandNow && (BandFeats(bandNow).Count > 0 || BandTitles(bandNow).Count > 0)
+                         || view.CompareNow != null || view.CompareNote != null;   // 0.8.5: Compare's legend or reason holds the strip's left too
             if (top != null && titled && !string.IsNullOrEmpty(top.Title)) { moved.Add(AboutLine(DetailsLabel, Cap(top.Title) + ".")); top.Title = null; }
             // "Earlier counts may be incomplete." comes off the page and lives only in About these numbers (Joost on the board: no "i" mark, no hover)
             if (ClearIncomplete(items) && input.IsSelf) moved.Add(AboutLine(AboutEarlierLabel, EarlierIncomplete));   // a fellow's book has no box (hard case 6): there it simply goes
@@ -59,7 +72,8 @@ namespace Hearthwoven.Panel
             // the strip leads (an empty one when the page has only a switch or About these numbers to carry), About these numbers right after it
             var band = items.FirstOrDefault(b => b.Kind == "featband");
             var about = items.FirstOrDefault(b => b.Kind == "aboutnumbers");
-            if (band != null || about != null || TopSwitch(plate) != null || !string.IsNullOrEmpty(view.StripNote))
+            if (about != null && HeadAbout(plate) != null) about = null;   // 0.8.5: While away's head line carries it: no strip for it, its box stays under the totals
+            if (band != null || about != null || TopSwitch(plate) != null || !string.IsNullOrEmpty(view.StripNote) || view.CompareNow != null || view.CompareNote != null)   // 0.8.5: Compare's legend or reason rides in it
             {
                 if (band == null) band = new Block { Kind = "featband", Items = new List<Block>() };
                 items.Remove(band); items.Insert(0, band);
@@ -82,7 +96,7 @@ namespace Hearthwoven.Panel
             {
                 // why the window chips are greyed (a fellow's copy, the group, a day window before the history): the greyed chips' hover reason
                 if (line == WaitLine(input, state.Window)) { view.WindowTip = state.Window.ToString(); return; }   // a greyed day chip was pressed: its own reason shows under it now (B17)
-                if (line == GroupDaysLine || line == GroupFoesDaysLine || line == DeedsWindowsLine(input) || line == RecentWindowsLine(input) || line == SharedWindowsLine(input) || line == SharedWindowsLine(input, true))
+                if (line == GroupDaysLine || line == GroupFoesDaysLine || line == DeedsWindowsLine(input, view.Page) || line == VoyagesWindowsLine(input) || line == RecentWindowsLine(input) || line == SharedWindowsLine(input) || line == SharedWindowsLine(input, true))
                 {
                     view.WindowWhy = string.IsNullOrEmpty(view.WindowWhy) ? line : view.WindowWhy + " " + line;
                     return;
@@ -139,7 +153,8 @@ namespace Hearthwoven.Panel
             }
         }
 
-        // every "Earlier counts may be incomplete." on the page, a note of its own or a number's qualifier, taken off; true when there was one
+        // every "Earlier counts may be incomplete." on the page, a note of its own, a number's qualifier or a scope line (0.8.5: Company >
+        // Together's category chips; Joost, "we have the about these numbers thing"), taken off; true when there was one
         static bool ClearIncomplete(List<Block> blocks)
         {
             var any = false;
@@ -151,6 +166,7 @@ namespace Hearthwoven.Panel
                 {
                     if (b.Note == EarlierIncomplete) { b.Note = null; any = true; }
                     if (b.Text == EarlierIncomplete) { b.Text = null; any = true; }
+                    if (b.Value2 == EarlierIncomplete) { b.Value2 = null; any = true; }
                     Walk(b.Items);
                 }
             }

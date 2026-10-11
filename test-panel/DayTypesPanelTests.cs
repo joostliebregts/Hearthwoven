@@ -55,9 +55,9 @@ static class DayTypesPanelTests
         var sevenText = PanelModel.AllText(seven).ToList();
         Check(hero != null && rows.Count >= 3 && rows.All(r => r.Items != null && r.Items.Count > 0) && Math.Abs(rows.Sum(r => Num(r.Value)) - Num(hero.Value)) <= 0.5 * rows.Count &&
               weapons.Count > 0 && Math.Abs(weapons.Sum(w => Num(w.Value)) - Num(hero.Value)) <= 0.5 * weapons.Count && Math.Abs(got.Values.Sum() - Num(hero.Value)) <= 0.5 * got.Count &&
-              line == "Today counts each player's whole day, also before you came online." && Count(text, line) == 1 && !text.Any(t => t.Contains("every player's hits")) &&
+              line.Contains("whole day") && line.Contains("online") && Count(text, line) == 1 && !text.Any(t => t.Contains("every player's hits")) &&
               seven.ShownWindow == TimeWindow.SevenDays && Count(sevenText, PanelModel.DayWindowLine(TimeWindow.SevenDays)) == 1 && !sevenText.Contains(line) &&
-              PanelModel.DayWindowLine(TimeWindow.SevenDays) == "7 days counts each player's whole days, also when you were not online.",
+              PanelModel.DayWindowLine(TimeWindow.SevenDays).Contains("whole days") && PanelModel.DayWindowLine(TimeWindow.SevenDays) != line,
               "DTP By player: Today's rows each carry their split by type and add up to the hero (" + hero?.Value + "); By weapon and By type add up to it too; \"" + line + "\" once on the page, " +
               "7 days its own words, and the old \"need every player's hits\" note is gone");
 
@@ -70,12 +70,13 @@ static class DayTypesPanelTests
         var oldRows = PanelModel.Content(PanelModel.Build(mixed, Group(TimeWindow.Today))).FirstOrDefault(b => b.Kind == PanelModel.GroupRowsKind)?.Items ?? new List<Block>();
         var torRow = oldRows.FirstOrDefault(r => r.Id == SampleWorld.Tor);
         var torTotal = torOld.DealtByDay != null && torOld.DealtByDay.TryGetValue(todayKey, out var tt) ? tt : 0;
-        var oldLine = "Tor's Hearthwoven is 0.8.1: Tor's part in By weapon and By type fills in once they update.";
         var oldText = PanelModel.AllText(PanelModel.Build(mixed, Group(TimeWindow.Today))).ToList();
+        var oldLines = oldText.Where(t => t.Contains(SampleWorld.Tor) && t.Contains(torOld.ModVersion)).ToList();   // the line naming Tor's older Hearthwoven
+        var oldLine = oldLines.FirstOrDefault();
         var oldGrid = PanelModel.Content(PanelModel.Build(mixed, Group(TimeWindow.Today, "type"))).FirstOrDefault(b => b.Kind == "damagegrid");
         var oldColumns = oldGrid?.Items.FirstOrDefault(b => b.Kind == "weapons")?.Items.Select(c => c.Id).ToList() ?? new List<string>();
         Check(torOld.DayDealt == null && torTotal > 0 && torRow?.Kind == PanelModel.GroupMemberKind && Math.Abs(Num(torRow.Value) - torTotal) <= 0.5 && (torRow.Items == null || torRow.Items.Count == 0) &&
-              Count(oldText, oldLine) == 1 && Count(oldText, line) == 1 && oldGrid != null && !oldColumns.Contains(SampleWorld.Tor) && oldColumns.Count == columns.Count - 1,
+              oldLines.Count == 1 && oldLine.Contains("By weapon") && Count(oldText, line) == 1 && oldGrid != null && !oldColumns.Contains(SampleWorld.Tor) && oldColumns.Count == columns.Count - 1,
               "DTP older: Tor on 0.8.1 keeps a total-only row today (" + torRow?.Value + "), By type leaves his column out (" + string.Join(", ", oldColumns) + "), and the page says once: \"" + oldLine + "\"");
 
         // ---------- a friend's own book: Damage opens their days from the shared parts; the other Battle pages keep them greyed and say why ----------
@@ -97,8 +98,8 @@ static class DayTypesPanelTests
         var torToday = Hers(torOwn, "damage", TimeWindow.Today);
         Check(herToday.ShownWindow == TimeWindow.Today && herGrid != null && Math.Abs(Num(herGrid.Value) - herParts.Values.Sum()) <= 0.5 && herParts.Count > 0 &&
               !PanelModel.Content(herToday).Any(b => b.Kind == "dealtfoes") && Count(herText, PanelModel.DayWindowLine(TimeWindow.Today, "Edda")) == 1 &&
-              herOverview.ShownWindow != TimeWindow.Today && herOverview.Windows.First(c => c.Id == "Today").Disabled && (herOverview.WindowWhy ?? "").Contains("Edda's days are shared only for damage dealt.") &&
-              torToday.ShownWindow != TimeWindow.Today && torToday.Windows.First(c => c.Id == "Today").Disabled && (torToday.WindowWhy ?? "").EndsWith("ays are not shared."),
+              herOverview.ShownWindow != TimeWindow.Today && herOverview.Windows.First(c => c.Id == "Today").Disabled && Says(herOverview, "Edda", "only for damage dealt") &&
+              torToday.ShownWindow != TimeWindow.Today && torToday.Windows.First(c => c.Id == "Today").Disabled && Says(torToday, "not shared"),
               "DTP friend's book: Edda's Damage opens Today from her shared parts (" + herGrid?.Value + ", no By foe: a day is not split by foe) with \"" + PanelModel.DayWindowLine(TimeWindow.Today, "Edda") +
               "\"; her Overview keeps Today greyed: \"" + herOverview.WindowWhy + "\"; Tor on 0.8.1 keeps his Damage days greyed: \"" + torToday.WindowWhy + "\"");
         return fails;

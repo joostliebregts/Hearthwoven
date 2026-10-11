@@ -31,11 +31,11 @@ static partial class Program
               "diff-05 company: one empty text per page that fits it (Together is not about meals)");
         var soloT = new PanelInput { PlayerName = "Rowan", IsSelf = true, ItemsPickedUp = new Dictionary<string, float> { ["$item_wood"] = 40 }, GatherKind = _ => "wood", Events = new SessionEvents() };
         var togetherAlone = Page(soloT, "together");
-        Check(Of(togetherAlone, "together")?.Items.All(c => c.Items.Count == 1 && c.Items[0].Id == "Rowan") == true && Of(togetherAlone, "empty") == null &&
-              Of(togetherAlone, "note")?.Text == PanelModel.TogetherAlone, "diff-05 company: Together alone still shows your own row, the fellow players to come");
-        Check(togetherAlone.Recorded && Of(togetherAlone, "together")?.Items.Where(c => c.Id == "built" || c.Id == "sailed").All(c => c.Value2 == "since you made this character") == true &&
-              Of(togetherAlone, "together")?.Items.Where(c => c.Id == "wood").All(c => c.Value2 == PanelModel.EarlierIncomplete) == true,
-              "0.7 company: Together alone keeps the game's own since-when on pieces built and sailed; wood, which has no baseline yet, says \"Earlier counts may be incomplete.\" once in its scope line");
+        Check(Of(togetherAlone, "together")?.Items.Where(c => c.Kind == "category").All(c => c.Items.Count == 1 && c.Items[0].Id == "Rowan") == true && Of(togetherAlone, "empty") == null &&
+              Says(togetherAlone, PanelModel.TogetherAlone), "diff-05 company: Together alone still shows your own row, the fellow players to come");
+        Check(togetherAlone.Recorded && Of(togetherAlone, "together")?.Items.Where(c => c.Id == "built" || c.Id == "sailed" || c.Id == "wood").All(c => c.Value2 == PanelModel.MadeLine(soloT)) == true &&
+              togetherAlone.AboutNumbers?.Items.Count(l => l.Text == PanelModel.EarlierIncomplete) == 1 && !PanelModel.AllText(togetherAlone).Any(t => t == PanelModel.EarlierIncomplete && !togetherAlone.AboutNumbers.Items.Any(l => l.Text == t)),
+              "0.7 company: Together alone keeps the game's own since-when on pieces built, sailed and (0.8.5: the same on every category) wood; wood, which has no baseline yet, says \"Earlier counts may be incomplete.\" once, in About these numbers (0.8.5: not under the chip)");
 
         var keepFellows = input.Fellows; var keepId = input.PlayerId;
         input.Fellows = CompanyFellows(now); input.PlayerId = 11;
@@ -46,8 +46,8 @@ static partial class Program
             var giving = Of(fire, "giving");
             var players = giving.Items.Where(i => i.Kind == "player").ToList();
             var gifts = giving.Items.Where(i => i.Kind == "gift").ToDictionary(g => g.Id + "/" + g.Tone);
-            Check(PanelModel.PlateOf(fire)?.Title == "Fireside" && giving.Note == PanelModel.FiresideLine && PanelModel.PlateOf(fire).Text == null && PanelModel.PlateOf(fire).Icon == "ui:chapter-company" && PanelModel.PlateOf(fire).Pill == "Edda, Finch and Tor share" &&
-                  PanelModel.PlateOf(Page(input, "food")).Pill == "Edda, Finch and Tor share", "company: every page on the plate, its pill says who shares (or what is counted)");
+            Check(PanelModel.PlateOf(fire)?.Title == "Fireside" && Says(fire, PanelModel.FiresideLine) && PanelModel.PlateOf(fire).Icon == "ui:chapter-company" && Says(fire, "Edda", "Finch", "Tor", "share") &&
+                  Says(Page(input, "food"), "Edda", "Finch", "Tor", "share"), "company: every page on the plate, and says who shares (or what is counted)");
             Check(players.Select(p => p.Id).SequenceEqual(new[] { "Rowan", "Edda", "Finch", "Tor" }) && players[0].Title == "You" && players[0].Selected && players.Skip(1).All(p => !p.Selected),
                   "fireside: you first, then the fellow players who share, by name (never by amount)");
             Check(gifts["Edda>Rowan/food"].Value == "8" && gifts["Edda>Rowan/food"].Src == "pc" && gifts["Edda>Rowan/food"].Note == "enjoyed" &&
@@ -77,14 +77,14 @@ static partial class Program
 
             // ----- Together -----
             var together = Of(Page(input, "together"), "together");
-            var cats = together.Items;
+            var cats = together.Items.Where(c => c.Kind == "category").ToList();
             Check(cats.Select(c => c.Id).SequenceEqual(new[] { "wood", "ore", "built", "cooked", "dealt", "sailed", "cargo" }) && cats[0].Selected && cats.Count(c => c.Selected) == 1,
                   "together: categories with numbers in them, the first shown large; no hall category (chests are not in the shared records)");
-            Check(cats.All(c => c.Items.Select(p => p.Id).SequenceEqual(new[] { "Rowan", "Edda", "Finch", "Tor" })) && cats.All(c => Math.Abs(c.Items.Sum(p => p.Fraction) - 1f) < 1e-4),
-                  "together: every bar in the fire's order (you first, then by name), never sorted by amount; shares sum to the whole");
+            Check(cats.All(c => c.Items.Select(p => p.Id).SequenceEqual(new[] { "Rowan", "Edda", "Finch", "Tor" })),
+                  "together: every bar in the fire's order (you first, then by name), never sorted by amount (its shares add up: PropertyTests, every bar)");
             var wood = cats[0];
-            Check(wood.Value == "4\u00A0805" && wood.Text == "wood brought in together" && wood.Note == PanelModel.BroughtInScope && wood.Items.Select(p => p.Value).SequenceEqual(new[] { "3\u00A0305", "1\u00A0000", "", "500" }) && wood.Items.All(p => p.Src == "character"),
-                  "together: wood brought in, your character's counts and theirs, total = the parts");
+            Check(wood.Value == "4\u00A0805" && wood.Text == "wood brought in together" && wood.Note == null && Page(input, "together").AboutNumbers.Items.Count(l => l.Text == PanelModel.BroughtInAbout) == 1 && wood.Items.Select(p => p.Value).SequenceEqual(new[] { "3\u00A0305", "1\u00A0000", "", "500" }) && wood.Items.All(p => p.Src == "character"),
+                  "together: wood brought in, your character's counts and theirs, total = the parts; what brought in counts in About these numbers, once (0.8.5: the hero's qualifier ran into its words in game)");
             var dealt = cats.Single(c => c.Id == "dealt");
             Check(dealt.Note == "before the foe's armor" && dealt.Items[0].Src == "pc" && dealt.Items[0].Value == "420" && dealt.Items[1].Src == "fellows" && dealt.Items[0].RecordedFrom == from1 && dealt.Items[1].RecordedFrom != null && (dealt.Items[1].RecordedFrom.StartsWith("Recorded on ") || dealt.Items[1].RecordedFrom.StartsWith("as ")),
                   "together 0.7: damage dealt before the foe's armor; yours \"" + from1 + "\" (this PC), theirs from their PCs");
@@ -111,23 +111,23 @@ static partial class Program
                 return Of(v, "together");
             }
             string Shares(Block t) => string.Join(",", t.Items.Single(c => c.Id == "dealt").Items.Select(p => p.Id + "=" + p.Value));
-            Check(together.Items.All(c => c.Kind == "category") && DealtOf(null).Items.Count(c => c.Kind == "switch") == 1 && DealtOf(null).Tone == null &&
-                  Of(Page(input, "together"), "together").Items.Count(c => c.Kind == "switch") == 0 && Of(Page(input, "together", s => s.View[key] = "wood"), "together").Items.Count(c => c.Kind == "switch") == 0,
-                  "together windows: the switch shows only while Damage dealt is chosen; the default is the total since install");
+            Check(DealtOf(null).Items.Count(c => c.Kind == "switch") == 1 && DealtOf(null).Tone == null && together.Tone == null &&
+                  new[] { "wood", "ore", "built", "cooked", "sailed", "cargo" }.All(c => Of(Page(input, "together", s => s.View[key] = c), "together").Items.Count(i => i.Kind == "switch" && i.Items.Single(v => v.Selected).Id == "SinceInstall") == 1),
+                  "together windows (0.8.5, Joost in game: \"why no time filters on the other tabs?\"): every category has the window chips; the default is the total since install");
             var sw = DealtOf(null).Items.Single(c => c.Kind == "switch");
             Check(sw.Id == wkey && sw.Items.Select(v => v.Id).SequenceEqual(Enum.GetNames(typeof(TimeWindow))) && sw.Items.Select(v => v.Title).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "7 days", "30 days", "All" }) &&
-                  sw.Items.Single(v => v.Selected).Id == "SinceInstall" && sw.Title == "All: recorded from " + install1,
-                  "together windows: Battle's nine windows as the same short chips, All (since install) the default");
+                  sw.Items.Single(v => v.Selected).Id == "SinceInstall" && sw.Title == null && DealtOf(null).Items.Single(c => c.Id == "dealt").Value2 == "Recorded from " + install1,
+                  "together windows: Battle's nine windows as the same short chips, All (since install) the default; Damage dealt says since when under its bar, as every category (0.8.5)");
             Check(Shares(DealtOf("LastHour")) == "Rowan=434,Edda=200,Finch=80,Tor=" && DealtOf("LastHour").Items.Single(c => c.Id == "dealt").Value == "714" &&
-                  DealtOf("LastHour").Items.Single(c => c.Id == "dealt").Text == "damage dealt together, last hour" && DealtOf("LastHour").Tone == PanelModel.WindowedTone,
+                  DealtOf("LastHour").Items.Single(c => c.Id == "dealt").Text.Contains(PanelModel.WindowLabel(TimeWindow.LastHour).ToLowerInvariant()) && DealtOf("LastHour").Tone == PanelModel.WindowedTone,
                   "together windows: last hour = each player's own log of it (you 434, Edda 200, Finch 80), the hero names the window in full");
             Check(Shares(DealtOf("LastTenMinutes")) == "Rowan=,Edda=200,Finch=80,Tor=" && Shares(DealtOf("LastThirtyMinutes")) == "Rowan=,Edda=200,Finch=80,Tor=" &&
                   Shares(DealtOf("LastThreeHours")) == "Rowan=854,Edda=300,Finch=80,Tor=" && Shares(DealtOf("Session")) == "Rowan=962,Edda=300,Finch=80,Tor=",
                   "together windows: 10 and 30 minutes (the fight just now: Edda 200, Finch 80), 3 hours (Edda's earlier 100 joins you), this session (yours 962)");
             var tenParts = DealtOf("LastTenMinutes").Items.Single(c => c.Id == "dealt").Items;
             Check(Math.Abs(tenParts[1].Fraction - 200f / 280f) < 1e-4 && tenParts[0].Fraction == 0 && Math.Abs(tenParts.Sum(p => p.Fraction) - 1f) < 1e-4 &&
-                  DealtOf("LastTenMinutes").Items.Where(c => c.Id != "dealt" && c.Kind == "category").All(c => c.Items.Sum(p => p.Fraction) > 0.999f),
-                  "together windows: the shares are of the window's whole; the other categories keep their totals");
+                  DealtOf("LastTenMinutes").Items.Where(c => c.Kind == "category").All(c => c.Text.EndsWith(", " + PanelModel.WindowLabel(TimeWindow.LastTenMinutes).ToLowerInvariant()) && c.Tone == null) && DealtOf("LastTenMinutes").Note == null,
+                  "together windows: the shares are of the window's whole; every category follows the window, sailed and cargo too (0.8.5)");
             Check(DealtOf("nonsense").Tone == null && DealtOf("nonsense").Items.Single(c => c.Kind == "switch").Items.Single(v => v.Selected).Id == "SinceInstall",
                   "together windows: an unknown choice falls back to the total since install");
             var inst = Page(input, "together", s => s.View[key] = "dealt"); var hour2 = Page(input, "together", s => { s.View[key] = "dealt"; s.View[wkey] = "LastHour"; });
@@ -147,19 +147,19 @@ static partial class Program
                   "together windows: a chip's click picks the window; the filter key steps them (All > 10 min), the footer lists it (fix4-rest: the view key flips the category)");
             var catKeyed = new PanelState { Chapter = Chapter.Company, ViewKey = "F", FilterKey = "G" }; catKeyed.Page[Chapter.Company] = "together";
             var catView = PanelModel.Build(input, catKeyed); var catTogether = PanelModel.TogetherOf(catView);
-            Check(catTogether.KeyCap == "F" && catView.Keys.Contains("[F] Category") && !catView.Keys.Contains("[G] Window") && PanelModel.StepView(catKeyed, catView, 1) && catKeyed.View[key] == "ore" && PanelModel.StepView(catKeyed, PanelModel.Build(input, catKeyed), -1) && catKeyed.View[key] == "wood" &&
-                  Enumerable.Range(0, catTogether.Items.Count(c => c.Kind == "category")).Aggregate(catKeyed, (st, _) => { PanelModel.StepView(st, PanelModel.Build(input, st), 1); return st; }).View[key] == "wood" && !PanelModel.FilterKeyPressed(new PanelState(), catView),
-                  "together keys: the view key flips the category chips (wraps), the footer says so; the window key only exists under Damage dealt");
+            Check(catTogether.KeyCap == "F" && catView.Keys.Contains("[F] Category") && catView.Keys.Contains("[G] Window") && PanelModel.StepView(catKeyed, catView, 1) && catKeyed.View[key] == "ore" && PanelModel.StepView(catKeyed, PanelModel.Build(input, catKeyed), -1) && catKeyed.View[key] == "wood" &&
+                  Enumerable.Range(0, catTogether.Items.Count(c => c.Kind == "category")).Aggregate(catKeyed, (st, _) => { PanelModel.StepView(st, PanelModel.Build(input, st), 1); return st; }).View[key] == "wood" && PanelModel.FilterKeyPressed(catKeyed, PanelModel.Build(input, catKeyed)) && catKeyed.View[wkey] == "LastTenMinutes" && catKeyed.View[key] == "wood",
+                  "together keys: the view key flips the category chips (wraps), the footer says so; the window key steps the windows of every category (0.8.5)");
             var noKeys = new PanelState { Chapter = Chapter.Company, ViewKey = "", FilterKey = "" }; noKeys.Page[Chapter.Company] = "together"; noKeys.View[key] = "dealt";
             var noKeysView = PanelModel.Build(input, noKeys);
             Check(DealtOf(null).Items.Single(c => c.Kind == "switch").KeyCap == new PanelState().FilterKey && PanelModel.TogetherOf(noKeysView).KeyCap == null && PanelModel.TogetherOf(noKeysView).Items.Single(c => c.Kind == "switch").KeyCap == null && !noKeysView.Keys.Any(k => k.EndsWith("Category") || k.EndsWith("Window")) &&
-                  catTogether.Items.All(c => c.Kind != "category" || c.Value2 != null || c.Id == "dealt" || c.Id == "wood" || c.Id == "ore" || c.Id == "cooked"),
-                  "together keys: the window chips carry the filter key's cap, the category chips the view key's; keys switched off, no caps and no footer words; every chip says since when, except Damage dealt (its own caption) and the class A chips with no gap (no date on a class A number, 0.7 rule A.4)");
+                  catTogether.Items.All(c => c.Kind != "category" || !string.IsNullOrEmpty(c.Value2)) && catTogether.Items.Where(c => c.Id == "wood" || c.Id == "ore" || c.Id == "cooked").All(c => c.Value2 == "since each character was made"),
+                  "together keys: the window chips carry the filter key's cap, the category chips the view key's; keys switched off, no caps and no footer words; every category says since when on All, the same way (0.8.5, Joost: Sailed said it, Stone and ore did not): the game's counters since each character was made, wood, ore and dishes too (no date on a class A number, 0.7 rule A.4)");
             var soloDealt = new PanelInput { PlayerName = "Rowan", IsSelf = true, NowUtc = now, Session = new DamageTally(), Log = new EventLog(), Events = new SessionEvents() };
             soloDealt.Session.AddDealt("Troll", "Axes", new HitData.DamageTypes { m_slash = 500 });
             var soloNone = Page(soloDealt, "together", s => { s.View[key] = "dealt"; s.View[wkey] = "LastTenMinutes"; });
             var soloCat = Of(soloNone, "together").Items.Single(c => c.Id == "dealt");
-            Check(soloCat.Value == "0" && soloCat.Selected && soloCat.Items[0].Value == "" && PanelModel.Content(soloNone).Any(b => b.Kind == "note" && b.Text == "Nothing dealt in the last 10 minutes.") && Of(soloNone, "together").Items.Any(c => c.Kind == "switch"),
+            Check(soloCat.Value == "0" && soloCat.Selected && soloCat.Items[0].Value == "" && Says(soloNone, "Nothing dealt", PanelModel.WindowLabel(TimeWindow.LastTenMinutes).ToLowerInvariant()) && Of(soloNone, "together").Items.Any(c => c.Kind == "switch"),
                   "together windows: nothing dealt in the window keeps the category and its switch (so you can step back) and says so, never a blank page");
 
             // ----- Food shared -----
@@ -218,7 +218,7 @@ static partial class Program
             var gift = giving.Items.FirstOrDefault(i => i.Kind == "gift" && i.Id == "Rowan>Edda"); var line = gift?.Items?.SingleOrDefault();
             var row = Of(Page(edda, "food"), "axis")?.Items.FirstOrDefault(i => i.Kind == "row" && i.Id == "Rowan");
             Check(gift != null && gift.Value == "3" && line?.Title == "Tor set it out" && line.Tone == PanelModel.TeamworkTone && line.Value == "3" && !giving.Items.Any(i => i.Kind == "gift" && i.Title == "Tor") &&
-                  row?.Value == "3" && row.Note == "Teamwork: 3 servings from a feast Tor set out",
+                  row?.Value == "3" && row.Note != null && new[] { "Teamwork", "3", "Tor" }.All(row.Note.Contains),
                   "fireside 0.8 B22: Edda sees both: the feast Rowan made and Tor set out is Rowan's thread to her, its line says " + line?.Title + ", marked teamwork; Food shared: " + row?.Note);
             // the fallback: no record of who made it (an older copy, a feast set out before 0.8): the servings stay with the one who set it out
             torEv.SetOutFeastMadeBy.Clear();

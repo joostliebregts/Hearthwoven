@@ -47,8 +47,8 @@ static class MealsTests
         var group = Show(world, true);
         var gd = Rows(group).Items.ToDictionary(r => r.Title, r => r);
         Check(group.EveryoneOn && PanelModel.Content(group).Any(b => b.Kind == "switch" && b.Items.Any(x => x.Id == PanelModel.MealsDishView && x.Selected)) && AddsUp(group)
-              && PanelModel.Content(group).First(b => b.Kind == "hero").Value == "92" && Parts(gd["Bread"]) == "You=4,Edda=3" && Parts(gd["Raspberries"]) == "Gathered=6" && Parts(gd["Meadows feast"]) == "You=17",
-              "meals, Everyone By dish: 92 meals together, each dish split by who cooked it (you first, then by name), Gathered for food with no cook, a feast for its maker: "
+              && PanelModel.Content(group).First(b => b.Kind == "hero").Value == "111" && Parts(gd["Bread"]) == "You=4,Edda=3" && Parts(gd["Raspberries"]) == "Gathered=6" && Parts(gd["Meadows feast"]) == "You=17",
+              "meals, Everyone By dish: 111 meals together, each dish split by who cooked it (you first, then by name), Gathered for food with no cook, a feast for its maker: "
               + Parts(gd["Bread"]) + " / " + Parts(gd["Meadows feast"]));
 
         // Everyone, By player: a row per player (you first, then by name), split by whose cooking they ate; the hero's second number is the cooking of another

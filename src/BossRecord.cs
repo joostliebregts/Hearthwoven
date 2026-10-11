@@ -282,6 +282,8 @@ namespace Hearthwoven
     /// <summary>One boss attempt you took part in, as the group's record showed it (GroupFights.Join over your recorder and the fellows' feeds).</summary>
     public sealed class BossAttempt
     {
+        /// <summary>0.8.5: the world it was fought in (FellowCache.ScopeKey); null: saved before 0.8.5 and not yet adopted (BossLog.Adopt).</summary>
+        public string World;
         /// <summary>The first boss's prefab and its network id as text (FoeId.ToString): with StartUtc the attempt's identity across saves.</summary>
         public string Kind, Lead;
         public DateTime StartUtc;
@@ -302,11 +304,13 @@ namespace Hearthwoven
     }
 
     /// <summary>
-    /// The boss attempts kept on this PC (0.9, LocalTotals top-level "bossFights", schema 6): the newest MaxAttempts, oldest first. Note takes a
-    /// group fight once its boss fight is over and you were in it; the same attempt noted again (the fellows' copies arrive 10 s or more after the
-    /// kill) grows it, never shrinks it, and a win sticks. JSON: [{"k":"SeekerQueen","id":"123:456","s":"ISO","t":312.5,"o":1,"hp":0,
+    /// The boss attempts kept on this PC (0.9, LocalTotals top-level "bossFights", schema 6), oldest first. Note takes a group fight once its boss
+    /// fight is over and you were in it; the same attempt noted again (the fellows' copies arrive 10 s or more after the kill) grows it, never
+    /// shrinks it, and a win sticks. 0.8.5 (the lead, after v085-lastfight: another world never shows the first world's attempts): each attempt
+    /// carries its world, the pages read one world's (Of), and the log keeps the newest MaxAttempts of each world, for the KeptFights.MaxWorlds
+    /// worlds noted last. JSON: [{"k":"SeekerQueen","id":"123:456","s":"ISO","t":312.5,"o":1,"hp":0,"w":"Midgard-123",
     /// "pl":"Mistlands_DvergrBossEntrance1","pt":"$location_dvergrboss","u":1,"p":[{"n":"Edda","me":1,"d":[0,52.3],"r":[0,0,15,0,0,0,20],"dd":1,
-    /// "bk":4,"pa":1}]}] (o BossOutcome; d and r per type up to the last with damage; hp, pl, pt, u, me, dd, bk, pa only when there).
+    /// "bk":4,"pa":1}]}] (o BossOutcome; d and r per type up to the last with damage; hp, w, pl, pt, u, me, dd, bk, pa only when there).
     /// </summary>
     public sealed class BossLog
     {
@@ -314,21 +318,51 @@ namespace Hearthwoven
         public readonly List<BossAttempt> Attempts = new List<BossAttempt>();
         public bool IsEmpty => Attempts.Count == 0;
 
-        /// <summary>Keeps <paramref name="g"/>'s boss fight when it is over and you were in it; returns whether the log changed.</summary>
-        public bool Note(GroupFight g)
+        /// <summary>0.8.5: the attempts of one world (null: those not yet adopted), oldest first, as the pages read them. Shares the attempts: read only.</summary>
+        public BossLog Of(string world)
+        {
+            var log = new BossLog();
+            log.Attempts.AddRange(Attempts.Where(a => a.World == world));
+            return log;
+        }
+
+        /// <summary>0.8.5: attempts saved before 0.8.5, with no world, go to <paramref name="world"/> (Plugin: the world of your last save before this
+        /// version, else the one you play now); returns whether any did.</summary>
+        public bool Adopt(string world)
+        {
+            var changed = false;
+            foreach (var a in Attempts) if (a.World == null && world != null) { a.World = world; changed = true; }
+            if (changed) Trim(Attempts, x => x.World, x => x.StartUtc, MaxAttempts);
+            return changed;
+        }
+
+        /// <summary>0.8.5 (review, B23): sharing switched off: each fellow's part of every attempt goes (their row and their part of each foe row);
+        /// yours stays. Returns whether any went.</summary>
+        public bool ForgetFellows()
+        {
+            var gone = 0;
+            foreach (var a in Attempts) gone += a.Players.RemoveAll(p => !p.Self) + ForgetFellowParts(a.Foes);
+            return gone > 0;
+        }
+
+        /// <summary>The fellows' parts of foe rows gone (BossLog, RunLog.ForgetFellows); how many went.</summary>
+        internal static int ForgetFellowParts(List<FoeRow> rows) => rows.Sum(r => r.Parts.RemoveAll(p => !p.Self));
+
+        /// <summary>Keeps <paramref name="g"/>'s boss fight when it is over and you were in it, in <paramref name="world"/>; returns whether the log changed.</summary>
+        public bool Note(GroupFight g, string world = null)
         {
             var b = g?.Boss;
             if (b == null || b.Outcome == BossOutcome.Fighting || b.Bosses.Count == 0) return false;
             var mine = g.Players.FirstOrDefault(p => p.Self);
             if (mine == null || !mine.InBoss) return false;
             var ids = new HashSet<string>(b.Bosses.Select(id => id.ToString()), StringComparer.Ordinal);
-            var a = Attempts.LastOrDefault(x => ids.Contains(x.Lead) && x.StartUtc <= b.EndUtc + BattleRecorder.BossGap && b.StartUtc <= x.StartUtc.AddSeconds(x.Seconds) + BattleRecorder.BossGap);
+            var a = Attempts.LastOrDefault(x => x.World == world && ids.Contains(x.Lead) && x.StartUtc <= b.EndUtc + BattleRecorder.BossGap && b.StartUtc <= x.StartUtc.AddSeconds(x.Seconds) + BattleRecorder.BossGap);
             bool changed = false;
             if (a == null)
             {
-                a = new BossAttempt { Kind = b.Kind, Lead = b.Bosses[0].ToString(), StartUtc = b.StartUtc };
+                a = new BossAttempt { World = world, Kind = b.Kind, Lead = b.Bosses[0].ToString(), StartUtc = b.StartUtc };
                 Attempts.Add(a); changed = true;
-                while (Attempts.Count > MaxAttempts) Attempts.RemoveAt(0);
+                Trim(Attempts, x => x.World, x => x.StartUtc, MaxAttempts);
             }
             var secs = (float)Math.Max(0, (b.EndUtc - a.StartUtc).TotalSeconds);
             if (b.StartUtc < a.StartUtc) { secs += (float)(a.StartUtc - b.StartUtc).TotalSeconds; a.StartUtc = b.StartUtc; changed = true; }
@@ -365,6 +399,7 @@ namespace Hearthwoven
             foreach (var a in Attempts)
             {
                 j.Open().Str("k", a.Kind ?? "?").Str("id", a.Lead ?? "").Str("s", a.StartUtc.ToString("o", inv)).Num("t", a.Seconds).Num("o", (int)a.Outcome);
+                if (a.World != null) j.Str("w", a.World);
                 if (a.Health >= 0f) j.Num("hp", Math.Round(a.Health, 3));
                 if (a.Lowest >= 0f) j.Num("lo", Math.Round(a.Lowest, 3));
                 if (!string.IsNullOrEmpty(a.Place)) j.Str("pl", a.Place);
@@ -393,10 +428,10 @@ namespace Hearthwoven
         {
             var log = new BossLog();
             if (!(o is List<object> list)) return log;
-            foreach (var x in list.OfType<Dictionary<string, object>>().Skip(Math.Max(0, list.Count - MaxAttempts)))
+            foreach (var x in list.OfType<Dictionary<string, object>>().Skip(Math.Max(0, list.Count - MaxAttempts * KeptFights.MaxWorlds)))
             {
                 if (!DateTime.TryParse(MiniJson.Str(x, "s"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var s)) continue;
-                var a = new BossAttempt { Kind = MiniJson.Str(x, "k", "?"), Lead = MiniJson.Str(x, "id"), StartUtc = s.ToUniversalTime(), Seconds = Clip(MiniJson.Num(x, "t"), 1e7f),
+                var a = new BossAttempt { World = MiniJson.Str(x, "w", null), Kind = MiniJson.Str(x, "k", "?"), Lead = MiniJson.Str(x, "id"), StartUtc = s.ToUniversalTime(), Seconds = Clip(MiniJson.Num(x, "t"), 1e7f),
                                           Outcome = (BossOutcome)Math.Min((int)Clip(MiniJson.Num(x, "o"), 9), (int)BossOutcome.GotAway),
                                           Health = x.ContainsKey("hp") ? Math.Min(1f, Clip(MiniJson.Num(x, "hp"), 1f)) : -1f, Lowest = x.ContainsKey("lo") ? Math.Min(1f, Clip(MiniJson.Num(x, "lo"), 1f)) : -1f,
                                           Unnamed = (int)Clip(MiniJson.Num(x, "u"), 1000) };
@@ -417,6 +452,15 @@ namespace Hearthwoven
         }
 
         internal static float Clip(double v, float max) => Json.IsFinite(v) ? (float)Math.Max(0, Math.Min(max, v)) : 0f;
+
+        /// <summary>0.8.5: a log (oldest first) to its bounds: the newest <paramref name="max"/> of each world, the KeptFights.MaxWorlds worlds whose
+        /// newest entry is newest.</summary>
+        internal static void Trim<T>(List<T> log, Func<T, string> world, Func<T, DateTime> at, int max)
+        {
+            var worlds = log.GroupBy(world).OrderByDescending(g => g.Max(at)).Select(g => g.Key).Take(KeptFights.MaxWorlds).ToList();
+            log.RemoveAll(x => !worlds.Contains(world(x)));
+            foreach (var w in worlds) { var n = log.Count(x => world(x) == w); for (int i = 0; n > max && i < log.Count; ) if (world(log[i]) == w) { log.RemoveAt(i); n--; } else i++; }
+        }
     }
 
     /// <summary>One player's part of a saved run: their own seconds inside, deaths, foes, and damage dealt and received per type in it.</summary>
@@ -432,6 +476,8 @@ namespace Hearthwoven
     /// <summary>One dungeon run you were in, as the group's record showed it (GroupFights.JoinRuns), kept so Runs and bosses lists it after a restart.</summary>
     public sealed class RunRecord
     {
+        /// <summary>0.8.5: the world it was in (FellowCache.ScopeKey); null: saved before 0.8.5 and not yet adopted (RunLog.Adopt).</summary>
+        public string World;
         /// <summary>The place's game name and name token (DungeonRun.Kind, Token).</summary>
         public string Kind, Token;
         public DateTime StartUtc;
@@ -451,9 +497,10 @@ namespace Hearthwoven
     }
 
     /// <summary>
-    /// The dungeon runs you were in, kept on this PC (0.9, LocalTotals top-level "dungeonRuns", schema 6): the newest MaxRuns, oldest first, each
-    /// noted as it goes (a run still on after a restart shows as it was last saved) and grown, never shrunk, as the fellows' copies catch up.
-    /// JSON: [{"k":"Crypt2","tk":"$location_crypt","s":"ISO","t":1080,"dd":2,"n":31,"bl":"123:456","bs":"ISO","p":[{"n":"Edda","me":1,"in":400,"dd":1,
+    /// The dungeon runs you were in, kept on this PC (0.9, LocalTotals top-level "dungeonRuns", schema 6), oldest first, each noted as it goes (a
+    /// run still on after a restart shows as it was last saved) and grown, never shrunk, as the fellows' copies catch up. 0.8.5: per world as the
+    /// BossLog (each run's "w"; Of, Adopt), the newest MaxRuns of each world.
+    /// JSON: [{"k":"Crypt2","w":"Midgard-123","tk":"$location_crypt","s":"ISO","t":1080,"dd":2,"n":31,"bl":"123:456","bs":"ISO","p":[{"n":"Edda","me":1,"in":400,"dd":1,
     /// "fo":12,"d":[..],"r":[..]}],"f":[foe rows as BossLog],"sp":[[0,70],[300,520,1]]}] (sp: seconds from s; 1 = the boss fight's).
     /// </summary>
     public sealed class RunLog
@@ -462,17 +509,42 @@ namespace Hearthwoven
         public readonly List<RunRecord> Runs = new List<RunRecord>();
         public bool IsEmpty => Runs.Count == 0;
 
-        /// <summary>Keeps or grows <paramref name="r"/> when you were in it; returns whether the log changed.</summary>
-        public bool Note(GroupRun r)
+        /// <summary>0.8.5: the runs of one world (null: those not yet adopted), oldest first, as the pages read them. Shares the runs: read only.</summary>
+        public RunLog Of(string world)
+        {
+            var log = new RunLog();
+            log.Runs.AddRange(Runs.Where(r => r.World == world));
+            return log;
+        }
+
+        /// <summary>0.8.5: runs saved before 0.8.5, with no world, go to <paramref name="world"/> (as BossLog.Adopt); returns whether any did.</summary>
+        public bool Adopt(string world)
+        {
+            var changed = false;
+            foreach (var r in Runs) if (r.World == null && world != null) { r.World = world; changed = true; }
+            if (changed) BossLog.Trim(Runs, x => x.World, x => x.StartUtc, MaxRuns);
+            return changed;
+        }
+
+        /// <summary>0.8.5 (review, B23): sharing switched off: each fellow's part of every run goes, as BossLog.ForgetFellows; yours stays.</summary>
+        public bool ForgetFellows()
+        {
+            var gone = 0;
+            foreach (var r in Runs) gone += r.Players.RemoveAll(p => !p.Self) + BossLog.ForgetFellowParts(r.Rows);
+            return gone > 0;
+        }
+
+        /// <summary>Keeps or grows <paramref name="r"/> when you were in it, in <paramref name="world"/>; returns whether the log changed.</summary>
+        public bool Note(GroupRun r, string world = null)
         {
             if (r == null || !r.Players.Any(w => w.Self)) return false;
-            var rec = Runs.LastOrDefault(x => x.Kind == r.Kind && x.StartUtc <= r.EndUtc + BattleRecorder.RunBreak && r.StartUtc <= x.StartUtc.AddSeconds(x.Seconds) + BattleRecorder.RunBreak);
+            var rec = Runs.LastOrDefault(x => x.World == world && x.Kind == r.Kind && x.StartUtc <= r.EndUtc + BattleRecorder.RunBreak && r.StartUtc <= x.StartUtc.AddSeconds(x.Seconds) + BattleRecorder.RunBreak);
             bool changed = false;
             if (rec == null)
             {
-                rec = new RunRecord { Kind = r.Kind, StartUtc = r.StartUtc };
+                rec = new RunRecord { World = world, Kind = r.Kind, StartUtc = r.StartUtc };
                 Runs.Add(rec); changed = true;
-                while (Runs.Count > MaxRuns) Runs.RemoveAt(0);
+                BossLog.Trim(Runs, x => x.World, x => x.StartUtc, MaxRuns);
             }
             if (rec.Token == null && r.Token != null) { rec.Token = r.Token; changed = true; }
             if (r.StartUtc < rec.StartUtc) { rec.Seconds += (float)(rec.StartUtc - r.StartUtc).TotalSeconds; rec.StartUtc = r.StartUtc; changed = true; }
@@ -512,6 +584,7 @@ namespace Hearthwoven
             foreach (var r in Runs)
             {
                 j.Open().Str("k", r.Kind ?? "?");
+                if (r.World != null) j.Str("w", r.World);
                 if (!string.IsNullOrEmpty(r.Token)) j.Str("tk", r.Token);
                 j.Str("s", r.StartUtc.ToString("o", inv)).Num("t", Math.Round(r.Seconds)).Num("dd", r.Deaths).Num("n", r.Foes);
                 if (r.BossLead != null) j.Str("bl", r.BossLead).Str("bs", r.BossStartUtc.ToString("o", inv));
@@ -539,10 +612,10 @@ namespace Hearthwoven
         {
             var log = new RunLog();
             if (!(o is List<object> list)) return log;
-            foreach (var x in list.OfType<Dictionary<string, object>>().Skip(Math.Max(0, list.Count - MaxRuns)))
+            foreach (var x in list.OfType<Dictionary<string, object>>().Skip(Math.Max(0, list.Count - MaxRuns * KeptFights.MaxWorlds)))
             {
                 if (!DateTime.TryParse(MiniJson.Str(x, "s"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var s)) continue;
-                var r = new RunRecord { Kind = MiniJson.Str(x, "k", "?"), StartUtc = s.ToUniversalTime(), Seconds = BossLog.Clip(MiniJson.Num(x, "t"), 1e7f),
+                var r = new RunRecord { World = MiniJson.Str(x, "w", null), Kind = MiniJson.Str(x, "k", "?"), StartUtc = s.ToUniversalTime(), Seconds = BossLog.Clip(MiniJson.Num(x, "t"), 1e7f),
                                         Deaths = (int)BossLog.Clip(MiniJson.Num(x, "dd"), 1e5f), Foes = (int)BossLog.Clip(MiniJson.Num(x, "n"), 1e6f) };
                 var tk = MiniJson.Str(x, "tk", null); if (!string.IsNullOrEmpty(tk)) r.Token = tk;
                 var bl = MiniJson.Str(x, "bl", null);

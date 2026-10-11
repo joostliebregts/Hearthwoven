@@ -40,16 +40,24 @@ static class FellowPanelTests
         {
             var solo = new PanelView();
             PanelModel.AddPlayers(solo, "Rowan", new string[0], "", sharing, solo: true);
-            Check(solo.Players.Count == 0 && solo.ShareNote == PanelModel.SoloNote, "solo: singleplayer says once that fellow players appear on a server or hosted world (sharing " + (sharing ? "on" : "off") + ")");
+            Check(solo.Players.Count == 0 && TimesSaid(solo, PanelModel.SoloNote) == 1, "solo: singleplayer says once that fellow players appear on a server or hosted world (sharing " + (sharing ? "on" : "off") + ")");
         }
         var soloInput = new PanelInput { PlayerName = "Rowan", IsSelf = true, Solo = true, ItemsPickedUp = new Dictionary<string, float> { ["$item_wood"] = 40 }, GatherKind = _ => "wood", Events = new SessionEvents() };
         var soloView = PanelModel.Build(soloInput, new PanelState { Chapter = Chapter.Company, Page = { [Chapter.Company] = "together" } });
         PanelModel.AddPlayers(soloView, "Rowan", new string[0], "", true, solo: true);
-        var notes = PanelModel.Content(soloView).Where(b => b.Kind == "note").Select(b => b.Text).ToList();
-        Check(notes.Count(t => t == PanelModel.SoloNote) == 1 && !notes.Contains(PanelModel.TogetherAlone), "solo: Together carries the one solo line, not \"once they share too\"");
+        Check(PanelModel.Content(soloView).Count(b => (b.Text ?? "").Contains(PanelModel.SoloNote)) == 1 && !Says(soloView, PanelModel.TogetherAlone), "solo: Together carries the one solo line, not \"once they share too\"");
+        // 0.8.5: said once on the page, not also in the header's notice (Together showed it twice: the page's line and ShareNote's framed box)
+        var soloPages = PanelModel.Build(soloInput, new PanelState { Chapter = Chapter.Company }).List.Select(l => l.Id).ToList();
+        var twice = soloPages.Where(page =>
+        {
+            var v = PanelModel.Build(soloInput, new PanelState { Chapter = Chapter.Company, Page = { [Chapter.Company] = page } });
+            PanelModel.AddPlayers(v, "Rowan", new string[0], "", true, solo: true);
+            return TimesSaid(v, PanelModel.SoloNote) != 1;
+        }).ToList();
+        Check(soloPages.Count >= 4 && twice.Count == 0, "solo: every Company page says the solo line once (" + soloPages.Count + " pages" + (twice.Count > 0 ? "; twice or never on " + string.Join(", ", twice) : "") + ")");
         var hosted = new PanelView();
         PanelModel.AddPlayers(hosted, "Rowan", new string[0], "", true);
-        Check(hosted.ShareNote == PanelModel.ShareWaitingNote, "solo: a hosted or dedicated world with nobody else yet keeps the waiting line");
+        Check(Says(hosted, PanelModel.ShareWaitingNote), "solo: a hosted or dedicated world with nobody else yet keeps the waiting line");
 
         // 0.7 item 1: names right away. Tor was there when you arrived; Ylva joins at 20:00:00 and their copy comes at :25; Sam joins and never shares
         var t0 = new DateTime(2026, 10, 9, 20, 0, 0, DateTimeKind.Utc);
@@ -76,9 +84,9 @@ static class FellowPanelTests
         var arrivedView = new PanelView();
         PanelModel.AddPlayers(arrivedView, "Rowan", new[] { "Tor", "Ylva" }, "", true, joining: arrived);
         Check(early.SequenceEqual(new[] { "Ylva", "Sam" }) && ylva != null && ylva.Disabled && !ylva.Selected && joinView.Players.Last().Label == "Sam" &&
-              joinView.ShareNote == null && joinView.PersonColors.ContainsKey("Ylva") &&
+              !Says(joinView, PanelModel.JoiningNote) && !Says(joinView, PanelModel.ShareWaitingNote) && joinView.PersonColors.ContainsKey("Ylva") &&
               arrived.SequenceEqual(new[] { "Sam" }) && arrivedView.Players.Single(p => p.Label == "Ylva").Disabled == false &&
-              later.Count == 0 && AloneJoin().ShareNote == PanelModel.JoiningNote && whileDead.Count == 0 && respawned.Count == 0 && returned.SequenceEqual(new[] { "Sam" }),
+              later.Count == 0 && Says(AloneJoin(), PanelModel.JoiningNote) && whileDead.Count == 0 && respawned.Count == 0 && returned.SequenceEqual(new[] { "Sam" }),
               "joining: a fellow who just joined shows at once as a dimmed chip without a book (\"" + PanelModel.JoinedLine + "\"; alone with them the header adds \"" + PanelModel.JoiningNote + "\"); whoever was there before you is not joining; " +
               "once the copy is here it is the normal chip; nobody stays \"just joined\" past " + JoinWatch.Window + " s (a player who never shares drops out); " +
               "a death and respawn is no new arrival, leaving for over " + JoinWatch.Absence + " s and coming back is");

@@ -12,8 +12,9 @@ namespace Hearthwoven.Panel
     /// eaten first, each bar one part in the dish's own colour (Cooking's item colours), no cooks and no legend. The Everyone chip: the meals
     /// eaten together and those cooked by another player, then two views: By dish (the default), one row per dish for the whole group split by
     /// who cooked it in the person colours, a cook outside the group by name in gray, Gathered (food the game names no cook on) in its own gray; and By player, one row per player
-    /// (you first, then by name, never a ranking) split by whose cooking they ate, so who fed whom is one glance. All only: fellow players
-    /// share no days. A feast is a dish of its own, its servings credited to who made it as Fireside credits them (FeastBook).
+    /// (you first, then by name, never a ranking) split by whose cooking they ate, so who fed whom is one glance. 0.8.5: Today, 7 days and 30
+    /// days too, from each fellow's shared days (their meals by cook and dish, DeedsDays.cs). A feast is a dish of its own, its servings credited
+    /// to who made it as Fireside credits them (FeastBook); a fellow's feast in a day window has no feast id, so it counts for who set it out.
     /// Meals count where they were eaten and are never capped by what a cook made (Cooking caps its "Who enjoyed" that way): this page says
     /// what the eater ate. Drawn and mirrored by the damage rows as they are; this file only builds the blocks.
     /// </summary>
@@ -170,13 +171,14 @@ namespace Hearthwoven.Panel
             view.Heading = MealsLabel;
             view.Scope = RecordedScope(input);   // a fellow's copy: whose and when (rule E)
             var group = state != null && state.Everyone && input.IsSelf && FellowsOf(input).Any();
-            // a Deeds page shows All until a window is chosen (PanelState.WindowPicked); the group has no days (fellows share none): All only
+            // a Deeds page shows All until a window is chosen (PanelState.WindowPicked). 0.8.5: a fellow's days and the group's come from what each
+            // copy shares per day (their meals as their record keeps them, FellowDeedsWindow); the group's day windows open as your day history allows
             var chosen = state != null && state.Window == TimeWindow.Session && !state.WindowPicked ? TimeWindow.SinceInstall : state?.Window;
-            Func<PanelInput, TimeWindow, bool> open = group ? (i, x) => x == TimeWindow.SinceInstall : (Func<PanelInput, TimeWindow, bool>)DeedsWindowOpen;
+            Func<PanelInput, TimeWindow, bool> open = group ? (i, x) => x == TimeWindow.SinceInstall || (IsDayWindow(x) && DayOpen(i, x)) : (Func<PanelInput, TimeWindow, bool>)DeedsWindowOpen;
             var w = state == null ? TimeWindow.SinceInstall : WindowChips(input, state, view, WindowsOf(Chapter.Deeds, MealsPageId) ?? DayAndAll, chosen, open);
-            if (group) { MealsGroup(input, view, state); return; }
+            if (group) { MealsGroup(input, view, state, w); return; }
 
-            var day = IsDayWindow(w) ? DeedsWindow(input, w) : null;
+            var day = IsDayWindow(w) ? (input.IsSelf ? DeedsWindow(input, w) : FellowDeedsWindow(input, w, input)) : null;
             var src = day ?? input;
             var dishes = MealsOf(src, input);
             var total = MealsEaten(dishes);
@@ -187,22 +189,24 @@ namespace Hearthwoven.Panel
             if (total <= 0 && day == null) view.Blocks.Add(Empty(NothingFrom(input, StartOf(input, null)), Voice(input, MealsEmptyLine)));
             if (day == null) AboutNumbers(view, input, StartOf(input, null), MealsAboutBefore, MealsFrom(total), MealsAboutDetails);   // your own book (a fellow's copy has no dates)
             Plate(view, MealsIcon, RecordedScope(input));
-            if (day != null) DeedsDayLines(input, day, MealsPageId, view, w);   // nothing in the window, a very full day
+            if (day != null) { DeedsDayLines(input, day, MealsPageId, view, w); FellowDayLines(input, day, MealsPageId, view, w); }   // nothing in the window, a very full day; a fellow's whole day
         }
 
         /// <summary>
         /// The group's Meals (the Everyone chip): the meals eaten together with those cooked by another player beside them, then the view switch
         /// (as Battle's By player / By weapon): By dish, the default, one row per dish for the whole group split by who cooked it; By player, one row
         /// per player (you first, then the others by name: a fixed order, never a ranking), split by whose cooking they ate, with how fresh their
-        /// numbers are under the name. Each player's meals from their own record as their own book reads it (MealsOf).
+        /// numbers are under the name. Each player's meals from their own record as their own book reads it (MealsOf). 0.8.5: in a day window, your
+        /// day history and each fellow's shared days (FellowDeedsWindow); a copy that shares no days is left out, its row and one line say why.
         /// </summary>
-        static void MealsGroup(PanelInput input, PanelView view, PanelState state)
+        static void MealsGroup(PanelInput input, PanelView view, PanelState state, TimeWindow w)
         {
             view.EveryoneOn = true;
-            foreach (var c in view.Windows.Where(c => c.Id != TimeWindow.SinceInstall.ToString())) c.Waits = false;   // greyed for the group, not waiting for your day history
             var people = FiresidePeople(input);
             Func<string, bool> inGroup = c => people.Any(p => SameName(p.Name, c));
-            var meals = people.Select(p => MealsOf(p.Input, input)).ToList();
+            var day = IsDayWindow(w);
+            var srcs = people.Select(p => !day ? p.Input : p.Input.IsSelf ? DeedsWindow(p.Input, w) : FellowDeedsWindow(p.Input, w, input)).ToList();
+            var meals = srcs.Select(src => src == null ? new Dictionary<string, Dictionary<string, double>>() : MealsOf(src, input)).ToList();
             var totals = meals.Select(MealsEaten).ToList();
             var max = totals.DefaultIfEmpty(0).Max(); var all = totals.Sum();
             double fromAnother = 0;
@@ -215,7 +219,7 @@ namespace Hearthwoven.Panel
                 fromAnother += byCook.Where(kv => !SameName(kv.Key, NoCook) && !SameName(kv.Key, p.Name)).Sum(kv => kv.Value);
                 var row = new Block { Kind = "source", Id = p.Name, Title = p.Input.IsSelf ? "You" : p.Name, Icon = "person:" + p.Name, Note = Freshness(p.Input, input), Src = SrcFellows, Source = TagFellows };
                 if (totals[k] > 0) { row.Value = N(totals[k]); row.Fraction = (float)(totals[k] / max); row.Items = CookParts(byCook, input.PlayerName, c => SameName(c, input.PlayerName) ? "You" : c, inGroup); }
-                else { row.Text = NothingEaten; row.Items = new List<Block>(); }
+                else { row.Text = srcs[k] != null ? NothingEaten : p.Input.IsSelf ? "no days recorded yet" + GroupNotInSum : (OlderThan(p.Input, NeedsDayDeeds) ? "shares no days yet" : "shares no days") + GroupNotInSum; row.Items = new List<Block>(); }
                 rows.Add(row);
             }
             Add(view, Hero((all > 0 ? N(all) : null, Label1(all, "meal eaten together", "meals eaten together"), SrcFellows, null),
@@ -231,15 +235,19 @@ namespace Hearthwoven.Panel
             Switch(view, state, MealsPageId, MealsGroupSwitch, null,
                    (MealsDishView, ByDishLabel, byDish == null ? null : new List<Block> { byDish }),
                    (MealsPlayerView, ByPlayerLabel, new List<Block> { new Block { Kind = "sources", Title = MealsByPlayer, Text = MealsSplitGroup, Src = SrcFellows, Source = TagFellows, Items = rows } }));
-            var lastOnly = people.Where(p => !p.Input.IsSelf && !p.Input.SharedSinceInstall).Select(p => p.Name).ToList();
+            var lastOnly = day ? new List<string>() : people.Where(p => !p.Input.IsSelf && !p.Input.SharedSinceInstall).Select(p => p.Name).ToList();
             if (lastOnly.Count > 0) view.Blocks.Add(new Block { Kind = "note", Text = JoinNames(lastOnly) + (lastOnly.Count == 1 ? " shares" : " share") + " no totals: their number is their last shared session." });
+            // 0.8.5: a day window: whose days are left out because their Hearthwoven is older, and that a fellow's day is their whole day
+            foreach (var k in Enumerable.Range(0, people.Count).Where(k => day && srcs[k] == null && OlderThan(people[k].Input, NeedsDayDeeds)))
+                view.Blocks.Add(new Block { Kind = "note", Text = OlderLine(people[k].Input, "their days fill in") });
+            if (day && Enumerable.Range(0, people.Count).Any(k => srcs[k] != null && !people[k].Input.IsSelf)) view.Blocks.Add(new Block { Kind = "note", Text = DayWindowLine(w) });
             view.AboutNumbers = new Block
             {
                 Kind = "aboutnumbers", Id = NumbersTarget, Title = AboutNumbersTitle,
                 Items = new List<Block> { new Block { Kind = "aboutline", Title = MealsCookLabel, Text = MealsCookAbout }, new Block { Kind = "aboutline", Title = MealsGatheredLabel, Text = MealsGatheredAbout },
                                           new Block { Kind = "aboutline", Title = MealsPlayersLabel, Text = MealsPlayersAbout } },
             };
-            Plate(view, MealsIcon, GroupDaysLine);   // the greyed day chips' reason (PageHead); each player's row says how fresh their numbers are
+            Plate(view, MealsIcon);   // each player's row says how fresh their numbers are
         }
     }
 }

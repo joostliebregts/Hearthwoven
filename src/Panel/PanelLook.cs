@@ -18,7 +18,7 @@ namespace Hearthwoven.Panel
         // compact dark translucent menu over the world, warm text, one gold accent
         public static readonly Color Panel = new Color(0.075f, 0.058f, 0.042f, 0.88f), Edge = Hex("#6b5232"), Slot = new Color(0.11f, 0.085f, 0.06f, 0.95f),
             SlotEdge = Hex("#4a3a28"), Text = Hex("#e9dcc4"), Muted = Hex("#b9a688"), Faint = Hex("#b0a086"),
-            Gold = Hex("#e8c27a"), Focus = Hex("#fff3d6"), Accent = Hex("#e8a948"), Track = new Color(0.17f, 0.13f, 0.09f, 1f), Rule = new Color(0.42f, 0.32f, 0.2f, 0.6f);
+            Gold = Hex("#e8c27a"), Focus = Hex("#fff3d6"), Accent = Hex("#e8a948"), Track = new Color(0.17f, 0.13f, 0.09f, 1f), Rule = PanelWash.Rule.Game;   // Rule: the mirror's --rule as the game draws it (PanelWash.cs)
 
         /// <summary>The smallest text in the panel, px at 1080p (rubric 4; was 13, raised round 3: Averia has a small x-height, 13 px read as about 11): Label never goes below it. Faint was #8c7b62 (2.9:1 on the character zone), now #b0a086 (4.6:1 there, 7:1 on the plate).
         /// One exception (Joost, 2026-10-10 13:40): a number inside a damage-bar part, digits only and bold, may be MinBarDigits. The floor exists because
@@ -49,6 +49,9 @@ namespace Hearthwoven.Panel
         /// <summary>A feat's tier mark (B30, Joost: each tier its own achievement): a small square, all four corners rounded. Filled: Rounded;
         /// not reached yet: this outline, its rim thick enough to stay 1 px when drawn TierMarkScale times smaller (radius 5 / 2.5 = 2 px).</summary>
         public static Sprite TierMarkEdge;
+        /// <summary>0.8.5 a damage part's outline (DamageRowsUi.StoppedPart: What your armor stopped, damage dealt after the foe's armor): the same shape
+        /// with its rim 2 px and its corners 2 px when drawn at the damage bars' scale (radius 5 / 2.5), one image where four edges were.</summary>
+        public static Sprite DamageEdge;
         /// <summary>0.8 Battle (a foe's outcome, Chapters/BattleFeedUi.cs): a ring and a half-filled ring, drawn at twice the 11 to 13 px they show
         /// at, so the rim stays about 1.5 px. The filled mark is Circle.</summary>
         public static Sprite Ring, HalfRing;
@@ -65,9 +68,10 @@ namespace Hearthwoven.Panel
         /// <summary>0.8 layout D+ (PanelUi.Islands): an island's ground, a white rounded rectangle, radius 10, nine-sliced, tinted IslandGround.</summary>
         public static Sprite Island;
         /// <summary>The island's ground: a lighter, greyish wash over the plate. The game blends in linear color space and the preview in sRGB,
-        /// so the game takes 0.4 % where the preview has rgba(255, 240, 210, .04): about (20, 18, 15) on the page's (10, 9, 7) in both. Joost picked
-        /// it in game (0.8.2, shade 4 of four tried with the temporary Dev.IslandShade; 4 % showed about (58, 53, 46), too loud).</summary>
-        public static readonly Color IslandGround = new Color(1f, 0.94f, 0.82f, 0.004f);
+        /// so the game takes about 0.4 % where the preview has rgba(255, 240, 210, .04): about (20, 18, 15) on the page's (10, 9, 7) in both. Joost picked
+        /// it in game (0.8.2, shade 4 of four tried with the temporary Dev.IslandShade; 4 % showed about (58, 53, 46), too loud). Since 0.8.5 worked
+        /// out with every other wash in PanelWash.cs (the same look).</summary>
+        public static readonly Color IslandGround = PanelWash.IslandGround.Game;
         public const float TierMarkScale = 2.5f;
         static bool resolved;
 
@@ -88,7 +92,7 @@ namespace Hearthwoven.Panel
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel fonts: " + e.Message); }
             Circle = Drawn(CircleTexture());
-            Rounded = RoundedSprite(false); RoundedEdge = RoundedSprite(true); RoundedTrace = RoundedSprite(true, 1f); TierMarkEdge = RoundedSprite(true, 2.5f);
+            Rounded = RoundedSprite(false); RoundedEdge = RoundedSprite(true); RoundedTrace = RoundedSprite(true, 1f); TierMarkEdge = RoundedSprite(true, 2.5f); DamageEdge = RoundedSprite(true, 5f);
             Ring = Drawn(RingTexture(false)); HalfRing = Drawn(RingTexture(true)); PillEdge = PillSprite();
             Triangle = Drawn(TriangleTexture());
             Chevron = Drawn(ChevronTexture());

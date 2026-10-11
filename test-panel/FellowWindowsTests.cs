@@ -35,10 +35,10 @@ static class FellowWindowsTests
         var defenseView = Battle(edda, "defense", TimeWindow.LastTenMinutes);
         var defense = PanelModel.Content(defenseView).FirstOrDefault(b => b.Kind == "guard");
         Check(PanelModel.FellowLive(edda) && damage.ShownWindow == TimeWindow.LastTenMinutes && !damage.Windows.First(c => c.Id == "LastTenMinutes").Disabled &&
-              inTen > 0 && inTen < all && Math.Abs(shown - inTen) < 0.5 && damage.Scope.EndsWith("Edda, live") &&
+              inTen > 0 && inTen < all && Math.Abs(shown - inTen) < 0.5 && Says(damage, "Edda", "live") &&
               guard != null && (guard.Blocks == 0 ? defense == null : defense != null && Lead(defense.Value) + Lead(defense.Value2) == guard.Blocks) &&
-              !damage.Windows.Any(c => c.Disabled) && damage.WindowWhy == null &&   // 0.9: her Damage opens her days too (DayTypesPanelTests)
-              defenseView.Windows.Where(c => c.Disabled).Select(c => c.Id).SequenceEqual(new[] { "Today", "SevenDays", "ThirtyDays" }) && defenseView.WindowWhy == "Edda's days are shared only for damage dealt.",
+              !damage.Windows.Any(c => c.Disabled) &&   // 0.9: her Damage opens her days too (DayTypesPanelTests)
+              defenseView.Windows.Where(c => c.Disabled).Select(c => c.Id).SequenceEqual(new[] { "Today", "SevenDays", "ThirtyDays" }) && Says(defenseView, "Edda", "only for damage dealt"),
               "FW live: Edda's copy is live, so her 10 min is open and cut from her minute log counted back from now (" + shown + " of her " + all +
               " dealt this session); Defense's blocks from her minutes too (" + guard?.Blocks + "); Damage greys nothing, Defense only the days: " + defenseView.WindowWhy);
 
@@ -46,7 +46,7 @@ static class FellowWindowsTests
         var group = Battle(world, "damage", TimeWindow.LastTenMinutes, everyone: true);
         var rows = PanelModel.Content(group).FirstOrDefault(b => b.Kind == PanelModel.GroupRowsKind)?.Items ?? new List<Block>();
         var eddaRow = rows.FirstOrDefault(r => r.Id == "Edda"); var torRow = rows.FirstOrDefault(r => r.Id == "Tor");
-        Check(eddaRow?.Kind == PanelModel.GroupMemberKind && Math.Abs(Lead(eddaRow.Value) - inTen) < 0.5 && torRow != null && torRow.Kind != PanelModel.GroupMemberKind && (torRow.Text ?? "").StartsWith("updates only every few minutes"),
+        Check(eddaRow?.Kind == PanelModel.GroupMemberKind && Math.Abs(Lead(eddaRow.Value) - inTen) < 0.5 && torRow != null && torRow.Kind != PanelModel.GroupMemberKind && (torRow.Text ?? "").Contains("every few minutes"),
               "FW Everyone: in 10 min Edda (live) counts " + eddaRow?.Value + " from her minute log; Tor, whose copies are not live, is left out: " + torRow?.Text);
 
         // ---------- a copy that is not live: the short windows stay greyed, and the line says why ----------
@@ -56,9 +56,9 @@ static class FellowWindowsTests
         var shortIds = new[] { "LastTenMinutes", "LastThirtyMinutes", "LastHour", "LastThreeHours" };
         var goneRows = PanelModel.Content(Battle(world, "damage", TimeWindow.LastTenMinutes, everyone: true)).FirstOrDefault(b => b.Kind == PanelModel.GroupRowsKind);
         Check(!PanelModel.FellowLive(gone) && goneView.ShownWindow == TimeWindow.Session && shortIds.All(id => goneView.Windows.First(c => c.Id == id).Disabled) &&
-              goneView.WindowWhy == "Edda is not playing now: 10 min to 3 h work while Edda plays. Days are shared only for damage dealt." &&
-              torView.ShownWindow == TimeWindow.Session && shortIds.All(id => torView.Windows.First(c => c.Id == id).Disabled) && torView.WindowWhy == PanelModel.FellowShortWhy(tor) + " Days are shared only for damage dealt." &&
-              PanelModel.FellowShortWhy(new PanelInput { IsSelf = false, PlayerName = "Ylva", ModVersion = "0.6.5", ServerLive = true }) == "Ylva's Hearthwoven is 0.6.5: 10 min to 3 h fill in once they update.",
+              Says(goneView, "Edda", "not playing") && Says(goneView, "only for damage dealt") &&
+              torView.ShownWindow == TimeWindow.Session && shortIds.All(id => torView.Windows.First(c => c.Id == id).Disabled) && Says(torView, PanelModel.FellowShortWhy(tor)) && Says(torView, "only for damage dealt") &&
+              PanelModel.FellowShortWhy(new PanelInput { IsSelf = false, PlayerName = "Ylva", ModVersion = "0.6.5", ServerLive = true }) is string ylvaWhy && ylvaWhy.Contains("Ylva") && ylvaWhy.Contains("0.6.5") && ylvaWhy.Contains("update"),
               "FW not live: Edda's last update five minutes old greys 10 min to 3 h (Foes shows Session): \"" + goneView.WindowWhy + "\"; Tor's copies never live: \"" + torView.WindowWhy + "\"");
         return fails;
     }

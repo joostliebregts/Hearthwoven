@@ -18,7 +18,8 @@ namespace Hearthwoven.Panel
     /// over. Nothing here is a count; it never touches the totals file. 0.8: also the views a player chose where the book keeps them
     /// (PanelModel.RememberedViews: the battle feed's Log, Cards or Timeline), under "views".
     /// 0.8: the Compare chip (PanelState.Compare, Chapters/CompareModel.cs), so every page reads the same way after a restart: "compare":1,
-    /// written only when on (a file without it reads as off; an older reader keeps it as an unknown key).
+    /// written only when on (a file without it reads as off; an older reader keeps it as an unknown key). 0.8.5: what each page compares
+    /// against (PanelState.CompareWith), "compareWith":{"Deeds/woodcutting":"best"}, written only for a page that does not use the default.
     /// </summary>
     public static class PanelPrefs
     {
@@ -32,7 +33,7 @@ namespace Hearthwoven.Panel
         public static string PathFor(string hearthwovenDir, long playerId, string name) =>
             Path.Combine(Path.Combine(hearthwovenDir, "local"), playerId.ToString(CultureInfo.InvariantCulture) + "-" + LocalTotals.SafeName(name) + ".panel.json");
 
-        static readonly HashSet<string> KnownKeys = new HashSet<string> { "version", "facets", "open", "everyone", "views", "compare" };   // every key this version writes (else a stale one is carried as a newer version's)
+        static readonly HashSet<string> KnownKeys = new HashSet<string> { "version", "facets", "open", "everyone", "views", "compare", "compareWith" };   // every key this version writes (else a stale one is carried as a newer version's)
         static Dictionary<string, object> Root(string json) => MiniJson.Parse(json ?? "") as Dictionary<string, object>;
         static bool IsPrefs(string json) => Root(json) is Dictionary<string, object> r && MiniJson.Num(r, "version") >= 1;
 
@@ -50,6 +51,8 @@ namespace Hearthwoven.Panel
             b.Append("},\"open\":[").Append(string.Join(",", s.OpenFilters.OrderBy(x => x, StringComparer.Ordinal).Select(Json.Q).ToArray())).Append(']');
             if (s.Everyone) b.Append(",\"everyone\":true");   // 0.8: the Everyone chip, written only when on (a file without it reads as off)
             if (s.Compare) b.Append(",\"compare\":1");   // 0.8: the Compare chip, written only when on
+            if (s.CompareWith.Count > 0)   // 0.8.5: what each page compares against, only the pages that do not use the stretch just before
+                b.Append(",\"compareWith\":{").Append(string.Join(",", s.CompareWith.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => Json.Q(kv.Key) + ":" + Json.Q(kv.Value)).ToArray())).Append('}');
             // 0.8: the views kept between sessions (PanelModel.RememberedViews: the battle feed's Log, Cards or Timeline); written only when set,
             // so a file without one reads and writes as before
             var views = PanelModel.RememberedViews.Where(k => s.View.TryGetValue(k, out var v) && !string.IsNullOrEmpty(v)).OrderBy(k => k, StringComparer.Ordinal).ToList();
@@ -60,7 +63,7 @@ namespace Hearthwoven.Panel
         /// <summary>Puts what <paramref name="json"/> holds into the state (its filters cleared first); false when it is not a prefs file this version reads.</summary>
         public static bool Apply(string json, PanelState s)
         {
-            s.Facets.Clear(); s.OpenFilters.Clear(); s.Everyone = false; s.Compare = false; foreach (var k in PanelModel.RememberedViews) s.View.Remove(k);
+            s.Facets.Clear(); s.OpenFilters.Clear(); s.Everyone = false; s.Compare = false; s.CompareWith.Clear(); foreach (var k in PanelModel.RememberedViews) s.View.Remove(k);
             if (!(MiniJson.Parse(json ?? "") is Dictionary<string, object> root)) return false;
             var v = MiniJson.Num(root, "version");
             if (v < 1 || v > Version) return false;
@@ -74,6 +77,8 @@ namespace Hearthwoven.Panel
             foreach (var kv in MiniJson.Obj(root, "views") ?? new Dictionary<string, object>())
                 if (kv.Value is string pick && pick.Length > 0 && pick.Length <= 32 && Array.IndexOf(PanelModel.RememberedViews, kv.Key) >= 0) s.View[kv.Key] = pick;
             s.Compare = MiniJson.Num(root, "compare") > 0;
+            foreach (var kv in MiniJson.Obj(root, "compareWith") ?? new Dictionary<string, object>())
+                if (kv.Value is string with && (with == PanelModel.CompareSameId || with == PanelModel.CompareBestId) && kv.Key.Length > 0 && kv.Key.Length <= 64) s.CompareWith[kv.Key] = with;
             return true;
         }
 
@@ -103,7 +108,7 @@ namespace Hearthwoven.Panel
                 else if (!string.IsNullOrEmpty(legacyPath) && File.Exists(legacyPath) && Apply(File.ReadAllText(legacyPath, Encoding.UTF8), s)) return ToJson(s);
             }
             catch { }
-            s.Facets.Clear(); s.OpenFilters.Clear(); s.Everyone = false; s.Compare = false; foreach (var k in PanelModel.RememberedViews) s.View.Remove(k);
+            s.Facets.Clear(); s.OpenFilters.Clear(); s.Everyone = false; s.Compare = false; s.CompareWith.Clear(); foreach (var k in PanelModel.RememberedViews) s.View.Remove(k);
             return ToJson(s);
         }
 

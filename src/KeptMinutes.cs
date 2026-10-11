@@ -123,6 +123,15 @@ namespace Hearthwoven
             return kept.Empty ? null : kept;
         }
 
+        /// <summary>0.8.5: the world of the minutes at <paramref name="path"/>, which every local save writes: the world of your last save before this
+        /// connection, whatever world you play now. Null: no file, or none this version reads.</summary>
+        public static string WorldOf(string path)
+        {
+            if (path == null || (!File.Exists(path) && !File.Exists(path + AtomicFile.BackupSuffix))) return null;
+            try { KeptMinutes k = null; AtomicFile.ReadWithBackup(path, t => (k = FromJson(t)) != null, out _); return string.IsNullOrEmpty(k?.World) ? null : k.World; }
+            catch (Exception) { return null; }
+        }
+
         /// <summary>The kept log as your shared copy carries it (SharedKey): "from" and the log's fields. Fellows put it under your connection's
         /// log (FellowTrail.Joined); the deeds and armour minutes stay on this PC, as this session's do.</summary>
         public string SharedJson()

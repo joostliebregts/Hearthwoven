@@ -33,12 +33,22 @@ namespace Hearthwoven
         /// map, so no reader of Damage or Hits ever meets it; folded with them. Two keys a minute at most.</summary>
         public readonly Dictionary<string, float> Guard = new Dictionary<string, float>();
         public const string GuardBlock = "block", GuardParry = "parry";
+        /// <summary>0.8.5: your hits after the foe's resistances and armor (AfterArmour), under the same keys as their Damage ("...|dealt|Troll|Axes|slash"
+        /// -> after), every key on a foe from AfterFrom on (a type the foe is immune to: 0). Its own map, so no reader of Damage ever meets it;
+        /// folded, joined and cut with it. Hits on players have none (their armor is not known here: Measured says so). Written as "stopped"
+        /// (WriteFields: what the foe's armor took off, only where it took or added something), read back into After for every measured key, so a
+        /// measured key always has its entry; one without (its after could not be worked out) is read as not measured.</summary>
+        public readonly Dictionary<string, float> After = new Dictionary<string, float>();
+        /// <summary>0.8.5: the bucket from which every hit of yours on a foe has its After (the first such hit's ten minutes, as a folded bucket would
+        /// say it); "" = none (a log of a Hearthwoven before 0.8.5). A dealt key is measured when its bucket is at or after it (Measured).</summary>
+        public string AfterFrom = "";
         /// <summary>The log keeps Guard (this PC's own; a fellow's copy whose measuredLog has "guard"). False: a copy from before 0.8.2, whose
         /// blocks are one untimed tally of the session (SessionEvents).</summary>
         public bool GuardKept = true;
         public readonly List<Death> Deaths = new List<Death>();
-        /// <summary>Damage and deaths folded per biome, kept up to date as hits and deaths come in: always what BiomeTally.FromLog(this) gives
-        /// for a log filled through AddDamage and AddDeath (the full pass over every key stays as the reference, and for a log read from a snapshot).</summary>
+        /// <summary>Damage and deaths folded per biome, kept up to date as hits and deaths come in: what BiomeTally.FromLog(this) gives for a log
+        /// filled through AddDamage and AddDeath, and also the falls past MaxDeaths, which the list (and so FromLog) no longer holds (0.8.5). The full
+        /// pass over every key stays as the reference, and for a log read from a snapshot.</summary>
         public readonly BiomeTally Biome = new BiomeTally();
         public int DeathsNotListed;   // beyond MaxDeaths: counted, never silently lost
         /// <summary>0.8.2: how often the log changed (a hit, a death, a block): the book joins your kept minutes under it (Plugin.LogWithEarlier)
@@ -69,8 +79,20 @@ namespace Hearthwoven
             var now = Bucket(utc); if (now == lastFold) return;
             lastFold = now;
             var cut = Bucket(utc.AddMinutes(-FoldAfterMinutes));
-            FoldKeys(Damage, cut); FoldKeys(Hits, cut); FoldKeys(Guard, cut);
+            FoldKeys(Damage, cut); FoldKeys(Hits, cut); FoldKeys(Guard, cut); FoldKeys(After, cut);
         }
+
+        /// <summary>0.8.5: a bucket ("2026-10-07T20:14Z", or a key that starts with one) whose hits on foes have their After: at or after AfterFrom.</summary>
+        public bool Measured(string bucketOrKey) =>
+            AfterFrom.Length >= 17 && bucketOrKey != null && bucketOrKey.Length >= 17 && string.CompareOrdinal(bucketOrKey, 0, AfterFrom, 0, 17) >= 0;
+
+        /// <summary>0.8.5: whether a dealt row has its After: its bucket is Measured and its target is no player (a player's armor is not known here).</summary>
+        public bool Measured(string bucket, string other) => Measured(bucket) && other != PlayerTarget;
+        /// <summary>The name a hit on another player is booked under (ClientHooks: the target's prefab).</summary>
+        public const string PlayerTarget = "Player";
+
+        /// <summary>The ten minutes a bucket folds into ("2026-10-07T20:14Z" -> "2026-10-07T20:10Z").</summary>
+        static string TenOf(string bucket) => bucket.Length >= 17 ? bucket.Substring(0, 15) + "0" + bucket.Substring(16) : bucket;
 
         /// <summary>One held block (ClientHooks.Block, where SessionEvents.Blocks counts it); <paramref name="parry"/>: it was a parry too.</summary>
         public void AddGuard(DateTime utc, bool parry)
@@ -99,7 +121,9 @@ namespace Hearthwoven
             }
         }
 
-        public void AddDamage(DateTime utc, string biome, bool dealt, string other, string cause, HitData.DamageTypes d)
+        /// <summary>A hit: yours on <paramref name="other"/> (<paramref name="dealt"/>) or on you. <paramref name="after"/> (0.8.5, your hit on a foe):
+        /// the same hit after the foe's resistances and armor (AfterArmour), kept under the same keys (AddAfter); null: none (a hit on a player).</summary>
+        public void AddDamage(DateTime utc, string biome, bool dealt, string other, string cause, HitData.DamageTypes d, HitData.DamageTypes? after = null)
         {
             if (!dealt && DamageTally.TotalOf(d) <= 0f) return;   // a hit fully absorbed (a ward) is no hit received, as in DamageTally (review 0.6.5: the windows still counted it)
             Fold(utc); Changes++;
@@ -108,11 +132,29 @@ namespace Hearthwoven
             Hits.TryGetValue(head, out var h); Hits[head] = h + 1;
             var biomeName = biome ?? "None";
             Each(d, (type, v) => { var k = head + "|" + type; Damage.TryGetValue(k, out var o); Damage[k] = o + v; Biome.AddDamage(biomeName, dealt, type, v); });
+            if (dealt && after.HasValue) AfterOf(head, utc, d, after.Value);
             if (!dealt)
             {
                 recent.Enqueue(new Recent { T = utc, Source = other, Cause = cause, D = d });
                 while (recent.Count > 0 && ((utc - recent.Peek().T).TotalSeconds > TimelineSeconds || recent.Count > MaxRecent)) recent.Dequeue();
             }
+        }
+
+        /// <summary>0.8.5: the after of a hit of yours already added (AddDamage with the same <paramref name="utc"/>, biome, foe, skill and
+        /// <paramref name="before"/>), under its keys. ClientHooks adds it once the game has found the weak spot the hit struck.</summary>
+        public void AddAfter(DateTime utc, string biome, string other, string cause, HitData.DamageTypes before, HitData.DamageTypes after)
+        {
+            var head = Bucket(utc) + "|" + (biome ?? "None") + "|dealt|" + (other ?? "?") + "|" + (cause ?? "?");
+            if (!Hits.ContainsKey(head)) head = Bucket(utc) + "|" + (biome ?? "None") + "|dealt|other|other";   // AddDamage put it under the cap's key
+            Changes++;
+            AfterOf(head, utc, before, after);
+        }
+
+        // every type of the before gets its after (an immune one adds 0); from the first one on, the log's hits on foes all have theirs
+        void AfterOf(string head, DateTime utc, HitData.DamageTypes before, HitData.DamageTypes after)
+        {
+            if (AfterFrom.Length == 0) AfterFrom = TenOf(Bucket(utc));
+            Each(before, (type, v) => { var k = head + "|" + type; After.TryGetValue(k, out var o); After[k] = o + Math.Max(0f, TypeOf(after, type)); });
         }
 
         public Death AddDeath(DateTime utc, string biome, float x, float z)
@@ -136,7 +178,8 @@ namespace Hearthwoven
             death.Killer = any ? last.Source : "unknown";
             death.Cause = any ? last.Cause : "unknown";
             recent.Clear(); Changes++;
-            if (Deaths.Count < MaxDeaths) { Deaths.Add(death); Biome.AddDeath(death.Biome); } else DeathsNotListed++;
+            if (Deaths.Count < MaxDeaths) Deaths.Add(death); else DeathsNotListed++;
+            Biome.AddDeath(death.Biome);   // 0.8.5: a fall past the list's cap keeps its place (it was counted, LocalTotals' Deaths, with no biome)
             return death;
         }
 
@@ -149,10 +192,12 @@ namespace Hearthwoven
         {
             if (earlier == null) return later;
             if (later == null) return earlier;
-            var j = new EventLog { Span = Math.Max(earlier.Span, later.Span), GuardKept = later.GuardKept, DeathsNotListed = earlier.DeathsNotListed + later.DeathsNotListed };
+            // 0.8.5: After from the earlier part's start when it has one, else from the later's (the earlier's minutes, older, stay unmeasured)
+            var j = new EventLog { Span = Math.Max(earlier.Span, later.Span), GuardKept = later.GuardKept, DeathsNotListed = earlier.DeathsNotListed + later.DeathsNotListed,
+                                   AfterFrom = earlier.AfterFrom.Length > 0 ? earlier.AfterFrom : later.AfterFrom };
             foreach (var log in new[] { earlier, later })
             {
-                Add(log.Damage, j.Damage); Add(log.Hits, j.Hits); Add(log.Guard, j.Guard);
+                Add(log.Damage, j.Damage); Add(log.Hits, j.Hits); Add(log.Guard, j.Guard); Add(log.After, j.After);
                 j.Deaths.AddRange(log.Deaths);
             }
             j.Deaths.Sort((a, b) => a.Time.CompareTo(b.Time));
@@ -167,9 +212,9 @@ namespace Hearthwoven
         /// </summary>
         public EventLog Between(DateTime fromUtc, DateTime untilUtc)
         {
-            var b = new EventLog { Span = Span, GuardKept = GuardKept };
+            var b = new EventLog { Span = Span, GuardKept = GuardKept, AfterFrom = AfterFrom };
             string lo = Bucket(fromUtc), hi = untilUtc == DateTime.MaxValue ? null : Bucket(untilUtc);
-            KeysBetween(Damage, b.Damage, lo, hi); KeysBetween(Hits, b.Hits, lo, hi); KeysBetween(Guard, b.Guard, lo, hi);
+            KeysBetween(Damage, b.Damage, lo, hi); KeysBetween(Hits, b.Hits, lo, hi); KeysBetween(Guard, b.Guard, lo, hi); KeysBetween(After, b.After, lo, hi);
             foreach (var d in Deaths) if (d.Time >= fromUtc && d.Time < untilUtc) b.Deaths.Add(d);
             return b;
         }
@@ -193,12 +238,31 @@ namespace Hearthwoven
             A("fire", d.m_fire); A("frost", d.m_frost); A("lightning", d.m_lightning); A("poison", d.m_poison); A("spirit", d.m_spirit); A("damage", d.m_damage);
         }
 
+        // what the foe's armor took off each measured key (a weakness: less than 0), only where it is not nothing: a key it left as it was is not written
+        IEnumerable<KeyValuePair<string, float>> Stopped()
+        {
+            foreach (var kv in After)
+                if (Damage.TryGetValue(kv.Key, out var d) && Math.Abs(d - kv.Value) >= 0.0005f) yield return new KeyValuePair<string, float>(kv.Key, d - kv.Value);
+        }
+
+        // one type of a hit by the name Each gives it
+        static float TypeOf(HitData.DamageTypes d, string type)
+        {
+            switch (type)
+            {
+                case "blunt": return d.m_blunt; case "slash": return d.m_slash; case "pierce": return d.m_pierce; case "chop": return d.m_chop; case "pickaxe": return d.m_pickaxe;
+                case "fire": return d.m_fire; case "frost": return d.m_frost; case "lightning": return d.m_lightning; case "poison": return d.m_poison; case "spirit": return d.m_spirit;
+                default: return d.m_damage;
+            }
+        }
+
         public void WriteTo(Json j, string key = "measuredLog") { j.Key(key).Open(); WriteFields(j); j.Close(); }
 
         /// <summary>The log's fields inside an object the caller opened (WriteTo; KeptMinutes adds its own beside them).</summary>
         internal void WriteFields(Json j)
         {
             j.Num("bucketMinutes", BucketMinutes).Num("deathsNotListed", DeathsNotListed).Dict("damage", Damage).Dict("hits", Hits).Dict("guard", Guard);
+            if (AfterFrom.Length > 0) j.Str("afterFrom", AfterFrom).Dict("stopped", Stopped());   // 0.8.5: the after as what was stopped, nothing where nothing was
             j.Key("deaths").OpenArr();
             foreach (var d in Deaths)
             {
@@ -217,6 +281,16 @@ namespace Hearthwoven
         {
             MiniJson.Into(MiniJson.Obj(log, "damage"), Damage); MiniJson.Into(MiniJson.Obj(log, "hits"), Hits);
             MiniJson.Into(MiniJson.Obj(log, "guard"), Guard); GuardKept = MiniJson.Obj(log, "guard") != null;   // 0.8.2: blocks and parries per minute (an older sender keeps none)
+            AfterFrom = MiniJson.Str(log, "afterFrom"); if (AfterFrom.Length < 17) AfterFrom = "";   // 0.8.5: your hits after the foe's armor (an older sender keeps none)
+            if (AfterFrom.Length > 0)
+            {
+                var stopped = new Dictionary<string, float>(); MiniJson.Into(MiniJson.Obj(log, "stopped"), stopped);
+                foreach (var kv in Damage)
+                {
+                    var p = kv.Key.Split('|');   // time|biome|dir|foe|cause|type
+                    if (p.Length >= 6 && p[2] == "dealt" && Measured(p[0], p[3])) After[kv.Key] = kv.Value - (stopped.TryGetValue(kv.Key, out var st) ? st : 0f);
+                }
+            }
             Span = log != null && MiniJson.Num(log, "bucketMinutes") >= 1 ? (int)MiniJson.Num(log, "bucketMinutes") : 10;   // an older sender kept ten-minute buckets
             if (log != null && log.TryGetValue("deaths", out var ds) && ds is List<object> deaths)
                 foreach (var o in deaths)

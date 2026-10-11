@@ -172,12 +172,14 @@ namespace Hearthwoven
             {
                 var peer = ZNet.instance.GetPeer(e.Peer);
                 var parts = e.Key.Split('|');
-                lines.Append(new Json().Open().Str("t", t).Str("player", peer?.m_playerName ?? "?").Num("playerId", (peer != null ? PeerIdentity.Id(peer) : null) ?? 0)
+                var line = new Json().Open().Str("t", t).Str("player", peer?.m_playerName ?? "?").Num("playerId", (peer != null ? PeerIdentity.Id(peer) : null) ?? 0)
                     .Str("playerKey", peer != null ? PeerIdentity.Key(peer) : "")
                     .Str("via", e.Via).Str("container", container ? container.name : "#" + zdo.GetPrefab()).Str("kind", kind)
                     .Str("containerId", zdo.m_uid.ToString()).Num("containerBuilder", builder).Num("x", pos.x).Num("z", pos.z)
                     .Str("item", ItemName(int.Parse(parts[0], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture))).Str("maker", parts[1]).Num("quality", int.Parse(parts[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture))
-                    .Str("action", e.Action).Num("count", e.Count).Close()).Append('\n');
+                    .Str("action", e.Action).Num("count", e.Count);
+                if (kind == "feeder") line.Raw("fromOwner", e.FromOwner ? "true" : "false");   // 0.8.5: the chest's own PC or not (ServerBook.ReplayFed)
+                lines.Append(line.Close()).Append('\n');
                 // 0.6: ships and carts also go into the server's book (cargo loaded and unloaded); a player without an id credits nobody
                 var id = peer != null ? PeerIdentity.Id(peer) : null;
                 ServerBookHooks.Chest(kind, zdo.m_uid.ToString(), e.Action, e.Via, id.HasValue ? PeerIdentity.Key(peer) : null, ItemName(int.Parse(parts[0], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)), e.Count, pos.x, pos.z);

@@ -102,11 +102,9 @@ static class UsSpellingTests
         Check(British.IsMatch("Defence") && British.IsMatch("item-metres") && British.IsMatch("greyed out") && British.IsMatch("Practised") && !British.IsMatch("Greydwarf") && !British.IsMatch("Defense") && !British.IsMatch("armor") && !British.IsMatch("practiced") && !British.IsMatch("items"),
               "us spelling: the word list finds the British forms and leaves the US ones and Valheim's own names (Greydwarf) alone");
 
-        var src = SrcDir();
-        Check(src != null, "us spelling: the mod's source folder is found");
-        if (src == null) return fails;
+        var src = SrcDir();   // a source folder not found reads no file: the scan's check fails on it (no files), never skipped
         var used = new HashSet<(string, string)>(); var hits = new List<string>(); int files = 0, literals = 0, logs = 0, ids = 0, dev = 0;
-        foreach (var file in Directory.GetFiles(Path.Combine(src, "src"), "*.cs", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.Ordinal))
+        foreach (var file in src == null ? new string[0] : Directory.GetFiles(Path.Combine(src, "src"), "*.cs", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.Ordinal).ToArray())
         {
             var rel = Path.GetRelativePath(src, file).Replace('\\', '/'); files++;
             foreach (var (line, text) in Literals(File.ReadAllText(file)))
@@ -120,7 +118,7 @@ static class UsSpellingTests
                 hits.Add(rel + ":" + line + " \"" + (text.Length > 60 ? text.Substring(0, 60) + "..." : text) + "\"");
             }
         }
-        Check(hits.Count == 0, "us spelling: no string literal in src/ holds a British form (" + files + " files, " + literals + " literals; " + ids + " ids and field names, " + logs + " log lines, " + dev +
+        Check(files > 0 && hits.Count == 0, "us spelling: no string literal in src/ holds a British form (" + files + " files, " + literals + " literals; " + ids + " ids and field names, " + logs + " log lines, " + dev +
                                " developer-check lines allowed, each with its reason in test-panel/UsSpellingTests.cs)" + (hits.Count > 0 ? ": " + hits.Count + ", e.g. " + string.Join(" | ", hits.Take(5)) : ""));
         var stale = Exact.Where(x => !used.Contains((x.file, x.literal))).Select(x => x.file + " \"" + x.literal + "\"").ToList();
         Check(stale.Count == 0, "us spelling: every allowed id is still in the source (a stale entry hides nothing but also rots the list)" + (stale.Count > 0 ? ": " + string.Join(" | ", stale) : ""));

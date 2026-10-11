@@ -69,6 +69,17 @@ namespace Hearthwoven
                     }
                     Save();
                 }
+                if (!Book.FedReplayed)   // 0.8.5 (B5): once per book, the Stoker's Chest feeding the chest logs already hold; a PC hosting a world starts from now
+                {
+                    if (ZNet.instance.IsDedicated())
+                    {
+                        var r = Book.ReplayFedLogs(Root, w, out var files, uid);
+                        Debug.Log($"[Hearthwoven] Stoker's Chest feeding of world {w} read once from {files} chest logs, from " + (r.First.HasValue ? r.First.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "no day") +
+                                  $": {r.Applied} feeding lines counted, {r.Pulls} left out as a pull ({r.Pulls - r.PullsTooMany} another PC's between the host's lines, {r.PullsTooMany} holding more than a feeder takes at once), {r.RolledBack} rolled back with the world, {r.OtherWorld} of other worlds left out");
+                    }
+                    Book.FedReplayed = true;
+                    Save();
+                }
             }
             catch (Exception e) { Book = Book ?? new ServerBook { BornFrom = DateTime.UtcNow }; Debug.LogWarning("[Hearthwoven] server book: " + e.Message + (path == null ? "; not saved this run" : "")); }
         }
@@ -84,11 +95,23 @@ namespace Hearthwoven
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] server book not saved: " + e.Message); }
         }
 
-        /// <summary>One chest-log event (ChestWatch.Write): ships and carts go into the book.</summary>
+        /// <summary>One chest-log event (ChestWatch.Write): ships and carts go into the book, and (0.8.5) a Stoker's Chest's auto-feed.</summary>
         internal static void Chest(string kind, string container, string action, string via, string playerKey, string item, int count, float x, float z)
         {
-            try { if (Book != null && ServerBook.IsCarrier(kind)) Book.Cargo(container, kind, action, via, playerKey, item, count, x, z, DateTime.UtcNow); }
+            try
+            {
+                if (Book == null) return;
+                if (ServerBook.IsCarrier(kind)) Book.Cargo(container, kind, action, via, playerKey, item, count, x, z, DateTime.UtcNow);
+                else Book.Fed(kind, action, item, count, DateTime.UtcNow);
+            }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] server book cargo: " + e.Message); }
+        }
+
+        /// <summary>A Stoker's Chest's feeding that the host of a world did itself (StokerHooks: its own chest updates never reach ChestWatch).</summary>
+        internal static void Fed(string item, int count)
+        {
+            try { Book?.Fed("feeder", "auto-feed", item, count, DateTime.UtcNow); }
+            catch (Exception e) { Debug.LogWarning("[Hearthwoven] server book feeding: " + e.Message); }
         }
 
         /// <summary>An item prefab ("IronScrap") as the game's token ("$item_ironscrap"), the key the client's own cargo uses; else the prefab.</summary>
@@ -102,8 +125,8 @@ namespace Hearthwoven
         }
 
         /// <summary>
-        /// For GroupShare's answer: {"self":{...},"players":{name:{...}}}, the requester's own numbers and each listed sharer's
-        /// (ServerBook.SharedJson); "{}" when the book has nothing for any of them. With <paramref name="fellows"/> (FellowIds keys, one per
+        /// For GroupShare's answer: {"self":{...},"players":{name:{...}},"world":{...}}, the requester's own numbers and each listed sharer's
+        /// (ServerBook.SharedJson), and the world's (0.8.5, ServerBook.WorldJson: Stoker's Chest feeding); "{}" when the book has nothing. With <paramref name="fellows"/> (FellowIds keys, one per
         /// name) the same numbers again under "byKey", so two fellows with one name each keep their own (an older reader ignores it).
         /// </summary>
         internal static string Shared(string ownKey, IList<string> keys, IList<string> names, IList<string> fellows = null)
@@ -121,6 +144,8 @@ namespace Hearthwoven
             }
             if (players.Count > 0) b.Append(own != null ? "," : "").Append("\"players\":{").Append(string.Join(",", players)).Append('}');
             if (byKey.Count > 0) b.Append(own != null || players.Count > 0 ? "," : "").Append("\"byKey\":{").Append(string.Join(",", byKey)).Append('}');
+            var world = Book.WorldJson();   // 0.8.5: the world's Stoker's Chest feeding by item prefab (the keys of a smelter's own count), the same for everyone; an older reader ignores it
+            if (world != null) b.Append(own != null || players.Count > 0 || byKey.Count > 0 ? "," : "").Append("\"world\":").Append(world);
             return b.Append('}').ToString();
         }
 

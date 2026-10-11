@@ -10,8 +10,9 @@ namespace Hearthwoven.Panel
     /// beside damage dealt on Battle > Overview. Read from the DayHistory rows the day windows read (one day's copy of the input per column,
     /// the page's own count of it), so a column is what Today showed that day. Honest when the history is short: only the days it holds are
     /// drawn (from DayHistory.KeptFrom, the counter's first kept day), never a 0 before them; a kept day with nothing is a flat mark. A fellow's
-    /// copy shares no days, so their Deeds pages draw the line's place greyed ("no days shared"); damage dealt is the exception (their
-    /// snapshot's dealtByDay, the last 30 days). Past days are worked out once per day row (Memo); only today is counted again on a build.
+    /// line comes from what their copy shares per day: damage dealt (their snapshot's dealtByDay, the last 30 days) and, 0.8.5, their Deeds
+    /// (dayDeeds, SharedGrowth in DeedsDays.cs); an older copy shares no Deeds days, so its Deeds pages draw the line's place greyed ("no days
+    /// shared"). Past days are worked out once per day row (Memo); only today is counted again on a build.
     /// </summary>
     public static partial class PanelModel
     {
@@ -158,7 +159,8 @@ namespace Hearthwoven.Panel
             {
                 var hero = Content(view).FirstOrDefault(b => b.Kind == "hero");
                 if (hero == null || SparkOf(hero) != null) return;
-                var spark = input.IsSelf ? DeedsGrowth(input, view.Page, m) : new Block { Kind = SparkKind, Tone = OffTone, Title = NoDaysShared };
+                // a fellow's: from the Deeds days their copy shares (0.8.5, SharedGrowth); an older copy shares none, its place greyed
+                var spark = input.IsSelf ? DeedsGrowth(input, view.Page, m) : input.DayDeeds != null ? SharedGrowth(input, view.Page, m.of) : new Block { Kind = SparkKind, Tone = OffTone, Title = NoDaysShared };
                 if (spark != null) (hero.Items ?? (hero.Items = new List<Block>())).Add(spark);
                 return;
             }

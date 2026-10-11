@@ -121,6 +121,7 @@ static partial class CoherenceTests
                     var key = b.Kind + "#" + (b.Id ?? b.Title ?? "");
                     if (!d.ContainsKey(key)) d[key] = new List<double>();
                     d[key].Add(Lead(b.Value));
+                    if (b.Whole != null) d[key].Add(Lead(b.Whole));   // 0.8.5: a dealt part by the after rule says what got through; a copy without the after says what was swung
                 }
                 return d;
             }
@@ -282,8 +283,10 @@ static partial class CoherenceTests
             PanelView In(string page, TimeWindow w) => Show(b, Chapter.Deeds, page, st => st.Window = w);
             bool Line(PanelView v, string text) => All(v).Any(x => x.Kind == "note" && x.Text == text);
             var cookAll = In("cooking", TimeWindow.SinceInstall); var cookWeek = In("cooking", TimeWindow.SevenDays);
-            Is(All(cookAll).Any(x => (x.Title ?? "").StartsWith("Who enjoyed")) && !All(cookWeek).Any(x => x.Src == PanelModel.SrcFellows || (x.Title ?? "").StartsWith("Who enjoyed")) && Line(cookWeek, PanelModel.NoDaysFood) && !Line(cookAll, PanelModel.NoDaysFood),
-               "Cooking: who enjoyed your food is on All, left out of 7 days with its one line");
+            // 0.8.5: the fellows share their meals per day, so Who enjoyed has days too: in 7 days from their shared days, never the all-time list
+            double Enjoyed(PanelView v) => ValueOf(v, x => x.Kind == "section" && (x.Title ?? "").StartsWith("Who enjoyed"));
+            Is(Enjoyed(cookAll) > 0 && Enjoyed(cookWeek) > 0 && Enjoyed(cookWeek) < Enjoyed(cookAll) && !Line(cookWeek, PanelModel.NoDaysFood) && !Line(cookAll, PanelModel.NoDaysFood),
+               "Cooking: who enjoyed your food is on All and in 7 days from the fellows' shared days (" + Enjoyed(cookWeek) + " of " + Enjoyed(cookAll) + "), never its all-time value, with no line that they have no days");
             var craftAll = In("crafting", TimeWindow.SinceInstall); var craftWeek = In("crafting", TimeWindow.SevenDays);
             Is(All(craftAll).Any(x => x.Kind == "people") && !All(craftWeek).Any(x => x.Kind == "people" || x.Src == PanelModel.SrcFellows) && Line(craftWeek, PanelModel.NoDaysGear), "Crafting: put to good use by is on All, left out of 7 days with its one line");
             var tameAll = In("taming", TimeWindow.SinceInstall); var tameWeek = In("taming", TimeWindow.SevenDays);
@@ -451,7 +454,7 @@ static partial class CoherenceTests
                 var own = owns[n];
                 double Progress(string id) { var d = First(Show(own, Chapter.Feats, PanelModel.FeatTier(PanelModel.FeatById(id), own) > 0 ? "earned" : "unsung", st => st.FeatSel = id), x => x.Kind == "featdetail" && x.Id == id); return d == null ? -1 : Lead(d.Items.FirstOrDefault(i => i.Kind == "progress")?.Title); }
                 var kept = PanelModel.FeatById("keptfires"); var tier = PanelModel.FeatTier(kept, own);
-                var smelters = Show(own, Chapter.Stores, "smelters"); var put = ValueOf(smelters, x => x.Kind == "hero" && x.Title == "items put in");
+                var smelters = Show(own, Chapter.Stores, "smelters"); var put = ValueOf(smelters, x => x.Kind == "hero" && x.Title == PanelModel.PutInMany);
                 if (tier < 3) Is(Progress("keptfires") == put, n + ": Kept the Fires says " + Progress("keptfires") + ", the smelters took " + put);
                 Is(PanelModel.FeatValue(kept, own) == put, n + ": the feat counts " + PanelModel.FeatValue(kept, own) + " into the smelters, the Hall says " + put);
                 var ore = PanelModel.FeatById("oreroad"); var cargo = Cargo(own);
@@ -463,7 +466,7 @@ static partial class CoherenceTests
                 Is(Math.Abs(PanelModel.FeatValue(drover, own) - ledKm) < 0.06, n + ": Drover counts " + PanelModel.FeatValue(drover, own) + " km, Taming says " + ledKm);
                 var lead = PanelModel.FeatById("longlead"); var best = ValueOf(Show(own, Chapter.Deeds, "taming"), x => x.Kind == "stat" && x.Title == "longest lead");
                 Is(Math.Abs(PanelModel.FeatValue(lead, own) - best) < 0.06, n + ": Long Lead counts " + PanelModel.FeatValue(lead, own) + " km, Taming says " + best);
-                var keel = PanelModel.FeatById("heavykeel"); var aboard = ValueOf(Show(own, Chapter.Voyages, "cargo"), x => x.Kind == "item" && x.Id == "heavykeel");
+                var keel = PanelModel.FeatById("heavykeel"); var aboard = ValueOf(Show(own, Chapter.Voyages, "cargo"), x => x.Id == "heavykeel");
                 Is(PanelModel.FeatValue(keel, own) == aboard, n + ": Heavy Keel counts " + PanelModel.FeatValue(keel, own) + ", Cargo says " + aboard);
                 var parries = PanelModel.FeatById("turnedblades");
                 Is(PanelModel.FeatValue(parries, own) == own.Events.Parries, n + ": Turned Blades counts " + PanelModel.FeatValue(parries, own) + ", the parries counted are " + own.Events.Parries);
@@ -495,13 +498,13 @@ static partial class CoherenceTests
                 if (ledger != null) Is(Math.Abs(ledger.Items.SelectMany(r => r.Items).Sum(c => Lead(c.Value)) - bought) < 0.5, n + ": the ledger adds up to " + ledger.Items.SelectMany(r => r.Items).Sum(c => Lead(c.Value)) + " items, " + bought + " bought");
                 var sub = First(over, x => x.Kind == "section" && x.Title != null && x.Title.EndsWith("items bought"));
                 Is((sub == null) == (bought == 0) && (sub == null || Lead(sub.Title) == bought), n + ": the overview counts " + (sub?.Title) + ", " + bought + " were bought");
-                var put = ValueOf(smelters, x => x.Kind == "hero" && x.Title == "items put in");
+                var put = ValueOf(smelters, x => x.Kind == "hero" && x.Title == PanelModel.PutInMany);
                 Is(Math.Abs(put - b.Events.SmelterAdded.Values.Sum()) < 0.5, n + ": " + put + " put in, " + b.Events.SmelterAdded.Values.Sum() + " counted");
                 var bar = First(smelters, x => x.Kind == "composition");
                 if (bar != null) Is(Math.Abs(bar.Items.Sum(i => Lead(i.Value)) - put) < 0.5, n + ": the ore, fuel and wood add up to " + bar.Items.Sum(i => Lead(i.Value)) + ", the put-in is " + put);
                 var stations = First(smelters, x => x.Kind == "ledger");
                 if (stations != null) Is(Math.Abs(stations.Items.SelectMany(r => r.Items).Sum(c => Lead(c.Value)) - put) < 0.5, n + ": the stations add up to " + stations.Items.SelectMany(r => r.Items).Sum(c => Lead(c.Value)) + ", the put-in is " + put);
-                Is(ValueOf(over, x => x.Kind == "hero" && x.Title == "items put in") == put && ValueOf(over, x => x.Kind == "hero" && x.Title == "coins spent") == coins, n + ": the Hall overview is not the Trader and Smelters pages");
+                Is(ValueOf(over, x => x.Kind == "hero" && x.Title == PanelModel.PutInShort) == put && ValueOf(over, x => x.Kind == "hero" && x.Title == "coins spent") == coins, n + ": the Hall overview is not the Trader and Smelters pages");
                 // every item bought was bought from a trader who was paid
                 foreach (var kv in b.Events.Bought) Is(b.Events.Spent.TryGetValue(kv.Key.Split('|')[0], out var paid) && paid > 0, n + ": " + kv.Key + " was bought from a trader who was paid nothing");
             }
@@ -538,6 +541,8 @@ static partial class CoherenceTests
                 var hero = Cargo(b); var bar = First(Show(b, Chapter.Voyages, "cargo"), x => x.Kind == "composition" && x.Items.Any(i => (i.Id ?? "").StartsWith("$item")));
                 Is(Math.Abs(b.Events.CargoMeters.Values.Sum() / 1000.0 - hero) < 0.5, n + ": the cargo hero says " + hero + ", the tally " + b.Events.CargoMeters.Values.Sum() / 1000.0);
                 if (bar != null) Is(Math.Abs(bar.Items.Sum(i => Lead(i.Value)) - hero) < 1.01, n + ": the cargo bar adds up to " + bar.Items.Sum(i => Lead(i.Value)) + ", the hero says " + hero);
+                // 0.8.5 the sum under the bar works out its largest part from that item's card, and holds as shown (CargoTests.SumWrong)
+                if (bar != null) { var wrong = CargoTests.SumWrong(All(Show(b, Chapter.Voyages, "cargo")).ToList()); Is(wrong == null, n + ": the cargo sum: " + wrong); }
                 var helmM = SampleWorld.HelmSince(n) * 1000; b.Events.CartMeters.TryGetValue("Cart", out var cart);
                 foreach (var kv in b.Events.CargoStretch) Is(kv.Value <= helmM + cart + 1, n + ": " + kv.Key + " was carried over " + kv.Value + " m but the helm and the cart moved " + (helmM + cart));
                 Is(b.Events.CargoMeters.Keys.All(k => b.Events.CargoStretch.ContainsKey(k)) && b.Events.CargoMeters.Count > 0 == (hero > 0), n + ": cargo without a stretch, or a hero without cargo");

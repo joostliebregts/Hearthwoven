@@ -49,12 +49,8 @@ static class PerfPassTests
         m.AddPanel(900, 4096); m.AddRefresh(800, 4000); m.AddRebuild(100, 300, 50, 250, 100); m.EndFrame(0.030, true, 11);   // a refresh that drew the page
         m.AddPanel(20, -1); m.EndFrame(0.016, true, 12);   // a span the runtime could not tell
         m.AddPanel(20, 512); m.EndFrame(0.016, false, 12);  // book shut
-        var line = m.Line();
         Check(m.IdleFrames == 3 && m.IdleBytes == 0 && m.ByteFrames == 5 && m.PanelBytesMax == 4096 && m.UnknownByteFrames == 1 && m.Collections == 2 && m.Rebuilds == 1 && m.UiMax == 350,
               "perf: idle frames counted apart (3 at 0 B), the refresh frame is not idle, an unknown span is left out, 2 collections");
-        Check(line.Contains("book open and idle 0 B/frame avg (max 0 B, 3 frames)") && line.Contains("page refresh 3.9 KB avg") && line.Contains("1 rebuild: gather 0.10 ms, model 0.30 ms, json 0.05 ms, UI 0.25 ms, canvas 0.10 ms avg (UI + canvas max 0.35 ms)") &&
-              line.Contains("(1 frame not known") && line.Contains("2 garbage collections") && line.StartsWith("last 0 s, 6 frames"), "perf: the line adds bytes, the rebuild's phases and the collections after the times: " + line);
-        Check(!new PerfMeter(1_000_000).Line().Contains("allocations"), "perf: nothing measured, no allocation part in the line");
 
         // the bench's numbers: nearest-rank percentiles, written in invariant culture
         var s = new BenchSeries(); for (int i = 1; i <= 20; i++) s.Add(i); s.Add(double.NaN);

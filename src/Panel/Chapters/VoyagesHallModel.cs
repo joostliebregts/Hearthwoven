@@ -46,19 +46,36 @@ namespace Hearthwoven.Panel
             view.Recorded = true;   // 0.7 (REDESIGN-RULES.md, group G7): no zones; the dated labels are automatic
             view.Scope = RecordedScope(input);
             // Sailing and Cargo have the day windows (HISTORY-06.md): Today, 7 days, 30 days from the day history, and All. A day window
-            // reads the window's copy of the input (InWindow): km from the game counters' growth those days, crew and cargo from the rows
+            // reads the window's copy of the input (InWindow): km from the game counters' growth those days, crew and cargo from the rows.
+            // 0.8.5: a fellow's book reads the copy their Everyone row reads (VoyageDays: their shared voyage days), so the two tell one number
             var offered = WindowsOf(Chapter.Voyages, page);
-            var w = offered != null && state != null ? WindowChips(input, state, view, offered) : TimeWindow.SinceInstall;
-            var src = IsDayWindow(w) ? InWindow(input, w) ?? input : input;
+            var w = offered != null && state != null ? WindowChips(input, state, view, offered, open: VoyagesWindowOpen) : TimeWindow.SinceInstall;
+            var src = IsDayWindow(w) ? VoyageDays(input, w, input, out _, out _) ?? input : input;
             if (!IsDayWindow(w)) VoyagesAboutNumbers(input, view);   // the box: All only (a day window has none, rule W.1)
             switch (page)
             {
-                case "sailing": Sailing(src, view, w); return;
-                case "cargo": CargoPage(src, view, w, input.Book != null); return;
+                case "sailing": Sailing(src, view, w); FellowVoyageLines(input, src, page, view); return;
+                case "cargo": CargoPage(src, view, w, input.IsSelf && input.Book != null); FellowVoyageLines(input, src, page, view); return;   // a fellow's day: no line about the server's book
                 case "onfoot": OnFoot(input, view); return;
                 case "maps": Maps(input, view); return;
                 default: VoyagesOverview(input, view); return;
             }
+        }
+
+        /// <summary>
+        /// A fellow's Sailing or Cargo (0.8.5), as their Deeds pages (FellowDayLines): with the day chips greyed, why (VoyagesWindowsLine, the
+        /// chips' hover reason); in a day window one paragraph, as Everyone's Voyages day pages: what their shared days hold (DeedsSharedLine: no
+        /// crew, no helms of others, no distance per item, so no cargo sum; left out on an empty window) and that their day is their whole day
+        /// (DayWindowLine). Nothing on your own book.
+        /// </summary>
+        static void FellowVoyageLines(PanelInput input, PanelInput day, string page, PanelView view)
+        {
+            if (input == null || input.IsSelf || !(PlateOf(view) is Block plate)) return;
+            if (view.Windows.Any(c => c.Disabled) && VoyagesWindowsLine(input) is string why)
+                plate.Text = (string.IsNullOrEmpty(plate.Text) ? "" : plate.Text + "\n") + why;
+            if (day?.Window?.Shared == null) return;
+            var whole = DayWindowLine(day.Window.Window, Name(input));
+            plate.Items.Add(new Block { Kind = "note", Text = plate.Items.Any(b => b.Kind == "empty") ? whole : DeedsSharedLine(input, page) + " " + whole });
         }
 
         /// <summary>
@@ -295,7 +312,8 @@ namespace Hearthwoven.Panel
             view.Scope = RecordedScope(input);
             AboutNumbers(view, input, StartOf(input, null), "Not recorded: the game keeps no count of trades or smelting.",
                          "Hearthwoven counted what you bought and put in, on this PC.",
-                         "The game does not name the fuel; each station's usual fuel is shown. What a Stoker's Chest feeds is shown apart, never as yours.");
+                         "The game does not name the fuel; each station's usual fuel is shown. What a Stoker's Chest feeds is shown apart, never as yours." +
+                         (ChestsFeed(input) ? " " + (input.World != null ? ChestsCountServer : ChestsCountHost) : ""));
             switch (page)
             {
                 case "trader": TraderPage(input, view); return;
@@ -401,7 +419,7 @@ namespace Hearthwoven.Panel
                 }),
                 Stretch(v =>
                 {
-                    HeroAndBar(v, IntoSmelters, SmelterComposition(input), "item put in", "items put in", compact: true);
+                    HeroAndBar(v, IntoSmelters, SmelterComposition(input), PutInShort, PutInShort, compact: true);   // a half island: the short words fit beside the number
                     Add(v, SmelterRows(input, Smelted(input), int.MaxValue));   // the item tiles say it: no "by item" heading
                 }));
             if (PanelModel.Content(view).All(b => IsBox(b))) { view.Blocks.Clear(); Add(view, NothingHere(input, StartOf(input, null))); }
@@ -493,6 +511,27 @@ namespace Hearthwoven.Panel
             }, SrcPc);
         }
 
+        /// <summary>What the Stoker's Chests put in as a bar by kind, as SmelterComposition draws the hand count (ore, fuel, any other good), with
+        /// its total and <paramref name="note"/> (who counted it) beside the heading: Everyone > Smelters (GroupChests). One kind: no bar, its row.</summary>
+        public static Block ChestComposition(PanelInput input, List<(string station, string item, bool fuel, double n)> fed, string note)
+        {
+            if (fed == null || fed.Count == 0) return null;
+            var parts = new Dictionary<string, double>();
+            foreach (var s in fed) Bump(parts, SmeltPart(s), s.n);
+            var total = parts.Values.Sum(); var colour = SmeltColours(input);
+            var b = Tagged(new Block
+            {
+                Kind = "composition", Title = FedByChests, Value = N(total), Note = note,
+                Items = parts.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => new Block
+                {
+                    Id = kv.Key, Title = kv.Key == "Ore" || kv.Key == "Fuel" ? kv.Key : Who(input, kv.Key), Value = N(kv.Value), Fraction = (float)(kv.Value / total),
+                    Colour = colour(kv.Key),
+                }).ToList(),
+            }, SrcPc);
+            if (b.Items.Count == 1) b.Tone = "single";
+            return b;
+        }
+
         // the items put in, most first, each edged in its part's colour; the fuel marked as fuel (Coal 27 here is the bar's Fuel 27)
         static IEnumerable<(string item, bool fuel, double n, string colour)> SmeltItems(PanelInput input, IEnumerable<(string station, string item, bool fuel, double n)> smelted)
         {
@@ -501,12 +540,12 @@ namespace Hearthwoven.Panel
                           .OrderByDescending(r => r.n).ThenBy(r => r.item, StringComparer.Ordinal);
         }
 
-        static Block SmelterRows(PanelInput input, IEnumerable<(string station, string item, bool fuel, double n)> smelted, int top)
+        static Block SmelterRows(PanelInput input, IEnumerable<(string station, string item, bool fuel, double n)> smelted, int top, string src = SrcPc)
         {
             var rows = SmeltItems(input, smelted).Take(top)
                               .Select(r => new Block { Kind = "item", Id = r.item, Icon = r.item == FuelKey ? "" : "item:" + r.item, Title = r.item == FuelKey ? "Fuel" : Who(input, r.item), Value = N(r.n),
                                                        Colour = r.colour, Tone = r.fuel ? FuelTone : null }).ToList();
-            return rows.Count == 0 ? null : Tagged(new Block { Kind = "itemgrid", Items = rows, Note = rows.Any(r => r.Tone == FuelTone) ? FuelNote : null }, SrcPc);
+            return rows.Count == 0 ? null : Tagged(new Block { Kind = "itemgrid", Items = rows, Note = rows.Any(r => r.Tone == FuelTone) ? FuelNote : null }, src);
         }
 
         /// <summary>The caveat under fuel (fix-rest, review: the fuel pictures were a guess, unflagged): the game tells the mod only that
@@ -516,16 +555,57 @@ namespace Hearthwoven.Panel
         /// <summary>True when this game has the Stoker's Chest (StokerHooks found the OverDrive-SmelterUpgrades mod on this PC). The mod is enforced
         /// on the server, so every fellow's book here has the chests too.</summary>
         public static bool StokersChests;
-        /// <summary>Stoker's Chests feed the smelters here: the mod is on this PC, or the book counted a chest's feeding.</summary>
-        public static bool ChestsFeed(PanelInput input) => StokersChests || (input?.Events?.ChestFed.Values.Any(v => v > 0) ?? false);
+        /// <summary>Stoker's Chests feed the smelters here: the mod is on this PC, the server counted a chest's feeding, or the book did.</summary>
+        public static bool ChestsFeed(PanelInput input) => StokersChests || input?.World != null || (input?.Events?.ChestFed.Values.Any(v => v > 0) ?? false);
+        /// <summary>The smelters' hero (0.8.5, Joost's evening: "1 item put in together" stood over 1 610 fed by the chests): what it counts.</summary>
+        public const string PutInOne = "item put in by hand", PutInMany = "items put in by hand", PutInShort = "put in by hand";
         public const string FedByChests = "Fed by Stoker's Chests", ChestsNoneYet = "Nothing fed by a Stoker's Chest yet. Its feeding shows here, apart from yours.";
         /// <summary>Under the chests' part: nobody's own work, and only what this PC (or the fellow's) hosted.</summary>
         public static string ChestNote(PanelInput input) => "Nobody's own work: what the chests put in while " + (input.IsSelf ? "your" : Name(input) + "'s") + " PC hosted them.";
+        /// <summary>Under the chests' part when the server counts it (0.8.5, ServerBook.Fed): the whole group's, once.</summary>
+        public const string ChestNoteServer = "Nobody's own work: what the group's chests put in, counted once by the server.";
+        /// <summary>What the Smelters page counts, one plain line (0.8.5, Joost in game: "This also seems to lack data..?"): by hand is your
+        /// own; a chest's feeding is nobody's, counted by the server or else on the PC that hosts the chest; Everyone shows the group.</summary>
+        public const string HandCounts = "Put in by hand counts what you put in yourself.",
+                            ChestsCountServer = "A Stoker's Chest's feeding is nobody's: the server counts it once for the whole group.",
+                            ChestsCountHost = "A Stoker's Chest's feeding is nobody's: it counts on the PC of the player who hosts the chest, the first player near it or the last who opened it.",
+                            EveryoneShowsGroup = "Everyone shows the whole group.";
+        public static string SmeltersCount(PanelInput input) =>
+            HandCounts + (ChestsFeed(input) ? " " + (input?.World != null ? ChestsCountServer : ChestsCountHost) : "") + " " + EveryoneShowsGroup;
+
+        /// <summary>What the Stoker's Chests put in, as Smelted's tuples, and whether the server counted it (0.8.5): the world's count from the
+        /// server when it counts (ServerBook.World: once, whoever hosts a chest, whatever Hearthwoven that PC runs), else what this PC (or the
+        /// fellow's) counted while it hosted them (StokerHooks). The server's count is nobody's: a fellow's book leaves it out (yours and
+        /// Everyone show it). The server names the item itself, so coal and sap are fuel by name, not a guess.</summary>
+        public static (List<(string station, string item, bool fuel, double n)> rows, bool server) ChestFedRows(PanelInput input)
+        {
+            if (input?.World == null) return (Smelted(input, chests: true), false);
+            if (!input.IsSelf) return (new List<(string, string, bool, double)>(), true);
+            return (WorldFed(input.World.ChestFed), true);
+        }
+        static List<(string station, string item, bool fuel, double n)> WorldFed(IDictionary<string, double> fed) =>
+            (fed ?? new Dictionary<string, double>()).Where(kv => kv.Value > 0)
+                .Select(kv => ((string)null, kv.Key, kv.Key == FuelOf("smelter") || kv.Key == FuelOf("eitrrefinery"), kv.Value)).ToList();
+        /// <summary>The server's label over its count: "Recorded by the server from 11 October" (as Cargo's server part).</summary>
+        static string ServerFedScope(PanelInput input) =>
+            "Recorded by the server" + (input?.World?.FedFrom is DateTime from ? " from " + RecordDate(input, from) : "");
+
+        /// <summary>The chests' part on a page: its heading (the server's label when the server counts) and the items it put in; null when
+        /// there is nothing to show.</summary>
+        static List<Block> ChestPart(PanelInput input, List<(string station, string item, bool fuel, double n)> fed, bool server)
+        {
+            var chest = SmelterRows(input, fed, int.MaxValue, server ? SrcServer : SrcPc);
+            if (chest == null) return null;
+            chest.Note = server ? ChestNoteServer : ChestNote(input);
+            var head = Section(FedByChests);
+            if (server) head.RecordedFrom = ServerFedScope(input);
+            return new List<Block> { head, chest };
+        }
 
         static void SmeltersPage(PanelInput input, PanelView view)
         {
             view.Heading = "Smelters";
-            HeroAndBar(view, null, SmelterComposition(input), "item put in", "items put in", compact: true);
+            HeroAndBar(view, null, SmelterComposition(input), PutInOne, PutInMany, compact: true);
             var smelted = Smelted(input);
             // one row per station (its game name, alphabetical), what went in as chips in their part's colour, fuel marked
             var ledger = LedgerRows(smelted.Select(s => s.station).Distinct().OrderBy(s => Who(input, s), StringComparer.OrdinalIgnoreCase).Select(station => new Block
@@ -535,12 +615,18 @@ namespace Hearthwoven.Panel
             }));
             if (ledger != null && smelted.Any(s => s.fuel)) ledger.Note = FuelNote;
             if (ledger != null) { view.Blocks.Add(Section(PerStation)); view.Blocks.Add(ledger); }
-            // a Stoker's Chest's feeding (StokerHooks): its own part, never in "items put in" (a chest's feeding is nobody's)
-            var chest = SmelterRows(input, Smelted(input, chests: true), int.MaxValue);
-            if (chest != null) chest.Note = ChestNote(input);
-            if (view.Blocks.Count == 0 && chest == null) Add(view, NothingHere(input, StartOf(input, null)));
-            if (chest != null) { view.Blocks.Add(Section(FedByChests)); view.Blocks.Add(chest); }
-            else if (ChestsFeed(input)) Add(view, Empty(ChestsNoneYet));
+            // a Stoker's Chest's feeding (the server's count, else StokerHooks on the hosting PC): its own part, never in "items put in" (nobody's)
+            var (fed, server) = ChestFedRows(input);
+            var chest = ChestPart(input, fed, server);
+            if (view.Blocks.Count == 0 && chest == null)
+            {
+                // nothing at all: when, and what counts here (by hand, the chests apart, Everyone for the group), in one line
+                var none = NothingHere(input, StartOf(input, null));
+                if (input.IsSelf) none.Text = SmeltersCount(input);
+                Add(view, none);
+            }
+            else if (chest == null && ChestsFeed(input) && (input.IsSelf || !server)) Add(view, Empty(ChestsNoneYet));
+            if (chest != null) view.Blocks.AddRange(chest);
             Plate(view, "ui:chapter-stores", RecordedScope(input));
         }
     }

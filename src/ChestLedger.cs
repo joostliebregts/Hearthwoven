@@ -36,6 +36,9 @@ namespace Hearthwoven
             public long Peer;
             public string Key, Action, Via;
             public int Count;
+            /// <summary>The PC that sent the change manages the container (sender = owner). 0.8.5: written on a Stoker's Chest's lines, so a
+            /// rebuild of its feeding (ServerBook.ReplayFed) knows the chest's own PC from a craft-from-chest pull without guessing.</summary>
+            public bool FromOwner;
         }
 
         /// <summary>
@@ -144,9 +147,11 @@ namespace Hearthwoven
                 if (!inUse)
                 {
                     via = "unattended";   // nobody had it open: a mod or automation, still on this PC
-                    if (kind == "feeder" && sign < 0) action = "auto-feed";
+                    // the chest's own PC (its manager) runs the mod's feeding; another PC that empties it unopened is a craft-from-chest mod
+                    // (AzuCraftyBoxes) pulling for its player: a take, never the chest's feeding (0.8.5, ServerBook.Fed counts auto-feed)
+                    if (kind == "feeder" && sign < 0 && sender == owner) action = "auto-feed";
                 }
-                events.Add(new Event { Peer = sender, Key = kv.Key, Action = action, Via = via, Count = Math.Abs(kv.Value) });
+                events.Add(new Event { Peer = sender, Key = kv.Key, Action = action, Via = via, Count = Math.Abs(kv.Value), FromOwner = sender == owner });
             }
             return events;
         }

@@ -14,6 +14,7 @@ static class BattleFeedTests
         void Check(bool ok, string what) { System.Console.WriteLine((ok ? "PASS " : "FAIL ") + what); if (!ok) fails++; }
         var world = PanelSample.Full(now);
         Block Find(PanelView v, string kind) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == kind);
+        bool SaysWindow(PanelView v, TimeWindow w) => Texts(v).Any(t => t.IndexOf(PanelModel.WindowLabel(w), StringComparison.OrdinalIgnoreCase) >= 0);   // the window in full, wherever the page says it
         PanelState Damage(TimeWindow w, Action<PanelState> more = null) { var s = new PanelState { Chapter = Chapter.Battle, Window = w, Page = { [Chapter.Battle] = "damage" } }; s.View["Battle/damage/view"] = "foe"; more?.Invoke(s); return s; }
         IEnumerable<Block> All(Block b) => new[] { b }.Concat((b?.Items ?? new List<Block>()).SelectMany(All));
         // the page's fights: one feed block per fight, each its own island (0.8.1, FeedBlocks); the feed's lines between and after them
@@ -32,7 +33,7 @@ static class BattleFeedTests
         var edda = FullDump.Books(world).First(b => b.who == "Edda").book;
         var fellowHour = PanelModel.DealtFoes(edda, PanelModel.Damage(edda.Log, TimeWindow.LastHour, "", edda.NowUtc), TimeWindow.LastHour);   // their copy has Session and All only
         var everyX = PanelModel.AllWindows.SelectMany(w => All(Find(PanelModel.Build(world, Damage(w)), "dealtfoes"))).Concat(All(Find(PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.SinceInstall, Page = { [Chapter.Battle] = "defense" } }), "sources")))
-                            .Where(b => b != null).Select(b => b.Value2).Where(v => v != null).ToList();
+                            .Where(b => b != null && b.Kind == "source").Select(b => b.Value2).Where(v => v != null).ToList();   // the rows' badges (0.8.5: a part's Value2 is what the foe's armor stopped)
         Check(session != null && right && narrowed != null && narrowed.Items.All(i => i.Value2 == null && (i.Items ?? new List<Block>()).All(p => p.Kind != "pips")) &&
               PanelModel.Content(swamp).Any(b => b.Kind == "note" && b.Text == PanelModel.ByFoeNoBiome) &&
               fellowHour != null && fellowHour.Items.All(i => i.Value2 == null) && PanelModel.Badge(0) == null && everyX.Count > 0 && everyX.All(v => v.StartsWith("×") && v != "×0"),
@@ -102,16 +103,21 @@ static class BattleFeedTests
             Check(trollFights.Count == 2 && trollFights.All(f => f.Items.Where(e => e.Kind == "entry").All(e => e.Id == "Troll")) && mixed != null && mixed.Text.EndsWith("1 of 5 foes") &&
                   mixedEntries.Count == 1 && mixed.Value == mixedEntries[0].Value,
                   "BF 0.8.1 filter: a fight shows only its foes that pass, its heading \"" + mixed?.Text + "\" and its damage theirs (" + mixed?.Value + " = " + mixedEntries.FirstOrDefault()?.Value + ")");
-            // the window: 10 min shows only the foes hit in the last 10 minutes; the day windows and All are greyed, each with its reason; the title says it
-            var ten = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastTenMinutes, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } });
+            // the window: 10 min shows only the foes hit in the last 10 minutes; the title says it. 0.8.5: your own feed opens every window (the days
+            // and All reach back into the fights kept from earlier sessions); a fellow's copy holds their session only, so on Edda's feed the day
+            // windows and All are greyed, each with its reason
+            PanelState FeedAt(TimeWindow w, string player = null) => new PanelState { Player = player ?? "", Chapter = Chapter.Battle, Window = w, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } };
+            var ten = PanelModel.Build(world, FeedAt(TimeWindow.LastTenMinutes));
             var feedFights = PanelModel.BattleFeed(world); var cut = now.AddMinutes(-10);
             var tenFoes = Fights(ten).Sum(f => f.Items.Count(e => e.Kind == "entry"));
-            var greyed = ten.Windows.Where(c => c.Disabled).ToList();
-            Check(tenFoes == feedFights.Sum(f => f.Entries.Count(e => e.EndUtc >= cut)) && tenFoes > 0 && tenFoes < feedFights.Sum(f => f.Foes) && ten.Heading + ", " + ten.HeadingWindow == "Battle feed, last 10 minutes" &&
+            var greyed = PanelModel.Build(edda, FeedAt(TimeWindow.LastTenMinutes, "Edda")).Windows.Where(c => c.Disabled).ToList();
+            Check(tenFoes == feedFights.Sum(f => f.Entries.Count(e => e.EndUtc >= cut)) && tenFoes > 0 && tenFoes < feedFights.Sum(f => f.Foes) && SaysWindow(ten, TimeWindow.LastTenMinutes) &&
+                  ten.Windows.Count(c => c.Disabled) == 0 &&
                   greyed.Select(c => c.Id).SequenceEqual(new[] { "Today", "SevenDays", "ThirtyDays", "SinceInstall" }) && greyed.Take(3).All(c => c.Why == PanelModel.FeedDaysWhy) && greyed[3].Why == PanelModel.FeedAllWhy,
-                  "BF 0.8.1 window: 10 min shows " + tenFoes + " foes (those hit since " + cut.ToString("HH:mm") + "), the title \"" + ten.Heading + ", " + ten.HeadingWindow + "\", the days and All greyed with their own reason");
+                  "BF 0.8.1 window: 10 min shows " + tenFoes + " foes (those hit since " + cut.ToString("HH:mm") + "), the page names the window in full; every window open on your own feed, the days and All greyed with their own reason on Edda's");
             // the window and the filter kept between sessions: the window the feed showed is noted and written with the view; a fresh game (no window
-            // chosen yet) opens the feed on it while the other pages keep Session; 7 days chosen elsewhere shows Session here
+            // chosen yet) opens the feed on it while the other pages keep Session; 7 days chosen elsewhere shows 7 days on your feed (0.8.5: it
+            // reaches your earlier sessions' fights) and Session on Edda's (her copy has no days)
             var played = new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastHour, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } };
             played.Facets[PanelModel.FeedFilter + "|biome"] = new List<string> { "Swamp" };
             PanelModel.Build(world, played);
@@ -119,22 +125,58 @@ static class BattleFeedTests
             later.Chapter = Chapter.Battle; later.Page[Chapter.Battle] = PanelModel.FeedPage;
             var reopened = PanelModel.Build(world, later);
             later.Page[Chapter.Battle] = "damage"; var damage = PanelModel.Build(world, later);
-            var week = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.SevenDays, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } });
-            Check(reopened.ShownWindow == TimeWindow.LastHour && reopened.HeadingWindow == "last hour" && PanelModel.Chosen(later, PanelModel.FeedFilter, "biome").SequenceEqual(new[] { "Swamp" }) &&
+            var week = PanelModel.Build(world, FeedAt(TimeWindow.SevenDays)); var eddaWeek = PanelModel.Build(edda, FeedAt(TimeWindow.SevenDays, "Edda"));
+            Check(reopened.ShownWindow == TimeWindow.LastHour && SaysWindow(reopened, TimeWindow.LastHour) && PanelModel.Chosen(later, PanelModel.FeedFilter, "biome").SequenceEqual(new[] { "Swamp" }) &&
                   Fights(reopened).SelectMany(f => f.Items).Where(e => e.Kind == "entry").All(e => e.Id == "Leech" || e.Id == "Draugr" || e.Id == "Blob") &&
-                  damage.ShownWindow == TimeWindow.Session && week.ShownWindow == TimeWindow.Session && week.Windows.First(c => c.Id == "Session").Selected,
-                  "BF 0.8.1: the feed's window (1 h) and Biome choice are kept between sessions and reopen the feed on them; Damage keeps Session; 7 days chosen elsewhere shows Session on the feed");
-            // review 0.8.1 batch 6: 1 h on the feed, then 7 days chosen on Deeds and the feed opened again: it keeps showing 1 h and keeps it noted,
-            // so the next session opens on 1 h, not Session (the 7 days overwrote it before)
-            var evening = new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastHour, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } };
-            PanelModel.Build(world, evening);
-            evening.Chapter = Chapter.Deeds; evening.Window = TimeWindow.SevenDays; PanelModel.Build(world, evening);
-            evening.Chapter = Chapter.Battle; var feedAfterDeeds = PanelModel.Build(world, evening);
-            var morning = new PanelState(); PanelPrefs.Apply(PanelPrefs.ToJson(evening), morning);
+                  damage.ShownWindow == TimeWindow.Session && week.ShownWindow == TimeWindow.SevenDays && week.Windows.First(c => c.Id == "SevenDays").Selected &&
+                  eddaWeek.ShownWindow == TimeWindow.Session && eddaWeek.Windows.First(c => c.Id == "Session").Selected,
+                  "BF 0.8.1: the feed's window (1 h) and Biome choice are kept between sessions and reopen the feed on them; Damage keeps Session; 7 days chosen elsewhere shows 7 days on your feed, Session on Edda's");
+            // review 0.8.1 batch 6: 1 h on a feed, then 7 days chosen on Deeds and the feed opened again. A feed that cannot show 7 days (Edda's) keeps
+            // showing 1 h and keeps it noted, so the next session opens on 1 h, not Session (the 7 days overwrote it before); your own feed (0.8.5) shows
+            // 7 days, the book's one window, and notes it
+            var evening = FeedAt(TimeWindow.LastHour, "Edda");
+            PanelModel.Build(edda, evening);
+            evening.Chapter = Chapter.Deeds; evening.Window = TimeWindow.SevenDays; PanelModel.Build(edda, evening);
+            evening.Chapter = Chapter.Battle; var feedAfterDeeds = PanelModel.Build(edda, evening);
+            var morning = new PanelState { Player = "Edda" }; PanelPrefs.Apply(PanelPrefs.ToJson(evening), morning);
             morning.Chapter = Chapter.Battle; morning.Page[Chapter.Battle] = PanelModel.FeedPage;
-            var nextSession = PanelModel.Build(world, morning);
-            Check(feedAfterDeeds.ShownWindow == TimeWindow.LastHour && evening.View[PanelModel.FeedWindowKey] == nameof(TimeWindow.LastHour) && nextSession.ShownWindow == TimeWindow.LastHour,
-                  "BF 0.8.1 review batch 6: 1 h on the feed, then 7 days chosen on Deeds: the feed still shows 1 h (" + feedAfterDeeds.ShownWindow + ") and the next session opens on it (" + nextSession.ShownWindow + "), not Session");
+            var nextSession = PanelModel.Build(edda, morning);
+            var own = FeedAt(TimeWindow.LastHour); PanelModel.Build(world, own); own.Chapter = Chapter.Deeds; own.Window = TimeWindow.SevenDays; PanelModel.Build(world, own);
+            own.Chapter = Chapter.Battle; var ownAfterDeeds = PanelModel.Build(world, own);
+            Check(feedAfterDeeds.ShownWindow == TimeWindow.LastHour && evening.View[PanelModel.FeedWindowKey] == nameof(TimeWindow.LastHour) && nextSession.ShownWindow == TimeWindow.LastHour &&
+                  ownAfterDeeds.ShownWindow == TimeWindow.SevenDays && own.View[PanelModel.FeedWindowKey] == nameof(TimeWindow.SevenDays),
+                  "BF 0.8.1 review batch 6: 1 h on Edda's feed, then 7 days chosen on Deeds: her feed still shows 1 h (" + feedAfterDeeds.ShownWindow + ") and the next session opens on it (" + nextSession.ShownWindow + "), not Session; your own feed shows and notes 7 days (" + ownAfterDeeds.ShownWindow + ")");
+            // 0.8.5 (Joost in game, after a restart: "last fight should show your last fight, but indicate that it was x hours/days ago. Same for the
+            // feed."): two hours after a restart, one fight since. Session holds this session's fight only and says where the earlier ones are; Today
+            // reaches back into the evening kept from before the restart (KeptFights), under its own line, and its fights before midnight stay out; a
+            // fresh game with nothing fought yet opens the feed on the first window from the kept one that shows the last fight, the kept one untouched
+            {
+                var restarted = BattleSample.Restarted(world, TimeSpan.FromHours(2), 10); var justBack = BattleSample.Restarted(world, TimeSpan.FromHours(2));
+                List<Block> Lines(PanelView v, string tone) => PanelModel.Content(v).Where(b => b.Kind == PanelModel.FeedLineKind && b.Tone == tone).ToList();
+                var sessionV = PanelModel.Build(restarted, FeedAt(TimeWindow.Session)); var todayV = PanelModel.Build(restarted, FeedAt(TimeWindow.Today));
+                var midnight = PanelModel.WindowStartUtc(restarted, TimeWindow.Today).Value;
+                var keptFights = PanelModel.KeptFightsOf(restarted); var sinceMidnight = keptFights.Count(f => f.EndUtc >= midnight);
+                var plan = PanelModel.Content(todayV).Where(b => b.Kind == "feed" || b.Kind == PanelModel.FeedLineKind).Select(b => b.Kind == "feed" ? "feed" : b.Tone).ToList();
+                var fresh = new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.FeedPage } }; fresh.View[PanelModel.FeedWindowKey] = nameof(TimeWindow.Session);
+                var opened = PanelModel.Build(justBack, fresh);
+                Check(Fights(sessionV).Count == 1 && Says(sessionV, "Today", "earlier") && Lines(sessionV, "session").Count == 0 &&
+                      Fights(todayV).Count == 1 + sinceMidnight && keptFights.Any(f => f.EndUtc < midnight) && plan.Count > 2 && plan[0] == "feed" && plan[1] == "session" && plan.Count(t => t == "session") == 1 &&
+                      Lines(todayV, "session")[0].Text is string span && span.Contains("20:54") && span.Contains("00:30") &&
+                      opened.ShownWindow == TimeWindow.Today && fresh.View[PanelModel.FeedWindowKey] == nameof(TimeWindow.Session) && Fights(opened).Count == sinceMidnight,
+                      "BF 0.8.5 the feed over a restart: Session shows this session's one fight and says where the earlier ones are; Today adds the " + sinceMidnight +
+                      " fights of the kept evening since midnight under \"" + Lines(todayV, "session").FirstOrDefault()?.Text + "\"; with nothing fought yet the feed opens on " + opened.ShownWindow + ", the kept Session untouched");
+                // Last fight two hours after the restart: the evening's last fight, Edda's and Tor's parts in it, its head says how long ago
+                var lastV = PanelModel.Build(justBack, new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.LastFightPage } });
+                var players = PanelModel.Content(lastV).FirstOrDefault(b => b.Kind == PanelModel.FightPlayersKind)?.Items.Where(i => i.Kind == "player").Select(i => i.Title).ToList() ?? new List<string>();
+                Check(lastV.Heading == PanelModel.LastFightLabel && Says(lastV, "2 hours ago", "00:26", "2 min") && players.SequenceEqual(new[] { "You", "Edda", "Tor" }) &&
+                      PanelModel.AllText(lastV).Contains(PanelModel.KeptAbout),
+                      "BF 0.8.5 Last fight after a restart: the evening's last fight with " + string.Join(", ", players) + ", its head says 2 hours ago, at 00:26, 2 min long; one About line says what is kept");
+                // the cost of the feed's model with the kept evening under it, against the live evening alone: two windows in turn, so the feed's
+                // blocks are built every time (FeedOf keeps them while nothing changes); the drawing is the newest 40 foes either way (FeedTop)
+                double Ms(PanelInput b, TimeWindow a, TimeWindow z) { PanelModel.Build(b, FeedAt(a)); var sw = System.Diagnostics.Stopwatch.StartNew(); for (int r = 0; r < 20; r++) PanelModel.Build(b, FeedAt(r % 2 == 0 ? z : a)); return sw.Elapsed.TotalMilliseconds / 20; }
+                System.Console.WriteLine("  the feed's model build, one window change: the live evening " + Ms(world, TimeWindow.Session, TimeWindow.LastThreeHours).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) +
+                                         " ms; after the restart with the evening kept, Today and 7 days " + Ms(restarted, TimeWindow.Today, TimeWindow.SevenDays).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " ms");
+            }
             // review 0.8.1 batch 6: the last fight shown has no gap (the fight before it is outside the window, the filter or the cap); between two
             // fights shown the gap stays: the quiet time when they follow each other, else the time and how many fights lie between
             List<string> Gaps(PanelView v)   // per fight shown, the quiet line under it (null: none)
@@ -212,7 +254,7 @@ static class BattleFeedTests
         var last = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.LastFightPage } });
         var rows = Find(last, "grouprows");
         Check(before.Count == 0 && after.SequenceEqual(new[] { "Edda" }) && rec.Version > at8 && next.Count == 0 && rec.Fights()[1].NearFor("Edda") == 10 && passerBy.Count == 0 &&
-              rows != null && rows.Items.Select(r => r.Title).SequenceEqual(new[] { "You", "Edda", "Tor" }) && PanelModel.AboutText(last).Contains("Finch was elsewhere"),
+              rows != null && rows.Items.Select(r => r.Title).SequenceEqual(new[] { "You", "Edda", "Tor" }) && Says(last, "Finch", "elsewhere"),
               "BF last fight: a fellow player is in the fight after 10 s near you (8 s: not yet), the page changes then; a moment near (Finch), near only after the last hit (REVIEW-08 #7) or the next fight starts without them; the page's rows are you, Edda and Tor");
         // REVIEW-08 #6: Edda reconnected after the fight: her copy is fresh, but her log starts with the new connection, so it holds no minute of
         // the fight: her row shows without numbers (never "0 · 0 %") and she is left out of "together"

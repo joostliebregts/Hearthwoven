@@ -82,6 +82,13 @@ namespace Hearthwoven.Panel
         /// their snapshot's "dayDealt", DayHistory.DayDealt), so the group's By weapon and By type work on Today to 30 days; null = not shared (a
         /// Hearthwoven before 0.9: their days are one total each, DealtByDay).</summary>
         public Dictionary<string, Dictionary<string, float>> DayDealt;
+        /// <summary>0.8.5: a fellow's Deeds per local day, the last 30 days (day -> family -> part -> amount; their snapshot's "dayDeeds",
+        /// PanelModel.DayDeeds): what their Deeds pages' heroes and first bars show, so those pages and the group's work on Today to 30 days;
+        /// null = not shared (a Hearthwoven before 0.8.5).</summary>
+        public Dictionary<string, Dictionary<string, Dictionary<string, float>>> DayDeeds;
+        /// <summary>0.8.5: their DayDeeds carry km sailed and cargo per day (PanelModel.SharesVoyageDays); false = not shared (the 0.8.5 test build or older),
+        /// so Together leaves them out of Sailed and Cargo carried in a day window instead of reading "sailed nothing".</summary>
+        public bool DayVoyages;
         /// <summary>A day window's input (PanelModel.InWindow): the window this copy holds; null = the input as recorded.</summary>
         public PanelModel.DayView Window;
         /// <summary>Defence's armour view (0.7, ArmourTally.cs), yourself only (never shared; a fellow's copy: all null). This session's ledger, the same
@@ -99,6 +106,10 @@ namespace Hearthwoven.Panel
         /// <summary>0.8.2: a fellow's battle feed as their copy shares it (FeedShare: their newest foes, names only of players who share); null on
         /// your own book (the recorder holds yours) and for a copy from before 0.8.2.</summary>
         public FeedShare SharedFeed;
+        /// <summary>0.8.5: your fights of earlier sessions in this world, kept on this PC (KeptFights), newest first: the feed lists them under this
+        /// session's, Last fight shows the newest when it is newer than any of this session (Fights, through the fight adapter). Null on a fellow's
+        /// copy (their copy carries their feed of this session only) and before the totals load.</summary>
+        public List<KeptSession> KeptSessions;
         /// <summary>0.9: the boss attempts you took part in, kept on this PC (BossLog); null on a fellow's copy and before the totals load.</summary>
         public BossLog BossLog;
         /// <summary>0.9: the fights for Battle > Last fight, Runs and bosses and their pages (Chapters/FightView.cs), filled by the fight adapter; null = none yet (Last fight draws the 0.8 page).</summary>
@@ -106,8 +117,12 @@ namespace Hearthwoven.Panel
         public FoeBook FoeBook;
         public FoeCounts FoesSession, FoesSince, FoesPending;
         public DateTime? FoesFromUtc;
-        public ArmourTally DealtArmourSession;
-        public ArmourLog DealtArmourMinutes;
+        /// <summary>0.8.5, the dealt ledger (Plugin.DealtArmour; Chapters/AfterArmourModel.cs): your hits on foes as you swung them and after the foe's
+        /// resistances and armor, per "foe|skill|type": this session, everything recorded (earlier sessions + this one), the book (day rows), this
+        /// session's unsaved part and when recording began. Your own book only (the short windows read the log's After, which is shared); null: none.</summary>
+        public ArmourTally DealtArmourSession, DealtArmourSince, DealtArmourPending;
+        public ArmourBook DealtArmourBook;
+        public DateTime? DealtArmourFromUtc;
         /// <summary>Deeds > Recent and Since you were away (0.7, RecentModel.cs). Yourself: this session's deeds per minute (DeedLog, flushed when
         /// gathered) and when your previous session on this PC ended (LocalTotals' last save before this session; null = no earlier session
         /// here). A fellow's copy: its session id, when this PC received this copy, and their mark as this PC last saw it before this session
@@ -133,6 +148,9 @@ namespace Hearthwoven.Panel
         public PanelInput ShallowCopy() => (PanelInput)MemberwiseClone();
 
         public ServerBook.Shared Book;                      // the server's book for this player (cargo loaded and unloaded, born near; GroupShare); null = none (a server before 0.6, or you do not share)
+        /// <summary>0.8.5: the world's part of the server's book, the same on every book (Stoker's Chest feeding, counted once on the server whoever
+        /// hosts the chest); null = none (a server before 0.8.5, nothing fed yet, or you do not share).</summary>
+        public ServerBook.World World;
         public FeatsLedger Feats;                           // the feats earned and their moments: yourself, the ledger on this PC (counters too); a fellow's, what they shared (no counters); null = none known
         public List<PanelInput> Fellows;                    // everyone else who shares (and you, when looking at a fellow player)
         public IDictionary<long, string> PlayerNames;       // player id -> name, for feast creators (players nearby)
@@ -140,6 +158,7 @@ namespace Hearthwoven.Panel
         public Func<DateTime, DateTime> ToLocal;            // null = the PC's own time zone
         // Battle (ch-battle): the game's own creature and arrow data, read at runtime (BattleGame); null = unknown, nothing shown
         public Func<string, PanelModel.FoeData> Foe;        // creature prefab -> its damage modifiers and trophy
+        public Func<string, string> FoeKin;                 // 0.8.5: creature prefab -> the main prefab of every creature the game gives its name (GameData.FoeKin, PanelModel.FoeGroup); null = itself
         public Func<IList<PanelModel.ArrowData>> Arrows;    // every arrow the game defines, with its damage
         public Func<string, bool> RecipeKnown;              // item token -> your character knows its recipe (Player.IsRecipeKnown); null = not known (a fellow's copy)
         public Func<IList<PanelModel.ArrowData>> Gear;      // 0.7 Foes ranking: every bolt and weapon the game defines, with its base damage (Kind bolt | weapon); null = unknown
@@ -198,6 +217,8 @@ namespace Hearthwoven.Panel
             var dayDealt = Obj(root, "dayDealt");   // 0.9: per day by weapon kind and type (an older copy has none: null); only real days, at most 40 of them
             if (dayDealt != null) input.DayDealt = dayDealt.Where(kv => kv.Value is Dictionary<string, object> && DateTime.TryParseExact(kv.Key, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
                                                            .Take(40).ToDictionary(kv => kv.Key, kv => Dict((Dictionary<string, object>)kv.Value));
+            input.DayDeeds = PanelModel.ReadDayDeeds(Obj(root, PanelModel.DayDeedsKey));   // 0.8.5: their Deeds per day (an older copy has none: null); only real days, bounded
+            input.DayVoyages = PanelModel.SharesVoyageDays(Obj(root, PanelModel.DayDeedsKey));   // 0.8.5: km sailed and cargo among them
             var foes = FoeShare.ReadFrom(Obj(root, "foes"));   // 0.8: the foes they fought per kind (an older copy has none: null)
             if (foes != null) { input.FoesSession = foes.Session; input.FoesSince = foes.Since; input.FoesFromUtc = foes.FromUtc; }
             input.SharedFeed = FeedShare.ReadFrom(Obj(root, "battleFeed"));   // 0.8.2: their battle feed (an older copy has none: null)

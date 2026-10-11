@@ -132,6 +132,9 @@ namespace Hearthwoven
 
         /// <summary>Seconds a player was near you in this fight (0: not sampled near).</summary>
         public float NearFor(string name) => Near != null && name != null && Near.TryGetValue(name, out var s) ? s : 0f;
+
+        /// <summary>0.8.5: a fight of an earlier session, kept on this PC (KeptFights): that session; null: this session's, or a fellow's copy.</summary>
+        public KeptSession Kept;
     }
 
     /// <summary>
@@ -283,6 +286,26 @@ namespace Hearthwoven
         /// <summary>0.9 falls: what hit you this long before a death is its "last seconds" (the game's own death log looks back as far).</summary>
         public static readonly TimeSpan FallWindow = TimeSpan.FromSeconds(10);
         public const int MaxBossFights = 20, MaxRuns = 20, MaxMembers = 1000, MaxFalls = 30;
+
+        /// <summary>
+        /// 0.8.5 (Joost, 11 Oct): Hildir's minibosses are boss fights whether or not the game flags them (Character.IsBoss): Brenna
+        /// (Skeleton_Hildir), Geirrhafa (Fenring_Cultist_Hildir), Zil (GoblinShaman_Hildir) and Thungr (GoblinBruteBros), and the copies her raids
+        /// send (the "_nochest" prefabs). Named by prefab and by name token (the game's, the same in every language), so the hooks can ask with
+        /// whichever they have without making a string (BattleHooks.Watch has the token only). The prefab names: the game's own strings (the
+        /// valheim-save-research prefab-hashlib.json beside the report); the tokens: the game's English names (reference/item-names.json,
+        /// "enemy_skeletonfire" = "&lt;color=orange&gt;Brenna"). A name here that is no creature in the game is never asked for: harmless.
+        /// </summary>
+        static readonly HashSet<string> Minibosses = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Skeleton_Hildir", "Skeleton_Hildir_nochest", "Fenring_Cultist_Hildir", "Fenring_Cultist_Hildir_nochest",
+            "GoblinShaman_Hildir", "GoblinShaman_Hildir_nochest", "GoblinBruteBros", "GoblinBruteBros_nochest", "GoblinBrute_Hildir",
+            "$enemy_skeletonfire", "$enemy_fenringcultist_hildir", "$enemy_goblin_hildir", "$enemy_goblinbrute_hildir", "$enemy_goblinbrute_hildircombined",
+        };
+
+        /// <summary>Whether a creature is a boss for the boss fights: the game says so (<paramref name="flag"/>, Character.IsBoss), or it is one of
+        /// Hildir's minibosses by its prefab or name token (Minibosses).</summary>
+        public static bool IsBoss(bool flag, string kind, string token) =>
+            flag || (kind != null && Minibosses.Contains(kind)) || (token != null && Minibosses.Contains(token));
 
         sealed class Inst
         {
@@ -634,7 +657,7 @@ namespace Hearthwoven
                 if (instances.Count >= MaxInstances) Evict();
                 instances[id] = inst = new Inst { Id = id, Kind = kind ?? "?", Token = token ?? "" };
             }
-            if (boss) inst.Boss = true;
+            if (IsBoss(boss, kind, token)) inst.Boss = true;   // 0.8.5: Hildir's minibosses too, flagged or not
             if (!open.TryGetValue(id, out var e))
             {
                 e = new FoeEncounter { Id = id, Kind = inst.Kind, Token = inst.Token, Biome = biome ?? "None", StartUtc = utc, EndUtc = utc, Fight = fight, Seq = ++seq };
@@ -1061,8 +1084,8 @@ namespace Hearthwoven
         public readonly List<Fall> Falls = new List<Fall>();
 
         /// <summary>What of <paramref name="rec"/>'s feed goes in the shared copy now; <paramref name="shares"/>: whether a player shares (null: nobody,
-        /// so every name is left out).</summary>
-        public static FeedShare From(BattleRecorder rec, Func<string, bool> shares)
+        /// so every name is left out). <paramref name="maxFoes"/>: the newest foes it holds (0.8.5: your kept fights hold more, KeptFights.MaxFoes).</summary>
+        public static FeedShare From(BattleRecorder rec, Func<string, bool> shares, int maxFoes = MaxFoes)
         {
             var s = new FeedShare();
             if (rec == null) return s;
@@ -1072,9 +1095,9 @@ namespace Hearthwoven
             int n = 0; var full = false;
             foreach (var f in rec.Fights())
             {
-                full = full || n >= MaxFoes || (s.Fights.Count > 0 && n + f.Foes > MaxFoes);   // whole fights while they fit, then none older (no gap)
+                full = full || n >= maxFoes || (s.Fights.Count > 0 && n + f.Foes > maxFoes);   // whole fights while they fit, then none older (no gap)
                 if (full) { s.LeftOut += f.Foes; continue; }
-                var take = Math.Min(f.Entries.Count, MaxFoes - n);
+                var take = Math.Min(f.Entries.Count, maxFoes - n);
                 var c = new FoeFight { Number = f.Number, Open = f.Open, Of = take < f.Foes ? f.Foes : 0, Deaths = f.Deaths };
                 var outside = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (f.Near != null)
@@ -1126,10 +1149,12 @@ namespace Hearthwoven
         static DateTime Whole(DateTime t) => new DateTime(t.Ticks - t.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
         long Secs(DateTime t) => t.Ticks / TimeSpan.TicksPerSecond - T0.Ticks / TimeSpan.TicksPerSecond;
 
-        public void WriteTo(Json j)
+        /// <summary>Writes the copy under <paramref name="key"/>. <paramref name="hits"/> (0.8.5, your kept fights only, never the shared copy): each foe's
+        /// hits both ways too ("hd", "hr"), so a kept fight weighs your blocks against the hits that landed (FightPages.BringLine).</summary>
+        public void WriteTo(Json j, string key = "battleFeed", bool hits = false)
         {
             var inv = CultureInfo.InvariantCulture;
-            j.Key("battleFeed").Open().Str("t0", Whole(T0).ToString("o", inv)).Num("left", LeftOut);
+            j.Key(key).Open().Str("t0", Whole(T0).ToString("o", inv)).Num("left", LeftOut);
             var open = Fights.FirstOrDefault(f => f.Open);
             if (open != null) j.Num("open", open.Number);
             j.Key("fights").Open();
@@ -1159,6 +1184,8 @@ namespace Hearthwoven
                     if (e.Run > 0) j.Num("rn", e.Run);
                     if (e.Blocks > 0) j.Num("bk", e.Blocks);
                     if (e.Parries > 0) j.Num("pa", e.Parries);
+                    if (hits && e.HitsDealt > 0) j.Num("hd", e.HitsDealt);
+                    if (hits && e.HitsReceived > 0) j.Num("hr", e.HitsReceived);
                     j.Close();
                 }
             j.Close();
@@ -1249,7 +1276,7 @@ namespace Hearthwoven
                     Boss = Count(MiniJson.Num(x, "bf")), Run = Count(MiniJson.Num(x, "rn")), Blocks = Count(MiniJson.Num(x, "bk")), Parries = Count(MiniJson.Num(x, "pa")),
                     StartUtc = At(s.T0, MiniJson.Num(x, "s")), EndUtc = At(s.T0, MiniJson.Num(x, "e")),
                     Outcome = (FoeOutcome)Math.Min(Count(MiniJson.Num(x, "o")), (int)FoeOutcome.GotAway), Away = (AwayHow)Math.Min(Count(MiniJson.Num(x, "a")), (int)AwayHow.YouLeft),
-                    Others = Count(MiniJson.Num(x, "n")), Outside = Count(MiniJson.Num(x, "u")),
+                    Others = Count(MiniJson.Num(x, "n")), Outside = Count(MiniJson.Num(x, "u")), HitsDealt = Count(MiniJson.Num(x, "hd")), HitsReceived = Count(MiniJson.Num(x, "hr")),
                 };
                 if (e.EndUtc < e.StartUtc) e.EndUtc = e.StartUtc;
                 ReadTypes(x, "d", e.Dealt); ReadTypes(x, "r", e.Received);

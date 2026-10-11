@@ -18,10 +18,10 @@ namespace Hearthwoven.Panel
         {
             var orders = b.Items ?? new List<Block>();
             if (orders.Count == 0) return;
-            var row = Line(col, 6); Size(row, -1, 28);
-            var caption = Label(row, b.Title ?? PanelModel.SortCaption, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
+            var row = Line(col, PanelLayout.Sort.Gap); Size(row, -1, PanelLayout.Sort.Height);
+            var caption = Label(row, b.Title ?? PanelModel.SortCaption, PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
             caption.textWrappingMode = TextWrappingModes.NoWrap;
-            Size(caption, Mathf.Ceil(caption.preferredWidth) + 4, 28);
+            Size(caption, Mathf.Ceil(caption.preferredWidth) + 4, PanelLayout.Sort.Height);
             var chosen = Math.Max(0, orders.FindIndex(x => x.Selected));
             foreach (var o in orders)
             {

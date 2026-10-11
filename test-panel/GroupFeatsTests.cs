@@ -47,7 +47,7 @@ static class GroupFeatsTests
             var page = Together(early);
             var ids = Cards(page).Select(c => c.Id).ToList();
             Check(!ids.Contains("bogiron") && !ids.Contains("ironforge") && ids.Contains("copperwed") && ids.Contains("charcoal") && ids.Contains("meadhall") && ids.Contains("wellfed") &&
-                  PanelModel.PlateOf(page).Text == PanelModel.TogetherDefinition + " " + PanelModel.LandsNotFound,
+                  TimesSaid(page, PanelModel.LandsNotFound) == 1,
                   "gate: the Meadows and the Black Forest found: their feats show, the Swamp's do not (Bog Iron, Iron for the Forge), and one quiet line says more wait: " + string.Join(", ", ids));
             var texts = string.Join(" ", PanelModel.Content(page).SelectMany(b => new[] { b }.Concat(b.Items ?? new List<Block>()).Concat((b.Items ?? new List<Block>()).SelectMany(x => x.Items ?? new List<Block>())))
                                      .SelectMany(b => new[] { b.Title, b.Text, b.Note, b.Value, b.Icon })).ToLowerInvariant();
@@ -56,7 +56,7 @@ static class GroupFeatsTests
             // Edda finds the Swamp: her copy says so, and the gate opens on Rowan's book
             var edda = early.Fellows[0]; edda.KnownBiomes = new List<string> { "Meadows", "BlackForest", "Swamp" };
             var opened = Together(early);
-            Check(Cards(opened).Any(c => c.Id == "bogiron") && Cards(opened).Any(c => c.Id == "ironforge") && PanelModel.PlateOf(opened).Text == PanelModel.TogetherDefinition,
+            Check(Cards(opened).Any(c => c.Id == "bogiron") && Cards(opened).Any(c => c.Id == "ironforge") && !Says(opened, PanelModel.LandsNotFound),
                   "gate: a fellow who shares found the Swamp: its feats show on your book too, and the line is gone");
             // an older copy (0.6) carries no knownBiomes: the evidence it does carry opens the gate (damage there since install)
             edda.KnownBiomes = null; edda.BiomeSinceInstall = new BiomeTally(); edda.BiomeSinceInstall.AddDamage("Swamp", true, "slash", 40);
@@ -69,12 +69,14 @@ static class GroupFeatsTests
             var card = Cards(Together(early, "copperwed")).Single(c => c.Id == "copperwed");
             var d = card.Items[0];
             var said = string.Join(" ", new[] { card.Title, card.Text, card.Note, d.Title, d.Text }.Concat(d.Items.Select(x => x.Title + " " + x.Text))).ToLowerInvariant();
-            Check(card.Title == "What the Deep Woods Hold" && d.Text == "Something in these woods is worth the fire." && card.Icon == "vocab:biome-blackforest" &&
+            var veil = PanelModel.FeatById("copperwed").Veil;
+            Check(card.Title == veil.Name && d.Text == veil.Honours && card.Icon == "vocab:biome-blackforest" &&
                   !said.Contains("copper") && !said.Contains("tin ") && !said.Contains("bronze"),
                   "veil: the Black Forest found but no copper or tin held: its riddle name, line and land's emblem, and nothing names the metal: " + card.Title + " | " + said);
             early.Fellows[0].ItemsPickedUp["$item_tinore"] = 3;   // Edda brings home a little tin
             var lifted = Cards(Together(early, "copperwed")).Single(c => c.Id == "copperwed");
-            Check(lifted.Title == "Copper Wed to Tin" && lifted.Items[0].Items.First(x => x.Kind == "rule").Title == "Together, make 50 bronze." && lifted.Icon.StartsWith("item:$item_bronze"),
+            var liftedRule = lifted.Items[0].Items.First(x => x.Kind == "rule").Title;
+            Check(lifted.Title == PanelModel.FeatById("copperwed").Name && liftedRule.Contains("50") && liftedRule.Contains("bronze") && lifted.Icon.StartsWith("item:$item_bronze"),
                   "veil: a fellow who shares held tin: the real name, line, rule and the game's own picture");
             var veils = PanelModel.FeatDefs.Where(f => f.Veil != null).ToList();
             Check(veils.Select(f => f.Id).OrderBy(x => x).SequenceEqual(new[] { "bogiron", "copperwed", "ironforge" }) &&
@@ -89,13 +91,13 @@ static class GroupFeatsTests
             string Said(Block c) => string.Join(" ", new[] { c.Title, c.Text, c.Note, c.Icon }.Concat(c.Items.SelectMany(x => new[] { x.Title, x.Text, x.Icon }.Concat((x.Items ?? new List<Block>()).SelectMany(y => new[] { y.Title, y.Text, y.Icon }))))).ToLowerInvariant();
             Block Card(PanelInput i, string id) => Cards(Together(i, id)).Single(c => c.Id == id);
             var bog = Card(me, "bogiron"); var forge = Card(me, "ironforge"); var shop = Card(me, "workshop");
-            Check(bog.Title == "What the Bog Keeps" && forge.Title == "Ore for the Forge" && bog.Icon == "vocab:biome-swamp" && forge.Icon == "vocab:biome-swamp" && bog.Items[0].Icon == "vocab:biome-swamp" && forge.Items[0].Icon == "vocab:biome-swamp" &&
+            Check(bog.Title == PanelModel.FeatById("bogiron").Veil.Name && forge.Title == PanelModel.FeatById("ironforge").Veil.Name && bog.Icon == "vocab:biome-swamp" && forge.Icon == "vocab:biome-swamp" && bog.Items[0].Icon == "vocab:biome-swamp" && forge.Items[0].Icon == "vocab:biome-swamp" &&
                   !new[] { Said(bog), Said(forge) }.Any(t => t.Contains("iron") || t.Contains("bar ") || t.Contains("bars") || t.Contains("scrap") || t.Contains("anvil")),
                   "veil: the Swamp found, no iron held: Bog Iron and Iron for the Forge both keep their riddle, the Swamp's emblem as picture, and no word or icon (caveat included) names the metal: " + Said(bog) + " || " + Said(forge));
             Check(!Said(shop).Contains("anvil") && !Said(shop).Contains("forge") && !Said(shop).Contains("iron"),
                   "veil: The Workshop Grows (not gated) uses a workbench extension's picture and no anvil, forge or iron in its words or icons: " + Said(shop));
             tor.ItemsPickedUp["$item_ironscrap"] = 2;   // Tor carries home some scrap
-            Check(Card(me, "bogiron").Title == "Bog Iron" && Card(me, "ironforge").Title == "Iron for the Forge", "veil: once someone who shares held iron, both Swamp feats lift together");
+            Check(Card(me, "bogiron").Title == PanelModel.FeatById("bogiron").Name && Card(me, "ironforge").Title == PanelModel.FeatById("ironforge").Name, "veil: once someone who shares held iron, both Swamp feats lift together");
         }
 
         // ---------- one sum: you and every fellow who shares, each once, per kind of count ----------

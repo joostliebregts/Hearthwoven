@@ -9,17 +9,19 @@ namespace Hearthwoven.Panel
 {
     /// <summary>
     /// 0.8 layout D+ (Islands.cs; work/hearthwoven-0.8/density-feedback/FEEDBACK.md part 4): the plate drawn as its strip, then a calm grid of
-    /// islands. An island is a plain greyish rounded rectangle (PanelLook.Island, no outline), 14 px inside, its blocks 6 px apart; two half
-    /// islands stand side by side, 14 apart, as tall as each other; a plain island is its blocks without a ground. Each island lays its blocks out
+    /// islands. An island is a plain greyish rounded rectangle (PanelLook.Island, no outline), its measures PanelLayout.Island; two half
+    /// islands stand side by side, as tall as each other; a plain island is its blocks without a ground. Each island lays its blocks out
     /// at its own inner width (Column). Built once per fill, nothing per frame. Mirrored by islands() in preview/panel-preview.html.
     /// </summary>
     public partial class PanelUi
     {
-        const float IslandPad = 14, IslandGap = 14, IslandInner = 6, IslandHeroTop = 8, IslandHeroBottom = 10;
+        static readonly float IslandPad = PanelLayout.Island.Pad, IslandGap = PanelLayout.Island.PairGap, IslandInner = PanelLayout.Island.Inner, IslandHeroTop = PanelLayout.Island.HeroTop, IslandHeroBottom = PanelLayout.Island.HeroBottom;
         /// <summary>A column narrower than this is a half island: a ranking in one column, a heading's dated label under it (the preview's COLUMN &lt; 500).</summary>
-        const float NarrowColumn = 500;
+        static readonly float NarrowColumn = PanelLayout.Island.Narrow;
         /// <summary>A fellow's book: whose copy and when, at the strip's right end (PanelView.StripNote, set by Fill while the plate is drawn).</summary>
         static string stripNote;
+        /// <summary>0.8.5: the page whose Compare legend (CompareNow, CompareThen) or greyed chip's reason (CompareNote) leads the strip; null: none.</summary>
+        static PanelView stripCompare;
         /// <summary>Drawing inside an island: no air before a heading (the padding is the air), no rules between rows, no item band behind a
         /// weapon or a foe (the island is that band).</summary>
         static bool islanded;
@@ -103,7 +105,7 @@ namespace Hearthwoven.Panel
         {
             var head = Line(col, 10); Size(head, -1, 34);
             Marker(head, p.Icon, 34);
-            OneLine(Label(head, p.Title, 20, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft));
+            OneLine(Label(head, p.Title, PanelLayout.Text.Lead, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft));
             if (!string.IsNullOrEmpty(p.Note))   // "+3 more": what grew past the island (RecentPage.GroupGains), quiet at the head's right end; a click shows every gain (0.8.2)
             {
                 Node("Rest", head).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
@@ -120,10 +122,10 @@ namespace Hearthwoven.Panel
                     var cell = Line(line, 8); Size(cell, cellW, -1);
                     var room = cellW;
                     if (!string.IsNullOrEmpty(i.Icon)) { Pic(cell, i.Icon, 30); room -= 30 + 8; }
-                    if (!string.IsNullOrEmpty(i.Value)) { var n = OneLine(Label(cell, i.Value, 18, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold)); room -= Mathf.Ceil(n.preferredWidth) + 8; }
-                    var since = Labelled(i) ? Since(cell, 14, i) : null; if (since) { since.transform.SetAsLastSibling(); room -= Mathf.Ceil(since.preferredWidth) + 8; }
+                    if (!string.IsNullOrEmpty(i.Value)) { var n = OneLine(Label(cell, i.Value, PanelLayout.Text.Row, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold)); room -= Mathf.Ceil(n.preferredWidth) + 8; }
+                    var since = Labelled(i) ? Since(cell, PanelLayout.Text.Floor, i) : null; if (since) { since.transform.SetAsLastSibling(); room -= Mathf.Ceil(since.preferredWidth) + 8; }
                     var quiet = !string.IsNullOrEmpty(i.Value) || i.Unrecorded || i.Tone == "quiet";
-                    var name = Unrecorded(Label(cell, i.Title, 15, quiet ? PanelLook.Muted : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: i.Tone == "quiet" ? FontStyles.Italic : FontStyles.Normal), i, 15);
+                    var name = Unrecorded(Label(cell, i.Title, PanelLayout.Text.Small, quiet ? PanelLook.Muted : PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: i.Tone == "quiet" ? FontStyles.Italic : FontStyles.Normal), i, 15);
                     name.textWrappingMode = TextWrappingModes.Normal; Size(name, Mathf.Max(40f, room), -1);   // a known width, so a long name wraps onto a second line instead of being cut
                     if (since) since.transform.SetAsLastSibling();
                 }

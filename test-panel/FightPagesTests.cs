@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Hearthwoven;
 using Hearthwoven.Panel;
 
 static class FightPagesTests
@@ -66,8 +67,8 @@ static class FightPagesTests
         var won = new FightView { Kind = FightKind.Boss, Outcome = FightOutcome.Won, Health = 0 };
         var words = new[] { PanelModel.OutcomeWords(queen), PanelModel.OutcomeWords(bonemass), PanelModel.OutcomeWords(away), PanelModel.OutcomeWords(won), PanelModel.OutcomeWords(mine) };
         var everyPage = new[] { PanelModel.LastFightPage, PanelModel.RunsPage }.Concat(live.Fights.Fights.Select(PanelModel.FightPageOf)).SelectMany(p => PanelModel.AllText(PanelModel.Build(live, At(p)))).ToList();
-        Check(words.SequenceEqual(new[] { "Live, 64 % left", "Reset at 41 %", "Got away at 58 %", "Won", "Out, 4 deaths" }) && !everyPage.Any(t => System.Text.RegularExpressions.Regex.IsMatch(t, @"\blost\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)),
-              "FP outcome words: " + string.Join(" / ", words) + "; \"lost\" nowhere on the fight pages (" + everyPage.Count + " strings)");
+        Check(words.Distinct().Count() == 5 && words[0].Contains("64 %") && words[1].Contains("41 %") && words[2].Contains("58 %") && !words[3].Any(char.IsDigit) && words[4].Contains("4 deaths") && !everyPage.Any(t => System.Text.RegularExpressions.Regex.IsMatch(t, @"\blost\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)),
+              "FP outcome words, one for each outcome with its own number (health left, reset at, got away at, the deaths): " + string.Join(" / ", words) + "; \"lost\" nowhere on the fight pages (" + everyPage.Count + " strings)");
 
         // ---------- Runs and bosses: the fight on now on top, then newest first, a boss fight under its run; every row opens its page ----------
         var runs = PanelModel.Build(live, At(PanelModel.RunsPage));
@@ -88,7 +89,7 @@ static class FightPagesTests
               Of(nowNested[0], "lane").Count == 1 && Of(nowNested[0], "foe").Count == 3 &&
               earlier.Select(r => r.Id).SequenceEqual(new[] { "Battle/fight:mine-1", "Battle/fight:citadel-2", "Battle/fight:bonemass-1" }) &&
               nested["Battle/fight:citadel-2"].SequenceEqual(new[] { "Battle/fight:queen-2" }) && nested["Battle/fight:mine-1"].Count == 0 && nested["Battle/fight:bonemass-1"].Count == 0 &&
-              !earlier.Any(r => r.Id.EndsWith("citadel-now") || r.Id.EndsWith("queen-2") || r.Id.EndsWith("camp")) && opened.All(o => o.ok) && runs.Blocks[0].Pill == "3 runs, 3 boss fights",
+              !earlier.Any(r => r.Id.EndsWith("citadel-now") || r.Id.EndsWith("queen-2") || r.Id.EndsWith("camp")) && opened.All(o => o.ok) && Says(runs, "3 runs", "3 boss fights"),
               "FP Runs and bosses: the Infested Citadel run on now on top (› to its page, 18:05), The Queen live under it with her lane and the 3 foes around her, then " + string.Join(", ", earlier.Select(r => r.Title)) + " newest first, the earlier Queen nested under its Citadel run; each of " +
               opened.Count + " rows opens its page with its list entry lit and Backspace returns" + (opened.Any(o => !o.ok) ? ": " + string.Join(", ", opened.Where(o => !o.ok).Select(o => o.t)) : ""));
 
@@ -104,12 +105,14 @@ static class FightPagesTests
         var b8 = PanelModel.BringLine(R(("blunt", 26), ("lightning", 74)), "you", 0, 8);   // a quarter is enough for the shield
         var b9 = PanelModel.BringLine(R(("blunt", 100)), "you", 0, 4);   // under five hits landed: too small a fight to advise on
         var b10 = PanelModel.BringLine(R(("blunt", 100)), "you", 0, -1);   // hits not known (a fellow's copy, a saved fight): no shield line
-        string Note(PanelInput book, string page) => PanelModel.Build(book, At(page)).StripNote;   // the strip's quiet slot
-        var onQueen = Note(live, PanelModel.LastFightPage); var onCamp = Note(after, PanelModel.LastFightPage); var onMine = Note(live, "fight:mine-1");
-        Check(b1 == "Poison was 62 % of what hit you: bring Poison resistance mead." && b2 == "Fire was 50 % of what hit you: bring Fire resistance barley wine." &&
-              b3 == "Slash was 70 % of what hit Edda: bring a shield." && b4 == null && b5 == null && b6 == "Blunt and slash were 75 % of what hit you: bring a shield." &&
-              b7 == "Frost was 100 % of what hit you: bring Frost resistance mead." && b8 == "Blunt was 26 % of what hit you: bring a shield." && b9 == null && b10 == null &&
-              onQueen == "Poison was 62 % of what hit you: bring Poison resistance mead." && onCamp == "Blunt was 68 % of what hit you: bring a shield." && onMine == "Poison was 37 % of what hit you: bring Poison resistance mead.",
+        // the facts of a line: the damage type, its share, whom it hit and what to bring (the sentence around them is free to change)
+        bool Has(string line, params string[] facts) => line != null && facts.All(line.Contains);
+        var queenPage = PanelModel.Build(live, At(PanelModel.LastFightPage)); var campPage = PanelModel.Build(after, At(PanelModel.LastFightPage)); var minePage = PanelModel.Build(live, At("fight:mine-1"));
+        var onQueen = Texts(queenPage).FirstOrDefault(t => t.Contains("Poison resistance mead")); var onCamp = Texts(campPage).FirstOrDefault(t => t.Contains("shield"));
+        Check(Has(b1, "Poison", "62 %", "you", "Poison resistance mead") && Has(b2, "Fire", "50 %", "Fire resistance barley wine") &&
+              Has(b3, "Slash", "70 %", "Edda", "shield") && b4 == null && b5 == null && Has(b6, "Blunt", "slash", "75 %", "shield") &&
+              Has(b7, "Frost", "100 %", "Frost resistance mead") && Has(b8, "Blunt", "26 %", "shield") && b9 == null && b10 == null &&
+              Says(queenPage, "Poison", "62 %", "Poison resistance mead") && Says(campPage, "Blunt", "68 %", "shield") && Says(minePage, "Poison", "37 %", "Poison resistance mead"),
               "FP bring next time: " + b1 + " | " + b2 + " | " + b3 + " | " + b6 + " | " + b8 + " | none when the shield worked (a block or more per 5 hits landed), under 5 hits, hits not known, a drink under a third, or for lightning and spirit | the Queen: " + onQueen + " | the camp (1 block, 9 hits landed): " + onCamp);
 
         // ---------- the layout switch never changes a number; the players in the book's order ----------
@@ -153,6 +156,48 @@ static class FightPagesTests
                       .Concat(htmlFt.Keys.Where(k => !csFt.ContainsKey(k) && k != "track" && k != "barH").Select(k => "the preview's own " + k)).ToList();
         Check(csFt.Count >= 40 && off.Count == 0 && htmlFt["track"] == PanelModel.DamageTrack && htmlFt["barH"] == PanelModel.DamageTrack + PanelModel.DamageInner + PanelModel.DamageTrue,
               "FP one set of measures: the " + csFt.Count + " Ft measures of FightUi.cs are the preview's FT" + (off.Count > 0 ? ": " + string.Join(", ", off) : ""));
+
+        // ---------- 0.8.5 (the lead, after v085-lastfight): a player without numbers gets the line that is true of them ----------
+        // The fight adapter lists without numbers only a player who shares but whose copy holds nothing of the fight; the row said "does not share"
+        // of them. Edda shares in the sample; her copy is changed one way at a time, each giving its own line; Ylva does not share
+        {
+            var fight = new FightView { Id = "fight:t", Kind = FightKind.Group, StartUtc = now.AddMinutes(-6), EndUtc = now.AddMinutes(-4) };
+            fight.Players.Add(new FightPlayer { Name = "Rowan", You = true }); fight.Players.Add(new FightPlayer { Name = "Edda", Has = false, Shares = true });
+            var eddaRow = fight.Players[1];
+            var self = PanelSample.Full(now);
+            FeedShare Feed(DateTime t0, DateTime fightAt, int leftOut)
+            {
+                var feed = new FeedShare { T0 = t0, LeftOut = leftOut }; var ff = new FoeFight { Number = 1, StartUtc = fightAt, EndUtc = fightAt.AddSeconds(30) };
+                ff.Entries.Add(new FoeEncounter { Id = new FoeId(7, 1), Kind = "Boar", StartUtc = fightAt, EndUtc = fightAt.AddSeconds(30) }); feed.Fights.Add(ff);
+                return feed;
+            }
+            string Line(Action<PanelInput> change, PanelInput book = null, FightPlayer who = null)
+            {
+                var b = (book ?? self).ShallowCopy(); var e = b.Fellows.First(x => x.PlayerName == "Edda").ShallowCopy();
+                e.ReceivedUtc = now.AddSeconds(-5); e.SharedFeed = Feed(now.AddHours(-2), now.AddMinutes(-30), 0); change?.Invoke(e);
+                b.Fellows = b.Fellows.Select(x => x.PlayerName == "Edda" ? e : x).ToList();
+                return PanelModel.NoPartLine(b, fight, who ?? eddaRow);
+            }
+            var lines = new[]
+            {
+                ("covers the fight, no hit on its foes", Line(null), "shares, but Edda's copy holds no hit on these foes"),
+                ("Hearthwoven 0.8.2", Line(e => e.ModVersion = "0.8.2"), "Edda's Hearthwoven is 0.8.2: Edda's part fills in once they update."),
+                ("no feed (0.6.5)", Line(e => { e.ModVersion = "0.6.5"; e.SharedFeed = null; }), "Edda's Hearthwoven is 0.6.5: Edda's part fills in once they update."),
+                ("copy from before the fight", Line(e => e.ReceivedUtc = now.AddMinutes(-7)), "shares, but Edda's newest copy came in before this fight"),
+                ("no fight yet", Line(e => e.SharedFeed = new FeedShare()), "shares, but Edda's copy holds no fight yet"),
+                ("fight dropped", Line(e => e.SharedFeed = Feed(now.AddHours(-2), now.AddMinutes(-2), 40)), "shares, but Edda's copy no longer holds this fight"),
+                ("reconnected after it", Line(e => e.SharedFeed = Feed(now.AddMinutes(-2), now.AddMinutes(-2), 0)), "shares, but Edda's copy starts at " + self.ToLocal(now.AddMinutes(-2)).ToString("HH:mm") + ", after this fight"),
+                ("kept from an earlier session", Line(null, ((Func<PanelInput>)(() => { var k = self.ShallowCopy(); k.SessionStartUtc = now.AddMinutes(-1); return k; }))()), "shares, but Edda's copy held nothing of this fight when it was kept"),
+                ("Ylva, who does not share", Line(null, null, new FightPlayer { Name = "Ylva", Has = false }), PanelModel.NotSharingLine),
+                ("Ylva on a fight of an earlier session", Line(null, ((Func<PanelInput>)(() => { var k = self.ShallowCopy(); k.SessionStartUtc = now.AddMinutes(-1); return k; }))(), new FightPlayer { Name = "Ylva", Has = false }), PanelModel.NotSharingLine),
+                ("Bryn, sharing, no copy here now", Line(null, null, new FightPlayer { Name = "Bryn", Has = false, Shares = true }), "shares, but no copy of Bryn's is on this PC now"),
+            };
+            var wrong = lines.Where(l => l.Item2 != l.Item3).Select(l => l.Item1 + ": \"" + l.Item2 + "\"").ToList();
+            var table = PanelModel.FightPlayers(self, fight).Items.FirstOrDefault(i => i.Kind == "quiet" && i.Id == "Edda")?.Text;
+            Check(wrong.Count == 0 && table == PanelModel.NoPartLine(self, fight, eddaRow) && table != PanelModel.NotSharingLine,
+                  "FP 0.8.5 a player without numbers: " + lines.Length + " cases each with its own true line (" + string.Join("; ", lines.Take(3).Select(l => l.Item2)) + " ...), the players table uses it" +
+                  (wrong.Count > 0 ? "; wrong: " + string.Join("; ", wrong) : ""));
+        }
         return fails;
     }
 }

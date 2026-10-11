@@ -110,7 +110,7 @@ namespace Hearthwoven.Panel
         static string LandColour(string biome) { foreach (var t in BiomeTiles) if (string.Equals(t.key, biome, StringComparison.OrdinalIgnoreCase)) return t.colour; return "#9b8f80"; }
         static string BossTrophy(PanelInput input, string prefab)
         {
-            var t = TrophyOf(input, prefab); if (t.Length > 0) return t;
+            var t = TrophyOf(input, prefab); if (t.Length == 0) t = TrophyOf(input, FoeGroup(input, prefab)); if (t.Length > 0) return t;   // 0.8.5: a kind without its own trophy shows its name's
             var name = Who(input, prefab);
             foreach (var b in Bosses) if (b.name == name) return "item:" + b.trophy;
             return FoeMark;
@@ -219,11 +219,12 @@ namespace Hearthwoven.Panel
             view.Scope = boss ? "Boss fight · " + BossName(input, f) : "Last fight";
             view.Blocks.Add(FightHead(input, f));   // one head for every fight: the boss's ring, or a group fight's land with its foes defeated
             FightBody(input, view, state, page, f);
-            AboutLines(view, boss ? FightAboutBoss : FightAboutGroup, (FoeRowsAboutTitle, FoeRowsAbout), (DealtReceivedAboutTitle, DealtReceivedAbout), (DamageBarsAboutTitle, FightBarsAbout), (FallsAboutTitle, FallsUntyped(f) ? FallsAbout : null));
+            AboutLines(view, boss ? FightAboutBoss : FightAboutGroup, (FoeRowsAboutTitle, FoeRowsAbout), (DealtReceivedAboutTitle, DealtReceivedAbout), (DamageBarsAboutTitle, FightBarsAbout), (FallsAboutTitle, FallsUntyped(f) ? FallsAbout : null),
+                             (KeptAboutTitle, asLast && !boss && BeforeThisSession(input, f.EndUtc) ? KeptAbout : null));   // 0.8.5: Last fight kept from an earlier session (a boss attempt: the BossLog's)
             Plate(view, "ui:chapter-battle");
             var plate = view.Blocks[0];
             plate.Pill = f.IsLive ? "Live, " + FightClock(f.Length)
-                       : asLast ? Clock(input, f.StartUtc, false) + " · " + (boss ? Lapse(f.Length) : FightLength(f.Length)) + " · " + Ago(input.NowUtc - f.EndUtc)
+                       : asLast ? FightWhen(input, f.StartUtc, f.EndUtc, boss ? Lapse(f.Length) : FightLength(f.Length))   // 0.8.5: "2 hours ago, at 22:31 · 2 min" from an earlier session
                        : OutcomeWord(f) + ", " + Lapse(f.Length);
             if (asLast && !boss) plate.Items.Insert(0, new Block { Kind = "headlink", Id = "Battle/" + FeedPage, Title = EarlierFights, Icon = FeedIcon });   // as 0.8: the feed holds the fights before it
         }
@@ -314,7 +315,7 @@ namespace Hearthwoven.Panel
             if (f.Foes.Count == 0) return null;
             bool dealtCol = cols != "received", receivedCol = cols != "dealt";   // stacked: one column a block, all the room for its bars
             var players = InOrder(f.Players.Where(p => p.Has));
-            var foes = f.Foes.OrderByDescending(x => x.Boss).ThenByDescending(x => x.DealtTotal).ThenBy(x => x.Prefab, StringComparer.Ordinal).ToList();
+            var foes = FoeRowsOf(input, f).OrderByDescending(x => x.Boss).ThenByDescending(x => x.DealtTotal).ThenBy(x => x.Prefab, StringComparer.Ordinal).ToList();   // 0.8.5: a row per foe by the game's name
             double maxD = foes.Max(x => x.DealtTotal), maxR = foes.Max(x => x.ReceivedTotal);
             var key = "Battle/" + page + "/open";
             var open = state != null && state.View.TryGetValue(key, out var o) ? o : null;
@@ -368,12 +369,40 @@ namespace Hearthwoven.Panel
             return on.Select((b, k) => new Block { Kind = "part", Id = b.name, Title = b.name, Value = shown[k], Colour = "person:" + b.name, Fraction = (float)(b.v / total) }).ToList();
         }
 
+        /// <summary>The Hearthwoven that first shared the creatures' ids a group fight joins by (0.8.3): a fellow on an older one is never in its numbers.</summary>
+        public const string NeedsFightIds = "0.8.3";
+        public const string NotSharingLine = "does not share, so not in the numbers";
+
+        /// <summary>
+        /// Why a player in a fight has no numbers in it, in words that are true of them (0.8.5; it said "does not share" also of players who do). The
+        /// fight adapter lists a player without numbers only when they share but no record of theirs holds the fight (FightPlayer.Shares); a player
+        /// who does not share is never named by it (the fight sample's Ylva is). For one who shares, in order: a fight kept from an earlier session
+        /// (their copy held nothing of it then); no copy of theirs on this PC now; a Hearthwoven too old to join a fight (the older-version line);
+        /// their newest copy came before the fight; their copy holds no fight yet; it no longer holds this one (it carries their newest
+        /// FeedShare.MaxFoes foes); it starts after this fight (they reconnected); else their copy covers the time and holds no hit on these foes.
+        /// </summary>
+        public static string NoPartLine(PanelInput input, FightView f, FightPlayer p)
+        {
+            var n = p.Name;
+            if (!p.Shares) return NotSharingLine;
+            if (BeforeThisSession(input, f.EndUtc)) return "shares, but " + n + "'s copy held nothing of this fight when it was kept";
+            var fellow = input?.Fellows?.FirstOrDefault(x => x != null && SameName(x.PlayerName, n));
+            if (fellow == null) return "shares, but no copy of " + n + "'s is on this PC now";
+            var feed = fellow.SharedFeed;
+            if (feed == null || OlderThan(fellow, NeedsFightIds) || (feed.Fights.Count > 0 && feed.Fights.All(x => x.Entries.All(e => e.Id.IsNone)))) return OlderLine(fellow, n + "'s part fills in");
+            if (fellow.ReceivedUtc.HasValue && fellow.ReceivedUtc.Value < f.StartUtc) return "shares, but " + n + "'s newest copy came in before this fight";
+            if (feed.Fights.Count == 0) return "shares, but " + n + "'s copy holds no fight yet";
+            if (feed.LeftOut > 0 && feed.Fights.Min(x => x.StartUtc) > f.EndUtc) return "shares, but " + n + "'s copy no longer holds this fight";
+            if (feed.T0 > f.EndUtc) return "shares, but " + n + "'s copy starts at " + Clock(input, feed.T0, false) + ", after this fight";
+            return "shares, but " + n + "'s copy holds no hit on these foes";
+        }
+
         /// <summary>The players' table: what each dealt (a boss fight: against the boss and the foes around it; else by type) and received (by type),
         /// their blocks and parries, their deaths with the types of their last seconds; a run, their deaths and their own time inside.</summary>
         public static Block FightPlayers(PanelInput input, FightView f)
         {
             var run = f.Kind == FightKind.Run;
-            var boss = f.BossFoe;
+            var boss = BossRowOf(input, f);
             var cols = new List<Block>
             {
                 new Block { Kind = "col", Id = "dealt", Title = "Dealt" }, new Block { Kind = "col", Id = "received", Title = "Received" },
@@ -390,7 +419,7 @@ namespace Hearthwoven.Panel
             foreach (var p in InOrder(f.Players))   // the book's order: you, then by name (the data's own order is by damage)
             {
                 var title = PlayerTitle(input, p); var note = Freshness(input, f, p);
-                if (!p.Has) { items.Add(new Block { Kind = "quiet", Id = p.Name, Icon = "person:" + p.Name, Title = title, Note = note, Text = "does not share, so not in the numbers" }); continue; }
+                if (!p.Has) { items.Add(new Block { Kind = "quiet", Id = p.Name, Icon = "person:" + p.Name, Title = title, Note = note, Text = NoPartLine(input, f, p) }); continue; }
                 var dealt = f.DealtBy(p.Name); var received = f.ReceivedBy(p.Name);
                 double d = dealt.Values.Sum(), r = received.Values.Sum();
                 var row = new Block { Kind = "player", Id = p.Name, Icon = "person:" + p.Name, Title = title, Note = note, Colour = "person:" + p.Name,
@@ -441,12 +470,12 @@ namespace Hearthwoven.Panel
             // the boss fight on now: the boss's own damage, its health lane in the row, the foes around it as rows under it on the same scale
             Block NowBoss(Block row, FightView b, double max)
             {
-                var bossFoe = b.BossFoe;
+                var bossFoe = BossRowOf(input, b);
                 if (bossFoe == null) return row;
                 row.Value = NAtLeast(bossFoe.DealtTotal); row.Fraction = max > 0 ? (float)(bossFoe.DealtTotal / max) : 0;
                 row.Items = PlayerParts(InOrder(b.Players.Where(p => p.Has)).Select(p => (p.Name, bossFoe.PartOf(p.Name)?.Dealt.Values.Sum() ?? 0)).ToList());
                 if (b.Health >= 0) row.Items.Add(new Block { Kind = "lane", Fraction = Math.Max(0, Math.Min(1, b.Health)), Fraction2 = b.HealthMinuteAgo > b.Health ? Math.Min(1, b.HealthMinuteAgo) : 0, Colour = LandColour(b.Biome), Value = Pct(b.Health) + " left" });
-                foreach (var x in b.Foes.Where(x => !x.Boss).OrderByDescending(x => x.DealtTotal))
+                foreach (var x in FoeRowsOf(input, b).Where(x => !x.Boss).OrderByDescending(x => x.DealtTotal))
                     row.Items.Add(new Block { Kind = "foe", Id = x.Prefab, Icon = FoeIcon(input, x.Prefab), Title = Who(input, x.Prefab), Value2 = x.Count < 2 ? null : Badge(x.Count), Value = NAtLeast(x.DealtTotal), Fraction = max > 0 ? (float)(x.DealtTotal / max) : 0,
                                               Items = PlayerParts(InOrder(b.Players.Where(p => p.Has)).Select(p => (p.Name, x.PartOf(p.Name)?.Dealt.Values.Sum() ?? 0)).ToList()) });
                 return row;
@@ -455,7 +484,7 @@ namespace Hearthwoven.Panel
             {
                 var liveBoss = now.Kind == FightKind.Boss ? now : null;
                 var all = new List<double> { (nowRun ?? now).DealtTotal };
-                if (liveBoss != null) all.AddRange(liveBoss.Foes.Select(x => x.DealtTotal));
+                if (liveBoss != null) all.AddRange(FoeRowsOf(input, liveBoss).Select(x => x.DealtTotal));
                 if (nowRun != null) all.AddRange(Under(nowRun).Select(c => c.DealtTotal));
                 var max = all.Max();
                 Block row;

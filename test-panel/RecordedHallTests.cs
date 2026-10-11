@@ -36,9 +36,8 @@ static class RecordedHallTests
         var cargo = Show(world, Chapter.Voyages, "cargo");
         var cargo7 = Show(world, Chapter.Voyages, "cargo", s => s.Window = TimeWindow.SevenDays);
         var carried = PanelModel.Content(cargo).FirstOrDefault(b => b.Kind == "hero" && b.Src == PanelModel.SrcPc);
-        Check(cargo.Recorded && carried != null && carried.From.HasValue && cargo.AboutNumbers != null &&
-              cargo7.Recorded && cargo7.Windowed && cargo7.AboutNumbers == null && !PanelModel.Content(cargo7).Any(b => !string.IsNullOrEmpty(b.RecordedFrom) || b.Kind == "zone"),
-              "cargo 0.7: the cargo carried counted from its own date (From); All has the box; 7 days: no label, no box (rules C6, W.1)");
+        Check(cargo.Recorded && carried != null && carried.From.HasValue && cargo.AboutNumbers != null && cargo7.Windowed,
+              "cargo 0.7: the cargo carried counted from its own date (From); All has the box (rule C6); 7 days shows the window (its no label, no box: PropertyTests' rule W.1)");
 
         // ---------- Voyages > Maps: the map shared at the table is this PC's (from a date), the finds are your character's ----------
         var maps = Show(world, Chapter.Voyages, "maps");

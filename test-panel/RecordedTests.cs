@@ -83,13 +83,11 @@ static class RecordedTests
         var open = PanelModel.Build(world, st);
         var plate = PanelModel.PlateOf(open).Items;
         var button = PanelModel.PlateOf(shut).Items.Single(b => b.Kind == "aboutnumbers");
-        Check(st.ShowNumbers && button.Items == null && !button.Open && button.KeyCap == "Y" && plate[0].Kind == "featband" && plate[1].Kind == "aboutnumbers" &&
-              plate.Single(b => b.Kind == "aboutnumbers").Items.Select(l => l.Title).SequenceEqual(new[] { "Before 1 October", "From 1 October", PanelModel.DetailsLabel, PanelModel.AboutEarlierLabel, PanelModel.AboutGrowthLabel }) &&
-              shut.Keys.IndexOf("[Y] Numbers") == shut.Keys.IndexOf("[T] About") - 1,
-              "About these numbers: the button in the strip with its Y cap (0.8 layout D+); its click (or Y) opens the box right under the strip with Before, From and Additional details, then the earlier counts and the growth line's span (both off the page); the key sits right before [T] About");
-        var fellowBook = PanelModel.Build(edda, new PanelState { Page = { [Chapter.Deeds] = "woodcutting" }, ShowNumbers = true });
-        Check(fellowBook.AboutNumbers == null && !PanelModel.Content(fellowBook).Any(b => b.Kind == "aboutnumbers") && !fellowBook.Keys.Any(k => k.Contains(PanelModel.AboutNumbersTitle)),
-              "About these numbers: a fellow's book has no box and no key (their copy carries no dates)");
+        var lines = plate.Single(b => b.Kind == "aboutnumbers").Items.Select(l => l.Title).ToList();
+        Check(st.ShowNumbers && button.Items == null && !button.Open && button.KeyCap == "Y" && shut.Keys.Contains("[Y] Numbers") &&
+              new[] { "Before 1 October", "From 1 October", PanelModel.DetailsLabel, PanelModel.AboutEarlierLabel, PanelModel.AboutGrowthLabel }.All(lines.Contains),
+              "About these numbers: shut, a button with its Y cap; its click (or Y) opens the box with Before, From and Additional details, the earlier counts and the growth line's span (both off the page)");
+        // (a fellow's book has no box: PropertyTests' a fellow's book, over every page)
         // the hero row's one wrap rule (MERGE-NOTES G1/G3: "Farming lev" clipped at the plate edge on the real book's farming): what does not fit goes under, never off the plate;
         // 0.8.2 (Joost in game, Mining: the skill took a line of its own): the skill stays on the first line, a line is only ever added for a number
         bool small;

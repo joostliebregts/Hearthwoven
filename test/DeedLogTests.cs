@@ -151,10 +151,14 @@ static class DeedLogTests
         var away = PanelInput.FromSnapshot(Copy(160, 26, 5, true, "s2")); away.NowUtc = now; away.ViewerSessionStartUtc = start; away.OnThisSession = false;
         away.Trail = new FellowTrail(PanelInput.FromSnapshot(Copy(160, 26, 5, true, "s2")), start.AddSeconds(15));
         var fa = PanelModel.RecentOf(away, TimeWindow.Session);
-        tor.Timed = true; var t10 = PanelModel.RecentOf(tor, TimeWindow.LastTenMinutes); var t1 = PanelModel.RecentOf(tor, TimeWindow.LastHour);
+        tor.Timed = true; tor.ReceivedUtc = now.AddSeconds(-20);   // their copies come live: the latest 20 s ago (nothing they count grew since the trail's last sample)
+        var t10 = PanelModel.RecentOf(tor, TimeWindow.LastTenMinutes); var t1 = PanelModel.RecentOf(tor, TimeWindow.LastHour);
+        tor.ReceivedUtc = now.AddMinutes(-2); var gone10 = PanelModel.RecentOf(tor, TimeWindow.LastTenMinutes);   // 0.8.5: nothing came for two minutes, so not live (Battle's rule)
         Check(fs.Shown && fs.Total(DeedLog.PickedUp) == 15 && fs.Total(DeedLog.Placed) == 2 && fs.Grew[DeedLog.Kills]["$enemy_troll"] == 1 && !f10.Shown &&
-              !fa.Shown && fa.Row == PanelModel.RecentNotOn && fa.Why == PanelModel.FellowNotOn(away) && t10.Total(DeedLog.PickedUp) == 15 && t1.Total(DeedLog.PickedUp) == 15,
-              "R group (B33): a fellow's copy from before your session start is not counted in Session (15 of 175 wood); a fellow not on during your session says so; 10 min only with timed copies");
+              !fa.Shown && fa.Row == PanelModel.RecentNotOn && fa.Why == PanelModel.FellowNotOn(away) && t10.Total(DeedLog.PickedUp) == 15 && t1.Total(DeedLog.PickedUp) == 15 &&
+              !gone10.Shown && gone10.Row == PanelModel.FellowNotPlaying && gone10.Why == PanelModel.FellowShortWhy(tor),
+              "R group (B33): a fellow's copy from before your session start is not counted in Session (15 of 175 wood); a fellow not on during your session says so; 10 min only with timed copies, " +
+              "and (0.8.5) only while they come live: nothing for two minutes says \"" + gone10.Why + "\"");
         var bigMarks = new FellowMarks();
         var bigCopies = new Dictionary<string, string>();
         for (int i = 0; i < 4; i++)

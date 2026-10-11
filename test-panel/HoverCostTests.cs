@@ -37,7 +37,7 @@ static class HoverCostTests
         {
             var n = PanelModel.BarFormOf(Of(row, "part"), true).Rows.Count; if (n == 0) return;
             c.Bars_++; c.Parts += n;
-            if (row.Tone == PanelModel.DamagePlayerTone) c.Tagged += n; else c.Keyed += n;
+            if (row.Tone == PanelModel.DamagePlayerTone || Of(row, "part").Any(p => p.Whole != null)) c.Tagged += n; else c.Keyed += n;   // 0.8.5: a row of damage dealt with its after says its words on the tag
         }
         void Bar(List<Block> parts)   // PanelUi.DamageBar with no share line (the feed's Log and Cards, a ranking line)
         {
@@ -62,9 +62,10 @@ static class HoverCostTests
                     foreach (var r in Of(b, "foe"))
                     {
                         var split = Of(r, "part").Count; if (split > 0) { c.Bars_++; c.Parts += split; c.Group += split; }   // GroupDealtBar
+                        else if (r.Text != null) { c.Bars_++; c.Parts++; c.Tagged++; }   // 0.8.5 AfterDealtBar: your Dealt bar with its after, its words on the page's tag
                         foreach (var rk in Of(r, "ranking"))
                         {
-                            foreach (var who in Of(rk, PanelModel.WhoHitKind)) foreach (var s in Of(who, "source")) Row(s);
+                            foreach (var who in Of(rk, PanelModel.WhoHitKind).Concat(Of(rk, PanelModel.YourHitsKind))) foreach (var s in Of(who, "source")) Row(s);   // 0.8.5: your hits on it too
                             foreach (var line in Of(rk, "rankrow").SelectMany(x => Of(x, "rankgroup")).SelectMany(g => g.Items ?? new List<Block>())) Bar(Of(line, "part"));
                         }
                     }

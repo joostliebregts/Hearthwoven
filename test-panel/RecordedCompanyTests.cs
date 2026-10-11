@@ -18,6 +18,8 @@ static class RecordedCompanyTests
             var s = new PanelState { Chapter = Chapter.Company }; s.Page[Chapter.Company] = page; more?.Invoke(s); return PanelModel.Build(i, s);
         }
         IEnumerable<Block> Every(IEnumerable<Block> bs) => bs.SelectMany(b => new[] { b }.Concat(Every(b.Items ?? new List<Block>())));
+        // a block says this in any of its lines (its title, value lines, text or note), wherever the layout puts them
+        bool BlockSays(Block b, string text) => b != null && new[] { b.Title, b.Value, b.Value2, b.Text, b.Note, b.RecordedFrom }.Any(t => t != null && t.Contains(text));
 
         var keepFellows = input.Fellows; var keepId = input.PlayerId;
         input.Fellows = Program.CompanyFellows(now); input.PlayerId = 11;
@@ -32,29 +34,29 @@ static class RecordedCompanyTests
             var box = fire.AboutNumbers;
             Check(fire.Recorded && !PanelModel.AllText(fire).Any(t => t.Contains("since install")) && giving.Items.Where(i => i.Kind == "gift" && i.Src == "pc").All(g => g.RecordedFrom != null && g.RecordedFrom.Contains(from)) &&
                   giving.Items.Where(i => i.Kind == "gift" && i.Src == "fellows").All(g => g.RecordedFrom == null && (g.Value2 == null || g.Value2.StartsWith("as "))) &&
-                  box != null && box.Items.Count == 3 && box.Items[0].Title == "Before " + install && box.Items[2].Title == PanelModel.DetailsLabel,
+                  box != null && box.Items.Any(l => l.Title == "Before " + install) && box.Items.Any(l => l.Title == PanelModel.DetailsLabel),
                   "company 0.7, Fireside: your gifts \"" + from + "\" (this PC), fellow players' gifts with their own words and no date; the box says before and from " + install);
 
-            // ----- Together: wood, ore and dishes (class A) say Earlier counts may be incomplete. in the scope line; cargo (C6) says its own date -----
+            // ----- Together: wood, ore and dishes (class A) say Earlier counts may be incomplete. (0.8.5: in About these numbers); cargo (C6) says its own date -----
             var tg = Show(input, "together");
             var cats = PanelModel.Content(tg).First(b => b.Kind == "together").Items;
             var wood = cats.Single(c => c.Id == "wood"); var cargo = cats.Single(c => c.Id == "cargo"); var built = cats.Single(c => c.Id == "built");
             var cargoDate = "Recorded from " + PanelModel.RecordDate(input, PanelModel.StartOf(input, "cargo") ?? PanelModel.StartOf(input, null).Value);
-            Check(tg.Recorded && wood.Value2 == PanelModel.EarlierIncomplete && built.Value2 != null && cargo.Value2 != null && cargo.Value2.StartsWith(cargoDate) &&
+            Check(tg.Recorded && !BlockSays(wood, PanelModel.EarlierIncomplete) && tg.AboutNumbers?.Items.Count(l => l.Text == PanelModel.EarlierIncomplete) == 1 && built.Value2 != null && BlockSays(cargo, cargoDate) &&
                   cargo.From == PanelModel.StartOf(input, "cargo") && tg.AboutNumbers != null && !PanelModel.AllText(tg).Any(t => t.Contains("since install") || t.Contains("before install")),
-                  "company 0.7, Together: wood \"Earlier counts may be incomplete.\" once in its scope line, pieces built keep the game's since-when, cargo \"" + cargoDate + "\" (its own counter's start)");
+                  "company 0.7, Together: About these numbers says \"Earlier counts may be incomplete.\" (not the wood chip), pieces built keep the game's since-when, cargo \"" + cargoDate + "\" (its own counter's start)");
 
             // ----- Food shared: what you enjoyed is dated (this PC), what was enjoyed of yours says whose PC or their last session -----
             var food = Show(input, "food");
             var ends = PanelModel.Content(food).First(b => b.Kind == "axis").Items.Where(i => i.Kind == "end").ToList();
             Check(food.Recorded && ends.Count == 2 && ends[0].RecordedFrom == from && ends[1].RecordedFrom == null && !string.IsNullOrEmpty(ends[1].Value2) &&
-                  food.AboutNumbers != null && food.AboutNumbers.Items.Last().Title == PanelModel.DetailsLabel,
+                  food.AboutNumbers != null && food.AboutNumbers.Items.Any(l => l.Title == PanelModel.DetailsLabel),
                   "company 0.7, Food shared: \"" + from + "\" on what you enjoyed, their words on what was enjoyed of yours, the box with its three lines");
 
             // ----- Gear shared: your side is dated (this PC), a fellow's side says whose PC or their last session; no zone, no since install -----
             var gear = Show(input, "gear");
             var madeby = PanelModel.Content(gear).First(b => b.Kind == "madeby");
-            Check(gear.Recorded && madeby.Title == "Their gear, Recorded from " + install && !PanelModel.AllText(gear).Any(t => t.Contains("since install")) &&
+            Check(gear.Recorded && BlockSays(madeby, "Recorded from " + install) && !PanelModel.AllText(gear).Any(t => t.Contains("since install")) &&
                   gear.AboutNumbers != null && PanelModel.Content(gear).All(b => b.Kind != "zone"),
                   "company 0.7, Gear shared: their gear \"Recorded from " + install + "\" (yours), your gear with their words, no zone");
         }

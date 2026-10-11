@@ -5,8 +5,8 @@
 Press **H** and it opens on what you did: the trees you felled, the dishes you cooked, the damage you dealt by weapon, type and foe, and what hurt you. Choose a friend's name and see their stats. Choose **Everyone** and see the whole group: the builder, the cook, the one who is always first into a fight. Everyone plays their own part, and the book shows each part.
 
 - **Deeds and Skills:** cooking, meals, building, crafting, woodcutting, mining, farming, fishing and taming, and where your practice went.
-- **Battle:** damage by weapon, type and foe; Defense, with what hurt you and what your armor stopped; a feed of your fights; the fight of the whole group, foe by foe; boss fights and dungeon runs.
-- **Company:** who cooked for whom, whose gear went to good use, and what your friends did while you were away.
+- **Battle:** damage by weapon, type and foe, and how much got through the foe's armor; Defense, with what hurt you and what your armor stopped; a feed of your fights; the fight of the whole group, foe by foe; boss fights and dungeon runs.
+- **Company:** who cooked for whom, whose gear went to good use, each player's share in any time period, and what your friends did while you were away.
 - **Feats:** moments worth telling, earned alone or together, like steering a ship 2 km home with a heavy load of ore.
 - **Voyages:** distance sailed and on foot, who sailed with you, and the cargo you carried.
 
@@ -34,11 +34,11 @@ In single player, the book shows your own deeds.
 
 ### Battle, foe by foe
 
-Every fight since you installed Hearthwoven, counted: the damage you dealt by weapon, damage type and foe, in each biome. By foe shows how many foes of each kind you fought and which ones you defeated. The Foes page shows what each foe takes more, less or no damage from, and which arrows, bolts and weapons hit it hardest, with whether you have them, so you know what to bring next time. Choose a time period, from the last 10 minutes to All, to look at one fight or a whole trip. (Battle > Damage)
+Every fight since you installed Hearthwoven, counted: the damage you dealt by weapon, damage type and foe, in each biome. By foe shows how many foes of each kind you fought and which ones you defeated. Each bar also shows how much got through the foe's armor and resistances: the filled piece got through, and the outlined piece is what the armor stopped. The Foes page shows what each foe takes more, less or no damage from, and which arrows, bolts and weapons hit it hardest, with whether you have them, so you know what to bring next time. Choose a time period, from the last 10 minutes to All, to look at one fight or a whole trip. (Battle > Damage)
 
-[![Battle, By foe: how many of each kind you fought, which ones you defeated, and your damage by type](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-damage-foe.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-damage-foe.png)
+[![Battle, By foe: how many of each kind you fought, which ones you defeated, and your damage by type after the foe's armor](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-damage-foe.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-damage-foe.png)
 
-*By foe: how many of each kind you fought, which ones you defeated, and your damage by type.*
+*By foe: how many of each kind you fought, which ones you defeated, and your damage by type, with the share that got through the foe's armor.*
 
 [![Point at a part of a damage bar to see its type and number](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/hover.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/hover.gif)
 
@@ -66,9 +66,9 @@ Defense uses the same rows as the damage you dealt: what hurt you after your arm
 
 ### Each player's share
 
-The group side by side: wood and ore brought in, pieces built, dishes cooked, damage dealt, distance sailed and cargo carried. (Company > Together)
+The group side by side: wood and ore brought in, pieces built, dishes cooked, damage dealt, distance sailed and cargo carried, in any time period from the last 10 minutes to All. (Company > Together)
 
-The same works on almost every page: the **Everyone** chip at the end of the player row turns the page you are on into the group's page, with the group's total first and then a bar for each player with their share. Each player's numbers are as they last shared them, and each row says how fresh they are.
+The same works on almost every page: the **Everyone** chip at the end of the player row turns the page you are on into the group's page, with the group's total first and then a bar for each player with their share. Each player's numbers are as they last shared them, and each row says how fresh they are. A friend's Deeds, Sailing and Cargo pages open Today, 7 days and 30 days from the days they share, and the last 10 minutes to 3 hours while they play.
 
 [![Everyone on Woodcutting: the wood the group brought in, and each player's share](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/everyone-woodcutting.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/everyone-woodcutting.png)
 
@@ -88,7 +88,7 @@ Your deeds are grouped under titles such as Hearth Cook, Hallwright and Woodcutt
 
 ### Your fights, one by one
 
-The Feed tells your fights this session, newest first: each foe "defeated by you", "defeated with Edda", "survived" or "got away", with the damage both ways. Show it as Log, Cards or Timeline, and filter it by time, biome and foe. Fellow players who share see it on your book, and you see theirs. (Battle > Feed)
+The Feed tells your fights, newest first, also those of earlier sessions up to 7 days back: each foe "defeated by you", "defeated with Edda", "survived" or "got away", with the damage both ways. Show it as Log, Cards or Timeline, and filter it by time, biome and foe. Fellow players who share see it on your book, and you see theirs. (Battle > Feed)
 
 [![The battle feed as cards and as a log, with the foe filter](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/feed.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/feed.gif)
 
@@ -102,11 +102,15 @@ A feat is a moment worth telling, earned by doing it: steering a ship 2 km with 
 
 *Feats the whole group earns, with who helped.*
 
-### Last fight
+### Fights and boss fights
 
-After a fight, Last fight shows it for the whole group: what you dealt together and what you received together, then one row per foe. Each row has two bars: what the group dealt to that foe, one part per player, and what that foe dealt back, one part per damage type. Under the rows, each player has one line: damage dealt, damage received by type, blocks, parries and falls. One quiet line names what to bring next time, such as "Poison was 62 % of what hit you: bring Poison Resistance Mead." (Battle > Last fight)
+After a fight, Last fight shows it for the whole group, also after a restart, with how long ago it was: what you dealt together and what you received together, then one row per foe. Each row has two bars: what the group dealt to that foe, one part per player, and what that foe dealt back, one part per damage type. Under the rows, each player has one line: damage dealt, damage received by type, blocks, parries and falls. One quiet line names what to bring next time, such as "Poison was 62 % of what hit you: bring Poison Resistance Mead." (Battle > Last fight)
 
-During a fight with a boss, Last fight becomes **Boss fight**, with the boss's health and the foes around it, such as The Queen's Seekers. A fall and the run back from your bed stay in the same attempt. **Runs and bosses** lists your dungeon runs and boss fights, newest first: a run goes from the moment you go into a dungeon to the moment you come out, and a boss fight in a dungeon shows under its run. Every player in the fight needs Hearthwoven 0.8.3 to be counted in it. (Battle > Runs and bosses)
+During a fight with a boss, Last fight becomes **Boss fight**, with the boss's health and the foes around it, such as The Queen's Seekers. Hildir's minibosses count as boss fights too. A fall and the run back from your bed stay in the same attempt. **Runs and bosses** lists your dungeon runs and boss fights, newest first: a run goes from the moment you go into a dungeon to the moment you come out, and a boss fight in a dungeon shows under its run. Your book keeps them for each world. Every player in the fight needs Hearthwoven 0.8.3 or newer to be counted in it. (Battle > Runs and bosses)
+
+[![A boss fight, with the boss's health and what each player dealt and received](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/bossfight.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/bossfight.gif)
+
+*A boss fight as it happens: the boss's health, the foes around it, and what each player dealt and received.*
 
 [![Last fight: what you dealt together, and each player's part](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-lastfight.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-lastfight.png)
 
@@ -118,10 +122,10 @@ During a fight with a boss, Last fight becomes **Boss fight**, with the boss's h
 - **Woodcutting and mining:** trees felled, axe and pickaxe hits, and the wood, stone and ore you brought in.
 - **Taming:** young born in your care, young born near you and the animals you led.
 - **Voyages:** distance sailed and on foot, who sailed with you and the cargo you carried.
-- **Hall:** the shared household, including trader purchases and items put into smelters.
+- **Hall:** the shared household, including trader purchases and items put into smelters, by hand or by a Stoker's Chest.
 - **Recent:** what grew lately, yours and the group's: choose 10 minutes, an hour, this session or 7 days.
 - **While away:** after a day or more away, the book opens on what your fellow players did meanwhile.
-- **Compare:** set Today beside yesterday, or the last 7 days beside the 7 before, part by part.
+- **Compare:** set Today beside yesterday, the same day last week or your best day, or the last 7 days beside the 7 before or your best 7 days, part by part. Choose what to compare against in its menu (**J**).
 - **Growth lines:** a small column for each of the last 14 days beside the big number on most Deeds pages, and with your damage dealt on Battle.
 - **Show all:** a long list of tiles shows up to 32, in your sort order, and ends on **Show all**, which opens the rest in place.
 - **Point at a bar part** and its row in the list lights up, and the other way round. Anything else you can press shows a thin gold line when you point at it.
@@ -164,13 +168,14 @@ Install Hearthwoven on the server to share books. Players who install it share t
 - **ShareWithGroup** controls sharing with other players. Turn it off to see only your own book and stop sharing it with them.
 - **SendStats** controls statistics updates to the server, even when **ShareWithGroup** is off. Turn both settings off to stop new updates and sharing.
 - Shared copies leave out death locations and your history of worlds played.
-- From 0.8, your shared copy also says how many foes of each kind you fought and defeated, which feasts you ate from and who set them out, and who made the feasts you set out. From 0.8.2 it also carries your battle feed and who was near you in a fight. From 0.8.3 it also carries the boss fights and dungeon runs you were in, and your damage per day by weapon kind and type. A player who does not share is never named there: they show as "another player".
+- From 0.8, your shared copy also says how many foes of each kind you fought and defeated, which feasts you ate from and who set them out, and who made the feasts you set out. From 0.8.2 it also carries your battle feed and who was near you in a fight. From 0.8.3 it also carries the boss fights and dungeon runs you were in, and your damage per day by weapon kind and type. From 0.8.5 it also carries, for each day of the last 30 days, the top numbers of each Deeds page, your km sailed and at the helm, and your cargo per item. Nothing in it names a place. A player who does not share is never named there: they show as "another player".
 - Your PC keeps each fellow player's last shared copy for that world, so their pages show at once after you log in. These are plain files on your PC, kept for up to 14 days. Turning off **ShareWithGroup** deletes them.
 - A server that still runs Hearthwoven 0.6 works with this version: books are shared as before, and fellow players' numbers refresh every 2 minutes.
 - With Hearthwoven 0.8 or newer on the server, players who share send small live updates every 10 seconds, so fellow players see what you do, including the land you fight in, about every 10 seconds.
 - With Hearthwoven 0.8 on the server, a world made again under the same name starts its own record of cargo and births, and two players whose characters share one id are kept apart.
 - The server also records who adds or removes items from chests and carts. This includes players without Hearthwoven.
 - Cargo loaded and unloaded, young born near you and Iron for the Forge need Hearthwoven 0.6.0 or newer on the server. An older server works for everything else.
+- What a Stoker's Chest (from the SmelterUpgrades mod) feeds into smelters is counted by the server, one time for the whole group. This needs Hearthwoven 0.8.5 on the server. On its first start with 0.8.5, the server also counts the feeding in its earlier chest logs.
 
 <details>
 <summary>Server setup, saved data and removal</summary>
@@ -203,8 +208,8 @@ Open a section for controls, settings or more detail about the numbers.
 - **Deeds:** Recent, your titles and what you are known for, with pages for cooking, meals, building, groundwork, crafting, woodcutting, mining, farming, fishing and taming.
 - **Feats:** Earned, Unsung, Together and Titles. The feats you have, the feats still ahead, the group's feats and your titles.
 - **Company:** While away, Fireside, Together, Food shared and Gear shared. What your fellow players did while you were away, who enjoyed your cooking, who put your gear to good use and the cargo each of you carried.
-- **Hall:** the shared household, including trader purchases and items put into smelters.
-- **Battle:** Overview, Last fight, Feed, Damage, Defense, Deaths and Foes. Damage dealt and received, the foes you fought and what became of them, your fights this session, blocks, parries and deaths. Filter by biome and choose a time period.
+- **Hall:** Overview, Trader and Smelters. The shared household: trader purchases, and items put into smelters by hand or by a Stoker's Chest.
+- **Battle:** Overview, Last fight, Runs and bosses, Feed, Damage, Defense, Deaths and Foes. Damage dealt and received, the foes you fought and what became of them, your fights, boss fights and dungeon runs, blocks, parries and deaths. Filter by biome and choose a time period.
 - **Voyages:** Sailing, Cargo, On foot and Maps. Distance on foot and at sea, time at the helm, cargo, your heaviest load and maps shared.
 - **Skills:** a ladder for each skill. A glow marks skills you practiced since you installed Hearthwoven. Woodcutting, Mining, Cooking, Crafting, Farming, Fishing, On foot and Battle > Damage also show the skills that belong to them.
 
@@ -223,6 +228,7 @@ Open a section for controls, settings or more detail about the numbers.
 | **K** | Open or leave the filters on pages that have them. On Company > Together, change the time period under Damage dealt. |
 | **T** | Open the About page. |
 | **Y** | Show or hide About these numbers on the page: what the numbers hold and from when. |
+| **J**, or **X** on a controller | Open the Compare menu. **W/S** choose and **Enter** picks. |
 | **Backspace** | Return to the previous page. |
 | **Enter** or **Space** | On Battle > Foes, open or close the chosen foe's ranking of arrows, bolts and weapons. |
 | **Page Up/Page Down** | Scroll the page. On a controller, the right stick scrolls too. |
@@ -230,7 +236,7 @@ Open a section for controls, settings or more detail about the numbers.
 | **Tab** | Close the book, as you close the inventory with Tab. An open filter closes first, as with Esc. |
 | **Esc** | Leave filters or About first; otherwise close the book. |
 
-Inside filters, use **A/D** and **W/S** to move, **Enter** or **Space** to choose, and **Delete** to clear the filters. The book remembers your filters for each page and each character. It also remembers the Everyone chip, Compare and the Feed's view. While the book is open, **Tab** closes it and does not open the inventory.
+Inside filters, use **A/D** and **W/S** to move, **Enter** or **Space** to choose, and **Delete** to clear the filters. The book remembers your filters for each page and each character. It also remembers the Everyone chip, Compare, what each page compares against, and the Feed's view. While the book is open, **Tab** closes it and does not open the inventory.
 
 </details>
 
@@ -250,11 +256,12 @@ Use the config editor in your mod manager, such as Gale or r2modman. Changes app
 | Panel | **ViewKey** | F | Set the key to change the view. |
 | Panel | **FilterKey** | K | Set the key to open and leave filters. Set it to Tab to keep Tab for filters; then Tab does not close the book. |
 | Panel | **NumbersKey** | Y | Set the key that shows and hides About these numbers. |
+| Panel | **CompareKey** | J | Set the key that opens the Compare menu. In the menu, W/S choose and Enter picks. The controller's X also opens it. |
 | Panel | **BookKey** | B | Set the key that shows the next book in the player row: you, each fellow player, then Everyone. The controller's Y does the same. |
 | Panel | **ShowWhileAway** | On | After a long break, open the book on Company > While away the first time. |
 | Panel | **WhileAwayHours** | 24 | How many hours away count as a long break. |
 | Panel | **Scale** | 1.0 | Set the book's size, from 0.8 to 1.3. Use 1.0 for 1920 × 1080. |
-| Battle | **DealtAfterArmour** | Off | A developer test, not a feature. It measures your damage after the foe's armor, but nothing in the book shows it yet. Leave it off. It takes effect at the next game start. |
+| Battle | **DealtAfterArmour** | Off | A developer check, not a feature. It compares the damage after the foe's armor that the book shows with the game's own numbers, and writes the result to the log. Leave it off. It takes effect at the next game start. |
 | Server | **LogRoutedDamage** | Off | On the server only: write hits between two players' PCs to a daily log, for players without Hearthwoven. |
 | Server | **CompressLogsAfterDays** | 30 | On the server only: compress daily logs older than this many days. Nothing is deleted. |
 
@@ -282,6 +289,8 @@ From 0.8, your shared copy also carries how many foes of each kind you fought, d
 From 0.8.2, your shared copy also carries your battle feed: the newest 100 foes of your session, each with its biome, times, damage and outcome, and who was near you in each fight. It also carries your blocks and parries per minute of the session. A name is in the feed only for a player who shares too. Anyone else shows as "another player". The feed never carries a place.
 
 From 0.8.3, each foe in your feed also carries the game's network id for that creature. This id is the same on every PC, so the book can put one fight together from the copies of everyone who was in it. Your copy also says which boss fight or dungeon run a foe belongs to, with the kind of boss or dungeon, never a place. It also carries your damage dealt per day of the last 30 days, split by weapon kind and damage type, and the last 3 hours of your battle log from before a restart. To decide which foes belong to a boss fight, your PC uses where the boss and the foes were. Those places stay on your PC and are never saved or shared.
+
+From 0.8.5, your shared copy also carries, for each day of the last 30 days, the numbers at the top of each Deeds page and its first bar, such as trees felled, pieces built, dishes cooked and the meals you ate with who cooked them. It also carries your km sailed, the km of it at the helm, and your cargo per item for each day, and your damage after the foe's armor with your minutes. None of it names a place.
 
 Fireside names a feast's maker with the name the game writes on the item ("Crafted by"), also when that player does not use Hearthwoven. They get no numbers: only their name on the line. With **Everyone** on, Meals names a cook the same way: a cook who does not share shows by name, in gray, with the meals the group ate from their cooking.
 
@@ -314,17 +323,17 @@ These counters start at zero when you install Hearthwoven and add up across sess
 
 ### Time periods
 
-All Battle and Deeds pages, Sailing, Cargo and Company > Together have time periods: the last 10 minutes, 30 minutes, hour and 3 hours, this session, today, the last 7 days, the last 30 days and All. The day periods use a day history on your PC. A period without history yet shows grayed. The book does not guess. Foes are counted from the day you first play 0.8, and the Battle pages say "counts from" that day. **Compare** sets Today beside yesterday, or 7 days beside the 7 days before, once your history reaches that far. It works on those two periods only: 30 days stays grayed, because your PC keeps single days for 35 days and cannot cut out the 30 days before exactly. A fellow player's book has no Compare, since they share totals, not days; on Company > Together, Damage dealt compares every player from the days they share. With **Everyone** on, only Battle > Damage compares, player by player.
+All Battle and Deeds pages, Sailing, Cargo and Company > Together have time periods: the last 10 minutes, 30 minutes, hour and 3 hours, this session, today, the last 7 days, the last 30 days and All. The day periods use a day history on your PC. A period without history yet shows grayed. The book does not guess. Foes are counted from the day you first play 0.8, and the Battle pages say "counts from" that day. **Compare** sets Today beside yesterday, or 7 days beside the 7 days before, once your history reaches that far. The page title says the two periods, and a line at the top of the page shows which bar is which. The Compare chip opens a menu where you choose what to compare against: the same day last week, or your best day (the day with the most of the page's main number in your history). On 7 days you choose the same 7 days 4 weeks back, or your best 7 days. It works on those two periods only: 30 days stays grayed, because your PC keeps single days for 35 days and cannot cut out the 30 days before exactly. A fellow player's book has no Compare; on Company > Together, Damage dealt compares every player from the days they share. With **Everyone** on, only Battle > Damage compares, player by player.
 
 ### Fellow players and the server
 
-Other players' data comes from their own copy of Hearthwoven, shared through the server. On a fellow player's book, the time periods they do not share show grayed, with the reason. From 0.8.2, their Battle pages also have the last 10 minutes to 3 hours while they play: their numbers then come every 10 seconds, so these periods count back from now. When they are not playing, or their Hearthwoven sends no live updates, these periods stay grayed and say so. Their days are not shared. When a fellow player's Hearthwoven is older than a page needs, the page says so in one line, such as "Tor's Hearthwoven is 0.6.5: this page fills in once they update." This session means your session: a fellow player's numbers in it count only what they did while you were playing. With **Everyone** on, each player's numbers are as they last shared them; someone whose numbers cannot fill the chosen period is named and left out of the total. On Last fight, fellow players' parts come from the minutes their shared copies hold, so up to a minute at each end of the fight can fall in or out.
+Other players' data comes from their own copy of Hearthwoven, shared through the server. On a fellow player's book, the time periods they do not share show grayed, with the reason. From 0.8.2, their Battle pages also have the last 10 minutes to 3 hours while they play: their numbers then come every 10 seconds, so these periods count back from now. When they are not playing, or their Hearthwoven sends no live updates, these periods stay grayed and say so. Today, 7 days and 30 days come from the days they share: their damage from 0.8.3, and their Deeds, Sailing and Cargo from 0.8.5. When a fellow player's Hearthwoven is older than a page needs, the page says so in one line, such as "Tor's Hearthwoven is 0.6.5: this page fills in once they update." This session means your session: a fellow player's numbers in it count only what they did while you were playing. With **Everyone** on, each player's numbers are as they last shared them; someone whose numbers cannot fill the chosen period is named and left out of the total. On Last fight, fellow players' parts come from the minutes their shared copies hold, so up to a minute at each end of the fight can fall in or out.
 
 With Hearthwoven 0.6.0 or newer, the server also counts what only it can see in full: cargo loaded and unloaded, young born near you and the group's Iron for the Forge. "Born near you" means near, not bred: the game does not record who fed the animals.
 
 ### Cargo
 
-Cargo is measured in **item-km**: one item carried one kilometer while you steer a ship or pull a cart. The distance is measured in straight sections, so winding routes can be undercounted. With Hearthwoven 0.6.0 or newer on the server, Voyages > Cargo also shows what you loaded into a ship or cart and what you unloaded somewhere else. Chests do not count.
+Cargo is measured in **item-km**: items aboard × km, on a straight line. It counts what is in the ship's or cart's own hold, only while you steer or pull it. The distance is measured in straight sections, so winding routes can be undercounted. Under the Cargo carried bar, a small sum such as 100 × 4.1 km = 410 item-km shows how your own numbers make each part. With Hearthwoven 0.6.0 or newer on the server, Voyages > Cargo also shows what you loaded into a ship or cart and what you unloaded somewhere else. Chests do not count.
 
 ### Gaps in Valheim's counters
 
@@ -350,7 +359,7 @@ To keep the cost small, Hearthwoven does the following.
 - It checks the biome at most once a second. It checks ships, carts and the animals you lead every 10 seconds.
 - It keeps one running total for each kind of count. The battle log combines fights older than about 3 hours into 10-minute steps.
 - During a fight, it checks every 2 seconds which players are within 40 m of you, for Last fight. It does this only while hits are coming. It is never saved. Your shared copy carries it with your feed, naming only players who share.
-- The battle feed keeps your newest 200 foes of the session, in memory only. Your shared copy carries the newest 100.
+- The battle feed keeps your newest 200 foes of the session in memory. Your shared copy carries the newest 100. For Last fight and the Feed after a restart, a small file keeps your newest 200 foes of earlier sessions for each world, up to 7 days back.
 - It keeps your last 50 boss fights and your last 50 dungeon runs with your local totals, and the last 3 hours of your battle log in a small file next to them, so the short periods still work after a restart.
 - After you spawn, it gets the book ready while the book is still closed. It builds the book the first time you open it. When you turn a page, it keeps the tabs, the page list and the player row, and reuses its text and pictures.
 - A long list of tiles shows up to 32 tiles, and a page up to 40, until you press **Show all**.
@@ -377,7 +386,7 @@ We measured 0.8.1 inside Valheim on one player's PC, at 4K, with a real characte
 - The update every 2 seconds takes about 2 ms on a typical page.
 - Switching to another page takes about 11 ms for a typical page, a frame or two.
 - The first time you open the book after the game starts takes about 60 ms.
-- Pages with long lists took longer. In 0.8.1, Deeds > Building drew every kind of piece you built: on that character, 365 kinds, it took up to about 0.2 seconds. Cooking and Crafting took up to about 75 ms. From 0.8.2, a long list shows up to 32 tiles and ends on **Show all**. We have not measured 0.8.2 or 0.8.3 in the game yet.
+- Pages with long lists took longer. In 0.8.1, Deeds > Building drew every kind of piece you built: on that character, 365 kinds, it took up to about 0.2 seconds. Cooking and Crafting took up to about 75 ms. From 0.8.2, a long list shows up to 32 tiles and ends on **Show all**. We have not measured 0.8.2 or newer in the game yet.
 
 </details>
 

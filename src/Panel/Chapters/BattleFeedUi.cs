@@ -71,7 +71,7 @@ namespace Hearthwoven.Panel
 
         static float BadgeWidth(RectTransform parent, string text)
         {
-            var t = Label(parent, text, 14, PanelLook.Muted, style: FontStyles.Bold); t.textWrappingMode = TextWrappingModes.NoWrap;
+            var t = Label(parent, text, PanelLayout.Text.Floor, PanelLook.Muted, style: FontStyles.Bold); t.textWrappingMode = TextWrappingModes.NoWrap;
             var w = Mathf.Ceil(t.preferredWidth) + 16; t.gameObject.SetActive(false); Destroy(t.gameObject);   // out of the layout at once
             return w;
         }
@@ -82,7 +82,7 @@ namespace Hearthwoven.Panel
             var edge = Img(parent, "Badge", PanelLook.PillEdge, BadgeEdge); edge.preserveAspect = false;
             if (PanelLook.PillEdge) { edge.type = Image.Type.Sliced; edge.pixelsPerUnitMultiplier = 1f; }   // the rim at about 1 px, the ends round
             edge.rectTransform.Box(x, top, w, BadgeH);
-            BtText(parent, text, x, top, w, BadgeH, 14, PanelLook.Muted, TextAlignmentOptions.Center, FontStyles.Bold);
+            BtText(parent, text, x, top, w, BadgeH, PanelLayout.Text.Floor, PanelLook.Muted, TextAlignmentOptions.Center, FontStyles.Bold);
             return w;
         }
 
@@ -123,7 +123,7 @@ namespace Hearthwoven.Panel
         static void FightHead(RectTransform col, Block f)
         {
             var h = BtRow(col, FdHead);
-            var title = BtText(h, f.Title, 0, 4, Column * 0.6f, 26, 17, PanelLook.Gold, style: FontStyles.Bold);
+            var title = BtText(h, f.Title, 0, 4, Column * 0.6f, 26, PanelLayout.Text.Name, PanelLook.Gold, style: FontStyles.Bold);
             var tw = Mathf.Ceil(title.preferredWidth) + 2; title.rectTransform.sizeDelta = new Vector2(tw, title.rectTransform.sizeDelta.y);
             var rest = "· " + f.Text + (string.IsNullOrEmpty(f.Note) ? "" : " · " + f.Note);
             var right = string.Join(" · ", new[] { string.IsNullOrEmpty(f.Value) ? null : PanelModel.FeedDealt + " " + f.Value, string.IsNullOrEmpty(f.Value2) ? null : PanelModel.FeedReceived + " " + f.Value2 }.Where(x => x != null).ToArray());
@@ -152,11 +152,17 @@ namespace Hearthwoven.Panel
         }
 
         // 0.8.1 (Joost: every fight its own card): between the fight islands, outside them, the quiet time to the fight below (italic), and after
-        // the last one what is left out; at the islands' inner edge, quiet
+        // the last one what is left out; at the islands' inner edge, quiet. 0.8.5: over an earlier session's fights its day and span, a shade
+        // stronger, with a hairline on to the right edge (the mirror's .feed-ln.session)
         static void FeedQuiet(RectTransform col, Block b)
         {
             var box = VStack(col, 0); box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset((int)IslandPad, (int)IslandPad, 0, 0);
-            Label(box, b.Text, PanelLook.MinText, PanelLook.Faint, style: b.Tone == "gap" ? FontStyles.Italic : FontStyles.Normal);
+            if (b.Tone != "session") { Label(box, b.Text, PanelLook.MinText, PanelLook.Faint, style: b.Tone == "gap" ? FontStyles.Italic : FontStyles.Normal); return; }
+            var h = LineBox(PanelLook.MinText); var r = BtRow(box, h); var room = Column - 2 * IslandPad;
+            var t = BtText(r, b.Text, 0, 0, room, h, PanelLook.MinText, PanelLook.Muted);
+            var tw = Mathf.Min(room, Mathf.Ceil(t.preferredWidth) + 2); t.rectTransform.sizeDelta = new Vector2(tw, t.rectTransform.sizeDelta.y);
+            var gap = PanelLayout.Feed.SessionGap;
+            if (room - tw - gap > 0) BtRect(r, "Rule", PanelLook.Rule, tw + gap, Mathf.Round(h / 2), room - tw - gap, 1);
         }
 
         // Log (prototype A): one line per foe, time, the foe, what became of it, then (0.8.1, Joost in game) the dealt damage as a damage bar
@@ -197,11 +203,11 @@ namespace Hearthwoven.Panel
 
         static (float name, float outcome, float recv) FeedColumns(RectTransform col, List<Block> entries)
         {
-            var measure = Label(col, "", 16, PanelLook.Text, style: FontStyles.Bold); measure.textWrappingMode = TextWrappingModes.NoWrap;
+            var measure = Label(col, "", PanelLayout.Text.Body, PanelLook.Text, style: FontStyles.Bold); measure.textWrappingMode = TextWrappingModes.NoWrap;
             float name = FdName; foreach (var e in entries) { measure.text = e.Title ?? ""; name = Mathf.Max(name, 28 + Mathf.Ceil(measure.preferredWidth) + 2); }
             measure.fontStyle = FontStyles.Normal; measure.fontSize = FdText;
             float outcome = 0; foreach (var o in entries.Select(e => e.Note).Where(o => !string.IsNullOrEmpty(o)).Concat(new[] { FdOutLeast })) { measure.text = o; outcome = Mathf.Max(outcome, MarkPx + 8 + Mathf.Ceil(measure.preferredWidth) + 2); }
-            measure.fontSize = 14;
+            measure.fontSize = PanelLayout.Text.Floor;
             float recv = 0; foreach (var t in entries.Select(FeedReceived).Where(t => t != null)) { measure.text = t; recv = Mathf.Max(recv, Mathf.Ceil(measure.preferredWidth) + 2); }
             measure.gameObject.SetActive(false); Destroy(measure.gameObject);
             return (Mathf.Min(name, FdNameMax), Mathf.Min(outcome, FdOut), Mathf.Min(recv, FdRecvMax));
@@ -219,14 +225,14 @@ namespace Hearthwoven.Panel
                 var r = BtRow(col, FdRow); var h = FdRow;
                 if (recv[i] != null)
                 {
-                    var t = Label(r, recv[i], 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
+                    var t = Label(r, recv[i], PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
                     var th = Mathf.Max(LineBox(14), Wrapped(t, recvW)); h = Mathf.Max(FdRow, th + 14);
                     t.rectTransform.Box(xDmg + trackW + FdRecvGap, (h - th) / 2, recvW, th);
                 }
                 if (h > FdRow) Size(r, -1, h);
-                BtText(r, e.Text, 0, 0, FdTime - 6, FdRow, 14, PanelLook.Faint);
+                BtText(r, e.Text, 0, 0, FdTime - 6, FdRow, PanelLayout.Text.Floor, PanelLook.Faint);
                 BtMarker(r, e.Icon, xName, (FdRow - 22) / 2, 22);
-                BtText(r, e.Title, xName + 28, 0, cols.name - 28, FdRow, 16, PanelLook.Text, style: FontStyles.Bold);
+                BtText(r, e.Title, xName + 28, 0, cols.name - 28, FdRow, PanelLayout.Text.Body, PanelLook.Text, style: FontStyles.Bold);
                 MarkImg(r, e.Tone, xOut, (FdRow - MarkPx) / 2, MarkPx);
                 BtText(r, e.Note, xOut + MarkPx + 8, 0, cols.outcome - MarkPx - 8, FdRow, FdText, PanelLook.Muted);
                 var dealt = (e.Items ?? new List<Block>()).Where(p => p.Kind == PanelModel.FeedDealt).ToList();
@@ -260,8 +266,8 @@ namespace Hearthwoven.Panel
                     var card = Node("Card", r); card.Box(x, 0, w, 120);
                     var bg = RoundedPart(card, "Band", BtBand); bg.rectTransform.Stretch();
                     BtMarker(card, e.Icon, pad, 10, 20);
-                    var time = BtText(card, e.Text, pad, 10, inner, 22, 14, PanelLook.Faint, TextAlignmentOptions.MidlineRight);
-                    BtText(card, e.Title, pad + 26, 10, inner - 26 - Mathf.Ceil(time.preferredWidth) - 6, 22, 16, PanelLook.Text, style: FontStyles.Bold);
+                    var time = BtText(card, e.Text, pad, 10, inner, 22, PanelLayout.Text.Floor, PanelLook.Faint, TextAlignmentOptions.MidlineRight);
+                    BtText(card, e.Title, pad + 26, 10, inner - 26 - Mathf.Ceil(time.preferredWidth) - 6, 22, PanelLayout.Text.Body, PanelLook.Text, style: FontStyles.Bold);
                     MarkImg(card, e.Tone, pad, 39, MarkPx);
                     BtText(card, e.Note, pad + MarkPx + 8, 34, inner - MarkPx - 8, 22, FdText, PanelLook.Muted);
                     // 0.8.1 (Joost, who loves the Cards): the dealt damage as the damage bar at the card's inner width, on the feed page's one scale as the
@@ -278,7 +284,7 @@ namespace Hearthwoven.Panel
                     var recv = FeedReceived(e);
                     if (recv != null)
                     {
-                        var line = Label(card, recv, 14, PanelLook.Muted, align: TextAlignmentOptions.TopLeft);
+                        var line = Label(card, recv, PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.TopLeft);
                         lh = Wrapped(line, inner); line.rectTransform.Box(pad, y, inner, lh);
                     }
                     else y -= 6;
@@ -303,17 +309,17 @@ namespace Hearthwoven.Panel
                 var h = 26 + dh + 12; Size(r, -1, h);
                 float axTop = k == 0 ? 8 : 0, axH = k == entries.Count - 1 && gap == null ? 14 - axTop : h - axTop;   // from the first mark down to the last one (or on to the quiet time)
                 BtRect(r, "Axis", PanelLook.Rule, FdAxis - 1, axTop, 2, axH);
-                BtText(r, e.Text, 0, 0, FdAxis - 14, 26, 14, PanelLook.Faint, TextAlignmentOptions.MidlineRight);
+                BtText(r, e.Text, 0, 0, FdAxis - 14, 26, PanelLayout.Text.Floor, PanelLook.Faint, TextAlignmentOptions.MidlineRight);
                 var under = Img(r, "Ground", PanelLook.Circle, PlateColour); under.preserveAspect = false; under.rectTransform.Box(FdAxis - MarkPx / 2 - 1, 5, MarkPx + 2, MarkPx + 2);   // the axis stops at a ring
                 MarkImg(r, e.Tone, FdAxis - MarkPx / 2, 6, MarkPx);
-                var name = BtText(r, e.Title, x, 0, w * 0.5f, 26, 16, PanelLook.Text, style: FontStyles.Bold);
+                var name = BtText(r, e.Title, x, 0, w * 0.5f, 26, PanelLayout.Text.Body, PanelLook.Text, style: FontStyles.Bold);
                 var nw = Mathf.Ceil(name.preferredWidth) + 2; name.rectTransform.sizeDelta = new Vector2(nw, name.rectTransform.sizeDelta.y);
                 BtText(r, e.Note, x + nw + 10, 0, Mathf.Max(40, w - nw - 10), 26, FdText, PanelLook.Muted);
             }
             if (gap == null) return;
             var g = BtRow(col, FdGapRow);
             BtRect(g, "Axis", PanelLook.Rule, FdAxis - 1, 0, 2, FdGapRow);
-            BtText(g, gap.Text, x, 0, w, FdGapRow, 14, PanelLook.Faint, style: FontStyles.Italic);
+            BtText(g, gap.Text, x, 0, w, FdGapRow, PanelLayout.Text.Floor, PanelLook.Faint, style: FontStyles.Italic);
         }
 
         // ----- Last fight: the foes fought, what the group received (its rows per player are the Everyone chip's: EveryoneUi.GroupRows) -----
@@ -323,8 +329,8 @@ namespace Hearthwoven.Panel
             var foes = (b.Items ?? new List<Block>()).Where(i => i.Kind == "foe").ToList();
             if (foes.Count == 0) return;
             var head = Line(col, 8);
-            var t = Label(head, (b.Title ?? "").ToUpperInvariant(), 14, PanelLook.Muted); t.characterSpacing = 8; t.textWrappingMode = TextWrappingModes.NoWrap;
-            Label(head, b.Value, 15, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+            var t = Label(head, (b.Title ?? "").ToUpperInvariant(), PanelLayout.Text.Floor, PanelLook.Muted); t.characterSpacing = 8; t.textWrappingMode = TextWrappingModes.NoWrap;
+            Label(head, b.Value, PanelLayout.Text.Small, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
             if (!string.IsNullOrEmpty(b.Text)) Label(head, b.Text, PanelLook.MinText, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;   // "your damage to each"
             Node("Rest", head).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
             var key = (b.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "pipkey");
@@ -336,7 +342,7 @@ namespace Hearthwoven.Panel
         static void FightReceived(RectTransform col, Block b)
         {
             var row = Line(col, 8);
-            Label(row, b.Value, 17, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+            Label(row, b.Value, PanelLayout.Text.Name, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
             var people = (b.Items ?? new List<Block>()).Where(i => i.Kind == "player").ToList();
             Label(row, b.Title + ", " + b.Text + (people.Count > 0 ? ":" : ""), FdText, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
             foreach (var p in people)

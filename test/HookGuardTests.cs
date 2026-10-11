@@ -78,6 +78,53 @@ static class HookGuardTests
             Check(unguarded.Count == 0 && methods.Count > 0, "hooks: every patch method is guarded (HookGuard.Run, or try/catch with HookGuard.Fail around every call and field access)" +
                                                              (unguarded.Count > 0 ? ": " + string.Join("; ", unguarded) : ""));
 
+            // ---------- a postfix reads the arguments as the game's method left them ----------
+            // 0.8.5 (Joost's evening: no Stoker's Chest feed was ever counted): Harmony hands a postfix (and a finalizer) the original's argument
+            // slots after the original ran, and Inventory.RemoveItem(string, int, ...) counts its "amount" down to 0. So no postfix may read an
+            // argument its game method writes (starg) or hands out by address (ldarga, a ref or out write); such a value is read in a prefix
+            // (__state). Every postfix argument is listed, written or not.
+            var postArgs = new List<string>(); var overwritten = new List<string>(); var unresolved = new List<string>(); var unreadable = new List<string>();
+            ParameterInfo[] Params(MethodBase mb) { try { return mb.GetParameters(); } catch (FileNotFoundException) { return null; } }   // a game assembly not in lib/
+            foreach (var t in patchClasses)
+            {
+                var after = t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                             .Where(m => m.Name is "Postfix" or "Finalizer" || m.GetCustomAttributesData().Any(a => a.AttributeType.FullName is "HarmonyLib.HarmonyPostfix" or "HarmonyLib.HarmonyFinalizer"));
+                foreach (var m in after)
+                {
+                    if (Params(m) == null) { unreadable.Add(t.Name + "." + m.Name); continue; }   // the hook's own signature: read from its source by hand
+                    foreach (var p in Params(m).Where(p => !p.Name.StartsWith("__", StringComparison.Ordinal)))
+                    {
+                        var originals = Originals(t);
+                        if (originals.Count == 0) { unresolved.Add(t.Name + "." + m.Name + "(" + p.Name + ")"); continue; }
+                        foreach (var o in originals)
+                        {
+                            var ps = Params(o);
+                            if (ps == null) { unreadable.Add(t.Name + "." + m.Name + "(" + p.Name + ") on " + o.DeclaringType.Name + "." + o.Name); continue; }
+                            var op = ps.FirstOrDefault(x => x.Name == p.Name);
+                            if (op == null) { unresolved.Add(t.Name + "." + m.Name + "(" + p.Name + ") on " + o.DeclaringType.Name + "." + o.Name); continue; }
+                            var slot = op.Position + (o.IsStatic ? 0 : 1);
+                            MethodBody body; try { body = o.GetMethodBody(); } catch (FileNotFoundException) { unreadable.Add(t.Name + "." + m.Name + "(" + p.Name + ") on " + o.DeclaringType.Name + "." + o.Name); continue; }
+                            var ins = body == null ? new List<Ins>() : Read(body.GetILAsByteArray());
+                            // a write: starg; or ldarga (a ref or out write), unless it only calls a method on an enum's or number's value (skillType.ToString())
+                            var writes = ins.Where((x, k) => Slot(x) == slot && (x.Op.Name.StartsWith("starg") || x.Op.Name.StartsWith("ldarga") &&
+                                                              !(k + 1 < ins.Count && ins[k + 1].Op == OpCodes.Constrained && (op.ParameterType.IsEnum || op.ParameterType.IsPrimitive))))
+                                            .Select(x => x.Op.Name).Distinct().ToList();
+                            var key = t.Name + "." + m.Name + "(" + p.Name + ") on " + o.DeclaringType.Name + "." + o.Name;
+                            var line = t.Name + "." + m.Name + "(" + p.ParameterType.Name + " " + p.Name + ") on " + o.DeclaringType.Name + "." + o.Name + ": " +
+                                       (writes.Count == 0 ? "untouched" : "written (" + string.Join(", ", writes) + ")" + (WantsWritten.TryGetValue(key, out var why) ? ", and wanted: " + why : ""));
+                            postArgs.Add(line);
+                            if (writes.Count > 0 && !WantsWritten.ContainsKey(key)) overwritten.Add(line);
+                        }
+                    }
+                }
+            }
+            foreach (var l in postArgs) System.Console.WriteLine("INFO postfix argument: " + l);
+            foreach (var l in unreadable) System.Console.WriteLine("INFO postfix argument (its game method needs an assembly not here): " + l + ": " + (HandChecked.TryGetValue(l, out var hand) ? hand : "NOT CHECKED"));
+            unresolved.AddRange(unreadable.Where(l => !HandChecked.ContainsKey(l)));
+            Check(overwritten.Count == 0 && unresolved.Count == 0 && postArgs.Count > 0,
+                  "hooks: no postfix reads an argument its game method writes (Harmony hands it the slot as the method left it: RemoveItem's amount reads 0); " + postArgs.Count + " postfix arguments checked" +
+                  (overwritten.Count > 0 ? "; written: " + string.Join("; ", overwritten) : "") + (unresolved.Count > 0 ? "; not resolved: " + string.Join("; ", unresolved) : ""));
+
             // ---------- every patch method, called outside the game ----------
             var leaked = new List<string>(); int called = 0, notHere = 0;
             foreach (var m in methods)
@@ -122,7 +169,7 @@ static class HookGuardTests
         }
     }
 
-    struct Ins { public int At; public OpCode Op; public int Token; }
+    struct Ins { public int At; public OpCode Op; public int Token, Var; }
 
     static List<Ins> Read(byte[] il)
     {
@@ -130,22 +177,72 @@ static class HookGuardTests
         for (int i = 0; i < il.Length;)
         {
             var at = i; OpCode op = il[i] == 0xfe ? Two[il[i + 1]] : One[il[i]]; i += il[at] == 0xfe ? 2 : 1;
-            int token = 0;
+            int token = 0, var = -1;
             switch (op.OperandType)
             {
                 case OperandType.InlineNone: break;
-                case OperandType.ShortInlineBrTarget: case OperandType.ShortInlineI: case OperandType.ShortInlineVar: i += 1; break;
-                case OperandType.InlineVar: i += 2; break;
+                case OperandType.ShortInlineVar: var = il[i]; i += 1; break;
+                case OperandType.ShortInlineBrTarget: case OperandType.ShortInlineI: i += 1; break;
+                case OperandType.InlineVar: var = BitConverter.ToUInt16(il, i); i += 2; break;
                 case OperandType.InlineI8: case OperandType.InlineR: i += 8; break;
                 case OperandType.InlineSwitch: { var n = BitConverter.ToInt32(il, i); i += 4 + 4 * n; break; }
                 case OperandType.InlineMethod: case OperandType.InlineField: case OperandType.InlineType: case OperandType.InlineTok: case OperandType.InlineString: case OperandType.InlineSig:
                     token = BitConverter.ToInt32(il, i); i += 4; break;
                 default: i += 4; break;   // InlineBrTarget, InlineI, ShortInlineR
             }
-            list.Add(new Ins { At = at, Op = op, Token = token });
+            list.Add(new Ins { At = at, Op = op, Token = token, Var = var });
         }
         return list;
     }
+
+    /// <summary>A postfix argument its game method writes and the postfix wants as written (key "Class.Postfix(arg) on Type.Method").</summary>
+    static readonly Dictionary<string, string> WantsWritten = new Dictionary<string, string>
+    {
+        ["SmeltOre.Postfix(item) on Smelter.OnAddOre"] = "with no item held (E on the smelter) the game picks one from the bag into this argument; the postfix counts the item that went in",
+    };
+    /// <summary>A postfix argument whose game method cannot be read here (a game assembly not in lib/), checked by hand in the decompiled game.</summary>
+    static readonly Dictionary<string, string> HandChecked = new Dictionary<string, string>
+    {
+        ["DamageTaken.Postfix(hit) on Character.ApplyDamage"] = "untouched (by hand, 2026-10-11: ApplyDamage never assigns hit, no ref or out)",
+        ["Hurt.Postfix(hit) on Character.ApplyDamage"] = "untouched (by hand, 2026-10-11: ApplyDamage never assigns hit, no ref or out)",
+        ["Eat.Postfix"] = "item on Player.EatFood: untouched (by hand, 2026-10-11: EatFood never assigns item)",
+        ["LogOwners.Postfix"] = "only __instance (Player): no argument", ["OnSpawn.Postfix"] = "only __instance (Player): no argument",
+        ["SessionStart.Postfix"] = "only __instance (Player): no argument",
+    };
+
+    // the argument slot an ldarg/starg/ldarga reads or writes (-1: another opcode)
+    static int Slot(Ins x)
+    {
+        if (x.Var >= 0 && (x.Op.Name.StartsWith("ldarg") || x.Op.Name.StartsWith("starg"))) return x.Var;
+        return x.Op.Name switch { "ldarg.0" => 0, "ldarg.1" => 1, "ldarg.2" => 2, "ldarg.3" => 3, _ => -1 };
+    }
+
+    /// <summary>The game methods a patch class patches, read from its [HarmonyPatch] attributes as Harmony reads them (declaring type, method
+    /// name or constructor, argument types); empty when it names its target in code (TargetMethod: another mod's method, not here).</summary>
+    static List<MethodBase> Originals(Type t)
+    {
+        Type type = null; string name = null; Type[] args = null; var ctor = false;
+        foreach (var a in t.GetCustomAttributesData().Where(a => a.AttributeType.FullName == "HarmonyLib.HarmonyPatch"))
+            foreach (var arg in a.ConstructorArguments)
+            {
+                if (arg.Value is Type ty) { if (type == null) type = ty; else args = (args ?? new Type[0]).Concat(new[] { ty }).ToArray(); }
+                else if (arg.Value is string s) name = s;
+                else if (arg.Value is System.Collections.ObjectModel.ReadOnlyCollection<CustomAttributeTypedArgument> list) args = (args ?? new Type[0]).Concat(list.Select(x => (Type)x.Value)).ToArray();
+                else if (arg.ArgumentType.FullName == "HarmonyLib.MethodType" && Convert.ToInt32(arg.Value) == 3) ctor = true;   // MethodType.Constructor
+            }
+        if (type == null) return new List<MethodBase>();
+        const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+        if (ctor) return type.GetConstructors(all).Where(c => args == null || SameArgs(c, args)).Cast<MethodBase>().ToList();
+        if (name == null) return new List<MethodBase>();
+        for (var at = type; at != null; at = at.BaseType)   // Harmony's AccessTools looks up the base classes too
+        {
+            var found = at.GetMethods(all).Where(m => m.Name == name && (args == null || SameArgs(m, args))).Cast<MethodBase>().ToList();
+            if (found.Count > 0) return found;
+        }
+        return new List<MethodBase>();
+    }
+
+    static bool SameArgs(MethodBase m, Type[] args) { try { return m.GetParameters().Select(p => p.ParameterType).SequenceEqual(args); } catch (FileNotFoundException) { return false; } }
 
     static bool Generated(Type t) { for (; t != null; t = t.DeclaringType) if (t.IsDefined(typeof(CompilerGeneratedAttribute), false)) return true; return false; }
 

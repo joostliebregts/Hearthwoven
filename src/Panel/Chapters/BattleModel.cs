@@ -29,11 +29,15 @@ namespace Hearthwoven.Panel
     ///   window's scope is the heading's (HISTORY-06.md: Defence has the one window set).
     /// - sources (Defense): Title, Text = "after your armour", Items = Kind "source" (Id, Icon = trophy, Title, Value,
     ///   Fraction on the block's scale, Items = Kind "part" per type: Id, Title, Value, Fraction = share, Colour).
-    /// - deathrows (Overview, the window's deaths): Items = Kind "death" per killer and damage type, most first (Id killer,
-    ///   Icon = its trophy, else the type's icon, else the death mark; Colour = the type's colour for a type icon; Value =
-    ///   how many, Title "death(s) from <type>", Text = the times, newest first, at most three). Every row the same layout.
-    /// - deathstrip (Deaths): Title, Items = Kind "biome" per found biome in journey order, Ocean last (Id, Title, Colour,
-    ///   Tone ink, Count = deaths there, Fraction = width weight 1 + 0.9 x deaths, Items = Kind "death" with Value = time).
+    /// - deathrows (Overview, the window's falls; 0.8.5 one line each, Joost: "Overview should fit in one screen"): Title "Falls",
+    ///   Value = the falls in the window, Note = their order ("newest first", or "most first" when a row holds more than one), Text
+    ///   "No deaths yet" with no rows. Items = Kind "death" per killer and damage type, most first (Id killer, Icon = its trophy, else
+    ///   the type's icon, else the death mark; Colour = the type's colour for a type icon; Value = how many, Title "death(s) from
+    ///   <type>", Text = the newest one's time), at most OverviewFallRows; past them one Kind "more" (Title "2 more falls", Id the
+    ///   Deaths page). Every row the same layout.
+    /// - deathstrip (Deaths; 0.8.5 the tiles grow, a friend's idea): Title, Note, Items = Kind "biome" per found biome in journey
+    ///   order, Ocean last (Id, Title, Colour, Tone ink, Count = deaths there, Fraction = the height's share, Count over the most
+    ///   in one biome, Items = Kind "death" with Value = time). On All, Count = the falls with no place and Text = why (NoPlace).
     /// - deaths (Deaths): Title "Last 30 s" (every death has its timeline), "Last 10 seconds" (none has) or "Before each
     ///   death" (mixed), Text "after your armour", Items = Kind "death" per death, newest first (Id killer, Icon its trophy,
     ///   Title, Text "time · biome", Value = total, Note = "last 30 s" | "last 10 s"). A death with its timeline: Tone
@@ -88,7 +92,13 @@ namespace Hearthwoven.Panel
         public const string FoeHead = "Foe", DealtHead = "Dealt", BestArrowHead = "Best arrow", TotalHead = "Total", AllTypes = "All types";
         public const string ByType = "By type", ByWeapon = "By weapon", ByFoe = "By foe", ByDamageType = "By damage type";
         public const string ReceivedBySource = "Received from";
-        public const string WiderNote = "wider where you fell more";
+        public const string TallerNote = "taller where you fell more";
+        public const string FallsTitle = "Falls", NewestFirst = "newest first", MostFirst = "most first";
+        /// <summary>The words in Where you fell's tile for the falls with no place ("12 no place").</summary>
+        public const string NoPlaceWords = "no place";
+        /// <summary>The overview's falls island holds this many rows (its pair and the strip above fit one screen, Joost); past them one
+        /// line opens Deaths.</summary>
+        public const int OverviewFallRows = 3;
         public const string WhereYouFell = "Where you fell", LastTenSeconds = "Last 10 seconds", LastTenShort = "last 10 seconds", ReceivedWord = "received";
         public const string LastThirty = "Last 30 seconds", LastThirtyShort = "last 30 seconds", BeforeEachDeath = "Before each death";
         public const int FoeTop = 10, BattleDeathTop = 10;
@@ -181,7 +191,10 @@ namespace Hearthwoven.Panel
         public static bool FellowLive(PanelInput input, DateTime? nowUtc = null)
         {
             if (input == null || input.IsSelf || !input.Timed || input.Cached) return false;
-            var heard = input.Trail?.LastUtc ?? input.ReceivedUtc;
+            // the latest copy that reached this PC (0.8.5: ReceivedUtc moves with every live update; the trail's last sample only when a count it
+            // keeps grew, so a fellow sailing or walking for two minutes was "not playing")
+            DateTime? trail = input.Trail?.LastUtc, got = input.ReceivedUtc;
+            var heard = trail.HasValue && got.HasValue ? (trail.Value > got.Value ? trail : got) : trail ?? got;
             return heard.HasValue && ((nowUtc ?? input.NowUtc) - heard.Value).TotalSeconds <= LiveSeconds;
         }
 
@@ -299,14 +312,13 @@ namespace Hearthwoven.Panel
                     Add(view, bar);
                 }
                 else Add(view, Hero((NAtLeast(dealt), DealtLabel, SrcPc, DealtQualifier)));   // what hurt you carries its own total just below
-                Columns(view, Stretch(v =>
-                {
-                    var hurt = Composition(WhatHurt(input) + (ScopeOfSet(chosen) == null ? "" : " " + ScopeOfSet(chosen)), ReceivedByType(taken), TypeName, Look(DamageLook), SrcPc, t => "damage:" + t, AfterOf(input));
-                    if (perBiome) DateFrom(hurt, PerBiomeFrom(input));   // its parts are the per-biome rows (the same date as the strip)
-                    Add(v, hurt);
-                    if (!perBiome) LifetimeHero(v, input, ("Deaths", DeathWord, DeathsWord));   // with the strip the deaths are its marks per biome; the lifetime line lives on Deaths
-                }),
-                Stretch(v => { if ((input.Events?.Blocks ?? 0) > 0) v.Blocks.Add(new Block { Kind = "link", Icon = "item:ShieldWood", Title = BlocksLink, Id = "Battle/defense" }); }));
+                // 0.8.5 (variant A): no falls to list here (they are counted per biome), so What hurt you has its island to itself, the window's
+                // blocks and parries under it
+                var hurt = HurtRow(input, chosen, taken);
+                if (perBiome) DateFrom(hurt, PerBiomeFrom(input));   // its parts are the per-biome rows (the same date as the strip)
+                Add(view, hurt);
+                Add(view, GuardLine(input, input.Events));   // All: since install; a day: input is the day's copy
+                if (!perBiome) LifetimeHero(view, input, ("Deaths", DeathWord, DeathsWord));   // with the strip the deaths are its marks per biome; the lifetime line lives on Deaths
                 if (!perBiome && !day) view.Blocks.Add(new Block { Kind = "note", Text = BattleAllNote });
                 else if (input.BiomeFromUtc.HasValue) view.Blocks.Add(new Block { Kind = "note", Text = BiomeFromNote(input, input.BiomeFromUtc.Value) });
             }
@@ -315,10 +327,11 @@ namespace Hearthwoven.Panel
 
         /// <summary>"By type": damage types down, weapon kinds across, each cell's amount and its share of the grid's largest cell (Fraction), totals
         /// right and under; each weapon kind's fixed category colour (Colour). 0.8: drawn as the damage rows (DamageTypeRows).</summary>
-        public static Block DamageGrid(IEnumerable<DamageRow> dealtRows)
+        public static Block DamageGrid(IEnumerable<DamageRow> dealtRows, string earlier = NotSplitWords)
         {
             var dealt = DealtRows(dealtRows);
-            var cell = dealt.GroupBy(r => r.Type + "|" + WeaponOf(r.Cause)).ToDictionary(g => g.Key, g => g.Sum(r => (double)r.Amount));
+            var cell = new Dictionary<string, double>(); var after = new Dictionary<string, DealtAmount>(); var byType = new Dictionary<string, DealtAmount>();   // 0.8.5: each cell's after (AfterPart), each type's
+            foreach (var r in dealt) { var k = r.Type + "|" + WeaponOf(r.Cause); Bump(cell, k, r.Amount); BumpDealt(after, k, r); BumpDealt(byType, r.Type, r); }
             var max = cell.Values.DefaultIfEmpty(0).Max();
             if (max <= 0) return null;
             var weapons = WeaponKinds.ToList();   // all three kinds always: the columns stay where they are in every window (one with nothing is dim)
@@ -334,33 +347,41 @@ namespace Hearthwoven.Panel
             {
                 var total = weapons.Sum(w => Get(cell, t + "|" + w));
                 if (total <= 0) continue;
+                // 0.8.5: a cell with its after carries the after rule's fields (AfterPart), the type its line's closing words (Text: "73 % got through");
+                // DamageTypeRows hands both to the row it draws
                 items.Add(new Block
                 {
                     Kind = "dmgtype", Id = t, Title = TypeName(t), Icon = DamageIcon(t), Colour = DamageColour(t), Value = NAtLeast(total), Src = SrcPc, Source = TagMeasured,
-                    Items = weapons.Select(w => { var v = Get(cell, t + "|" + w); return new Block { Kind = "cell", Id = w, Value = v > 0 ? NAtLeast(v) : "", Fraction = (float)(v / max), Colour = DamageColour(t) }; }).ToList(),
+                    Text = byType.TryGetValue(t, out var ta) ? ThroughLine(ta) : null,
+                    Items = weapons.Select(w => { var v = Get(cell, t + "|" + w); var c = new Block { Kind = "cell", Id = w, Value = v > 0 ? NAtLeast(v) : "", Fraction = (float)(v / max), Colour = DamageColour(t) };
+                                                  return v > 0 && after.TryGetValue(t + "|" + w, out var a) ? AfterPart(c, a, earlier) : c; }).ToList(),
                 });
             }
             return new Block { Kind = "damagegrid", Title = AllTypes, Value = NAtLeast(cell.Values.Sum()), Src = SrcPc, Source = TagMeasured, Items = items };
         }
 
-        /// <summary>"By weapon": one proportional bar per weapon kind, split into the damage types it dealt.</summary>
-        public static List<Block> DamageMixes(IEnumerable<DamageRow> dealtRows)
+        /// <summary>"By weapon": one proportional bar per weapon kind, split into the damage types it dealt. 0.8.5: each part by the after rule where
+        /// its hits have their after (AfterPart), the row's line ending with its share that got through (Text, ThroughLine).</summary>
+        public static List<Block> DamageMixes(IEnumerable<DamageRow> dealtRows, string earlier = NotSplitWords)
         {
             var dealt = DealtRows(dealtRows);
             var mixes = new List<Block>();
-            var largest = WeaponKinds.Select(w => dealt.Where(r => WeaponOf(r.Cause) == w).Sum(r => (double)r.Amount)).DefaultIfEmpty(0).Max();
+            // one pass: each weapon kind's damage by type, its after (0.8.5) and the weapon's own
+            var amount = new Dictionary<string, double>(); var after = new Dictionary<string, DealtAmount>(); var weapon = new Dictionary<string, DealtAmount>();
+            foreach (var r in dealt) { var wk = WeaponOf(r.Cause); var k = wk + "|" + r.Type; Bump(amount, k, r.Amount); BumpDealt(after, k, r); BumpDealt(weapon, wk, r); }
+            var largest = WeaponKinds.Select(w => weapon.TryGetValue(w, out var a) ? a.Before : 0).DefaultIfEmpty(0).Max();
             foreach (var w in WeaponKinds)
             {
-                var byType = dealt.Where(r => WeaponOf(r.Cause) == w).GroupBy(r => r.Type).ToDictionary(g => g.Key, g => g.Sum(r => (double)r.Amount));
-                var total = byType.Values.Sum();
+                var total = weapon.TryGetValue(w, out var all) ? all.Before : 0;
                 if (total <= 0) continue;
                 mixes.Add(new Block
                 {
                     Kind = "dmgmix", Id = w, Icon = "vocab:weapon-" + w, Title = WeaponName(w), Value = NAtLeast(total), Fraction = (float)(total / largest), Src = SrcPc, Source = TagMeasured,
-                    Items = BattleTypes.Where(t => Get(byType, t) > 0).Select(t => new Block
+                    Text = ThroughLine(all),
+                    Items = BattleTypes.Where(t => Get(amount, w + "|" + t) > 0).Select(t => AfterPart(new Block
                     {
-                        Kind = "part", Id = t, Icon = DamageIcon(t), Title = TypeName(t), Value = NAtLeast(Get(byType, t)), Fraction = (float)(Get(byType, t) / total), Colour = DamageColour(t),
-                    }).ToList(),
+                        Kind = "part", Id = t, Icon = DamageIcon(t), Title = TypeName(t), Value = NAtLeast(Get(amount, w + "|" + t)), Fraction = (float)(Get(amount, w + "|" + t) / total), Colour = DamageColour(t),
+                    }, after[w + "|" + t], earlier)).ToList(),
                 });
             }
             return mixes;
@@ -375,12 +396,13 @@ namespace Hearthwoven.Panel
             var since = w == TimeWindow.SinceInstall || IsDayWindow(w);   // the totals and the day rows carry no biome on a hit
             var biomeRf = since ? null : DamageBiomeFilter(input, state, rows);
             if (biomeRf != null && biomeRf.Bar != null) rows = biomeRf.Rows;
-            var grid = DamageGrid(rows);
+            var earlier = EarlierWords(input, w); var split = AnySplit(rows);   // 0.8.5: the after of your hits (Chapters/AfterArmourModel.cs)
+            var grid = DamageGrid(rows, earlier);
             if (grid != null || (biomeRf != null && biomeRf.Narrowed)) Add(view, since ? (BiomeRow(input).Options.Count >= 2 ? BiomeLine(IsDayWindow(w) ? DamageDayBiomeNote : DamageAllBiomeNote) : null) : biomeRf.Bar);   // the bar stays on an empty choice: it is how you unchoose
             if (grid == null) view.Blocks.Add(biomeRf != null && biomeRf.Narrowed ? Empty(NothingForChoice, "Clear the biome choice to see all your damage in this window.") : w == TimeWindow.SinceInstall ? AllEmpty(input) : WindowEmpty(input, w));   // vf-fix1's empty state
             else
             {
-                var mixes = DamageMixes(rows);   // 0.8 damage rows: a weapon's skills are in the page's Weapon skills strip, as on By type and By foe
+                var mixes = DamageMixes(rows, earlier);   // 0.8 damage rows: a weapon's skills are in the page's Weapon skills strip, as on By type and By foe
                 // the one answer first: the type and the weapon that did the most
                 var topType = grid.Items.Skip(1).OrderByDescending(t => ParseCount(t.Value)).First(); var topWeapon = mixes.OrderByDescending(m => ParseCount(m.Value)).First();
                 var byType = new List<Block> { TopLine(topType.Value, topType.Title + " damage, the most of any type", null), grid };
@@ -395,8 +417,9 @@ namespace Hearthwoven.Panel
                 else if (byFoe != null && CountsWait(input, w)) byFoe.Add(new Block { Kind = "note", Text = OlderLine(input, "the ×N counts fill in") });   // 0.8.2 (I): a copy from before 0.8
                 if (byFoe != null && state != null && state.View.TryGetValue(state.Chapter + "/" + page + "/view", out var shownView) && shownView == "foe") AboutLines(view, (ByFoeAboutTitle, ByFoeAbout));
                 if (!(state != null && state.Compare && IsDayWindow(w))) AboutLines(view, (DamageBarsAboutTitle, DamageBarsAbout));   // 0.8: all three views are damage rows (their floor and true line); comparing draws compare rows instead
+                if (split) AboutLines(view, (AfterAboutTitle, AfterAbout(input, w)));   // 0.8.5: what before and after are, said once (with the caption)
                 // Joost 2026-10-09: By weapon is the default (first), By type the second view; 0.8: By foe the third
-                Switch(view, state, page, "view", DealtCaption, ("weapon", ByWeapon, byWeapon), ("type", ByType, byType), ("foe", ByFoe, byFoe));
+                Switch(view, state, page, "view", split ? DealtAfterCaption : DealtCaption, ("weapon", ByWeapon, byWeapon), ("type", ByType, byType), ("foe", ByFoe, byFoe));
             }
             // 0.9 (Joost: Today vs Session was a puzzle): a fellow's day is their whole day as they shared it, said once
             if (fellowDay) view.Blocks.Add(new Block { Kind = "note", Text = DayWindowLine(w, Name(input)) });
@@ -412,18 +435,26 @@ namespace Hearthwoven.Panel
         // ---------- Foes ----------
 
         /// <summary>Foes and Defense are not windowed: the damage since install (LocalTotals, SOURCES.md fix 1), one row per
-        /// (foe or source, skill or cause, type), no time or biome. Not known (an older fellow's copy): the session log as before.</summary>
+        /// (foe or source, skill or cause, type), no time or biome. Not known (an older fellow's copy): the session log as before.
+        /// 0.8.5: a dealt row carries its after the foe's armor from the dealt ledger of the same span (input.DealtArmourSince: All, or the day
+        /// window's on InWindow's copy), the ledger's own before of it as Measured (never more than the row: hits from before the ledger began are not).</summary>
         public static List<DamageRow> DamageSinceInstallRows(PanelInput input)
         {
             var d = input.DamageSinceInstall;
             if (d == null) return Damage(input.Log, TimeWindow.Session, "", input.NowUtc);
-            var rows = new List<DamageRow>();
+            var rows = new List<DamageRow>(); var ledger = input.IsSelf ? input.DealtArmourSince : null;
             foreach (var (dir, map) in new[] { ("dealt", d.Dealt), ("taken", d.Taken) })
                 foreach (var kv in map)
                 {
                     var p = kv.Key.Split('|');
                     if (p.Length < 3) continue;
-                    rows.Add(new DamageRow { Biome = "", Dir = dir, Other = p[0], Cause = p[1], Type = p[2], Amount = kv.Value });
+                    var row = new DamageRow { Biome = "", Dir = dir, Other = p[0], Cause = p[1], Type = p[2], Amount = kv.Value };
+                    if (dir == "dealt" && ledger != null && ledger.Before.TryGetValue(kv.Key, out var m) && m > 0)
+                    {
+                        row.Measured = Math.Min(kv.Value, m);
+                        row.After = (ledger.After.TryGetValue(kv.Key, out var a) ? a : 0f) * (row.Measured / m);   // a ledger ahead of the totals (a save between them): its share
+                    }
+                    rows.Add(row);
                 }
             return rows;
         }
@@ -603,14 +634,15 @@ namespace Hearthwoven.Panel
         /// Colour "person:" + name, Value, Fraction = their share of the foe), and every foe opens: the open one's detail starts with who hit it
         /// (WhoHit, <paramref name="when"/> its window's words), then the ranking when the game knows the foe. The arrows and the ranking stay
         /// yours: they are about your weapons.</summary>
-        public static Block FoeTable(PanelInput input, IEnumerable<DamageRow> dealtRows, string open = null, List<FoeHitter> group = null, string when = null)
+        public static Block FoeTable(PanelInput input, IEnumerable<DamageRow> dealtRows, string open = null, List<FoeHitter> group = null, string when = null, string earlier = NotSplitWords)
         {
-            var byFoe = DealtRows(dealtRows).GroupBy(r => r.Other).Select(g => (key: g.Key, v: g.Sum(r => (double)r.Amount)))
+            // 0.8.5: a row per foe by the game's name (FoeGroup): the ranged Draugr's damage is the Draugr's; with its after (AfterPart)
+            var byFoe = DealtRows(dealtRows).GroupBy(r => FoeGroup(input, r.Other)).Select(g => { var a = DealtOf(g); return (key: g.Key, v: a.Before, a, kinds: g.Select(r => r.Other)); })
                                             .OrderByDescending(x => x.v).ThenBy(x => x.key, StringComparer.Ordinal).Take(FoeTop).ToList();
             if (byFoe.Count == 0) return null;
             var max = byFoe[0].v; var arrows = KnownArrows(input);
             var rows = new List<Block>();
-            foreach (var (key, v) in byFoe)
+            foreach (var (key, v, a, kinds) in byFoe)
             {
                 var foe = FoeOf(input, key);
                 var cells = new List<Block>();
@@ -626,12 +658,20 @@ namespace Hearthwoven.Panel
                 if (chosen)
                 {
                     var detail = foe != null ? FoeRanking(input, foe) : new Block { Kind = "ranking", Src = SrcPc, Items = new List<Block>() };
-                    if (group != null) detail.Items.Insert(0, WhoHit(group, key, when));
+                    var differs = foe != null ? KinDiffers(input, key, kinds) : null;   // 0.8.5: the kinds of one name take damage differently: the main kind's, said so
+                    if (differs != null) detail.Note = detail.Note == null ? differs : detail.Note + " " + differs;
+                    if (group != null) detail.Items.Insert(0, WhoHit(input, group, key, when));
+                    else if (a.Split) detail.Items.Insert(0, YourHits(input, dealtRows, key, when, earlier));   // 0.8.5: your hits on it, before and after its armor
                     cells.Add(detail);
                 }
-                if (group != null) cells.AddRange(DealtSplit(group, key, v));
-                rows.Add(new Block { Kind = "foe", Id = key, Icon = TrophyOf(input, key), Title = Who(input, key), Value = NAtLeast(v), Fraction = (float)(v / max), Src = SrcPc, Source = TagMeasured, Items = cells,
-                                     Tone = opens ? "opens" : null, Selected = chosen });
+                if (group != null) cells.AddRange(DealtSplit(input, group, key, v));
+                var row = new Block { Kind = "foe", Id = key, Icon = TrophyOf(input, key), Title = Who(input, key), Value = NAtLeast(v), Fraction = (float)(v / max), Src = SrcPc, Source = TagMeasured, Items = cells,
+                                      Tone = opens ? "opens" : null, Selected = chosen };
+                // 0.8.5: your own Dealt bar by the after rule (AfterPart: filled what got through, the outline what was stopped, a faded piece first
+                // for hits from before it was recorded); its numbers on the page's tag in the total's place (Text). With Everyone the bar is the
+                // players' parts, as before
+                if (group == null && a.Split) { var part = AfterPart(new Block { Value = NAtLeast(v) }, a, earlier); row.Fraction2 = part.Fraction2; row.Earlier = part.Earlier; row.Text = DealtTagWords(part); }
+                rows.Add(row);
             }
             return new Block { Kind = "foetable", Src = SrcPc, Source = TagMeasured, Items = rows };
         }
@@ -648,9 +688,9 @@ namespace Hearthwoven.Panel
         /// their damage to it, Fraction on the island's one scale (the top player 1), Items Kind "part" per damage type (Parts: amounts that
         /// add up to the row).</summary>
         public const string WhoHitKind = "whohit", WhoHitTitle = "Who hit it";
-        public static Block WhoHit(List<FoeHitter> group, string foe, string when)
+        public static Block WhoHit(PanelInput input, List<FoeHitter> group, string foe, string when)
         {
-            var per = group.Select(h => (h, types: h.Rows.Where(r => r.Other == foe).GroupBy(r => r.Type).ToDictionary(g => g.Key, g => g.Sum(r => (double)r.Amount))))
+            var per = group.Select(h => (h, types: h.Rows.Where(r => FoeGroup(input, r.Other) == foe).GroupBy(r => r.Type).ToDictionary(g => g.Key, g => g.Sum(r => (double)r.Amount))))
                            .Select(x => (x.h, x.types, total: x.types.Values.Sum())).Where(x => x.total > 0).ToList();
             var max = per.Select(x => x.total).DefaultIfEmpty(0).Max();
             return new Block
@@ -664,13 +704,33 @@ namespace Hearthwoven.Panel
             };
         }
 
+        /// <summary>0.8.5: the open foe's first island on your own book (Kind YourHitsKind, drawn as Who hit it): your hits on it in the window as one
+        /// damage row ("You", its parts by type by the after rule, AfterPart, and its line's closing words, "91 % got through"): Damage > By foe's row
+        /// for this foe, where Foes' Dealt bar is too small to say it.</summary>
+        public const string YourHitsKind = "yourhits", YourHitsTitle = "Your hits on it";
+        static Block YourHits(PanelInput input, IEnumerable<DamageRow> dealtRows, string foe, string when, string earlier)
+        {
+            var mine = DealtRows(dealtRows).Where(r => FoeGroup(input, r.Other) == foe).ToList();   // its name's every kind (FoeGroup), as its row
+            var types = new Dictionary<string, double>(); var after = new Dictionary<string, DealtAmount>();
+            foreach (var r in mine) { Bump(types, r.Type, r.Amount); BumpDealt(after, r.Type, r); }
+            var total = types.Values.Sum();
+            var parts = Parts(types, total); foreach (var p in parts) if (after.TryGetValue(p.Id, out var a)) AfterPart(p, a, earlier);
+            var me = input.PlayerName ?? "";
+            return new Block
+            {
+                Kind = YourHitsKind, Title = YourHitsTitle, Text = when, Src = SrcPc, Source = TagMeasured,
+                Items = new List<Block> { new Block { Kind = "source", Id = me, Icon = "person:" + me, Colour = "person:" + me, Title = "You", Value = NAtLeast(total), Fraction = 1, Src = SrcPc, Source = TagMeasured,
+                                                      Items = parts, Text = ThroughLine(DealtOf(mine)) } },
+            };
+        }
+
         /// <summary>The window as Who hit it says it: "in the last hour", "this session", "today", "all recorded".</summary>
         public static string WhoHitWhen(TimeWindow w) =>
             w == TimeWindow.SinceInstall ? "all recorded" : w == TimeWindow.Session ? "this session" : w == TimeWindow.Today ? "today" : "in the " + WindowLabel(w).ToLowerInvariant();
 
         // a foe's Dealt bar with Everyone: a part per player who hit it, in the group's order, each their share of the foe's total
-        static IEnumerable<Block> DealtSplit(List<FoeHitter> group, string foe, double total) =>
-            group.Select(h => (h, v: h.Rows.Where(r => r.Other == foe).Sum(r => (double)r.Amount))).Where(x => x.v > 0)
+        static IEnumerable<Block> DealtSplit(PanelInput input, List<FoeHitter> group, string foe, double total) =>
+            group.Select(h => (h, v: h.Rows.Where(r => FoeGroup(input, r.Other) == foe).Sum(r => (double)r.Amount))).Where(x => x.v > 0)
                  .Select(x => new Block { Kind = "part", Id = x.h.Id, Title = x.h.Title, Colour = "person:" + x.h.Id, Value = NAtLeast(x.v), Fraction = total > 0 ? (float)(x.v / total) : 0 });
 
         /// <summary>What Foes says with Everyone in its About these numbers box.</summary>
@@ -701,7 +761,7 @@ namespace Hearthwoven.Panel
         public static Block FoeTypes(PanelInput input, IEnumerable<DamageRow> dealtRows, bool group = false)
         {
             var dealt = DealtRows(dealtRows);
-            var foes = dealt.GroupBy(r => r.Other).Select(g => (key: g.Key, v: g.Sum(r => (double)r.Amount)))
+            var foes = dealt.GroupBy(r => FoeGroup(input, r.Other)).Select(g => (key: g.Key, v: g.Sum(r => (double)r.Amount)))
                             .OrderByDescending(x => x.v).ThenBy(x => x.key, StringComparer.Ordinal).Take(FoeTop)
                             .Select(x => (x.key, data: FoeOf(input, x.key))).Where(x => x.data != null).ToList();
             if (foes.Count == 0) return null;
@@ -790,13 +850,15 @@ namespace Hearthwoven.Panel
                 if (numbers.Count > 0) { var hero = Hero(numbers.ToArray()); if (hero != null) view.Blocks.Add(hero); }
                 rows = day ? DamageSinceInstallRows(src) : Damage(input.Log, w, "", input.NowUtc, SessionFrom(input));
             }
-            var table = FoeTable(input, rows, state != null && state.View.TryGetValue(FoeOpenKey, out var open) ? open : null);
+            var table = FoeTable(input, rows, state != null && state.View.TryGetValue(FoeOpenKey, out var open) ? open : null, when: WhoHitWhen(w), earlier: EarlierWords(input, w));
             if (table == null) view.Blocks.Add(w == TimeWindow.SinceInstall ? AllEmpty(input) : WindowEmpty(input, w));
             else
             {
                 FoesNumbers(input, view);
+                var split = AnySplit(rows);   // 0.8.5: the Dealt bars with their after; the caption and About say what before and after are
+                if (split) AboutLines(view, (AfterAboutTitle, AfterAbout(input, w)));
                 var types = FoeTypes(input, rows);
-                Switch(view, state, page, "view", DealtCaption, ("foe", ByFoe, new List<Block> { table }), ("type", ByDamageType, types == null ? null : new List<Block> { types }));
+                Switch(view, state, page, "view", split ? DealtAfterCaption : DealtCaption, ("foe", ByFoe, new List<Block> { table }), ("type", ByDamageType, types == null ? null : new List<Block> { types }));
             }
             if (src.Window != null && src.Window.Clipped) view.Blocks.Add(new Block { Kind = "note", Text = ClippedLine });
             Plate(view, "ui:chapter-battle", PlateText(input, w == TimeWindow.SinceInstall && input.DamageSinceInstall != null, windowed: true, w: w));
@@ -810,8 +872,8 @@ namespace Hearthwoven.Panel
         public static Block ReceivedSources(PanelInput input, IEnumerable<DamageRow> rows)
         {
             var taken = rows.Where(r => r.Dir == "taken" && r.Amount > 0 && ReceivedTypes.Contains(r.Type)).ToList();
-            var all = taken.GroupBy(r => r.Other).Select(g => (key: g.Key, total: g.Sum(r => (double)r.Amount), types: g.GroupBy(r => r.Type).ToDictionary(x => x.Key, x => x.Sum(r => (double)r.Amount))))
-                           .OrderByDescending(x => x.total).ThenBy(x => x.key, StringComparer.Ordinal).ToList();
+            var all = taken.GroupBy(r => FoeGroup(input, r.Other)).Select(g => (key: g.Key, total: g.Sum(r => (double)r.Amount), types: g.GroupBy(r => r.Type).ToDictionary(x => x.Key, x => x.Sum(r => (double)r.Amount))))
+                           .OrderByDescending(x => x.total).ThenBy(x => x.key, StringComparer.Ordinal).ToList();   // 0.8.5: one row per foe by the game's name
             if (all.Count == 0) return null;
             var fold = all.Count > RowTop;
             var shown = fold ? all.Take(RowTop - 1).ToList() : all;
@@ -892,19 +954,11 @@ namespace Hearthwoven.Panel
             // counting what they did before you came in
             var fellowSession = w == TimeWindow.Session && !input.IsSelf && SessionFrom(input).HasValue;   // your own Session: your session's tally, as before (0.8.2: kept minutes never in it)
             var shortWindow = IsShortWindow(w) && w != TimeWindow.Session;   // a fellow's only while their copy is live (0.8.2, H: WindowShared)
-            var timed = fellowSession || shortWindow ? GuardIn(input.Log, w, input.NowUtc, SessionFrom(input)) ?? (input.IsSelf ? new SessionEvents() : null) : null;
-            var ev = w == TimeWindow.SinceInstall ? input.Events : day ? src.Events : timed ?? (w == TimeWindow.Session && !fellowSession ? input.SessionOnly : null);
+            var ev = GuardOf(input, src, w);
             var received = w == TimeWindow.SinceInstall ? DamageSinceInstallRows(input) : day ? DamageSinceInstallRows(src) : Damage(input.Log, w, "", input.NowUtc, SessionFrom(input));
             // All: no heading mark, so the heading gets no "Recorded from" line (rule W.2: its page mixes counts the game keeps, hits received and base defences)
             view.Heading = "Defense"; view.HeadingSource = w != TimeWindow.SinceInstall && ((ev?.Blocks ?? 0) > 0 || received.Count > 0) ? TagMeasured : null;
-            if ((ev?.Blocks ?? 0) > 0)
-                view.Blocks.Add(new Block
-                {
-                    // the game's held blocks include the parries: the blocks number is the ones that were not parries
-                    Kind = "guard", Value = N(Math.Max(0, ev.Blocks - ev.Parries)), Title = Math.Max(0, ev.Blocks - ev.Parries) == 1 ? "block" : "blocks",
-                    Value2 = N(ev.Parries), Text = ev.Parries == 1 ? "parry" : "parries", Src = SrcPc, Source = TagMeasured,
-                });
-            if ((ev?.Blocks ?? 0) > 0) GuardSkill(input, view.Blocks[view.Blocks.Count - 1]);   // 0.8: the Blocking skill at the row's right end (Chapters/SkillsBeside.cs)
+            if ((ev?.Blocks ?? 0) > 0) view.Blocks.Add(Guard(input, ev));
             // a fellow's Session from an older copy keeps no minutes of their blocks: said once, as the empty state's one line when the window holds
             // nothing else (B19: never stacked under it)
             var noBlocksHere = ev == null && (fellowSession || (!input.IsSelf && shortWindow));
@@ -929,17 +983,60 @@ namespace Hearthwoven.Panel
             Plate(view, "ui:chapter-battle", PlateText(input, w == TimeWindow.SinceInstall && input.DamageSinceInstall != null, windowed: true, w: w));
         }
 
+        /// <summary>
+        /// The window's blocks and parries (Defense's rule, HISTORY-06.md): All the since-install tally, a day the day's copy (<paramref name="src"/>),
+        /// your own Session this session's tally, 10 min .. 3 h (and a fellow's Session, from yours) the log's minutes (GuardIn). null: not known
+        /// in this window (a fellow's copy from before 0.8.2 keeps no minutes of its blocks).
+        /// </summary>
+        static SessionEvents GuardOf(PanelInput input, PanelInput src, TimeWindow w)
+        {
+            // REVIEW-07 #2: a fellow's Session starts at yours (SessionFrom). 0.8.2: their blocks and parries per minute are cut there as Received
+            // from is; a copy from before 0.8.2 keeps one untimed tally of their whole session, left out rather than counting what they did before you came in
+            var fellowSession = w == TimeWindow.Session && !input.IsSelf && SessionFrom(input).HasValue;   // your own Session: your session's tally, as before (0.8.2: kept minutes never in it)
+            var shortWindow = IsShortWindow(w) && w != TimeWindow.Session;   // a fellow's only while their copy is live (0.8.2, H: WindowShared)
+            var timed = fellowSession || shortWindow ? GuardIn(input.Log, w, input.NowUtc, SessionFrom(input)) ?? (input.IsSelf ? new SessionEvents() : null) : null;
+            return w == TimeWindow.SinceInstall ? input.Events : IsDayWindow(w) ? src.Events : timed ?? (w == TimeWindow.Session && !fellowSession ? input.SessionOnly : null);
+        }
+
+        /// <summary>The guard block: the blocks that were not parries (the game's held blocks include the parries) and the parries, with the Blocking
+        /// skill at the row's right end (0.8, Chapters/SkillsBeside.cs).</summary>
+        static Block Guard(PanelInput input, SessionEvents ev)
+        {
+            var blocks = Math.Max(0, ev.Blocks - ev.Parries);
+            var g = new Block { Kind = "guard", Value = N(blocks), Title = blocks == 1 ? "block" : "blocks", Value2 = N(ev.Parries), Text = ev.Parries == 1 ? "parry" : "parries", Src = SrcPc, Source = TagMeasured };
+            GuardSkill(input, g);
+            return g;
+        }
+
+        /// <summary>
+        /// 0.8.5 (Joost on the overview: "why does it show this button here, rather than stats"): Battle > Overview's blocks and parries in the window,
+        /// one quiet line under What hurt you (Tone GuardLineTone): the guard block's numbers, small, the Blocking skill when it fits, the whole line a
+        /// click to Defense (Id) with the opens mark. A window that keeps no minutes of them (an older fellow's copy) says only the way there (no
+        /// Value); nothing when no block was ever counted.
+        /// </summary>
+        static Block GuardLine(PanelInput input, SessionEvents ev)
+        {
+            var ever = (input.Events?.Blocks ?? 0) > 0 || (ev?.Blocks ?? 0) > 0;
+            if (!ever) return null;
+            var g = ev == null ? new Block { Kind = "guard", Title = BlocksLink, Src = SrcPc, Source = TagMeasured } : Guard(input, ev);
+            g.Tone = GuardLineTone; g.Id = DefensePage;
+            return g;
+        }
+        public const string GuardLineTone = "line", DefensePage = "Battle/defense";
+
         // ---------- Deaths ----------
 
         // one format everywhere, always dated ("8 Oct 00:10"): "today 00:10" read as a different kind of time than Tor's page and the death rows after midnight
         static string DeathTime(PanelInput input, DateTime utc) => Local(input, utc).ToString("d MMM HH:mm", Inv);
 
-        /// <summary>"Where you fell": the biomes found (FoundBiomes: the game's record plus any damage or death on record), in journey order with the Ocean last;
-        /// a tile is wider where you fell more (1 + 0.9 per death), with a death mark and the time per fall above it.</summary>
+        /// <summary>"Where you fell" (0.8.5, a friend's idea Joost liked: the tiles grow): the biomes found (FoundBiomes: the game's record plus any
+        /// damage or death on record), in journey order with the Ocean last; a tile is taller where you fell more (FellHeight; Fraction = its share
+        /// of the most in one biome), with the time of each fall in it while they fit, else the death mark and the count.</summary>
         public static Block DeathStrip(PanelInput input, List<EventLog.Death> deaths, ICollection<string> chosen = null)
         {
             var seen = new HashSet<string>(FoundBiomes(input));   // one source with the Battle strip and Maps: the game's record plus evidence
             foreach (var d in deaths) seen.Add(d.Biome);
+            var most = Math.Max(1, BiomeTiles.Select(t => deaths.Count(d => d.Biome == t.key)).DefaultIfEmpty(0).Max());
             var tiles = new List<Block>();
             foreach (var t in BiomeTiles)
             {
@@ -948,13 +1045,59 @@ namespace Hearthwoven.Panel
                 tiles.Add(new Block
                 {
                     Kind = "biome", Id = t.key, Title = BiomeName(t.key), Colour = t.colour, Tone = t.key == "Meadows" || t.key == "Plains" ? "dark-text" : "light-text",
-                    Count = here.Count, Fraction = 1f + 0.9f * here.Count, Src = SrcPc, Source = TagMeasured,
+                    Count = here.Count, Fraction = (float)here.Count / most, Src = SrcPc, Source = TagMeasured,
                     Selected = chosen != null && chosen.Contains(t.key),   // the Biome row's choice: the renderer lights it and steps the others back, as on the overview
                     // a fall counted per biome only (since install) has no time: it is in Count, not listed
                     Items = here.Where(d => d.Time != default(DateTime)).Select(d => new Block { Kind = "death", Value = DeathTime(input, d.Time), Src = SrcPc, Source = TagMeasured }).ToList(),
                 });
             }
-            return tiles.Count == 0 ? null : new Block { Kind = "deathstrip", Title = input.IsSelf ? WhereYouFell : "Where " + Name(input) + " fell", Note = input.IsSelf ? WiderNote : "wider where " + Name(input) + " fell more", Src = SrcPc, Source = TagMeasured, Items = tiles };
+            return tiles.Count == 0 ? null : new Block { Kind = "deathstrip", Title = input.IsSelf ? WhereYouFell : "Where " + Name(input) + " fell", Note = input.IsSelf ? TallerNote : "taller where " + Name(input) + " fell more", Src = SrcPc, Source = TagMeasured, Items = tiles };
+        }
+
+        /// <summary>Where you fell draws each fall's time in its tile (FellLine apart) while every tile's falls are dated and the most in one biome fit
+        /// the room (PanelLayout.Fell.Room); else each tile shows the death mark and its count.</summary>
+        public static bool FellDated(IList<Block> tiles) =>
+            tiles.All(t => t.Count == 0 || (t.Items ?? new List<Block>()).Count(d => d.Kind == "death") == t.Count) &&
+            tiles.Select(t => t.Count).DefaultIfEmpty(0).Max() * PanelLayout.Fell.Line <= PanelLayout.Fell.Room;
+
+        /// <summary>A tile's height in Where you fell: the name's foot, and per fall a dated line (FellDated) or, under the count's line, a step as
+        /// tall as a line until the most in one biome would pass the room, so the heights follow the counts (the game and the preview draw this one rule).</summary>
+        public static float FellHeight(int count, int most, bool dated)
+        {
+            var f = PanelLayout.Fell.Foot;
+            if (count <= 0) return f;
+            if (dated) return f + count * PanelLayout.Fell.Line;
+            var step = Math.Max(1f, Math.Min(PanelLayout.Fell.Line, (float)Math.Floor((PanelLayout.Fell.Room - PanelLayout.Fell.CountLine) / Math.Max(1, most))));   // a line's step while they fit, less when the most would pass the room
+            return f + PanelLayout.Fell.CountLine + count * step;
+        }
+
+        /// <summary>
+        /// 0.8.5 (Joost: "the game counts more deaths than Where you fell places"): the falls of the page's count (LifetimeHero: the game's count when
+        /// Hearthwoven first ran + every fall counted since) that have no tile on Deaths > All, and one line that says why, from what the recorder keeps.
+        /// A fall has a place only when Hearthwoven saw it (EventLog.AddDeath books its biome with the count, BiomeTally). The rest, in order:
+        /// the game's count at the first run (it counts every fall, never where); falls counted on this PC before Hearthwoven kept places (a file
+        /// from before per-biome counting, BiomeFromUtc); falls in no land the strip has (the game named none). (0, null) when every fall is placed.
+        /// </summary>
+        public static (int count, string line) NoPlace(PanelInput input, BiomeTally counted, int placed)
+        {
+            var (before, exact) = BattleLayers(input, "Deaths");
+            int total = (int)Math.Round(before + exact), none = total - placed;
+            if (none <= 0) return (0, null);
+            int booked = (int)Math.Round(counted?.Deaths.Values.Sum() ?? 0), early = (int)Math.Round(exact) - booked, nowhere = booked - placed, first = (int)Math.Round(before);
+            var pc = input.IsSelf ? "this PC" : Name(input) + "'s PC";
+            var baselined = input.Baseline != null && input.Baseline.TryGetValue(LocalTotals.BattleKind, out var stored) && stored != null;
+            var start = StartOf(input, LocalTotals.BattleKind);
+            var reasons = new List<(int n, string why)>
+            {
+                (first, !baselined ? "were counted only by the game, not by Hearthwoven on " + pc
+                      : "came before " + (start.HasValue ? RecordDate(input, start.Value) + ", when " : "") + "Hearthwoven first ran on " + pc),
+                (early, "came before " + (input.BiomeFromUtc.HasValue ? RecordDate(input, input.BiomeFromUtc.Value) + ", when " : "") + "Hearthwoven began to keep places"),
+                (nowhere, "were where the game names no land"),
+            };
+            var head = none + " of " + Possessive(input) + " " + total + " falls have no place";
+            if (reasons.Any(r => r.n < 0) || reasons.Sum(r => r.n) != none) return (none, head + ": Hearthwoven did not record where they were.");
+            var shown = reasons.Where(r => r.n > 0).ToList();
+            return (none, head + ": " + (shown.Count == 1 ? "they " + shown[0].why : string.Join("; ", shown.Select(r => r.n + " " + r.why).ToArray())) + ".");
         }
 
         /// <summary>The list's caption: how many falls and in what order ("3 falls, newest first"), so a list that scrolls says how long it is.</summary>
@@ -1007,14 +1150,18 @@ namespace Hearthwoven.Panel
             return new Block { Kind = "deaths", Title = title, Text = AfterOf(input), Src = SrcPc, Source = TagMeasured, Items = items };
         }
 
-        /// <summary>The overview's deaths in the window: one row per killer and damage type (DominantType: never pinned on an
-        /// attacker when a damage-over-time ended it, the killer is whoever set it on you), most first, then newest.</summary>
+        /// <summary>The overview's falls in the window: one line per killer and damage type (DominantType: never pinned on an attacker when a
+        /// damage-over-time ended it, the killer is whoever set it on you), most first, then newest; the newest one's time on its line (the
+        /// Deaths page has every fall). At most OverviewFallRows lines: past them the last line opens Deaths ("2 more falls"). No falls: the
+        /// caption and "No deaths yet".</summary>
         public static Block DeathRows(PanelInput input, List<EventLog.Death> deaths)
         {
-            var groups = deaths.GroupBy(d => (killer: d.Killer ?? "unknown", type: DominantType(d)))
-                               .OrderByDescending(g => g.Count()).ThenByDescending(g => g.Max(d => d.Time)).Take(DeathTop).ToList();
-            if (groups.Count == 0) return null;
-            var items = groups.Select(g =>
+            var b = new Block { Kind = "deathrows", Title = FallsTitle, Src = SrcPc, Source = TagMeasured, Items = new List<Block>() };
+            if (deaths.Count == 0) { b.Text = NoDeaths; return b; }
+            var groups = deaths.GroupBy(d => (killer: FoeGroup(input, d.Killer) ?? "unknown", type: DominantType(d)))   // 0.8.5: a killer by the game's name
+                               .OrderByDescending(g => g.Count()).ThenByDescending(g => g.Max(d => d.Time)).ToList();
+            var shown = groups.Count > OverviewFallRows ? groups.Take(OverviewFallRows - 1).ToList() : groups;
+            b.Items = shown.Select(g =>
             {
                 var type = g.Key.type; var trophy = TrophyOf(input, g.Key.killer); var typeIcon = DamageIcon(type);
                 return new Block
@@ -1022,10 +1169,14 @@ namespace Hearthwoven.Panel
                     Kind = "death", Id = g.Key.killer, Icon = trophy.Length > 0 ? trophy : typeIcon.Length > 0 ? typeIcon : "vocab:death",
                     Colour = trophy.Length == 0 && typeIcon.Length > 0 ? DamageColour(type) : null, Value = N(g.Count()),
                     Title = (g.Count() == 1 ? DeathWord : DeathsWord) + (type.Length > 0 ? " from " + TypeName(type).ToLowerInvariant() : ""),
-                    Text = string.Join("  ·  ", g.OrderByDescending(d => d.Time).Take(3).Select(d => DeathTime(input, d.Time)).ToArray()), Src = SrcPc, Source = TagMeasured,
+                    Text = DeathTime(input, g.Max(d => d.Time)), Src = SrcPc, Source = TagMeasured,
                 };
             }).ToList();
-            return new Block { Kind = "deathrows", Src = SrcPc, Source = TagMeasured, Items = items };
+            var rest = groups.Skip(shown.Count).Sum(g => g.Count());
+            if (rest > 0) b.Items.Add(new Block { Kind = "more", Id = "Battle/deaths", Title = rest + " more " + (rest == 1 ? "fall" : "falls") });
+            b.Value = N(deaths.Count);
+            b.Note = groups.All(g => g.Count() == 1) ? NewestFirst : MostFirst;   // every line one fall: most first is newest first
+            return b;
         }
 
         static void BattleDeaths(PanelInput input, PanelInput src, PanelView view, PanelState state, List<EventLog.Death> deaths, TimeWindow w)
@@ -1045,6 +1196,12 @@ namespace Hearthwoven.Panel
             var strip0 = DeathStrip(input, strip, chosen);
             // All: the per-biome falls count from the per-biome start (hard case 8); falls of this session's log (no per-biome totals) from the session's start
             if (w == TimeWindow.SinceInstall) DateFrom(strip0, counted != null ? PerBiomeFrom(input) : input.SessionStartUtc);
+            // 0.8.5: All's strip holds every fall Hearthwoven placed, so the rest of the page's count get a tile and the line that says why
+            if (w == TimeWindow.SinceInstall && counted != null && strip0 != null)
+            {
+                var (none, why) = NoPlace(input, src.BiomeSinceInstall, strip0.Items.Sum(t => t.Count));   // the hero above counts with input
+                strip0.Count = none; strip0.Text = why;
+            }
             Add(view, strip0);
             Add(view, biomeBar);   // under the strip, as on the overview
             var listed = InBiomes(deaths, chosen);

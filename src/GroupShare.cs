@@ -43,6 +43,8 @@ namespace Hearthwoven
         /// <summary>After the book in the list: the fellow key of each name, in the same order. An older reader stops before it.</summary>
         public const string KeysTag = "hw-keys-1";
         public static ServerBook.Shared OwnBook;
+        /// <summary>0.8.5: the world's part of the server's book (Stoker's Chest feeding, counted once on the server); null = none (a server before 0.8.5, or nothing fed yet).</summary>
+        public static ServerBook.World World;
         /// <summary>The tag in front of the book in the list (after the names): a reader that knows it reads on, any other stops.</summary>
         public const string BooksTag = "hw-book-1";
         public static float LastReply = -1f;
@@ -211,9 +213,10 @@ namespace Hearthwoven
         /// <summary>Client: the server's book from a list's tail (null: a server before 0.6, so none).</summary>
         public static void ReadBooks(string json)
         {
-            Books.Clear(); BooksByKey.Clear(); OwnBook = null;
+            Books.Clear(); BooksByKey.Clear(); OwnBook = null; World = null;
             if (!(MiniJson.Parse(json) is Dictionary<string, object> root)) return;
             OwnBook = ServerBook.Shared.Read(MiniJson.Obj(root, "self"));
+            World = ServerBook.World.Read(MiniJson.Obj(root, "world"));
             foreach (var kv in MiniJson.Obj(root, "players") ?? new Dictionary<string, object>())
             {
                 var b = ServerBook.Shared.Read(kv.Value as Dictionary<string, object>);
@@ -362,7 +365,7 @@ namespace Hearthwoven
         }
 
         /// <summary>Client: forget what was received (on logout, or when sharing is switched off).</summary>
-        public static void Clear() { liveGeneration++; FellowCopies.Clear(); Cached.Clear(); Trails.Clear(); cacheDir = null; ReceivedUtc.Clear(); Fellows.Clear(); Books.Clear(); BooksByKey.Clear(); OwnBook = null; nextRequest = 0f; ListSeen = false; Joins.Clear(); ServerLive = false; LiveIn.Clear(); nextLiveRequest = 0f; }
+        public static void Clear() { liveGeneration++; FellowCopies.Clear(); Cached.Clear(); Trails.Clear(); cacheDir = null; ReceivedUtc.Clear(); Fellows.Clear(); Books.Clear(); BooksByKey.Clear(); OwnBook = null; World = null; nextRequest = 0f; ListSeen = false; Joins.Clear(); ServerLive = false; LiveIn.Clear(); nextLiveRequest = 0f; }
 
         /// <summary>Client, every couple of seconds while playing: the game's player list into Joins (the other spawned players by name;
         /// whether it shows you spawned yet).</summary>

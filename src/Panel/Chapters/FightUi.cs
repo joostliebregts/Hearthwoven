@@ -28,7 +28,7 @@ namespace Hearthwoven.Panel
         // Runs and bosses: the day, the picture and name over how it ended, the number, the bar
         const float FtDate = 60, FtListPic = 28, FtListWho = 236, FtListLine1 = 24, FtListLine2 = 20, FtListGap = 8, FtAddRow = 26;
         const float FtKeyGap = 14, FtSwatch = 10, FtBarH = PanelModel.DamageTrack + PanelModel.DamageInner + PanelModel.DamageTrue;
-        static readonly Color FtBossBand = new Color(0.91f, 0.76f, 0.48f, 0.16f), FtBossEdge = new Color(0.91f, 0.76f, 0.48f, 0.55f), FtTree = new Color(0.42f, 0.32f, 0.2f, 0.6f);
+        static readonly Color FtBossBand = PanelWash.BossBand.Game, FtBossEdge = PanelWash.BossEdge.Game, FtTree = PanelWash.Tree.Game;   // the mirror's .ft-boss and .ft-tree as the game draws them (PanelWash.cs)
 
         internal static void FightBlock(RectTransform col, Block b, Func<string, Action> link)
         {
@@ -272,7 +272,7 @@ namespace Hearthwoven.Panel
                 {
                     var s = BtRow(holder, FtBarH);
                     BtMarker(s, sub.Icon, FtSubIndent, (PanelModel.DamageTrack - 20) / 2, 20);
-                    BtText(s, sub.Title, FtSubIndent + 28, 0, g.Who - FtSubIndent - 28, PanelModel.DamageTrack, 16, PanelLook.Text);
+                    BtText(s, sub.Title, FtSubIndent + 28, 0, g.Who - FtSubIndent - 28, PanelModel.DamageTrack, PanelLayout.Text.Body, PanelLook.Text);
                     FtRowBars(s, sub, g);
                 }
             }
@@ -366,7 +366,7 @@ namespace Hearthwoven.Panel
                 var name = BtText(r, p.Title, 30, 0, nameW - 30, FtPlayerRow, DrName, PanelLook.Text, style: FontStyles.Bold);
                 var nw = Mathf.Min(FtWidth(name), nameW - 30); name.rectTransform.sizeDelta = new Vector2(nw, name.rectTransform.sizeDelta.y);
                 if (!string.IsNullOrEmpty(p.Note)) BtText(r, p.Note, 30 + nw + 8, 0, Mathf.Max(0, nameW - 30 - nw - 8), FtPlayerRow, PanelLook.MinText, PanelLook.Faint, style: FontStyles.Italic);
-                if (p.Kind == "quiet") { BtText(r, p.Text, xs.FirstOrDefault(), 0, Column - xs.FirstOrDefault(), FtPlayerRow, 16, PanelLook.Muted, style: FontStyles.Italic); continue; }
+                if (p.Kind == "quiet") { BtText(r, p.Text, xs.FirstOrDefault(), 0, Column - xs.FirstOrDefault(), FtPlayerRow, PanelLayout.Text.Body, PanelLook.Muted, style: FontStyles.Italic); continue; }
                 float barTop = (FtPlayerRow - PanelModel.DamageTrack) / 2;
                 for (int k = 0; k < cols.Count; k++)
                 {
@@ -405,7 +405,7 @@ namespace Hearthwoven.Panel
             var h = BtRow(col, FtKeyLineH);
             var cap = BtText(h, (b.Title ?? "").ToUpperInvariant(), 0, 0, 200, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); cap.characterSpacing = 8;
             float x = FtWidth(cap) + 10;
-            if (!string.IsNullOrEmpty(b.Value)) { var v = BtText(h, b.Value, x, 0, 120, FtKeyLineH, 15, PanelLook.Text, style: FontStyles.Bold); x += FtWidth(v) + 8; }
+            if (!string.IsNullOrEmpty(b.Value)) { var v = BtText(h, b.Value, x, 0, 120, FtKeyLineH, PanelLayout.Text.Small, PanelLook.Text, style: FontStyles.Bold); x += FtWidth(v) + 8; }
             if (!string.IsNullOrEmpty(b.Text)) { var t = BtText(h, b.Text, x, 0, 300, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); x += FtWidth(t) + 12; }
             if (!string.IsNullOrEmpty(b.Note)) { BtIcon(h, PanelModel.RunsIcon, PanelLook.Muted, x, (FtKeyLineH - 16) / 2, 16); var n = BtText(h, b.Note, x + 22, 0, 400, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); x += 22 + FtWidth(n) + 12; }
             var key = FtItems(b, "dkey").FirstOrDefault();
@@ -457,7 +457,7 @@ namespace Hearthwoven.Panel
                 OpensMark(r, false, 2);
             }
             var live = row.Selected;
-            if (!string.IsNullOrEmpty(row.Value2)) BtText(r, row.Value2, 0, 0, FtDate - 4, FtListLine1, 15, live ? PanelLook.Gold : PanelLook.Text, style: FontStyles.Bold);
+            if (!string.IsNullOrEmpty(row.Value2)) BtText(r, row.Value2, 0, 0, FtDate - 4, FtListLine1, PanelLayout.Text.Small, live ? PanelLook.Gold : PanelLook.Text, style: FontStyles.Bold);
             if (!string.IsNullOrEmpty(row.Pill)) BtText(r, row.Pill, 0, string.IsNullOrEmpty(row.Value2) ? 0 : FtListLine1, FtDate - 4, string.IsNullOrEmpty(row.Value2) ? FtListLine1 : FtListLine2, PanelLook.MinText, PanelLook.Faint);
             var px = FtDate + (nested ? FtIndent : 0);
             if (nested)   // the run's line down to this row's picture

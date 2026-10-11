@@ -159,8 +159,19 @@ static class FellowTests
             var swept = !Directory.Exists(otherWorld) && FellowCache.Load(world, later).Count == 1;
             var marks = Path.Combine(mod, "local", "7-Rowan.fellows.json"); File.WriteAllText(marks, "{}"); File.WriteAllText(marks + ".bak", "{}");
             FellowCache.ForgetAll(FellowCache.Root(mod));
-            Check(swept && !Directory.Exists(FellowCache.Root(mod)) && FellowCache.Load(world, t1).Count == 0 && !File.Exists(marks) && !File.Exists(marks + ".bak"),
-                  "CACHE (B23) sharing switched off: every cached fellow and the fellow marks are deleted; an unvisited world's old copies age out at spawn");
+            // 0.8.5 review: Edda's parts of your kept fights, boss attempts and runs go too (Plugin.ForgetKeptFellows); yours stay
+            var kf = new KeptFights(); var ks = new KeptSession { World = "Midgard-1", Id = "s1" }; kf.Sessions.Add(ks);
+            ks.Sides.Add(new FightSide { Name = "Rowan", Self = true }); ks.Sides.Add(new FightSide { Name = "Edda", Key = "k-edda" });
+            FoeRow Row(string kind) { var r = new FoeRow { Kind = kind, Count = 1 }; r.Part("Rowan", true); r.Part("Edda", false); return r; }
+            var bl = new BossLog(); var att = new BossAttempt { Kind = "Eikthyr", Lead = "-321:1", StartUtc = t0 }; bl.Attempts.Add(att); att.Foes.Add(Row("Eikthyr"));
+            att.Players.Add(new AttemptPlayer { Name = "Rowan", Self = true }); att.Players.Add(new AttemptPlayer { Name = "Edda" });
+            var rl = new RunLog(); var run = new RunRecord { Kind = "Crypt2", StartUtc = t0 }; rl.Runs.Add(run); run.Rows.Add(Row("Draugr"));
+            run.Players.Add(new RunPlayer { Name = "Rowan", Self = true }); run.Players.Add(new RunPlayer { Name = "Edda" });
+            var forgot = kf.ForgetFellows() & bl.ForgetFellows() & rl.ForgetFellows();
+            var onlyYours = ks.Sides.Single().Self && att.Players.Single().Self && att.Foes[0].Parts.Single().Self && run.Players.Single().Self && run.Rows[0].Parts.Single().Self && !kf.ForgetFellows();
+            Check(swept && !Directory.Exists(FellowCache.Root(mod)) && FellowCache.Load(world, t1).Count == 0 && !File.Exists(marks) && !File.Exists(marks + ".bak") && forgot && onlyYours,
+                  "CACHE (B23) sharing switched off: every cached fellow and the fellow marks are deleted, and the fellows' parts of your kept fights, boss attempts and runs (yours stay); " +
+                  "an unvisited world's old copies age out at spawn");
         }
         finally { GroupShare.Clear(); try { Directory.Delete(mod, true); } catch { } }
         return fails;

@@ -119,6 +119,9 @@ namespace Hearthwoven.Panel
         public bool You;
         /// <summary>Their numbers are in it; false: they were there, but their copy holds none of it (the row says so in words, the sums leave them out).</summary>
         public bool Has = true;
+        /// <summary>0.8.5: a player without numbers (Has false) who shares: the fight adapter lists no one else without numbers (FightPages.NoPartLine
+        /// says why their copy holds none of it); false with Has false: one who does not share (the fight sample's Ylva).</summary>
+        public bool Shares;
         /// <summary>Their numbers are coming in now (the row's "live"); else AsOfUtc says when they are from ("14 s ago"); null = not known.</summary>
         public bool Live;
         public DateTime? AsOfUtc;

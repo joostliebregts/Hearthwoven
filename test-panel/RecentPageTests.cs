@@ -19,6 +19,7 @@ static class RecentPageTests
             return PanelModel.Build(i, s);
         }
         List<Block> All(PanelView v) => PanelModel.Content(v).SelectMany(b => new[] { b }.Concat(PanelModel.IsBox(b) ? new List<Block>() : b.Items ?? new List<Block>())).ToList();   // every block once, and the rows of each
+        bool Names(string text, TimeWindow w) => text != null && text.IndexOf(PanelModel.WindowLabel(w), StringComparison.OrdinalIgnoreCase) >= 0;   // the window in full
         bool NoZero(PanelView v) => All(v).All(b => b.Value != "0" && b.Value != "+0") && !PanelModel.AllText(v).Any(t => t == "0" || t == "+0");
 
         // ---------- only what grew in the window: wood 50 and 40 minutes ago, stone 20 minutes ago, a tree now ----------
@@ -32,11 +33,11 @@ static class RecentPageTests
         string Sections(PanelView v) => string.Join(", ", All(v).Where(b => b.Kind == "section").Select(b => b.Title + " " + b.Value));
         var ten = Show(me, TimeWindow.LastTenMinutes); var half = Show(me, TimeWindow.LastThirtyMinutes); var session = Show(me, TimeWindow.Session);
         Check(Sections(ten) == "Trees felled +1" && Sections(half) == "Brought in +2, Trees felled +1" && Sections(session) == "Brought in +17, Trees felled +1" &&
-              All(half).Where(b => b.Kind == "item").All(b => b.Title != "Wood") && ten.HeadingWindow == "last 10 minutes" && ten.Windows.Select(c => c.Label).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "7 days", "30 days", "All" }),
+              All(half).Where(b => b.Kind == "item").All(b => b.Title != "Wood") && Texts(ten).Any(t => Names(t, TimeWindow.LastTenMinutes)) && ten.Windows.Select(c => c.Label).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "7 days", "30 days", "All" }),
               "Recent: each window shows only what grew inside it (10 min: the tree; 30 min: the stone too, no wood; Session: all of it), Battle's chips 10 min .. All (B33)");
         var quiet = new PanelInput { PlayerName = "Rowan", IsSelf = true, NowUtc = at.AddMinutes(30), SessionStartUtc = at.AddMinutes(-55), Deeds = log, Events = ev };
         var empty = Show(quiet, TimeWindow.LastTenMinutes);
-        Check(All(empty).Count(b => b.Kind == "empty") == 1 && All(empty).Single(b => b.Kind == "empty").Title == "Nothing new in the last 10 minutes" && !All(empty).Any(b => b.Kind == "section"),
+        Check(All(empty).Count(b => b.Kind == "empty") == 1 && All(empty).Single(b => b.Kind == "empty").Title is string calm && calm.StartsWith("Nothing") && Names(calm, TimeWindow.LastTenMinutes) && !All(empty).Any(b => b.Kind == "section"),
               "Recent: an empty window is one calm line, no empty sections");
 
         // ---------- the group: alphabetical; a fellow without live updates greyed in 10 min with the Why line, "Not recorded" never 0 ----------
@@ -61,9 +62,8 @@ static class RecentPageTests
         var tor10 = rows10.Single(r => r.Title == "Tor");
         Check(tor10.Items.Count == 1 && tor10.Items[0].Unrecorded && tor10.Items[0].Value == null && tor10.Items[0].Title == PanelModel.NotRecorded &&
               rows10.Where(r => r.Title != "Tor").All(r => r.Items.All(i => !i.Unrecorded)) && why == PanelModel.FellowNotTimed(world.Fellows.Single(f => f.PlayerName == "Tor")) &&
-              All(g10).Count(b => b.Kind == "note" && b.Text == why) == 1 && NoZero(g10) && NoZero(g) &&
-              All(g10).FindIndex(b => b.Kind == "note" && b.Text == why) > All(g10).FindIndex(b => b.Kind == "people"),
-              "Recent, the group in 10 min: fellows with live updates show their last 10 minutes; Tor (full copies only) says Not recorded (muted, never 0) with the Why line once, under the rows (no loose text above the numbers)");
+              TimesSaid(g10, why) == 1 && NoZero(g10) && NoZero(g),
+              "Recent, the group in 10 min: fellows with live updates show their last 10 minutes; Tor (full copies only) says Not recorded (muted, never 0) with the Why line once");
         // 0.8.1 review 5: a group of three (the fellows' note follows the players): the third player's island is a half like the others, never the plate's width
         var three = PanelSample.Full(now); three.Fellows.RemoveAll(f => f.PlayerName == "Finch");
         var isles = PanelModel.Islands(PanelModel.PlateOf(Show(three, TimeWindow.Session, "group"))).Where(i => i.Parts.Any(p => p.Only >= 0)).ToList();
@@ -76,14 +76,13 @@ static class RecentPageTests
         var torBook = Show(tor, TimeWindow.LastTenMinutes, null, "Tor");
         var open = torBook.Windows.Where(c => !c.Disabled).Select(c => c.Id).ToList();
         Check(open.SequenceEqual(new[] { TimeWindow.Session.ToString(), TimeWindow.SinceInstall.ToString() }) && torBook.Windows.Single(c => c.Selected).Id == TimeWindow.Session.ToString() &&
-              torBook.Scope == "Tor, " + PanelModel.SinceViewer(tor) && NoZero(torBook) && All(torBook).Any(b => b.Kind == "section"),
+              Says(torBook, "Tor", PanelModel.SinceViewer(tor)) && NoZero(torBook) && All(torBook).Any(b => b.Kind == "section"),
               "Recent on a fellow's book: Session (since your session began) and All; their days and the short windows (no live updates) greyed; never 0");
 
         // ---------- 7 days: the kills have no foes per day: their count stands as one entry with its line, never a 0 per foe ----------
         var week = Show(world, TimeWindow.SevenDays);
         var foes = All(week).FirstOrDefault(b => b.Kind == "section" && b.Title == "Foes defeated");
-        var foeStrip = foes == null ? null : PanelModel.Content(week).SkipWhile(b => b != foes).Skip(1).FirstOrDefault();
-        Check(foes != null && foeStrip?.Items?.Count == 1 && foeStrip.Note == PanelModel.RecentFoesNoDays && NoZero(week),
+        Check(foes != null && All(week).Any(b => b.Note == PanelModel.RecentFoesNoDays && b.Items?.Count == 1) && NoZero(week),
               "Recent, 7 days: foes defeated is the game's kill count with one line why it has no foes per day; nothing reads 0");
         return fails;
     }

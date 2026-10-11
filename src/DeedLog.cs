@@ -7,7 +7,7 @@ namespace Hearthwoven
     /// <summary>
     /// The deeds of this session per minute (0.7, Deeds > Recent): what you picked up, made, planted, felled, hit with the axe and the
     /// pickaxe, the skill practice, and from the game's own counters the pieces placed, plants and fish picked, foes defeated per kind and a
-    /// few totals (kills, boss kills, fish caught, creatures tamed). Like the damage buckets of EventLog: one-minute buckets, folded into
+    /// few totals (kills, boss kills, fish caught, creatures tamed; 0.8.5 km sailed and the cargo carried, CargoTotal). Like the damage buckets of EventLog: one-minute buckets, folded into
     /// ten-minute buckets once they are older than EventLog.FoldAfterMinutes, this session only, never shared (0.8.2: its last minutes are kept
     /// on this PC for the next connection's short windows, Earlier and KeptMinutes).
     ///
@@ -39,8 +39,12 @@ namespace Hearthwoven
         /// tells them apart), plants and fish picked (m_pickableStats), foes defeated per kind (m_enemyStats table 0), and Counters.</summary>
         public const string Placed = "placed", Picked = "picked", Kills = "kills", Counters = "counters";
         public static readonly string[] GameFamilies = { Placed, Picked, Kills, Counters };
-        /// <summary>The game's whole-number counters kept under Counters (PlayerStatType names).</summary>
-        public static readonly string[] CounterStats = { "EnemyKills", "BossKills", "FishCaught", "CreatureTamed" };
+        /// <summary>The game's counters kept under Counters (PlayerStatType names), and (0.8.5, v085-together) CargoTotal: the item-metres carried at the
+        /// helm or pulling a cart, all items added up (SessionEvents.CargoMeters), so Together's Sailed and Cargo carried have minutes too, about two
+        /// numbers per minute while sailing (yours from this log, a fellow's from their trail: FellowMarks.Families adds their CargoTotal).</summary>
+        public static readonly string[] CounterStats = { "EnemyKills", "BossKills", "FishCaught", "CreatureTamed", "DistanceSail", CargoTotal };
+        /// <summary>The counter that stands for all cargo carried (no game counter: Plugin.DeedGame and FellowMarks.Families add it).</summary>
+        public const string CargoTotal = "~cargo";
         public static readonly string[] AllFamilies = { PickedUp, Made, Planted, Felled, ChopHits, PickaxeHits, Skills, Recovered, Placed, Picked, Kills, Counters };
 
         /// <summary>"2026-10-09T20:14Z|family|token" -> amount booked in that minute (ten minutes once folded).</summary>

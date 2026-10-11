@@ -109,7 +109,7 @@ namespace Hearthwoven.Panel
         /// <summary>The height of the feats' grid area (px): up to this much shows, more rows scroll inside it with the soft fade, so the one detail area under it is always
         /// whole and at the same place (fix3: Finch's 13 feats pushed the detail under the fold). Four whole rows of the tiles in FeatsUi (fix4: 4 x 52 + 3 x 6, so the 16 feats
         /// of four across show with no row cut); a narrower plate or more feats scroll, with the fade and <see cref="FeatsMore"/> at the foot.</summary>
-        public const float FeatsGridRoom = 226;   // the least room the grid gets; on the Feats chapter it takes all the plate leaves above the detail area (FeatsUi)
+        public static float FeatsGridRoom => PanelLayout.Feats.GridRoom;   // the least room the grid gets; on the Feats chapter it takes all the plate leaves above the detail area (FeatsUi)
         /// <summary>The cue at the foot of a feats grid that has rows below (fix4): that there is more, and how to reach it.</summary>
         public const string FeatsMore = "More below · wheel or A/D";   // the Titles page uses the same grid (B18)
 

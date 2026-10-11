@@ -105,7 +105,7 @@ static partial class Program
         Check(boughtHead?.Title == "25 items bought" && ledger.Kind == "itemgrid" && ledger.Src == "pc" && Seq(ledger.Items.Select(r => r.Kind + ":" + r.Title + "=" + r.Value)) == "item:Fishing Bait=20,item:Ymir Flesh=3,item:Megingjord=1,item:Hat=1" &&
               ledger.Items.All(r => r.Icon.StartsWith("item:")), "VH hall: what was bought as an item grid, most first, the full list (coins per item are not recorded)");
         var smelt = comps[1];
-        Check(smelt != null && heroes[1].Value == "127" && heroes[1].Title == "items put in" && Seq(smelt.Items.Select(p => p.Title + "=" + p.Value)) == "Ore=60,Wood=40,Fuel=27" && Math.Abs(smelt.Items.Sum(p => p.Fraction) - 1) < 1e-4,
+        Check(smelt != null && heroes[1].Value == "127" && heroes[1].Title == PanelModel.PutInShort && Seq(smelt.Items.Select(p => p.Title + "=" + p.Value)) == "Ore=60,Wood=40,Fuel=27" && Math.Abs(smelt.Items.Sum(p => p.Fraction) - 1) < 1e-4,
               "VH hall: put in the smelters by kind (ore, fuel, and wood in the kiln on its own)");
         var byItem = hallAll.Last(b => b.Kind == "itemgrid");   // the smelted items follow the smelters bar, no "by item" heading
         Check(byItem.Kind == "itemgrid" && Seq(byItem.Items.Select(r => r.Title + "=" + r.Value)) == "Wood=40,Copper Ore=30,Coal=27,Tin Ore=20,Black Metal Scrap=10", "VH hall: smelters by item, the vanilla fuel named (Coal), top five");
@@ -133,18 +133,53 @@ static partial class Program
         // the Stoker's Chest (StokerHooks, OverDrive-SmelterUpgrades): the chests' feeding is its own part, never "items put in", never the player's title
         string Forge(PanelInput who) => PanelModel.Titles(who).SingleOrDefault(t => t.Id == "smith")?.Lines.Select(l => l.Key).FirstOrDefault(k => k.Contains("into smelters"));
         Check(!PanelModel.StokersChests && !smAll.Any(b => b.Kind == "section" && b.Title == PanelModel.FedByChests) && !PanelModel.AllText(smelters).Contains(PanelModel.ChestsNoneYet) &&
-              Forge(voyager) == "127 ore and fuel into smelters", "stoker: without the chests nothing about them, and the Forgekeeper line as before");
+              Forge(voyager) is string forge && forge.StartsWith("127 ") && !forge.Contains("by hand"), "stoker: without the chests nothing about them, and the Forgekeeper line as before (127 into smelters)");
         var stoked = VoyagesHallSample(PanelSample.Evening(DateTime.UtcNow));
         SessionEvents.Add(stoked.Events.ChestFed, "blastfurnace|IronScrap", 300); SessionEvents.Add(stoked.Events.ChestFed, "blastfurnace|fuel", 150);
         var stSm = Show(Chapter.Stores, "smelters", stoked); var stAll = PanelModel.Content(stSm);
-        var fedAt = stAll.FindIndex(b => b.Kind == "section" && b.Title == PanelModel.FedByChests);
-        Check(fedAt > 0 && stAll[fedAt + 1].Kind == "itemgrid" && Seq(stAll[fedAt + 1].Items.Select(r => r.Title + "=" + r.Value)) == "Iron Scrap=300,Coal=150" &&
-              stAll[fedAt + 1].Note == PanelModel.ChestNote(stoked) && stAll.First(b => b.Kind == "hero").Value == "127" &&
-              Forge(stoked) == "127 ore and fuel into smelters by hand" && SessionEvents.Sum(stoked.Events).ChestFed.Values.Sum() == 450,
+        var fed = stAll.FirstOrDefault(b => b.Kind == "itemgrid" && b.Note == PanelModel.ChestNote(stoked));
+        Check(stAll.Any(b => b.Kind == "section" && b.Title == PanelModel.FedByChests) && fed != null && Seq(fed.Items.Select(r => r.Title + "=" + r.Value)) == "Iron Scrap=300,Coal=150" &&
+              stAll.First(b => b.Kind == "hero").Value == "127" &&
+              Forge(stoked) is string byHand && byHand.StartsWith("127 ") && byHand.Contains("by hand") && SessionEvents.Sum(stoked.Events).ChestFed.Values.Sum() == 450,
               "stoker: what a Stoker's Chest fed is its own part on Smelters (its note says it is nobody's), the hand count and the Forgekeeper line stay the player's, \"by hand\"");
         PanelModel.StokersChests = true;
         try { Check(PanelModel.AllText(Show(Chapter.Stores, "smelters")).Contains(PanelModel.ChestsNoneYet), "stoker: the mod is here but no chest fed yet: one quiet line says where its feeding will show"); }
         finally { PanelModel.StokersChests = false; }
+        // 0.8.5 (Joost's evening: the chests fed the group's smelters, no PC counted it, and the page said nothing about why): the server counts the
+        // chests once (ServerBook.World); your book and Everyone show that count, never added to what a PC counted while it hosted a chest
+        {
+            var group = PanelSample.Full(DateTime.UtcNow); var from = new DateTime(2026, 10, 11, 17, 0, 0, DateTimeKind.Utc);
+            var world = new ServerBook.World { FedFrom = from }; world.ChestFed["Wood"] = 600; world.ChestFed["IronScrap"] = 420; world.ChestFed["Coal"] = 240;
+            SessionEvents.Add(group.Events.ChestFed, "smelter|CopperOre", 50);   // what this PC counted while it hosted a chest: inside the server's count
+            var edda = group.Fellows.First(f => f.PlayerName == "Edda"); SessionEvents.Add(edda.Events.ChestFed, "charcoal_kiln|Wood", 100);
+            PanelView Ev(PanelInput who) { var st = new PanelState { Chapter = Chapter.Stores, Everyone = true, Window = TimeWindow.SinceInstall, WindowPicked = true }; st.Page[Chapter.Stores] = "smelters"; return PanelModel.Build(who, st); }
+            Block FedGrid(PanelView v) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == "itemgrid" && (b.Note ?? "").StartsWith("Nobody's own work"));
+            Block FedBar(PanelView v) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == "composition" && b.Title == PanelModel.FedByChests);
+            string Items(Block g) => g == null ? "none" : Seq(g.Items.Select(r => r.Title + "=" + r.Value + (r.Tone == "fuel" ? " fuel" : "")));
+            // no server count: Everyone adds up what each PC counted while it hosted a chest (one host per chest at a time)
+            var hostView = Ev(group); var hostSum = FedBar(hostView);
+            Check(hostSum != null && hostSum.Value == "150" && hostSum.Note == PanelModel.ChestsByHosts && PanelModel.AllText(hostView).Contains(PanelModel.ChestNoteHosts),
+                  "stoker 0.8.5: without the server's count, Everyone > Smelters adds up what each player's PC counted while it hosted a chest (50 + 100), and says a chest counts on its host's PC: " + Items(hostSum));
+            group.World = world; foreach (var f in group.Fellows) f.World = world;
+            var own = Show(Chapter.Stores, "smelters", group); var ownGrid = FedGrid(own);
+            var ownHead = PanelModel.Content(own).FirstOrDefault(b => b.Kind == "section" && b.Title == PanelModel.FedByChests);
+            var everyone = FedBar(Ev(group)); var eddaBook = Show(Chapter.Stores, "smelters", edda);
+            Check(Items(ownGrid) == "Wood=600,Iron Scrap=420,Coal=240 fuel" && ownGrid.Note == PanelModel.ChestNoteServer && ownGrid.Src == PanelModel.SrcServer &&
+                  ownHead?.RecordedFrom == "Recorded by the server from 11 October" && everyone != null && PanelModel.ParseCount(everyone.Value) == 1260 && everyone.Note == PanelModel.ChestsByServer && Items(everyone) == "Wood=600,Ore=420,Fuel=240" &&
+                  FedGrid(eddaBook) == null && !PanelModel.AllText(eddaBook).Contains(PanelModel.ChestsNoneYet),
+                  "stoker 0.8.5: with the server's count, your Smelters and Everyone show it once (1 260, coal as fuel by name), never added to a host's own count; a fellow's book leaves the chests out: " +
+                  Items(ownGrid) + " / Everyone " + Items(everyone));
+            // nothing at all on your page: one plain line says what counts here, where a chest's feeding goes, and that Everyone shows the group
+            var empty = PanelSample.Full(DateTime.UtcNow); empty.Events.SmelterAdded.Clear(); empty.Events.ChestFed.Clear(); empty.Fellows = null;
+            PanelModel.StokersChests = true;
+            try
+            {
+                var none = PanelModel.Content(Show(Chapter.Stores, "smelters", empty)).Where(b => b.Kind == "empty").ToList();
+                Check(none.Count == 1 && none[0].Text == PanelModel.SmeltersCount(empty) && none[0].Text.Contains(PanelModel.ChestsCountHost) && none[0].Text.EndsWith(PanelModel.EveryoneShowsGroup),
+                      "stoker 0.8.5: an empty Smelters page says in one line what counts (by hand yours, a chest's feeding nobody's, on its host's PC) and that Everyone shows the group: " + string.Join(" | ", none.Select(b => b.Title + ": " + b.Text)));
+            }
+            finally { PanelModel.StokersChests = false; }
+        }
         Check(Seq(ledger.Items.Select(i => i.Title + "=" + i.Colour)) == "Fishing Bait=#e8a948,Ymir Flesh=#e8a948,Megingjord=#e8a948,Hat=#b8708c" &&
               byItem.Items.Single(i => i.Title == "Coal").Tone == "fuel" && byItem.Items.Where(i => i.Title != "Coal").All(i => i.Tone == null),
               "fix2 7 hall overview: each bought item edged in its trader's colour (Haldor gold, Hildir rose); Coal marked as fuel");

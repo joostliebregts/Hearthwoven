@@ -8,7 +8,7 @@ namespace Hearthwoven.Panel
     /// Company > Since you were away (0.7, Joost 2026-10-09: "when you open your log book after being away: hey, since you last played, this
     /// has happened"). A visual page (variant C, "Group totals first"): how long you were away and since when; the group's totals over that
     /// time as big numbers (what grew in each fellow player's record since your PC last saw it, RecentModel.SinceLastTimeOfFellow); one slim
-    /// row per fellow, alphabetical: their share of those totals as a bar (each total counted equally) with the per cent, and what of yours
+    /// row per fellow, alphabetical: their share of those totals as a bar (each total weighs the same) with the per cent, and what of yours
     /// they enjoyed or put to good use (FellowMarks.StoryFamilies) as item pictures with x N. Only what grew is shown (never "0"); what a copy
     /// cannot tell is left out; a fellow seen for the first time and one with nothing new get a quiet one-line row.
     ///
@@ -61,6 +61,8 @@ namespace Hearthwoven.Panel
         // yours they enjoyed or put to good use as item pictures with x N. Labels only; the one quiet limits line at the foot.
 
         public const string AwayTotalsKind = "awaytotals", AwayRowsKind = "awayrows", AwayFellowKind = "fellow", AwayQuietKind = "quiet";
+        /// <summary>A part of a fellow's bar, as a damage row's (PanelUi.DamageRow reads Kind "part").</summary>
+        public const string AwayPartKind = "part";
         public const string AwayForYou = "For you";
         public const string AwayFirstLine = "Started sharing: their part shows next time.", AwayNoTotalsLine = "Nothing in these totals";
         public const string AwayFirstSession = "Your first session on this PC";
@@ -70,22 +72,27 @@ namespace Hearthwoven.Panel
         /// underline and the same part in every fellow's bar), never by rank or size (BAR-FORM.md: the later restyle changes only the shape).</summary>
         sealed class AwayTotal
         {
-            public string Id, One, Many, Icon, Colour; public Func<AwayDeeds, double> Of;
+            /// <summary>Short: the one word a fellow's share entry and hover say ("built 35 %", "built 22"), so five entries fit one line.</summary>
+            public string Id, One, Many, Short, Icon, Colour; public Func<AwayDeeds, double> Of;
             public string Label(double n) => Math.Round(n) == 1 ? One : Many;
         }
 
         static readonly AwayTotal[] AwayTotals =
         {
-            new AwayTotal { Id = "built", One = "piece built", Many = "pieces built", Icon = "vocab:away-hero-built", Colour = "#7f9bab", Of = a => a.Built },
-            new AwayTotal { Id = "foes", One = "foe defeated", Many = "foes defeated", Icon = "vocab:weapon-melee", Colour = "#c4553b", Of = a => a.Foes.Values.Sum() },
-            new AwayTotal { Id = "mined", One = "stone and ore", Many = "stone and ore", Icon = "vocab:away-hero-stone-ore", Colour = "#a39d92", Of = a => a.Mined },
-            new AwayTotal { Id = "wood", One = "wood brought in", Many = "wood brought in", Icon = "vocab:away-hero-wood", Colour = "#b98a52", Of = a => a.Wood },
-            new AwayTotal { Id = "dishes", One = "dish cooked", Many = "dishes cooked", Icon = "vocab:away-hero-dishes", Colour = "#d9a441", Of = a => a.Dishes.Values.Sum() },
+            new AwayTotal { Id = "built", One = "piece built", Many = "pieces built", Short = "built", Icon = "vocab:away-hero-built", Colour = "#7f9bab", Of = a => a.Built },
+            new AwayTotal { Id = "foes", One = "foe defeated", Many = "foes defeated", Short = "foes", Icon = "vocab:weapon-melee", Colour = "#c4553b", Of = a => a.Foes.Values.Sum() },
+            new AwayTotal { Id = "mined", One = "stone and ore", Many = "stone and ore", Short = "stone", Icon = "vocab:away-hero-stone-ore", Colour = "#a39d92", Of = a => a.Mined },
+            new AwayTotal { Id = "wood", One = "wood brought in", Many = "wood brought in", Short = "wood", Icon = "vocab:away-hero-wood", Colour = "#b98a52", Of = a => a.Wood },
+            new AwayTotal { Id = "dishes", One = "dish cooked", Many = "dishes cooked", Short = "dishes", Icon = "vocab:away-hero-dishes", Colour = "#d9a441", Of = a => a.Dishes.Values.Sum() },
         };
 
-        static readonly string[] CountWords = { "", "", "two", "three", "four", "five" };
-        /// <summary>The rows' caption: "Share of the five totals, each counted equally" (the prototype's header), "Share of this total" for one.</summary>
-        public static string AwayShareCaption(int totals) => totals <= 1 ? "Share of this total" : "Share of the " + (totals < CountWords.Length ? CountWords[totals] : N(totals)) + " totals, each counted equally";
+        /// <summary>The rows' caption (0.8.5, Joost on "Share of the five totals, each counted equally": "each counted equally? What does that mean?"):
+        /// plain words over the bars; what the percent before a bar is goes into About these numbers (AwayPercentAbout).</summary>
+        public const string AwayCaption = "Who did what";
+        /// <summary>About these numbers on While away: the percent before a bar, said with the percents under it (Edda: 35, 12, 94, 45 and 33 make 44),
+        /// and the bars' floor and true line as on every damage row.</summary>
+        public const string AwayPercentAboutTitle = "A player's percent", AwayBarsAboutTitle = "The bars";
+        public const string AwayPercentAbout = "The percent before a bar is the average of the percents under it, and a total the player did not add to counts as 0. So each total weighs the same, however big it is: 7 of the 10 pieces built counts as much as 70 of the 100 stone.";
 
         /// <summary>"You were away 3 days, since Thursday 21:40": how long, and when your last session here ended, in your own time (rc1
         /// play-test: "1 hour away · since 10 Oct" did not say it plainly). Without the length: "Your last session ended yesterday 21:40".</summary>
@@ -153,21 +160,32 @@ namespace Hearthwoven.Panel
                 return;
             }
 
-            // each fellow's share: per total their part of the group's, each total counted equally (1 / totals), so all rows add up to 100 %
+            // each fellow's share: per total their part of the group's, each total counted equally (1 / totals), so all rows add up to 100 %.
+            // 0.8.5 (Joost: "tighten the visual grammar like the damage bar graphs"): a part says its count inside the bar and, in the line under
+            // it, the fellow's share of that one total in its own words (Text, "built 35 %": DamageLineWords); hovered, "built 22"
             var k = sums.Count;
             var rows = new List<Block>();
             var shares = new Dictionary<AwayFellow, List<Block>>();
             foreach (var t in told.Where(t => t.Deeds != null))
                 shares[t] = sums.Select(x => (x, n: Math.Max(0, x.t.Of(t.Deeds)))).Where(p => p.n > 0)
-                                .Select(p => new Block { Id = p.x.t.Id, Colour = p.x.t.Colour, Title = p.x.t.Label(p.n), Value = N(p.n), Fraction = (float)(p.n / p.x.sum / k), Src = SrcFellows, Source = TagFellows }).ToList();
-            var pct = AwayPercents(told.Select(t => shares.TryGetValue(t, out var ps) ? ps.Sum(p => (double)p.Fraction) : 0).ToList());
+                                .Select(p => new Block { Kind = AwayPartKind, Id = p.x.t.Id, Colour = p.x.t.Colour, Title = p.x.t.Short, Value = N(p.n), Fraction = (float)(p.n / p.x.sum / k), Src = SrcFellows, Source = TagFellows }).ToList();
+            // each total's shares in whole per cents over the fellows (largest remainder, so one total's entries add up to 100, never a 0)
+            foreach (var x in sums)
+            {
+                var of = told.Where(shares.ContainsKey).Select(t => shares[t].FirstOrDefault(p => p.Id == x.t.Id)).Where(p => p != null).ToList();   // in the rows' order
+                var each = AwayPercents(of.Select(p => (double)p.Fraction).ToList());
+                for (int j = 0; j < of.Count; j++) of[j].Text = PercentText(each[j], of[j].Fraction);
+            }
+            var whole = told.Select(t => shares.TryGetValue(t, out var ps) ? ps.Sum(p => (double)p.Fraction) : 0).ToList();
+            var pct = AwayPercents(whole);
+            var most = whole.DefaultIfEmpty(0).Max();   // the damage rows' one scale: the largest share fills the track
             for (int i = 0; i < told.Count; i++)
             {
                 var t = told[i]; var name = t.Who.PlayerName;
                 var row = new Block { Kind = AwayFellowKind, Id = name, Icon = "person:" + name, Title = name, Src = SrcFellows, Source = TagFellows };
                 if (t.OlderFrom.HasValue) row.Note = "from " + Local(input, t.OlderFrom.Value).ToString("d MMM", Inv);
                 var parts = shares.TryGetValue(t, out var ps) ? ps : new List<Block>();
-                if (parts.Count > 0) { row.Items = parts; row.Value = PercentText(pct[i], ps.Sum(p => (double)p.Fraction)); }
+                if (parts.Count > 0) { row.Items = parts; row.Value = PercentText(pct[i], whole[i]); row.Fraction = most > 0 ? (float)(whole[i] / most) : 0; }
                 else
                 {
                     row.Kind = AwayQuietKind; row.Items = new List<Block>();
@@ -178,14 +196,18 @@ namespace Hearthwoven.Panel
                 foreach (var g in t.ForYou) row.Items.Add(new Block { Kind = "chip", Id = g.icon, Icon = g.icon, Title = g.title, Value = "×" + N(g.n), Src = SrcFellows, Source = TagFellows });
                 rows.Add(row);
             }
+            // one fellow did it all: every entry would say 100 %, so the bar with its counts stands alone (its parts' words on hover)
+            var barred = rows.Where(r => r.Kind == AwayFellowKind).ToList();
+            if (barred.Count == 1) barred[0].Tone = DamageNoLineTone;
             view.Blocks.Add(new Block
             {
-                Kind = AwayRowsKind, Title = k > 0 && rows.Any(r => r.Kind == AwayFellowKind) ? AwayShareCaption(k) : null,
+                Kind = AwayRowsKind, Title = k > 0 && rows.Any(r => r.Kind == AwayFellowKind) ? AwayCaption : null,
                 Text = rows.Any(r => r.Items.Any(x => x.Kind == "chip")) ? AwayForYou : null, Items = rows,
             });
             foreach (var t in told.Where(t => t.Restarted))
                 view.Blocks.Add(new Block { Kind = "note", Text = "Some of " + t.Who.PlayerName + "'s counts started again from zero (a new install or another PC), so those are left out." });
             view.Blocks.Add(new Block { Kind = "note", Text = AwayLimits });
+            if (k > 0 && rows.Any(r => r.Kind == AwayFellowKind)) AboutLines(view, (AwayPercentAboutTitle, AwayPercentAbout), (AwayBarsAboutTitle, DamageBarsAbout));
             Plate(view, AwayIcon);
         }
 

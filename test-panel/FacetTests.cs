@@ -56,7 +56,7 @@ static class FacetTests
         Check(bar.Text == "9 items · 20 crafted" && bar.Items.First(b => b.Kind == "applied").Title == "No filter: every item" && !bar.Items.First(b => b.Kind == "applied").Items.Any(),
               "filter: no token and the result line says \"9 items · 20 crafted\"");
         Check(Grid(all) == "Bronze Axe=6,Wood Shield=4,Hammer=2,Leather Helmet=2,Iron Sword=2,Crude Bow=1,Cultivator=1,Hoe=1,Bronze Health Trinket=1", "filter: with nothing chosen the grid shows every item, most first: " + Grid(all));
-        Check(Math.Abs(Parts(all, "kind").Items.Sum(p => p.Fraction) - 1) < 1e-5 && Math.Abs(Parts(all, "material").Items.Sum(p => p.Fraction) - 1) < 1e-5, "filter: each bar adds up to its whole");
+        // each bar's shares add up to its whole: PropertyTests (every filter bar on every page, in every window)
         var kindColours = Parts(all, "kind").Items.Select(p => p.Colour).ToList(); var matColours = Parts(all, "material").Items.Select(p => p.Colour).ToList();
         Check(kindColours.Intersect(matColours).Count() == 0 && Parts(all, "material").Items.First(p => p.Id == "Wood").Colour == "#8a5a34" && Parts(all, "material").Items.First(p => p.Id == "Iron").Colour == "#647488",
               "filter: the kinds' bar and the materials' bar share no colour (blue never means two things); each material has its own");
@@ -69,8 +69,11 @@ static class FacetTests
         Check(Grid(both) == "Wood Shield=4,Crude Bow=1" && Bar(both).Text == "2 items · 5 crafted", "filter: Weapons and Wood leave the Wood Shield and the Crude Bow: \"2 items · 5 crafted\"");
         Check(Chips(both, "kind") == "Weapons=5,Armor=0(0),Tools=4,Trinkets=0(0)" && Chips(both, "material") == "Wood=5,Leather=0(0),Bronze=6,Iron=2,Silver=0(0),Black metal=0(0)",
               "filter: each row's counts follow the other row: " + Chips(both, "kind") + " | " + Chips(both, "material"));
-        var tokens = Bar(both).Items.First(b => b.Kind == "applied").Items;
-        Check(tokens.Select(t => t.Title + "/" + t.Text).SequenceEqual(new[] { "Weapons/Kind", "Wood/Main material" }), "filter: the chosen chips are removable tokens, in the order chosen");
+        // the tokens: row by row, and within a row in the order chosen (Wood, then Leather: not by name)
+        List<string> Tokens(PanelView v) => Bar(v).Items.First(b => b.Kind == "applied").Items.Select(t => t.Title + "/" + t.Text).ToList();
+        var twoChosen = Show(rich, Chosen(("material", "Wood"), ("material", "Leather")));
+        Check(Tokens(both).SequenceEqual(new[] { "Weapons/Kind", "Wood/Main material" }) && Tokens(twoChosen).SequenceEqual(new[] { "Wood/Main material", "Leather/Main material" }),
+              "filter: the chosen chips are removable tokens, row by row, within a row in the order chosen");
         var kb = Parts(both, "kind").Items; var mb = Parts(both, "material").Items;
         Check(kb.Where(p => p.Fraction > 0).Select(p => p.Id).SequenceEqual(new[] { "weapons", "tools" }) && kb.First(p => p.Id == "weapons").Selected && Math.Abs(kb.First(p => p.Id == "weapons").Fraction - 5f / 9) < 1e-5,
               "filter: the kind bar is filtered by the material, not by its own choice: weapons 5 of 9 wooden pieces beside the tools, its part outlined");

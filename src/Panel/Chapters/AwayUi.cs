@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -7,43 +8,56 @@ using UnityEngine.UI;
 namespace Hearthwoven.Panel
 {
     /// <summary>
-    /// Company > Since you were away, drawn (AwayModel.cs; variant C of work/hearthwoven-0.7/away-prototypes): the header line and the
-    /// group's totals as big numbers (awaytotals), then one slim row per fellow (awayrows): shield and name, their share of the totals as a
-    /// bar on one shared scale (the one bar form's rounded parts, each total in its fixed colour), the per cent, and "For you": item
-    /// pictures with x N. Laid out once per fill; nothing per frame.
+    /// Company > Since you were away, drawn (AwayModel.cs). 0.8.5 (Joost: "love the design but tighten down the visual grammar like we did with
+    /// the damage bar graphs; more dense, but still with visual hierarchy"; variant B of work/hearthwoven-0.8.5/proto/2-company-away): the header
+    /// line and the group's totals as big numbers, each with its icon beside it and its colour line at its foot (awaytotals); then one damage
+    /// row per fellow (awayrows, DamageRowsUi.cs): shield and name, their share of the totals before the bar in gold, the bar on the page's one
+    /// scale with each total's count inside, the true-length line, each total's share as the entries under it, and "For you" at the row's
+    /// right end: item pictures with x N. Five fellows fit the plate; a sixth scrolls. Laid out once per fill; nothing per frame.
     /// </summary>
     public partial class PanelUi
     {
-        const float AwayIconPx = 44, AwayNumber = 50, AwayLabelPx = 16, AwayRowH = 64, AwayNameW = 176, AwayPctW = 74, AwayYouW = 190, AwayChip = 26;
+        // the totals: a cell's icon, the number's line (the hero's second size, PanelLayout.Hero.Second), the label's line under it, the colour
+        // line at the cell's foot (it ends AwayLineEnd short of the next cell), a cell's widest, the header line's height
+        const float AwayIcon = 32, AwayIconGap = 10, AwayNumberH = 44, AwayLabelH = 18, AwayLinePx = 4, AwayLineGap = 5, AwayLineEnd = 16, AwayCellMax = 210, AwayHeadH = 28;
+        // the rows: the name and share columns at their least (player names are short, so less than a foe list's), For you at its least, its
+        // pictures and the gap between two of them
+        const float AwayNameW = 138, AwayPctW = 56, AwayYouW = 120, AwayChip = 22, AwayChipGap = 4, AwayChipsGap = 12;
+        static float AwayStatH => AwayNumberH + AwayLabelH + AwayLineGap + AwayLinePx;
 
-        // 0.8 hover (HoverUi.cs): the totals of the page just drawn, by id, so a fellow's part lights its total (the away rows have no list of their own)
-        static readonly Dictionary<string, (TextMeshProUGUI number, TextMeshProUGUI title, Image band)> awayLit = new Dictionary<string, (TextMeshProUGUI, TextMeshProUGUI, Image)>();
+        // 0.8 hover (HoverUi.cs): the totals' numbers of the page just drawn, by id, so a fellow's part lights its total's number above too
+        static readonly Dictionary<string, TextMeshProUGUI> awayLit = new Dictionary<string, TextMeshProUGUI>();
 
-        static void AwayTotals(RectTransform col, Block b)
+        static void AwayTotals(RectTransform col, Block b, Func<string, Action> link)
         {
             awayLit.Clear();
-            var head = Line(col, 10); Size(head, -1, 30);
+            var head = Line(col, 10); Size(head, -1, AwayHeadH);
             if (!string.IsNullOrEmpty(b.Icon)) Marker(head, b.Icon, 22);
-            OneLine(Label(head, b.Title, 20, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft));
-            if (!string.IsNullOrEmpty(b.Text)) Label(col, b.Text, 16, PanelLook.Muted);
+            OneLine(Label(head, b.Title, PanelLayout.Text.Lead, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft));
+            if (headAbout != null)   // 0.8.5: About these numbers at the head line's right end, so the page spends no row on it (PanelModel.HeadAbout)
+            {
+                Node("Rest", head).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                AboutButton(head, headAbout, link);
+            }
+            if (!string.IsNullOrEmpty(b.Text)) Label(col, b.Text, PanelLayout.Text.Body, PanelLook.Muted);
             var totals = b.Items ?? new List<Block>();
             if (totals.Count == 0) return;
-            Spacer(col, 6);
-            var w = Mathf.Min(Mathf.Floor(Column / totals.Count), 210f);
-            var row = Line(col, 0, TextAnchor.UpperLeft);
-            foreach (var t in totals)
+            float w = Mathf.Min(Mathf.Floor(Column / totals.Count), AwayCellMax), x = AwayIcon + AwayIconGap, room = w - x;   // the words may run to the next cell's icon
+            var row = Node("Totals", col); Size(row, Column, AwayStatH);
+            for (int i = 0; i < totals.Count; i++)
             {
-                var cell = VStack(row, 4); Size(cell, w, -1);
-                cell.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.UpperCenter;
-                var colour = Hex(t.Colour, PanelLook.Accent);
-                if ((t.Icon ?? "").StartsWith("vocab:")) Size(VocabImg(cell, "Mark", VocabName(t.Icon), colour), AwayIconPx, AwayIconPx);   // a line icon in the total's colour
-                else Pic(cell, t.Icon, AwayIconPx);
-                var band = RoundedPart(cell, "Lit", Color.clear); band.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-                band.rectTransform.Stretch(); band.rectTransform.offsetMin = new Vector2(8, -6); band.rectTransform.offsetMax = new Vector2(-8, 4);
-                var number = OneLine(Label(cell, t.Value, AwayNumber, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.Center));
-                var title = OneLine(Label(cell, t.Title, AwayLabelPx, PanelLook.Muted, align: TextAlignmentOptions.Center));
-                if (!string.IsNullOrEmpty(t.Id)) awayLit[t.Id] = (number, title, band);
-                Size(Fill(cell, "Underline", colour), 64, 4);   // the same colour as this total's part in every fellow's bar
+                var t = totals[i]; var colour = Hex(t.Colour, PanelLook.Accent);
+                var cell = Node("Total", row); cell.Box(i * w, 0, w, AwayStatH);
+                var top = (AwayNumberH + AwayLabelH - AwayIcon) / 2;   // the icon beside the number and its label, on their middle
+                if ((t.Icon ?? "").StartsWith("vocab:")) BtIcon(cell, t.Icon, colour, 0, top, AwayIcon);   // a line icon in the total's colour
+                else Pic(cell, t.Icon, AwayIcon).Box(0, top, AwayIcon, AwayIcon);
+                var number = Label(cell, t.Value, PanelLayout.Hero.Second, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft);
+                number.textWrappingMode = TextWrappingModes.NoWrap; number.rectTransform.Box(x, 0, room, AwayNumberH);
+                var need = Mathf.Ceil(number.preferredWidth);   // a long number (12 500 stone) takes a smaller size, the stat's at least, never the next cell
+                if (need > room) number.fontSize = Mathf.Max(PanelLayout.Text.Stat, PanelLayout.Hero.Second * room / need);
+                OneLine(Label(cell, t.Title, PanelLayout.Text.Small, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft)).rectTransform.Box(x, AwayNumberH, room, AwayLabelH);
+                Fill(cell, "Underline", colour).rectTransform.Box(0, AwayStatH - AwayLinePx, w - AwayLineEnd, AwayLinePx);   // the same colour as this total's part in every fellow's bar
+                if (!string.IsNullOrEmpty(t.Id)) awayLit[t.Id] = number;
             }
         }
 
@@ -51,71 +65,64 @@ namespace Hearthwoven.Panel
         {
             var rows = b.Items ?? new List<Block>();
             if (rows.Count == 0) return;
-            float barX = AwayNameW, barW = Column - AwayNameW - AwayPctW - AwayYouW, pctX = barX + barW, youX = pctX + AwayPctW;
-            Spacer(col, 14);
+            List<Block> Chips(Block r) => (r.Items ?? new List<Block>()).Where(p => p.Kind == "chip").ToList();
+            // the columns, measured once for the page: name, share, track, For you (only when a row has something for you)
+            float whoW = NameColumn(col, rows, AwayNameW), numW = NumberColumn(col, rows.Select(r => r.Kind == PanelModel.AwayFellowKind ? r.Value : null), AwayPctW);
+            var youW = rows.Any(r => Chips(r).Count > 0) ? Mathf.Max(AwayYouW, rows.Max(r => ChipsWidth(col, Chips(r)))) : 0;
+            float trackX = whoW + DrCol + numW + DrCol, trackW = Mathf.Max(80f, Column - trackX - (youW > 0 ? DrCol + youW : 0));
+            // the column heads, small capitals over the track and over For you, a rule under them
             if (!string.IsNullOrEmpty(b.Title) || !string.IsNullOrEmpty(b.Text))
             {
-                var cap = Node("Caption", col); Size(cap, Column, 22);
+                var cap = Node("Caption", col); Size(cap, Column, PanelLayout.Bar.HeadLine + 1);
                 if (!string.IsNullOrEmpty(b.Title))
                 {
-                    var c = Label(cap, b.Title, 14, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.MidlineLeft);
-                    c.characterSpacing = 6; c.textWrappingMode = TextWrappingModes.NoWrap; c.rectTransform.Box(barX, 0, barW + AwayPctW, 20);
+                    var c = Label(cap, b.Title, PanelLayout.Text.Floor, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.MidlineLeft);
+                    c.characterSpacing = 6; c.textWrappingMode = TextWrappingModes.NoWrap; c.rectTransform.Box(trackX, 0, trackW, PanelLayout.Bar.HeadLine);
                 }
-                if (!string.IsNullOrEmpty(b.Text))
+                if (!string.IsNullOrEmpty(b.Text) && youW > 0)
                 {
-                    var fy = Label(cap, b.Text, 14, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.MidlineRight);
-                    fy.characterSpacing = 6; fy.textWrappingMode = TextWrappingModes.NoWrap; fy.rectTransform.Box(youX, 0, AwayYouW, 20);
+                    var fy = Label(cap, b.Text, PanelLayout.Text.Floor, PanelLook.Muted, style: FontStyles.UpperCase, align: TextAlignmentOptions.MidlineRight);
+                    fy.characterSpacing = 6; fy.textWrappingMode = TextWrappingModes.NoWrap; fy.rectTransform.Box(Column - youW, 0, youW, PanelLayout.Bar.HeadLine);
                 }
-                Size(Img(col, "Rule", null, PanelLook.Rule), -1, 1);
+                Img(cap, "Rule", null, PanelLook.Rule).rectTransform.Box(0, PanelLayout.Bar.HeadLine, Column, 1);
             }
+            var list = VStack(col, PanelModel.DamageFoeGap);
             foreach (var r in rows)
             {
-                var box = Node("Fellow", col); Size(box, Column, AwayRowH);
-                var shield = Marker(box, r.Icon, 36, layout: false); shield.Box(0, (AwayRowH - 36) / 2, 36, 36);
-                var hasNote = !string.IsNullOrEmpty(r.Note);
-                var name = OneLine(Label(box, r.Title, 21, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft));
-                name.rectTransform.Box(46, hasNote ? 8 : 16, AwayNameW - 52, 30);
-                if (hasNote) OneLine(Label(box, r.Note, 14, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft)).rectTransform.Box(46, 38, AwayNameW - 52, 20);   // their copy is older than your last session
-                var parts = (r.Items ?? new List<Block>()).Where(p => p.Kind != "chip" && p.Fraction > 0).ToList();
-                if (r.Kind == PanelModel.AwayFellowKind && parts.Count > 0)
+                var row = DamageRow(list, r, true, whoW, numW, trackX, trackW);
+                // 0.8 hover: a part also lights its total's number above (the entry under the bar is lit by the damage row itself); no object for it
+                var hover = row.GetComponent<BarHover>();
+                if (hover != null)
                 {
-                    // one shared scale: the whole track is the group, so this fellow's parts end where their share ends
-                    // the one bar form's shape (BAR-FORM.md): rounded parts 4 px apart, no track; one shared scale, so this fellow's parts end
-                    // where their share of the group ends; each total keeps its fixed colour (the line under its big number)
-                    float tw = barW - 18, x = 0, min = (6f + PanelModel.BarFormGap) / tw;
-                    var bar = Node("BarForm", box); bar.Box(barX, (AwayRowH - PanelModel.BarFormBar) / 2, tw, PanelModel.BarFormBar);
-                    // 0.8 hover: a part rings and lights its total above (the colour line under the same number), as a bar part lights its list row
-                    var hover = box.gameObject.AddComponent<BarHover>(); hover.Init(parts.Count);
-                    for (int k = 0; k < parts.Count; k++)
-                    {
-                        var from = x; var to = Mathf.Min(1f, x + Mathf.Max(parts[k].Fraction, min)); x = to;
-                        var seg = RoundedPart(bar, "Part", Hex(parts[k].Colour, PanelLook.Accent), raycast: true).rectTransform;
-                        seg.anchorMin = new Vector2(from, 0); seg.anchorMax = new Vector2(to, 1); seg.pivot = new Vector2(0, 0.5f);
-                        seg.offsetMin = new Vector2(PanelModel.BarFormGap / 2, 0); seg.offsetMax = new Vector2(-PanelModel.BarFormGap / 2, 0);
-                        hover.Parts[k] = seg; var hp = seg.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = k;
-                        if (parts[k].Id != null && awayLit.TryGetValue(parts[k].Id, out var lit)) { hover.Numbers[k] = lit.number; hover.Names[k] = lit.title; hover.NameColours[k] = PanelLook.Muted; hover.Bands[k] = lit.band; }
-                    }
-                    var ring = VocabImg(bar, "Hover", "focus-ring", Color.clear); ring.raycastTarget = false; hover.RingImage = ring;
-                    var pct = OneLine(Label(box, r.Value, 24, PanelLook.Gold, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineRight));
-                    pct.rectTransform.Box(pctX, (AwayRowH - 32) / 2, AwayPctW - 6, 32);
+                    var parts = (r.Items ?? new List<Block>()).Where(p => p.Kind == PanelModel.AwayPartKind && p.Fraction > 0).ToList();
+                    for (int k = 0; k < parts.Count && k < hover.Parts.Length; k++) if (parts[k].Id != null && awayLit.TryGetValue(parts[k].Id, out var lit)) hover.Numbers[k] = lit;
                 }
-                else OneLine(Label(box, r.Text, 16, PanelLook.Muted, style: FontStyles.Italic, align: TextAlignmentOptions.MidlineLeft)).rectTransform.Box(barX, (AwayRowH - 24) / 2, barW + AwayPctW - 18, 24);
-                // For you: your items they enjoyed or put to good use, right-aligned
-                var chips = (r.Items ?? new List<Block>()).Where(p => p.Kind == "chip").ToList();
-                if (chips.Count > 0)
+                // For you: your food and gear they enjoyed or put to good use, on the bar's line, right-aligned in its column
+                float x = Column;
+                var chips = Chips(r);
+                for (int k = chips.Count - 1; k >= 0; k--)
                 {
-                    var you = Node("ForYou", box); you.Box(youX, (AwayRowH - 32) / 2, AwayYouW, 32);
-                    var line = you.gameObject.AddComponent<HorizontalLayoutGroup>(); Layout(line, 14, TextAnchor.MiddleRight);
-                    foreach (var c in chips)
-                    {
-                        var chip = Line(you, 5);
-                        if ((c.Icon ?? "").StartsWith("vocab:")) Size(VocabImg(chip, "Mark", VocabName(c.Icon), PanelLook.Gold), AwayChip, AwayChip);   // several kinds: the food-shared or gear-shared mark
-                        else Pic(chip, c.Icon, AwayChip);
-                        Keeps(Label(chip, c.Value, 19, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft));
-                    }
+                    var c = chips[k];
+                    var n = Label(row, c.Value, PanelLayout.Text.Name, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineLeft); n.textWrappingMode = TextWrappingModes.NoWrap;
+                    var nw = Mathf.Ceil(n.preferredWidth) + 2; x -= nw; n.rectTransform.Box(x, 0, nw, PanelModel.DamageTrack);
+                    x -= AwayChipGap + AwayChip;
+                    var top = (PanelModel.DamageTrack - AwayChip) / 2;
+                    if ((c.Icon ?? "").StartsWith("vocab:")) BtIcon(row, c.Icon, PanelLook.Gold, x, top, AwayChip);   // several kinds: the food-shared or gear-shared mark
+                    else Pic(row, c.Icon, AwayChip).Box(x, top, AwayChip, AwayChip);
+                    x -= AwayChipsGap;
                 }
-                Size(Img(col, "Rule", null, new Color(PanelLook.Rule.r, PanelLook.Rule.g, PanelLook.Rule.b, PanelLook.Rule.a * 0.5f)), -1, 1);
             }
+        }
+
+        // For you's room for one row's pictures with x N, as AwayRows lays them out
+        static float ChipsWidth(RectTransform parent, List<Block> chips)
+        {
+            if (chips.Count == 0) return 0;
+            var measure = Label(parent, "", PanelLayout.Text.Name, PanelLook.Text, style: FontStyles.Bold); measure.textWrappingMode = TextWrappingModes.NoWrap;
+            float w = (chips.Count - 1) * AwayChipsGap;
+            foreach (var c in chips) { measure.text = c.Value ?? ""; w += AwayChip + AwayChipGap + Mathf.Ceil(measure.preferredWidth) + 2; }
+            measure.gameObject.SetActive(false); Destroy(measure.gameObject);
+            return w;
         }
     }
 }

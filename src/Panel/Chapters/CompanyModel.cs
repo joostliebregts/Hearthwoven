@@ -193,6 +193,9 @@ namespace Hearthwoven.Panel
                             BoxFrom = "Hearthwoven counted what you enjoyed and put to good use on this PC; each fellow player's PC counts theirs.",
                             BoxDetails = "A fellow player's numbers are as they last shared them. Sailed counts one voyage once for each player aboard.";
         public const string BroughtInScope = "counted the first time in a player's hands";
+        /// <summary>Together's About these numbers line for wood and stone (0.8.5, Joost in game: the hero's qualifier ran into "stone and ore
+        /// brought in together"; it explains a word, so it lives in the box with the page's other explanations).</summary>
+        public const string BroughtInLabel = "Brought in", BroughtInAbout = "Wood, stone and ore are " + BroughtInScope + ".";
         public const string GearKey = "gear", FoodKey = "food";
         public const string GearPill = "gear put to good use";
         /// <summary>Under the heading of Gear shared: what the number on a tile counts (the times the gear was put to good use).</summary>
@@ -310,11 +313,11 @@ namespace Hearthwoven.Panel
                 case "together":
                     {
                         view.Heading = TogetherHeading;
-                        var tb = Together(input, people, state, page); Add(view, tb);
-                        view.Windowed = tb?.Tone == WindowedTone;   // a chosen window of the damage dealt: nothing "since install" about it
-                        var wn = tb == null ? null : TogetherWindowNote(input, people, tb, state);
-                        if (wn != null && tb.Tone != WindowedTone) view.Blocks.Insert(view.Blocks.IndexOf(tb), wn);   // the wait line alone (a pressed greyed day chip): at the top, where the other pages say it
-                        else if (wn != null) view.Blocks.Add(wn);
+                        var tb = Together(input, people, state, page, out var notes); Add(view, tb);
+                        view.Windowed = tb?.Tone == WindowedTone;   // a chosen window: nothing "since install" about it
+                        var wait = tb == null ? null : TogetherWaitNote(people, tb, state);
+                        if (wait != null) view.Blocks.Insert(view.Blocks.IndexOf(tb), wait);   // the wait line alone (a pressed greyed day chip): at the top, where the other pages say it
+                        else foreach (var n in notes ?? new List<string>()) view.Blocks.Add(new Block { Kind = "note", Text = n });
                     }
                     if (people.Count == 1 && view.Blocks.Count > 0 && !input.Solo) view.Blocks.Add(new Block { Kind = "note", Text = TogetherAlone });   // your own total, the others still to come (singleplayer: AddPlayers' one line)
                     break;
@@ -333,6 +336,8 @@ namespace Hearthwoven.Panel
             }
             if (view.Blocks.Count == 0) view.Blocks.Add(Empty(NothingYet, EmptyOf(page)));   // one empty text per page (0.7: no "counts from install" line; the agreed texts stay)
             AboutNumbers(view, input, StartOf(input, null), BoxBefore, BoxFrom, BoxDetails);   // the page's "About these numbers" box (own book only; RecordedModel.cs)
+            if (page == "together" && view.AboutNumbers != null && view.Blocks.Any(b => b.Kind == "together" && b.Items.Any(c => c.Kind == "category" && (c.Id == "wood" || c.Id == "ore"))))
+                view.AboutNumbers.Items.Add(new Block { Kind = "aboutline", Title = BroughtInLabel, Text = BroughtInAbout });   // what "brought in" counts (it was the hero's qualifier)
             // every Company page on the plate (slice 3), its pill naming who shares or what is counted
             // Fireside's "who made what for whom" sits in the legend row of its drawing (Giving.Note)
             Plate(view, "ui:chapter-company", RecordedScope(input));
@@ -406,8 +411,8 @@ namespace Hearthwoven.Panel
         /// player's PC). Chests are not in the shared records, so "Stowed in the hall" is not a category here.</summary>
         static readonly (string id, string label, string phrase, string note)[] Categories =
         {
-            ("wood", "Wood brought in", "wood brought in together", BroughtInScope),   // the row icons: TogetherIcon
-            ("ore", "Stone and ore brought in", "stone and ore brought in together", BroughtInScope),
+            ("wood", "Wood brought in", "wood brought in together", null),   // the row icons: TogetherIcon; what brought in counts: About these numbers (BroughtInAbout)
+            ("ore", "Stone and ore brought in", "stone and ore brought in together", null),
             ("built", "Pieces built", "pieces built together", null), ("cooked", "Dishes cooked", "dishes cooked together", null),
             ("dealt", "Damage dealt", "damage dealt together", BeforeResistance), ("sailed", "Sailed", "sailed together", null),
             ("cargo", "Cargo carried", "carried together", null),   // 0.6: item-metres at the helm or pulling a cart, Hearthwoven's own count (CargoModel.cs)
@@ -445,18 +450,23 @@ namespace Hearthwoven.Panel
 
         /// <summary>
         /// "Together" (kind together): Items = the categories with anything in them (Kind "category": Id, Title the chip,
-        /// Text the phrase after the total, Value the group's total, Note a qualifier, Selected = the one shown large), each
-        /// with Items = one part per player in the fire's order (Kind "part": Id name, Icon person, Title label, Value,
-        /// Fraction = share of the group, Src). Text = the matrix heading, Note = its key. No ranking, no combined score.
+        /// Text the phrase after the total, Value the group's total, Note a qualifier, Value2 its scope line, Selected = the one shown large), each
+        /// with Items = one part per player in the fire's order (Kind "part": Id name, Icon person, Title label, Value, Fraction = share of the
+        /// group, Src); then the window switch (Kind "switch"). Text = the matrix heading. No ranking, no combined score. <paramref name="notes"/>:
+        /// the lines under it: in a window who is not in the sums and why, whose Session, whose day; on All "Earlier counts may be incomplete."
+        /// when a class A category has a known gap (the page head moves it to About these numbers).
         /// </summary>
-        public static Block Together(PanelInput input, List<Fellow> people, PanelState state, string page)
+        public static Block Together(PanelInput input, List<Fellow> people, PanelState state, string page) => Together(input, people, state, page, out _);
+
+        public static Block Together(PanelInput input, List<Fellow> people, PanelState state, string page, out List<string> notes)
         {
+            notes = new List<string>();
             // the chosen category lives where a view switch keeps its view (PanelState.View, "Company/together/category"),
             // so a chip's click goes through Follow like any switch; the chips wrap, which the switch's top-right row cannot
             var key = Chapter.Company + "/" + page + "/category";
             var chosen = state != null && state.View.TryGetValue(key, out var v) ? v : null;
             if (people.Count < 1) return null;   // alone: your own row (diff-05), the fellow players join it once they share
-            // Damage dealt alone has time windows (below): the totals since install decide which categories have anything in them
+            // the totals since install decide which categories have anything in them, whatever the window
             var installValues = Categories.ToDictionary(c => c.id, c => people.Select(p => CategoryValue(p.Input, c.id)).ToList());
             var present = Categories.Where(c => installValues[c.id].Sum() > 0).Select(c => c.id).ToList();
             if (present.Count == 0) return null;
@@ -474,69 +484,119 @@ namespace Hearthwoven.Panel
                 else if (own != null && DayOpensOn(own, win).HasValue) state.WaitView = wkey;
             }
             if (Greyed(win)) win = TimeWindow.SinceInstall;
-            var windowed = pickId == "dealt" && win != TimeWindow.SinceInstall;   // the chosen window, on the damage dealt only
-            var cats = new List<Block>();
+            // 0.8.5 (Joost in game: "why no time filters on the other tabs?"): every category in every window, for you and your fellows, by the
+            // rules of Battle and Deeds; a player whose copy cannot tell the window is left out of its sum and named under it (TogetherNotes)
+            var shown = win;
+            var windowed = shown != TimeWindow.SinceInstall;
+            // each player's copy in the window, once for every Deeds category (DeedsSource: their Deeds pages' own copy, so the numbers agree)
+            var deeds = !windowed ? null : people.Select(p => { var s = DeedsSource(ReadWith(p.Input, input), shown, input, out var gap); return (src: s, gap); }).ToList();
+            var cats = new List<Block>(); var parts = new Dictionary<string, List<TogetherPart>>();
             foreach (var c in Categories)
             {
                 if (!present.Contains(c.id)) continue;
-                var inWindow = windowed && c.id == "dealt";
-                var values = inWindow ? people.Select(p => DealtInWindow(p.Input, win, input)).ToList() : installValues[c.id];
+                var inWindow = windowed;
+                if (inWindow) parts[c.id] = people.Select((p, k) => TogetherPartIn(p.Input, c.id, shown, input, deeds[k].src, deeds[k].gap)).ToList();
+                var values = inWindow ? parts[c.id].Select(x => x.In ? x.Value : 0).ToList() : installValues[c.id];
                 var total = values.Sum();
-                var src = c.id == "dealt" || c.id == "cargo" ? null : SrcCharacter;   // dealt and cargo are Hearthwoven's own counts on each PC
+                // dealt and cargo are Hearthwoven's own counts on each PC; in a window every category is (the day history, the minute logs, the shared days)
+                var src = inWindow || c.id == "dealt" || c.id == "cargo" ? null : SrcCharacter;
                 Func<double, string> fmt = v2 => c.id == "sailed" ? Km(v2) : c.id == "cargo" ? CargoText(v2, total) : N(v2);
-                // rule E/A/C6 (0.7): a class A category (wood, ore, dishes) says Earlier counts may be incomplete. in its scope line when a part has a known gap;
-                // cargo (C6) says the date Hearthwoven started counting it on this PC; built and sailed (game counters, complete) and Damage dealt (its window caption) say nothing here
+                // the scope line, since when on All the same way for every category (0.8.5, Joost: Sailed said it, Stone and ore did not): the game's own
+                // counters (and the class A layers on them: wood, ore, dishes) since each character was made (rule B, #78 and #81); Damage dealt since
+                // Hearthwoven recorded it (it was the window row's caption); cargo (C6) the date Hearthwoven started counting it on this PC and what an
+                // item-km is, in the Cargo page's own words (CargoUnitLine). In a window every count is exact and the chips say the window: only cargo's
+                // unit stays. A class A gap is one line under the page (notes), which the page head moves to About these numbers (hard case 7, rule A.4)
                 string scope = null;
                 if (c.id == "cargo")
-                {
-                    scope = string.Join(" · ", new[] { RecordedFromLine(input, StartOf(input, "cargo")), CargoUnit(total) + ": " + CargoUnitWords(total), "straight line, so the real figure is higher" });
-                }
-                else if (c.id == "wood" || c.id == "ore" || c.id == "cooked")
-                    scope = people.Any(p => HasGap(p.Input, c.id)) ? EarlierIncomplete : null;   // hard case 7: the category, once, in its scope line (no RF label on a class A number, rule A.4)
-                else if (c.id != "dealt")   // pieces built and sailed: the game's own counters, complete; the matrix keeps their since-when line (rule B, #78 and #81)
+                    scope = inWindow ? CargoUnitLine(total) : RecordedFromLine(input, StartOf(input, "cargo")) + " · " + CargoUnitLine(total);
+                else if (inWindow) scope = null;
+                else if (c.id == "dealt")
+                    scope = StartOf(input, null) is DateTime since ? "Recorded from " + RecordDate(input, since) : "Recorded on this PC";   // each fellow part says its own PC
+                else
                     scope = people.Count == 1 ? MadeLine(input) : "since each character was made";
+                if (!inWindow && (c.id == "wood" || c.id == "ore" || c.id == "cooked") && people.Any(p => HasGap(p.Input, c.id)) && !notes.Contains(EarlierIncomplete)) notes.Add(EarlierIncomplete);
                 cats.Add(new Block
                 {
-                    Kind = "category", Id = c.id, Icon = TogetherIcon(c.id), Title = c.label, Note = c.note, Value2 = scope, From = c.id == "cargo" ? StartOf(input, "cargo") : null,
-                    Text = inWindow ? c.phrase + ", " + WindowLabel(win).ToLowerInvariant() : people.Count == 1 ? c.phrase.Replace(" together", "") : c.phrase, Value = fmt(total),
+                    Kind = "category", Id = c.id, Icon = TogetherIcon(c.id), Title = c.label, Note = c.note, Value2 = scope, From = c.id == "cargo" && !inWindow ? StartOf(input, "cargo") : null,
+                    Text = inWindow ? (people.Count == 1 ? c.phrase.Replace(" together", "") : c.phrase) + ", " + WindowLabel(shown).ToLowerInvariant() : people.Count == 1 ? c.phrase.Replace(" together", "") : c.phrase, Value = fmt(total),
                     Src = src ?? (people.All(p => p.Input.IsSelf) ? SrcPc : SrcFellows), Source = TagOfSrc(src ?? (people.All(p => p.Input.IsSelf) ? SrcPc : SrcFellows)),
                     Items = people.Select((p, k) =>
                     {
                         var s = src ?? (p.Input.IsSelf ? SrcPc : SrcFellows);
                         // Damage dealt: a fellow whose copy has no damage record at all says so (rule E.3), never 0
                         var noRecord = c.id == "dealt" && !inWindow && !p.Input.IsSelf && p.Input.DamageSinceInstall == null && p.Input.Session == null;
-                        // a fellow's part says whose copy it is (rule E): Damage dealt in a window carries none; the total's caption says the rest
-                        var words = !p.Input.IsSelf && !noRecord && (c.id == "cargo" || (c.id == "dealt" && !inWindow)) ? FellowWords(p.Name, p.Input.SharedSinceInstall) : null;
+                        // a fellow's part says whose copy it is (rule E): a window carries none; the notes under it say who is not in it
+                        var words = !p.Input.IsSelf && !noRecord && !inWindow && (c.id == "cargo" || c.id == "dealt") ? FellowWords(p.Name, p.Input.SharedSinceInstall) : null;
                         return new Block { Kind = "part", Id = p.Name, Icon = "person:" + p.Name, Title = p.Label, Value = noRecord ? NotRecorded : values[k] > 0 ? fmt(values[k]) : "", Unrecorded = noRecord,
-                                           Fraction = total > 0 ? (float)(values[k] / total) : 0f, Src = s, Source = TagOfSrc(s), From = c.id == "cargo" ? StartOf(p.Input, "cargo") : null, RecordedFrom = words };
+                                           Fraction = total > 0 ? (float)(values[k] / total) : 0f, Src = s, Source = TagOfSrc(s), From = c.id == "cargo" && !inWindow ? StartOf(p.Input, "cargo") : null, RecordedFrom = words };
                     }).ToList(),
                 });
             }
-            cats.First(c => c.Id == pickId).Selected = true;
+            var pick = cats.First(c => c.Id == pickId); pick.Selected = true;
             var items = new List<Block>(cats);
-            if (pickId == "dealt")   // the chips Battle uses, under the category chips: who dealt how much, since install or in a window
-                items.Add(new Block
-                {
-                    Kind = "switch", Id = wkey, Title = !windowed && people.Count > 1 ? "All: " + (StartOf(input, null) is DateTime since ? "recorded from " + RecordDate(input, since) : "recorded on this PC") : TogetherWindowCaption,   // short: each fellow part says its own PC
-                    Items = TogetherWindows.Select(x => new Block { Kind = "view", Id = x.ToString(), Title = WindowShort(x), Selected = x == win, Tone = Greyed(x) ? OffTone : null, Waits = Greyed(x) && DayOpensOn(own, x).HasValue }).ToList(),
-                });
+            // the window chips under the category chips, Battle's set for every category; a day window before your day history greyed as everywhere
+            // (Waits: pressing it says from when)
+            items.Add(new Block
+            {
+                Kind = "switch", Id = wkey,
+                Items = TogetherWindows.Select(x => new Block { Kind = "view", Id = x.ToString(), Title = WindowShort(x), Selected = x == shown, Tone = Greyed(x) ? OffTone : null, Waits = Greyed(x) && DayOpensOn(own, x).HasValue }).ToList(),
+            });
             // the keys that act here (fix4-rest, review: the chips showed no key): the view key flips the category, the filter key the window
-            if (items.Any(i => i.Kind == "switch") && !string.IsNullOrEmpty(state?.FilterKey)) items.First(i => i.Kind == "switch").KeyCap = state.FilterKey;
-            return new Block { Kind = "together", Id = key, Text = "Each player's share", Items = items, Tone = windowed ? WindowedTone : null, Note = windowed ? WindowRowsNote(people) : null, KeyCap = cats.Count > 1 && !string.IsNullOrEmpty(state?.ViewKey) ? state.ViewKey : null };
+            if (!string.IsNullOrEmpty(state?.FilterKey)) items.First(i => i.Kind == "switch").KeyCap = state.FilterKey;
+            if (windowed) notes = pickId == "dealt" ? DealtWindowNotes(input, people, pick, shown) : TogetherNotes(people, parts[pickId], shown);
+            return new Block { Kind = "together", Id = key, Text = TogetherShareCaption, Items = items, Tone = windowed ? WindowedTone : null, KeyCap = cats.Count > 1 && !string.IsNullOrEmpty(state?.ViewKey) ? state.ViewKey : null };
         }
 
-        // ---------- Together: Damage dealt in Battle's time windows ----------
+        // ---------- Together: every category in Battle's time windows (0.8.5) ----------
 
-        /// <summary>The switch under Together's category chips while Damage dealt is chosen: Battle's windows (the same set, the same short
-        /// chips), the total since install the default. Everyone's windows come from the same place, each player's own log of the session
-        /// they shared (the numbers Battle reads), so a fellow player's last hour is as real as yours.</summary>
+        /// <summary>The switch under Together's category chips: Battle's windows (the same set, the same short chips), the total since install the
+        /// default. Damage dealt reads each player's own log of the session they shared and their damage per day (the numbers Battle reads); wood,
+        /// stone and ore, pieces and dishes each player's Deeds page in the window (DeedsSource: your minute log and day history, a fellow's trail
+        /// while you play and their shared days); sailed and cargo the same copies (0.8.5: km sailed and the cargo total per minute in the DeedLog
+        /// and the trail, per day in the shared days' voyage family).</summary>
         public static readonly TimeWindow[] TogetherWindows = (TimeWindow[])Enum.GetValues(typeof(TimeWindow));
-        public const string WindowSwitch = "window", WindowedTone = "windowed", TogetherWindowCaption = "Damage dealt";
+        public const string WindowSwitch = "window", WindowedTone = "windowed";
+        /// <summary>The share rows' caption: their parts hold the share as digits only (0.8.5, the damage grammar's 13 px digits), so it says the unit.</summary>
+        public const string TogetherShareCaption = "Each player's share in %";
         public const string WindowFellowSession = "Other players count from when you started playing this time.";
-        /// <summary>The caption above the share rows that do not follow the chosen window (fix3-rest, review: one table mixed two scopes): Damage dealt first,
-        /// in the window; under this line the rest, dimmed, and why they have no window (Joost: "since install" there read as a contradiction).</summary>
-        public static string WindowRowsNote(List<Fellow> people) =>
-            "No time windows for these: they are kept as totals";
+        /// <summary>One player's part of a Together category in a window: In false = their copy cannot tell it (Gap says why, Waits the
+        /// older-version line), so they are left out of the sum.</summary>
+        sealed class TogetherPart { public double Value; public bool In = true; public string Name, Gap, Waits; public bool Self; }
+
+        static TogetherPart TogetherPartIn(PanelInput p, string id, TimeWindow w, PanelInput viewer, PanelInput src, string gap)
+        {
+            var part = new TogetherPart { Name = Name(p), Self = p.IsSelf };
+            if (id == "dealt") { part.Value = DealtInWindow(p, w, viewer); return part; }
+            if (src == null)
+            {
+                part.In = false; part.Gap = gap;
+                part.Waits = IsDayWindow(w) && OlderThan(p, NeedsDayDeeds) ? OlderLine(p, "their days fill in") : null;   // Everyone's form for an older copy
+                return part;
+            }
+            if ((id == "sailed" || id == "cargo") && IsDayWindow(w))   // Everyone's Sailing and Cargo read the same copy (VoyageDays): a copy without voyage days is not "sailed nothing"
+            {
+                src = VoyageDays(p, w, viewer, out var vgap, out var vwaits);
+                if (src == null) { part.In = false; part.Gap = vgap; part.Waits = vwaits; return part; }
+            }
+            // a fellow's shared day holds the pieces per hammer tab, not the pieces themselves (SharedBuilding's hero adds the tabs up)
+            part.Value = id == "built" && src.Window?.Shared != null ? SharedParts(src, DdBuilt).Values.Sum() : CategoryValue(src, id);
+            return part;
+        }
+
+        /// <summary>The lines under a Deeds category in a window: each player left out of the sum and why (Everyone's words: an older copy's
+        /// version line, else "Tor: not playing now, so not in this sum."), nothing in it when nobody counted anything, then whose Session or day
+        /// it is when fellow players are in it.</summary>
+        static List<string> TogetherNotes(List<Fellow> people, List<TogetherPart> parts, TimeWindow w)
+        {
+            var lines = new List<string>();
+            foreach (var p in parts.Where(x => !x.In))
+                lines.Add(p.Waits ?? (p.Self ? "You" : p.Name) + ": " + (p.Gap ?? "not in this window") + ".");
+            var counted = parts.Where(x => x.In).ToList();
+            if (counted.All(x => x.Value <= 0)) lines.Add(w == TimeWindow.Session ? "Nothing this session." : w == TimeWindow.Today ? "Nothing today." : "Nothing in the " + WindowLabel(w).ToLowerInvariant() + ".");
+            else if (w == TimeWindow.Session && counted.Any(x => !x.Self)) lines.Add(WindowFellowSession);
+            else if (IsDayWindow(w) && counted.Any(x => !x.Self)) lines.Add(DayWindowLine(w));   // a fellow's day is their whole day, also before you came online
+            return lines;
+        }
 
         /// <summary>Damage dealt by one player in a window (the same rows, the same eight damage types, as Battle's Damage page).</summary>
         static double DealtInWindow(PanelInput p, TimeWindow w, PanelInput viewer)
@@ -557,20 +617,22 @@ namespace Hearthwoven.Panel
         // an empty sum and threw, v08-fix-open)
         static string JoinNames(List<string> names) => names == null || names.Count == 0 ? "" : names.Count == 1 ? names[0] : string.Join(", ", names.Take(names.Count - 1).ToArray()) + " and " + names[names.Count - 1];
 
-        /// <summary>One quiet line under a windowed Together, only when it tells something the bar cannot: a fellow player's latest
+        /// <summary>A greyed day chip that was pressed (B17): All shows, and the one line says from when the chosen window works, as on every other
+        /// page; null otherwise.</summary>
+        static Block TogetherWaitNote(List<Fellow> people, Block together, PanelState state)
+        {
+            var sw = together.Items.FirstOrDefault(i => i.Kind == "switch");
+            var asked = sw != null && state != null && state.View.TryGetValue(sw.Id, out var askedId) ? sw.Items.FirstOrDefault(v => v.Id == askedId && v.Waits) : null;
+            var own = people.FirstOrDefault(p => p.Input.IsSelf)?.Input;
+            return asked != null && own != null ? new Block { Kind = "note", Text = WaitLine(own, (TimeWindow)Enum.Parse(typeof(TimeWindow), asked.Id)) } : null;
+        }
+
+        /// <summary>The one quiet line under Damage dealt in a window, only when it tells something the bar cannot: a fellow player's latest
         /// shared record is older than the window (their copy may simply be out of date, so "nothing" would be a guess); nobody
         /// dealt anything in the window; or, in This session, whose session a fellow player's number is (0.9: in a day window, that each
-        /// player's whole day counts). Null otherwise.</summary>
-        static Block TogetherWindowNote(PanelInput input, List<Fellow> people, Block together, PanelState state)
+        /// player's whole day counts). Empty otherwise.</summary>
+        static List<string> DealtWindowNotes(PanelInput input, List<Fellow> people, Block dealt, TimeWindow w)
         {
-            // a greyed day chip that was pressed (B17): All shows, and the one line says from when the chosen window works, as on every other page
-            var sw0 = together.Items.FirstOrDefault(i => i.Kind == "switch");
-            var asked = sw0 != null && state != null && state.View.TryGetValue(sw0.Id, out var askedId) ? sw0.Items.FirstOrDefault(v => v.Id == askedId && v.Waits) : null;
-            var own = people.FirstOrDefault(p => p.Input.IsSelf)?.Input;
-            if (asked != null && own != null) return new Block { Kind = "note", Text = WaitLine(own, (TimeWindow)Enum.Parse(typeof(TimeWindow), asked.Id)) };
-            if (together.Tone != WindowedTone) return null;
-            var sw = together.Items.First(i => i.Kind == "switch"); var w = (TimeWindow)Enum.Parse(typeof(TimeWindow), sw.Items.First(y => y.Selected).Id);
-            var dealt = together.Items.First(i => i.Kind == "category" && i.Id == "dealt");
             var others = people.Where(p => !p.Input.IsSelf).ToList();
             var cutoff = Cutoff(w, input.NowUtc);
             var stale = cutoff.HasValue
@@ -588,7 +650,7 @@ namespace Hearthwoven.Panel
             else if (dealt.Items.All(p => p.Fraction <= 0)) text = w == TimeWindow.Session ? "Nothing dealt this session." : "Nothing dealt in the " + WindowLabel(w).ToLowerInvariant() + ".";
             else if (w == TimeWindow.Session && others.Count > 0) text = WindowFellowSession;
             else if (IsDayWindow(w) && others.Count > 0) text = DayWindowLine(w);   // 0.9: a fellow's day is their whole day, also before you came online
-            return text == null ? null : new Block { Kind = "note", Text = text };
+            return text == null ? new List<string>() : new List<string> { text };
         }
 
         // ---------- Food shared ----------

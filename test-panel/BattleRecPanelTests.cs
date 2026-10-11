@@ -34,8 +34,8 @@ static class BattleRecPanelTests
         var feed = PanelModel.BattleFeed(world);
         var words = feed?.SelectMany(f => f.Entries).Select(e => e.OutcomeText).Distinct().ToList() ?? new List<string>();
         Check(feed != null && feed.Count >= 2 && feed.Zip(feed.Skip(1), (a, b) => a.StartUtc >= b.EndUtc).All(x => x) &&
-              feed.All(f => f.Entries.Zip(f.Entries.Skip(1), (a, b) => a.EndUtc >= b.EndUtc).All(x => x)) && words.Contains("defeated by you") && words.Any(x => x.StartsWith("defeated with ")) && words.Contains("survived"),
-              "BR feed: " + feed?.Count + " fights newest first, each foe newest first, in the book's words (" + string.Join(", ", words) + ")");
+              feed.All(f => f.Entries.Zip(f.Entries.Skip(1), (a, b) => a.EndUtc >= b.EndUtc).All(x => x)) && new[] { FoeOutcome.DefeatedByYou, FoeOutcome.DefeatedWith }.All(o => feed.SelectMany(f => f.Entries).Any(e => e.Outcome == o)) && feed.SelectMany(f => f.Entries).Any(e => e.Outcome == FoeOutcome.GotAway && e.Away == AwayHow.Survived),
+              "BR feed: " + feed?.Count + " fights newest first, each foe newest first, defeated by you, defeated with others and survived among them (" + string.Join(", ", words) + ")");
 
         // a fellow's book: their shared Session and All as they sent them, no short or day windows; 0.8.2: their feed as their copy shares it
         var edda = world.Fellows.First(f => f.PlayerName == "Edda");

@@ -93,6 +93,7 @@ namespace Hearthwoven.Panel
                 new KeyValuePair<string, ConfigEntryKey>("Hotkey", new ConfigEntryKey(Hotkey)), new KeyValuePair<string, ConfigEntryKey>("InfoKey", new ConfigEntryKey(InfoKey)),
                 new KeyValuePair<string, ConfigEntryKey>("ViewKey", new ConfigEntryKey(ViewKey)), new KeyValuePair<string, ConfigEntryKey>("FilterKey", new ConfigEntryKey(FilterKey)),
                 new KeyValuePair<string, ConfigEntryKey>("NumbersKey", new ConfigEntryKey(NumbersKey)), new KeyValuePair<string, ConfigEntryKey>("BookKey", new ConfigEntryKey(BookKey)),
+                new KeyValuePair<string, ConfigEntryKey>("CompareKey", new ConfigEntryKey(CompareKey)),
                 new KeyValuePair<string, ConfigEntryKey>("SnapshotKey", new ConfigEntryKey(SnapshotKey)), new KeyValuePair<string, ConfigEntryKey>("SelfCheckKey", new ConfigEntryKey(DevCheck.Key)),
             };
             foreach (var k in keys)

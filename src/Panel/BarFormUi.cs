@@ -29,7 +29,8 @@ namespace Hearthwoven.Panel
             public Func<Block, Color> Colour; public Func<Block, Action> Click;
         }
 
-        const float BarListName = PanelLook.MinText, BarListText = 15, BarListShare = 14, BarListCellGap = PanelModel.BarFormCellGap, BarSwatch = 12, BarSwatchGap = 8;   // 0.8 layout D+: compact entries on the page's legend grid, names at the floor on every legend
+        static readonly float BarListName = PanelLayout.Legend.Name, BarListText = PanelLayout.Legend.Number, BarListShare = PanelLayout.Legend.Share, BarListCellGap = PanelLayout.Legend.CellGap,
+            BarSwatch = PanelLayout.Legend.Swatch, BarSwatchGap = PanelLayout.Legend.SwatchGap;   // 0.8 layout D+: compact entries on the page's legend grid, names at the floor on every legend
 
         static Color BarRowColour(BarRow r, BarLook look) =>
             look?.Colour != null && !(r.Other && r.Part.Id == PanelModel.FoldId) ? look.Colour(r.Part) : Hex(r.Colour, PanelLook.Accent);
@@ -89,7 +90,7 @@ namespace Hearthwoven.Panel
                 }
                 else { bar = Node("BarForm", box); Size(bar, -1, height); }
                 // each part at least 6 px wide, so a tiny Other still shows between its 4 px gaps (PanelModel.BarParts)
-                var spans = PanelModel.BarParts(form.Rows.Select(r => r.Fraction).ToArray(), form.Rows.Select(r => r.Part.Fraction2).ToArray(), (6f + PanelModel.BarFormGap) / width);
+                var spans = PanelModel.BarParts(form.Rows.Select(r => r.Fraction).ToArray(), form.Rows.Select(r => r.Part.Fraction2).ToArray(), (PanelLayout.Bar.MinPart + PanelModel.BarFormGap) / width);
                 for (int k = 0; k < form.Rows.Count; k++)
                 {
                     var row = form.Rows[k]; var c = BarRowColour(row, look); var click = clicks[k];
@@ -104,14 +105,14 @@ namespace Hearthwoven.Panel
                     {
                         // the part counted before Hearthwoven (K1): the same colour at 55 %, one fill per kind, no line inside it
                         if (grain == null) seg.gameObject.AddComponent<Mask>().showMaskGraphic = true;
-                        var veil = Img(seg.transform, "Faded", null, FadedVeil).rectTransform;
+                        var veil = Img(seg.transform, "Faded", null, PanelWash.Toward(FadedVeil, c)).rectTransform;   // the mirror's .bf-veil over this part, as the game draws it
                         veil.anchorMin = Vector2.zero; veil.anchorMax = new Vector2((spans[k].fadedTo - spans[k].from) / (spans[k].to - spans[k].from), 1);
                         veil.offsetMin = veil.offsetMax = Vector2.zero;
                     }
                     if (form.Numbers && !row.Other && !string.IsNullOrEmpty(row.Value) && !look.Thin)
                     {
                         // damage bars: the number inside the part where it fits (14 px and more, in the ink that reads on the colour)
-                        var t = Label(seg.transform, row.Value, 15, SegmentInk(c), style: FontStyles.Bold, align: TextAlignmentOptions.Center);
+                        var t = Label(seg.transform, row.Value, PanelLayout.Bar.Number, SegmentInk(c), style: FontStyles.Bold, align: TextAlignmentOptions.Center);
                         t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Stretch();
                         if (Mathf.Ceil(t.preferredWidth) + 12 > (spans[k].to - spans[k].from) * width - PanelModel.BarFormGap) UnityEngine.Object.Destroy(t.gameObject);
                     }
@@ -131,7 +132,7 @@ namespace Hearthwoven.Panel
                 }
                 if (form.List) Spacer(box, PanelModel.BarFormToList);
             }
-            if (form.List) BarList(box, form, look, hover, clicks);   // one part: no list, the head line says its name and total
+            if (PanelModel.ListShown(form, look.NoBar)) BarList(box, form, look, hover, clicks);   // one part on a bar: no list, the head line says its name and total
             if (look.After > 0) Spacer(box, look.After);
         }
 
@@ -178,9 +179,9 @@ namespace Hearthwoven.Panel
                 var title = Label(name, r.Title, BarListName, r.Selected ? PanelLook.Gold : zero ? PanelLook.Faint : PanelLook.Text, style: r.Selected ? FontStyles.Bold : FontStyles.Normal, align: TextAlignmentOptions.MidlineLeft);
                 title.textWrappingMode = TextWrappingModes.NoWrap;
                 var n = Label(row, r.Value ?? "", BarListText, PanelLook.Text, style: FontStyles.Bold, align: TextAlignmentOptions.MidlineRight); n.textWrappingMode = TextWrappingModes.NoWrap;
-                var pct = Label(row, r.Share, BarListShare, PanelLook.Faint, align: TextAlignmentOptions.MidlineRight); pct.textWrappingMode = TextWrappingModes.NoWrap;
+                var pct = Label(row, form.Rows.Count == 1 ? "" : r.Share, BarListShare, PanelLook.Faint, align: TextAlignmentOptions.MidlineRight); pct.textWrappingMode = TextWrappingModes.NoWrap;   // one row is the whole: no "100 %"
                 float extra = 0;
-                if (r.Part != null && Labelled(r.Part)) { var s = Since(row, 14, r.Part); extra = BarListCellGap + Mathf.Ceil(s.preferredWidth); }   // a part counted on this PC in a bar of other counts
+                if (r.Part != null && Labelled(r.Part)) { var s = Since(row, PanelLayout.Text.Floor, r.Part); extra = BarListCellGap + Mathf.Ceil(s.preferredWidth); }   // a part counted on this PC in a bar of other counts
                 var k = cells.Count; var click = clicks != null && k < clicks.Count ? clicks[k] : null;
                 if (hover != null || click != null)
                 {

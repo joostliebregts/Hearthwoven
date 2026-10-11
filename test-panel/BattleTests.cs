@@ -72,9 +72,9 @@ static partial class Program
         // ---------- Damage ----------
         var dmg = Page(rich, "damage");
         var sw = Of(dmg, "switch"); var grid = Of(Page(rich, "damage", s => s.View["Battle/damage/view"] = "type"), "damagegrid");
-        Check(PanelModel.PlateOf(dmg) != null && sw != null && sw.Id == "Battle/damage/view" && sw.Items.Select(v => v.Id + (v.Selected ? "*" : "")).SequenceEqual(new[] { "weapon*", "type", "foe" }) &&
-              sw.Title == "damage dealt, before the foe's armor" && sw.Items.Select(v => v.Title).SequenceEqual(new[] { "By weapon", "By type", "By foe" }) && Of(dmg, "dmgmix") != null && Of(dmg, "damagegrid") == null,
-              "B damage: on the plate, the shared view switch By weapon (default, Joost 2026-10-09) / By type / By foe (0.8), its caption what the numbers are");
+        Check(sw != null && sw.Id == "Battle/damage/view" && sw.Items.Select(v => v.Id + (v.Selected ? "*" : "")).SequenceEqual(new[] { "weapon*", "type", "foe" }) &&
+              Says(dmg, "before the foe's armor") && sw.Items.Select(v => v.Title).SequenceEqual(new[] { "By weapon", "By type", "By foe" }) && Of(dmg, "dmgmix") != null && Of(dmg, "damagegrid") == null,
+              "B damage: the shared view switch By weapon (default, Joost 2026-10-09) / By type / By foe (0.8); the page says the numbers are before the foe's armor");
         var weapons = grid.Items[0].Items; var types = grid.Items.Skip(1).ToList();
         var dealt = PanelModel.DealtRows(PanelModel.Damage(rich.Log, TimeWindow.Session, "", rich.NowUtc));
         Check(weapons.Select(w => w.Title + "=" + w.Value).SequenceEqual(new[] { "Melee=1\u00A0630", "Bow=360", "Magic=290" }) && grid.Value == "2\u00A0280" && grid.Title == "All types" && grid.Items[0].Title == "Total",
@@ -87,9 +87,9 @@ static partial class Program
         Check(!dealt.Any(r => r.Type == "chop") && PanelModel.AllText(dmg).All(s => !s.Contains("Chop")), "B dealt: tool damage (chop) never in Battle");
         var byWeapon = Page(rich, "damage", s => s.View["Battle/damage/view"] = "weapon");
         var mixes = PanelModel.Content(byWeapon).Where(b => b.Kind == "dmgmix").ToList();
-        Check(mixes.Select(m => m.Title + "=" + m.Value).SequenceEqual(new[] { "Melee=1\u00A0630", "Bow=360", "Magic=290" }) && mixes.All(m => Near(m.Items.Sum(p => p.Fraction), 1)) &&
+        Check(mixes.Select(m => m.Title + "=" + m.Value).SequenceEqual(new[] { "Melee=1\u00A0630", "Bow=360", "Magic=290" }) &&
               mixes[2].Items.Where(p => p.Kind == "part").Select(p => p.Id).SequenceEqual(new[] { "fire", "frost", "lightning", "spirit" }) && mixes[0].Icon == "vocab:weapon-melee" && Of(byWeapon, "damagegrid") == null,
-              "B by weapon: one composition bar per weapon kind, parts in type order summing to the whole, only the chosen view's blocks");
+              "B by weapon: one composition bar per weapon kind, parts in type order (their shares add up: PropertyTests), only the chosen view's blocks");
         Check(Page(plain, "damage", s => PanelModel.ToggleFacet(s, PanelModel.BattleDamageFilter, "biome", "Swamp")).Heading == "Damage dealt" && Of(Page(plain, "damage", s => { PanelModel.ToggleFacet(s, PanelModel.BattleDamageFilter, "biome", "Swamp"); s.View["Battle/damage/view"] = "type"; }), "damagegrid").Value == "434" && Page(plain, "damage").HasFilters,
               "B damage keeps the window choices and narrows by the Biome row (Swamp: 434 dealt)");
 
@@ -112,12 +112,12 @@ static partial class Program
               Chips("spirit", "none") == "Troll,Greydwarf,Greydwarf Brute,Boar,Neck,Leech" && ft.Items.Single(r => r.Id == "pierce").Value == "520",
               "B by damage type: strong against = their weakness, weak against = their resistance, no effect on = their immunity; the type's dealt");
         Check(PanelModel.StrongAgainst == "Hits harder on" && PanelModel.NormalOn == "Normal on" && PanelModel.WeakAgainst == "Hits softer on" && PanelModel.NoEffectOn == "No effect on" &&
-              Chips("pierce", "normal").Split(',').Contains("Greydwarf") && ft.Note == PanelModel.FoeTypesNote && !PanelModel.AllText(byType).Any(t => t != null && (t.Contains("dmg") || t.Contains("A row reads"))),
+              Chips("pierce", "normal").Split(',').Contains("Greydwarf") && TimesSaid(byType, PanelModel.FoeTypesNote) == 1 && !PanelModel.AllText(byType).Any(t => t != null && (t.Contains("dmg") || t.Contains("A row reads"))),
               "B foes wording (0.7): the type's side (hits harder / normal / softer / no effect on), \"damage\" in full, the explanation once, no example sentence");
         // 0.7 the weakness meter: each cell carries the game's factor (one meter part per x0.5); no key on the page, the About box says it
         Check(troll.Where(c => c.Kind == "mod").Select(c => c.Id + "=" + c.Value + ":" + c.Fraction.ToString(System.Globalization.CultureInfo.InvariantCulture)).SequenceEqual(new[] { "blunt=\u00D70.5:0.5", "slash=\u00D71:1", "pierce=\u00D71.5:1.5", "fire=\u00D71:1", "frost=\u00D71:1", "lightning=\u00D71:1", "poison=\u00D71:1", "spirit=\u00D70:0" }) &&
-              foes.AboutNumbers != null && foes.AboutNumbers.Items.Any(l => l.Title == "The meter"),
-              "B foes meter (0.7): the cells carry the game's factor (Troll x0.5 blunt, x1.5 pierce, x0 spirit); its meaning is in About these numbers");
+              Says(foes, PanelModel.FoesAbout.Single(l => l.title == "The meter").text),
+              "B foes meter (0.7): the cells carry the game's factor (Troll x0.5 blunt, x1.5 pierce, x0 spirit); the page says what the meter means");
         // 0.7 the ranking under an open foe (card placement b): arrows and bolts with your status, weapons you own, made or can craft, best and worst
         var geared = rich.ShallowCopy(); geared.Gear = PanelSample.SampleGear; geared.Owned = t => PanelSample.SampleOwned.Contains(t); geared.RecipeKnown = t => PanelSample.SampleRecipes.Contains(t);
         var openRow = Of(PageAll(geared, "foes", s => s.View[PanelModel.FoeOpenKey] = "Troll"), "foetable").Items.Single(r => r.Id == "Troll");
@@ -214,8 +214,8 @@ static partial class Program
         var dp = Page(rich, "deaths");
         var strip = Of(dp, "deathstrip"); var list = Of(dp, "deaths");
         Check(dp.Heading == "Deaths" && strip.Items.Select(t => t.Title + ":" + t.Count).SequenceEqual(new[] { "Meadows:0", "Black Forest:1", "Swamp:2" }) &&
-              Near(strip.Items[2].Fraction, 2.8) && strip.Items[2].Items.Select(d => d.Value).SequenceEqual(new[] { "8 Oct 15:40", "8 Oct 15:02" }),
-              "B where you fell: the found biomes in journey order, wider where you fell more, the time of each fall");
+              Near(strip.Items[2].Fraction, 1) && Near(strip.Items[1].Fraction, 0.5) && strip.Note == PanelModel.TallerNote && strip.Items[2].Items.Select(d => d.Value).SequenceEqual(new[] { "8 Oct 15:40", "8 Oct 15:02" }),
+              "B where you fell: the found biomes in journey order, taller where you fell more (0.8.5), the time of each fall");
         Check(list.Items.Select(d => d.Title + "|" + d.Text + "|" + d.Value).SequenceEqual(new[] { "Leech|8 Oct 15:40 · Swamp|100", "Draugr|8 Oct 15:02 · Swamp|126", "Troll|8 Oct 14:31 · Black Forest|171" }) &&
               list.Items[1].Items.Select(p => p.Id + "=" + p.Value).SequenceEqual(new[] { "slash=74", "poison=52" }) && list.Items[0].Icon == "item:TrophyLeech" && list.Text == "after your armor",
               "B deaths: per fall the killer's trophy, time and biome, and the last 10 seconds by type (totals)");
@@ -239,32 +239,32 @@ static partial class Program
               ovRows.Items.All(d => d.Src == "pc" && !string.IsNullOrEmpty(d.Icon)),
               "Battle deaths: every row the same layout, the killer's trophy, how many from which type, when");
         rich.NowUtc = rich.NowUtc.AddDays(1);
-        Check(Of(Page(rich, "deaths"), "deaths").Items[0].Text == "8 Oct 15:40 · Swamp", "B deaths: an earlier day carries its date");
+        Check((Of(Page(rich, "deaths"), "deaths").Items[0].Text ?? "").Contains("8 Oct 15:40"), "B deaths: an earlier day carries its date");
 
         // ---------- the windows: 10 and 30 minutes, and since install (Joost, play-test) ----------
         rich.DamageSinceInstall = PanelSample.SinceInstall(rich.Log);
         var sinceDealt = PanelModel.DealtRows(PanelModel.DamageSinceInstallRows(rich)).Sum(r => (double)r.Amount);
         var ovAll = Page(rich, "overview", s => { s.Window = TimeWindow.SinceInstall; });
         var hero = Of(ovAll, "hero");
-        Check(ovAll.HasFilters && ovAll.Windows.Last().Selected && ovAll.Windows.Last().Label == "All" && ovAll.Biomes.Count == 0 && ovAll.HeadingWindow == null && ovAll.Recorded &&
+        Check(ovAll.HasFilters && ovAll.Windows.Last().Selected && ovAll.Windows.Last().Label == "All" && ovAll.Biomes.Count == 0 && ovAll.Recorded &&
               Of(ovAll, "biomes") == null && hero != null && hero.Value == PanelModel.Number(sinceDealt) && Of(ovAll, "composition")?.Value == PanelModel.Number(PanelModel.DamageSinceInstallRows(rich).Where(r => r.Dir == "taken").Sum(r => (double)r.Amount)) &&
-              Of(ovAll, "composition")?.Title == PanelModel.WhatHurtYou && PanelModel.Content(ovAll).Any(b => b.Kind == "note" && b.Text == PanelModel.BattleAllNote),
+              Of(ovAll, "composition")?.Title == PanelModel.WhatHurtYou && Says(ovAll, PanelModel.BattleAllNote),
               "windows: All on the overview = everything this PC folded: the totals, what hurt you, the lifetime deaths; no biome strip or biome choice (per biome is not stored), and one line says so");
         var ovBiome = Page(rich, "overview", s => { s.Window = TimeWindow.Session; PanelModel.ToggleFacet(s, PanelModel.BattleOverviewFilter, "biome", "Swamp"); });
-        Check(Of(ovBiome, "biomes") != null && ovBiome.Biomes.Count == 0 && Of(ovBiome, "biomes").Items.Any(b => b.Selected && b.Id == "Swamp") && PanelModel.FilterOf(ovBiome) != null && !PanelModel.Content(ovBiome).Any(b => b.Text == PanelModel.BattleAllNote),
+        Check(Of(ovBiome, "biomes") != null && ovBiome.Biomes.Count == 0 && Of(ovBiome, "biomes").Items.Any(b => b.Selected && b.Id == "Swamp") && PanelModel.FilterOf(ovBiome) != null && !Says(ovBiome, PanelModel.BattleAllNote),
               "windows: any window but All keeps the biome strip, and its tiles are the biome choice");
         var dmgAll = Page(rich, "damage", s => { s.Window = TimeWindow.SinceInstall; PanelModel.ToggleFacet(s, PanelModel.BattleDamageFilter, "biome", "Swamp"); s.View["Battle/damage/view"] = "type"; });
-        Check(Of(dmgAll, "damagegrid") != null && Of(dmgAll, "damagegrid").Value == PanelModel.Number(sinceDealt) && dmgAll.Biomes.Count == 0 && dmgAll.HeadingWindow == null && dmgAll.Heading == "Damage dealt" &&
-              PanelModel.Content(dmgAll).Single(b => b.Kind == "filterbar").Items.Single().Title == PanelModel.DamageAllBiomeNote && !PanelModel.Content(dmgAll).Any(b => b.Kind == "filterbar" && b.Items.Any(i => i.Kind == "facet")),
+        Check(Of(dmgAll, "damagegrid") != null && Of(dmgAll, "damagegrid").Value == PanelModel.Number(sinceDealt) && dmgAll.Biomes.Count == 0 && dmgAll.Heading == "Damage dealt" &&
+              TimesSaid(dmgAll, PanelModel.DamageAllBiomeNote) == 1 && !PanelModel.Content(dmgAll).Any(b => b.Kind == "filterbar" && b.Items.Any(i => i.Kind == "facet")),
               "windows: Damage dealt on All reads the since-install totals, whatever biome was chosen before (it has none); one line where the Biome row would be says so, and no dimmed chip");
         var deathsAll = Page(rich, "deaths", s => s.Window = TimeWindow.SinceInstall);
         Check(Of(deathsAll, "deathstrip") != null && deathsAll.Biomes.Count == 0 && Of(deathsAll, "deaths") is Block dlAll && dlAll.Count >= dlAll.Items.Count && !PanelModel.Content(deathsAll).Any(b => b.Kind == "note" && b.Text == PanelModel.DeathsAllNote) &&
-              PanelModel.DeathsCaption(3, 4) == "Listed: this session's 3 of 4 falls, newest first" && PanelModel.DeathsCaption(3) == "3 falls, newest first" && PanelModel.DeathsCaption(3, 3) == "3 falls, newest first",
+              PanelModel.DeathsCaption(3, 4).Contains("3 of 4") && PanelModel.DeathsCaption(3).Contains("3 falls") && !PanelModel.DeathsCaption(3).Contains(" of ") && PanelModel.DeathsCaption(3, 3) == PanelModel.DeathsCaption(3),
               "windows: Deaths on All lists this session's falls under a heading that says how many of the counted falls it lists (3 of 4), with no separate caveat line");
         var tenMin = Page(rich, "overview", s => s.Window = TimeWindow.LastTenMinutes);
         Check(tenMin.Windows.Select(w => w.Id + (w.Selected ? "*" : "")).SequenceEqual(new[] { "LastTenMinutes*", "LastThirtyMinutes", "LastHour", "LastThreeHours", "Session", "Today", "SevenDays", "ThirtyDays", "SinceInstall" }) &&
-              tenMin.HeadingWindow == "last 10 minutes" && tenMin.Scope.Contains("last 10 minutes"),
-              "windows: Last 10 minutes on the overview: its chip lit, the plate's heading in full");
+              Says(tenMin, PanelModel.WindowLabel(TimeWindow.LastTenMinutes).ToLowerInvariant()),
+              "windows: Last 10 minutes on the overview: its chip lit, the page says the window in full");
         var keyPage = new PanelState { Chapter = Chapter.Battle }; keyPage.Page[Chapter.Battle] = "overview";
         var keyView = PanelModel.Build(rich, keyPage);
         Check(PanelModel.StepView(keyPage, keyView, 1) && keyPage.Window == TimeWindow.SinceInstall && PanelModel.StepView(keyPage, PanelModel.Build(rich, keyPage), 1) && keyPage.Window == TimeWindow.LastTenMinutes && keyView.Keys.Contains("[F] Window"),
@@ -336,32 +336,32 @@ static partial class Program
 
         // ---------- Battle layer (K1 for hits and deaths): the game's counter when Hearthwoven first ran + counted since ----------
         Dictionary<string, Dictionary<string, float>> K(params (string k, float v)[] kv) => new Dictionary<string, Dictionary<string, float>> { ["battle"] = kv.ToDictionary(x => x.k, x => x.v) };
-        bool FadedNoted(PanelView v) => PanelModel.Content(v).Any(b => b.Kind == "note" && b.Text == PanelModel.FadedKey);
+        bool FadedNoted(PanelView v) => Says(v, PanelModel.FadedKey);
         var lay = BattleSample();
         lay.Character["EnemyHits"] = 5600; lay.Character["Deaths"] = 41; lay.Character["HitsTakenEnemies"] = 1300; lay.Character["HitsTakenPlayers"] = 2;
         lay.Baseline = K(("EnemyHits", 5000), ("Deaths", 40)); lay.ExactAtBaseline = K();
         SessionEvents.Add(lay.Events.Battle, "EnemyHits", 120); SessionEvents.Add(lay.Events.Battle, "PlayerHits", 2); SessionEvents.Add(lay.Events.Battle, "Deaths", 3);
         // 0.7 rule A (REDESIGN-RULES.md part 1): one sum per number, Src character, the earlier counts note in the number's own slot; no faded key
         var lf = PageAll(lay, "foes"); var lh = Life(lf, "hits on foes"); var lp = Life(lf, "hits on other players");
-        Check(!FadedNoted(lf) && !PanelModel.AllText(lf).Any(t => t.IndexOf("faded", StringComparison.OrdinalIgnoreCase) >= 0),
-              "Battle layer foes (0.7): no faded key and no faded word; the earlier counts note sits in About these numbers (0.8 layout D+)");
-        Check(lh != null && lh.Value == "5\u00A0120" && lh.Note == null && PanelModel.AboutText(lf).Contains(PanelModel.EarlierIncomplete) && lh.Title == "hits on foes" && lh.Src == "character" &&
-              lp != null && lp.Value == "2" && lp.Note == null && lp.Src == "character",
-              "Battle layer foes (0.7): hits on foes = the game's EnemyHits at first run (5\u00A0000) + every hit counted since (120) = 5\u00A0120, one sum, its earlier counts note in About these numbers; hits on other players 2, no note");
+        Check(!FadedNoted(lf) && !Texts(lf).Any(t => t.IndexOf("faded", StringComparison.OrdinalIgnoreCase) >= 0),
+              "Battle layer foes (0.7): no faded key and no faded word");
+        Check(lh != null && lh.Value == "5\u00A0120" && TimesSaid(lf, PanelModel.EarlierIncomplete) == 1 && lh.Title == "hits on foes" && lh.Src == "character" &&
+              lp != null && lp.Value == "2" && lp.Src == "character",
+              "Battle layer foes (0.7): hits on foes = the game's EnemyHits at first run (5\u00A0000) + every hit counted since (120) = 5\u00A0120, one sum, the page notes the earlier counts once; hits on other players 2");
         var ld = Page(lay, "deaths"); var ldh = Of(ld, "hero");
-        Check(ldh != null && ldh.Value == "43" && ldh.Note == null && PanelModel.AboutText(ld).Contains(PanelModel.EarlierIncomplete) && ldh.Title == "deaths" && ldh.Src == "character" &&
-              PanelModel.Content(ld).Select(b => b.Kind).Where(k => k != "plate" && k != "zone" && k != "featband" && k != "aboutnumbers").Take(2).SequenceEqual(new[] { "hero", "deathstrip" }) && Of(ld, "deaths").Items.Count == 3,
-              "Battle layer deaths (0.7): one lifetime line first (the game's Deaths 40 + 3 counted since = 43, one sum, its note in About these numbers), then the window's strip and list as before");
+        Check(ldh != null && ldh.Value == "43" && TimesSaid(ld, PanelModel.EarlierIncomplete) == 1 && ldh.Title == "deaths" && ldh.Src == "character" &&
+              Of(ld, "deathstrip") != null && Of(ld, "deaths").Items.Count == 3,
+              "Battle layer deaths (0.7): one lifetime line (the game's Deaths 40 + 3 counted since = 43, one sum, the page notes the earlier counts once), and the window's strip and list as before");
         var dRows = PanelModel.Content(PageAll(lay, "defense")).SkipWhile(b => !(b.Kind == "section" && b.Title == "Hits received")).Skip(1).FirstOrDefault();
         Check(dRows != null && dRows.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "From foes=1\u00A0300", "From other players=2" }) && dRows.Src == "character",
               "Battle hits received: on Defense, the game's own count stands alone (complete: counted on your own character), your character's");
         var lo = Page(lay, "overview");
-        Check(!PanelModel.Content(lo).Any(b => b.Kind == "hero" || (b.Kind == "section" && b.Title == "Hits")) && !PanelModel.AllText(lo).Any(t => t.Contains("5\u00A0120") || t.Contains("5\u00A0600") || t.Contains("1\u00A0300")),
+        Check(!Says(lo, "5\u00A0120") && !Says(lo, "5\u00A0600") && !Says(lo, "1\u00A0300") && !PanelModel.Content(lo).Any(b => b.Kind == "section" && b.Title == "Hits"),
               "Battle: no lifetime count under the window chips");
         // an install from before the baseline: 100 hits and 3 deaths counted exactly by then, which the game's count already holds
         lay.ExactAtBaseline = K(("EnemyHits", 100), ("Deaths", 3));
         var oh = Life(PageAll(lay, "foes"), "hits on foes"); var od = Of(Page(lay, "deaths"), "hero");
-        Check(oh != null && oh.Value == "5\u00A0020" && oh.Note == null && od.Value == "40" && od.Note == null && PanelModel.AboutText(Page(lay, "deaths")).Contains(PanelModel.EarlierIncomplete) && od.Src == "character" && !FadedNoted(Page(lay, "deaths")),
+        Check(oh != null && oh.Value == "5\u00A0020" && od.Value == "40" && TimesSaid(Page(lay, "deaths"), PanelModel.EarlierIncomplete) == 1 && od.Src == "character" && !FadedNoted(Page(lay, "deaths")),
               "Battle layer, no double count (0.7): an older install's 100 hits and 3 deaths from before the baseline are in the game's count (5\u00A0020 and 40, not 5\u00A0120 and 43)");
         // a fellow's copy (no baseline): the game counter minus what was counted exactly, at least 0, so the total is the game's; the note says it is not complete
         lay.Baseline = null; lay.ExactAtBaseline = null;

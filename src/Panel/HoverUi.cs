@@ -18,7 +18,7 @@ namespace Hearthwoven.Panel
     {
         /// <summary>The ring's line colour (#f0cd86) with its glow (the focus-ring sprite), a lit row's band (gold at 15 %), a lit row's
         /// name and number (#f6d896).</summary>
-        internal static readonly Color Ring = new Color(0.941f, 0.804f, 0.525f, 1f), Band = new Color(0.91f, 0.76f, 0.48f, 0.15f), LitText = new Color(0.965f, 0.847f, 0.588f, 1f);
+        internal static readonly Color Ring = new Color(0.941f, 0.804f, 0.525f, 1f), Band = PanelWash.HoverBand.Game, LitText = new Color(0.965f, 0.847f, 0.588f, 1f);
         /// <summary>How far the ring's line runs outside its part (the focus-ring sprite's line lies 8 px in from its edge).</summary>
         internal const float RingGap = 1f;
 
@@ -140,7 +140,7 @@ namespace Hearthwoven.Panel
     /// </summary>
     class HoverMark : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
-        static readonly Color Ink = new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.45f);
+        static readonly Color Ink = PanelWash.HoverLine.Game;   // the mirror's :hover outline as the game draws it (PanelWash.cs)
         Image line;
         public virtual void OnPointerEnter(PointerEventData e) => Mark(true);
         public void OnPointerExit(PointerEventData e) => Mark(false);

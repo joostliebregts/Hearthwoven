@@ -11,7 +11,8 @@ using Hearthwoven.Panel;
 static class PanelTextTests
 {
     const float Em = 0.56f, SmallEm = 0.5f, Since = 66 + 6;
-    const float ListW = 190, TabW = (1180f - 140 - 5 * 8) / 6, PlateColumn = 840, CardGap = 10;   // chrome A2
+    static readonly float ListW = PanelLayout.Frame.ListW, TabW = (PanelLayout.Frame.W - 2 * PanelLayout.Frame.TabInset - 5 * PanelLayout.Frame.TabGap) / 6, PlateColumn = PanelLayout.Plate.Column;   // chrome A2, from the layout table
+    const float CardGap = 10;
 
     static int Max(float width, float font, float em = Em) => (int)Math.Floor(width / (em * font));
 
@@ -97,7 +98,10 @@ static class PanelTextTests
         }
         var distinct = tooLong.Distinct().ToList();
         foreach (var t in distinct.Take(20)) System.Console.WriteLine("    " + t);
-        Check(PanelModel.ItemTilesPerLine(PlateColumn) == 4 && PanelModel.ItemTilesPerLine((PlateColumn - 34) / 2) == 2, "item tiles: four across the plate, two in a half column (fix2 6)");
+        // item tiles (fix2 6): as many across as fit, never one cut at the plate's edge, and at least two in a half column (not a pinned count)
+        bool TilesFit(float column) { var n = PanelModel.ItemTilesPerLine(column); return n * PanelModel.ItemTileMinWidth + (n - 1) * PanelModel.ItemTileGap <= column; }
+        Check(TilesFit(PlateColumn) && TilesFit((PlateColumn - 34) / 2) && PanelModel.ItemTilesPerLine((PlateColumn - 34) / 2) >= 2 && PanelModel.ItemTilesPerLine(PlateColumn) >= PanelModel.ItemTilesPerLine((PlateColumn - 34) / 2),
+              "item tiles: never cut, " + PanelModel.ItemTilesPerLine(PlateColumn) + " across the plate and at least two in a half column (" + PanelModel.ItemTilesPerLine((PlateColumn - 34) / 2) + ") (fix2 6)");
         Check(distinct.Count == 0, $"fit: every list label, chapter tab, chip, card line and item tile name fits its box ({pages.Count} pages and views)" + (distinct.Count > 0 ? ": " + distinct[0] : ""));
 
         // 0.7 redesign (REDESIGN-RULES.md part 0): a migrated page (view.Recorded) says no "since install", "before install", "faded" or "in all ·"

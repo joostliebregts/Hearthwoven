@@ -19,8 +19,8 @@ namespace Hearthwoven.Panel
     /// </summary>
     public partial class PanelUi
     {
-        const float FacetLabelW = 128, FacetChipH = 24, FacetText = PanelLook.MinText;
-        static readonly Color FacetOn = new Color(0.91f, 0.66f, 0.28f, 0.2f);
+        static readonly float FacetLabelW = PanelLayout.Filter.LabelW, FacetChipH = PanelLayout.Filter.ChipH, FacetText = PanelLayout.Filter.Text;
+        static readonly Color FacetOn = PanelWash.ChipOn.Game;   // the mirror's .fb-chip.on as the game draws it (PanelWash.cs)
 
         static void FilterBar(RectTransform col, Block b, Func<string, Action> link)
         {
@@ -64,23 +64,24 @@ namespace Hearthwoven.Panel
             return Mathf.Clamp(Mathf.Ceil(w) + 6, 56, FacetLabelW);
         }
 
-        static void FacetRow(RectTransform box, Block filter, Block row, Func<string, Action> link, float labelW = FacetLabelW)
+        static void FacetRow(RectTransform box, Block filter, Block row, Func<string, Action> link, float labelW)
         {
             var line = Row(box, 8);
             var label = VStack(line, 2); Size(label, labelW, -1);
             label.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
             var head = Line(label, 6, TextAnchor.MiddleLeft); Size(head, -1, 24);
             var focus = row.Tone == "focus";
-            var t = Label(head, row.Title, 14, focus ? PanelLook.Gold : PanelLook.Muted, style: focus ? FontStyles.Bold : FontStyles.Normal); t.textWrappingMode = TextWrappingModes.NoWrap;
+            var t = Label(head, row.Title, PanelLayout.Text.Floor, focus ? PanelLook.Gold : PanelLook.Muted, style: focus ? FontStyles.Bold : FontStyles.Normal); t.textWrappingMode = TextWrappingModes.NoWrap;
             if (!string.IsNullOrEmpty(row.Note)) { var s = Label(label, row.Note, FacetText, PanelLook.Faint); s.textWrappingMode = TextWrappingModes.NoWrap; }
             if (focus) Size(Img(label, "Focus", null, PanelLook.Gold), 54, 2);   // the row the keys act on: a gold line under its name
-            var chips = VStack(line, 4); chips.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            var chips = VStack(line, PanelLayout.Filter.ChipGap); chips.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
             chips.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
             RectTransform cur = null; float used = 0; var room = Column - labelW - 8;
             foreach (var chip in row.Items ?? new List<Block>())
             {
                 var c = FacetChip(chips, filter, row, chip, link, out var w);
-                if (cur == null || used + 4 + w > room) { cur = Line(chips, 4, TextAnchor.UpperLeft); used = 0; } else used += 4;
+                var gap = PanelLayout.Filter.ChipGap;
+                if (cur == null || used + gap + w > room) { cur = Line(chips, gap, TextAnchor.UpperLeft); used = 0; } else used += gap;
                 c.SetParent(cur, false); used += w;
             }
         }
@@ -133,7 +134,7 @@ namespace Hearthwoven.Panel
         {
             var line = Line(box, 6, TextAnchor.MiddleLeft); Size(line, -1, 26);
             var toggle = link?.Invoke(PanelModel.FacetOpenLink(filter.Id));
-            var name = Label(line, string.IsNullOrEmpty(filter.Title) ? "Filter" : filter.Title, 14, filter.Open ? PanelLook.Gold : PanelLook.Muted, style: filter.Open ? FontStyles.Bold : FontStyles.Normal); name.textWrappingMode = TextWrappingModes.NoWrap;
+            var name = Label(line, string.IsNullOrEmpty(filter.Title) ? "Filter" : filter.Title, PanelLayout.Text.Floor, filter.Open ? PanelLook.Gold : PanelLook.Muted, style: filter.Open ? FontStyles.Bold : FontStyles.Normal); name.textWrappingMode = TextWrappingModes.NoWrap;
             if (toggle != null) { name.raycastTarget = true; name.gameObject.AddComponent<Press>().Act = toggle; }
             if (!string.IsNullOrEmpty(filter.KeyCap)) Size(Keycap(line, filter.KeyCap), KeycapWidth(filter.KeyCap, 20), 20);   // the key that opens the rows, as quiet as Q/E/W/S; a word key ("Tab") gets a wider cap
             var tokens = applied.Items ?? new List<Block>();
@@ -161,13 +162,20 @@ namespace Hearthwoven.Panel
             if (lead != null)
             {
                 var focus = lead.Tone == "focus";
-                var name = Label(line, lead.Title, 14, focus ? PanelLook.Gold : PanelLook.Muted, style: focus ? FontStyles.Bold : FontStyles.Normal); name.textWrappingMode = TextWrappingModes.NoWrap;
+                var name = Label(line, lead.Title, PanelLayout.Text.Floor, focus ? PanelLook.Gold : PanelLook.Muted, style: focus ? FontStyles.Bold : FontStyles.Normal); name.textWrappingMode = TextWrappingModes.NoWrap;
                 if (!string.IsNullOrEmpty(filter.KeyCap)) Size(Keycap(line, filter.KeyCap), KeycapWidth(filter.KeyCap, 20), 20);
             }
             var tokens = applied.Items ?? new List<Block>();
             foreach (var tok in tokens) Token(line, filter, tok, link);
             if (tokens.Count == 0) Label(line, applied.Title, FacetText, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft).textWrappingMode = TextWrappingModes.NoWrap;
             Node("Rest", line).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            // 0.8.5 (Battle > Overview, variant A): the strip's marks explained at this line's right end, inside the strip's island (BattleFacets.StripKey)
+            var key = (filter.Items ?? new List<Block>()).FirstOrDefault(x => x.Kind == PanelModel.StripKeyKind);
+            if (key != null)
+            {
+                StripMarks(line, key.Items.Any(m => m.Icon == "vocab:death"), key.Items.Any(m => m.Icon == "vocab:boss-mark"));
+                if (!string.IsNullOrEmpty(applied.Text)) Size(Node("Gap", line), KeyApart, 1);
+            }
             var res = Label(line, applied.Text, FacetText, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight); res.textWrappingMode = TextWrappingModes.NoWrap;
             if (tokens.Count > 0) FacetButton(line, "Clear all", link?.Invoke(PanelModel.FacetClearTarget + filter.Id));
         }

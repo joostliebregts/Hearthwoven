@@ -34,18 +34,19 @@ namespace Hearthwoven.Panel
         public const int BarListColumns = 3;
         public const string UnderOnePercent = "<1 %";
 
-        /// <summary>The one bar form's measures (px at scale 1, PanelUi and the preview alike): the bar (0.8 layout D+: 22, the Hall's thin one
-        /// too; a wood grain or groundwork pattern keeps its taller 24, BarFormTall), the gap between the parts, the air between bar and list, a
-        /// list row and the gap between rows, the gap between the columns, the gap between a row's cells, and the air after the whole
-        /// bar-with-list (none: it sits in an island, whose padding is the air).</summary>
-        public const float BarFormBar = 22, BarFormThin = 22, BarFormTall = 24, BarFormGap = 4, BarFormToList = 10, BarFormRow = 22, BarFormRowGap = 6, BarFormColumnGap = 36, BarFormCellGap = 8, BarFormAfter = 0;
+        /// <summary>The one bar form's measures (px at scale 1, PanelUi and the preview alike), from the layout table (PanelLayout.Bar, Legend): the
+        /// bar (the Hall's thin one too; a wood grain or groundwork pattern keeps its taller one, BarFormTall), the gap between the parts, the air
+        /// between bar and list, a list row and the gap between rows, the gap between the columns, the gap between a row's cells, and the air after
+        /// the whole bar-with-list (none: it sits in an island, whose padding is the air). These names stay while the pages move over to the table.</summary>
+        public static readonly float BarFormBar = PanelLayout.Bar.Height, BarFormThin = PanelLayout.Bar.Thin, BarFormTall = PanelLayout.Bar.Tall, BarFormGap = PanelLayout.Bar.Gap, BarFormToList = PanelLayout.Bar.ToList,
+            BarFormRow = PanelLayout.Legend.Row, BarFormRowGap = PanelLayout.Legend.RowGap, BarFormColumnGap = PanelLayout.Legend.ColumnGap, BarFormCellGap = PanelLayout.Legend.CellGap, BarFormAfter = PanelLayout.Bar.After;
 
         /// <summary>A bar's height: a part with a wood grain or groundwork pattern keeps the bar tall (Joost, FEEDBACK 3: Woodcutting and Groundwork).</summary>
         public static float BarHeightOf(IEnumerable<Block> parts, bool thin) =>
             (parts ?? Enumerable.Empty<Block>()).Any(p => p != null && p.Fraction > 0 && !string.IsNullOrEmpty(p.Pattern) && p.Pattern.StartsWith("vocab:grain-", StringComparison.Ordinal)) ? BarFormTall : thin ? BarFormThin : BarFormBar;
 
         /// <summary>How tall a bar with its list stands (its head line when it has one): what a page's fold test counts.</summary>
-        public static double BarFormHeight(int rows, bool head) => (head ? 18 + 6 : 0) + BarFormBar + (rows > 1 ? BarFormToList + BarListLines(rows) * (BarFormRow + BarFormRowGap) - BarFormRowGap : 0) + BarFormAfter;
+        public static double BarFormHeight(int rows, bool head) => (head ? PanelLayout.Bar.HeadLine + PanelLayout.Island.Inner : 0) + BarFormBar + (rows > 1 ? BarFormToList + BarListLines(rows) * (BarFormRow + BarFormRowGap) - BarFormRowGap : 0) + BarFormAfter;
 
         /// <summary>0.8 layout D+ (Joost, after step A): one legend grid per page. Every legend on a page uses the same equal columns across a
         /// wide island's width, so the islands' legends line up column for column: LegendColumnsMax of them when every legend's columns fit, else
@@ -53,7 +54,7 @@ namespace Hearthwoven.Panel
         /// book, the number right-aligned in its own small column, the share); the room left over is the space between columns. LegendGap: the least
         /// space between two columns (Joost: Cooking's By type on one row, Dishes by kind two rows of four).</summary>
         public const int LegendColumnsMax = 4;
-        public const float LegendGap = 10;
+        public static readonly float LegendGap = PanelLayout.Legend.Gap;
 
         /// <summary>The columns a legend gets and their width, for a page grid of <paramref name="page"/> columns over a wide island's inner
         /// width <paramref name="wide"/>: a wide island takes the grid itself; a narrower column (a half island) as many as nearly fit at the
@@ -169,6 +170,11 @@ namespace Hearthwoven.Panel
             form.Split = BarListSplit(n, form.Columns);   // the first column's rows (3 + 3 + 2 for eight, 2 + 2 for four)
             return form;
         }
+
+        /// <summary>Whether the bar form draws its list: past one part, and also for one part when there is no bar ("single": a fellow's one kind,
+        /// the group's one kind, a pickaxe find), so its island is never a heading alone (0.8.5, Joost in game: Everyone > Smelters' "Put in
+        /// together, by kind" stood empty over one friend's one item). Mirrored by barForm() in preview/panel-preview.html.</summary>
+        public static bool ListShown(BarForm form, bool noBar) => form != null && (form.List || noBar && form.Rows.Count == 1);
 
         /// <summary>The rows a bar's list takes (the left column when it flows into two; none for one part): what the filter's fold test counts.</summary>
         public static int BarListLines(int rows) => rows <= 1 ? 0 : BarListSplit(rows, Math.Min(BarListColumns, rows));

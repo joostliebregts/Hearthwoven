@@ -34,6 +34,7 @@ namespace Hearthwoven.Panel
         // 0.7 compact tops: the button rides at the right end of the plate's title strip when the page has one (PanelModel.StripAbout,
         // FeatsUi.FeatBandBlock); its own row is then left out, or hidden again when the strip comes after it (On foot)
         static Block stripAbout;          // this page's button that the strip may carry (set by Render before the plate is drawn)
+        static Block headAbout;           // 0.8.5: this page's button that While away's head line carries (PanelModel.HeadAbout; AwayUi.AwayTotals)
         static bool aboutInStrip;         // the strip drew it
         static RectTransform aboutRow;    // its own row, when drawn before the strip
         // B38 (Joost: "try to get all top items into one row max"): the page's view switch shares that row too (PanelModel.TopSwitch): in the
@@ -44,7 +45,7 @@ namespace Hearthwoven.Panel
         static void AboutNumbersBox(RectTransform col, Block b, Func<string, Action> link)
         {
             if (b == switchAbout) return;   // it rides in the view switch's row, which draws the button and its box (SwitchRow)
-            if (!(aboutInStrip && b == stripAbout))
+            if (!(aboutInStrip && b == stripAbout) && b != headAbout)   // the strip or While away's head line drew the button: only the box here
             {
                 var top = Line(col, 8);
                 Node("Rest", top).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;   // the button sits on the right, under the skill
@@ -68,15 +69,15 @@ namespace Hearthwoven.Panel
             foreach (var l in b.Items)
             {
                 var row = Row(inner, 12);
-                var label = Label(row, l.Title, 15, PanelLook.Gold); Size(label, NumbersLabelW, -1);
-                Label(row, l.Text, 15, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                var label = Label(row, l.Title, PanelLayout.Text.Small, PanelLook.Gold); Size(label, NumbersLabelW, -1);
+                Label(row, l.Text, PanelLayout.Text.Small, PanelLook.Text).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
             }
         }
 
         // the button itself: the chip, then the numbers key's cap 8 px after it; returns its width. title: the short label (B38)
-        static float AboutButton(RectTransform row, Block b, Func<string, Action> link, string title = null)
+        static float AboutButton(RectTransform row, Block b, Func<string, Action> link, string title = null, float height = -1)
         {
-            var w = Chip(row, title ?? b.Title, null, b.Open, link?.Invoke(b.Id), 26);
+            var w = Chip(row, title ?? b.Title, null, b.Open, link?.Invoke(b.Id), height);   // height: the chip's own unless a line sets it (Together's key line, 0.8.5)
             if (!string.IsNullOrEmpty(b.KeyCap)) { Size(Keycap(row, b.KeyCap), KeycapWidth(b.KeyCap, 22), 22); w += 8 + KeycapWidth(b.KeyCap, 22); }
             return w;
         }
@@ -138,8 +139,8 @@ namespace Hearthwoven.Panel
             var p = new SkillParts();
             var words = p.Words = VStack(parent, 4); words.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;   // the bar keeps its 120 px
             var line = Line(words, 8, TextAnchor.LowerLeft);
-            p.Name = Label(line, s.Title, 15, PanelLook.Muted); p.Name.textWrappingMode = TextWrappingModes.NoWrap;
-            p.Level = Label(line, PanelModel.LevelWord + " " + s.Value, 15, PanelLook.Text, style: FontStyles.Bold); p.Level.textWrappingMode = TextWrappingModes.NoWrap;
+            p.Name = Label(line, s.Title, PanelLayout.Text.Small, PanelLook.Muted); p.Name.textWrappingMode = TextWrappingModes.NoWrap;
+            p.Level = Label(line, PanelModel.LevelWord + " " + s.Value, PanelLayout.Text.Small, PanelLook.Text, style: FontStyles.Bold); p.Level.textWrappingMode = TextWrappingModes.NoWrap;
             if (s.Progress >= 0)
             {
                 var track = p.Track = Img(words, "Progress", null, PanelLook.Track); Size(track, SkillBar, 4);
