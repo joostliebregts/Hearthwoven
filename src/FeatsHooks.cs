@@ -58,6 +58,7 @@ namespace Hearthwoven
                 if (__state == null || !__result || __instance.IsStaggering()) return;   // guard broken: not a held block
                 FeatsCounters.OnBlock(Plugin.FeatsLedger, __state.Parry, attacker != null && attacker.IsBoss(), FellowNear(Player.m_localPlayer),
                                       Mathf.Max(0f, __state.Before - hit.GetTotalBlockableDamage()));
+                BattleHooks.Blocked(hit, attacker, __state.Parry);   // 0.9: on the foe's encounter in the battle record
             });
         }
 

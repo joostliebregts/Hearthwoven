@@ -153,6 +153,60 @@ namespace Hearthwoven.Panel
             return c;
         }
 
+        /// <summary>
+        /// 0.9: a fellow's damage dealt in a day window from what their copy shares per day ("dayDealt": weapon kind and type per local day, the
+        /// last 30 days), as the rows the Damage page reads: no foe (a day is not split by foe), the weapon kind as the row's cause (WeaponOf takes
+        /// it as itself). The window is the viewer's calendar (<paramref name="viewer"/>: your book, or the fellow's book read on this PC), as
+        /// Together reads their dealtByDay. null when their copy shares no split (a Hearthwoven before 0.9).
+        /// </summary>
+        public static List<DamageRow> FellowDayRows(PanelInput p, TimeWindow w, PanelInput viewer)
+        {
+            if (p?.DayDealt == null || !IsDayWindow(w)) return null;
+            DateTime from = DayFrom(viewer, w), to = LocalToday(viewer);
+            var sum = new Dictionary<string, double>();
+            foreach (var day in p.DayDealt)
+                if (DateTime.TryParseExact(day.Key, "yyyy-MM-dd", Inv, System.Globalization.DateTimeStyles.None, out var d) && d >= from && d <= to)
+                    foreach (var kv in day.Value ?? new Dictionary<string, float>()) if (kv.Value > 0) { sum.TryGetValue(kv.Key, out var o); sum[kv.Key] = o + kv.Value; }
+            var rows = new List<DamageRow>();
+            foreach (var kv in sum.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+            {
+                var k = kv.Key.Split('|');
+                if (k.Length == 2) rows.Add(new DamageRow { Biome = "", Dir = "dealt", Other = "", Cause = k[0], Type = k[1], Amount = (float)kv.Value });
+            }
+            return rows;
+        }
+
+        /// <summary>A fellow's book in a day window (0.9, Battle > Damage only): a copy whose damage since install is the window's shared parts
+        /// (FellowDayRows), read the way a day window of your own is (InWindow); null when their copy shares no split.</summary>
+        public static PanelInput FellowInWindow(PanelInput input, TimeWindow w)
+        {
+            var rows = FellowDayRows(input, w, input);
+            if (rows == null) return null;
+            var t = new DamageTally();
+            foreach (var r in rows) t.Dealt["|" + r.Cause + "|" + r.Type] = r.Amount;
+            var c = input.ShallowCopy();
+            c.DamageSinceInstall = t; c.BiomeSinceInstall = null; c.BiomeFromUtc = null;
+            c.Window = new DayView { Window = w, From = DayFrom(input, w), To = LocalToday(input) };
+            return c;
+        }
+
+        /// <summary>A fellow's day window is open on their book: Battle > Damage, when their copy splits its days (0.9, FellowDayRows).</summary>
+        public static bool FellowDaysOpen(PanelInput input, TimeWindow w) => input != null && !input.IsSelf && IsDayWindow(w) && input.DayDealt != null;
+
+        /// <summary>
+        /// 0.9 (Joost: Today's numbers looked unrelated to Session's): the one line of a day window that shows fellow players' numbers, once per
+        /// page. A fellow's day is their whole local day as they shared it, also the part before you came online; Session counts from your start
+        /// (WindowFellowSession). <paramref name="who"/>: one fellow's name on their own book; null = the group ("each player's").
+        /// </summary>
+        public static string DayWindowLine(TimeWindow w, string who = null)
+        {
+            var whose = who == null ? "each player's" : who + "'s";
+            return w == TimeWindow.Today ? "Today counts " + whose + " whole day, also before you came online."
+                 : WindowShort(w) + " counts " + whose + " whole days, also when you were not online.";
+        }
+        /// <summary>The version that first shares days by weapon kind and type (OlderLine names it when a copy has only the day totals).</summary>
+        public const string NeedsDayTypes = "0.9.0";
+
         /// <summary>The start of a window in UTC (a day window: local midnight of its first day; a short window: Cutoff; Session and All: null).</summary>
         public static DateTime? WindowStartUtc(PanelInput input, TimeWindow w)
         {
@@ -176,15 +230,58 @@ namespace Hearthwoven.Panel
             return n;
         }
 
+        /// <summary>
+        /// 0.8.2: your held blocks and parries in a window of this session's log (EventLog.Guard, a minute each), as Defence reads them: a minute
+        /// counts when any part of it lies in the window, Session from <paramref name="sessionFrom"/> (a fellow's book: your session's start).
+        /// Null when the log keeps no minutes of them (a copy from before 0.8.2: their blocks are one untimed tally).
+        /// </summary>
+        public static SessionEvents GuardIn(EventLog log, TimeWindow w, DateTime nowUtc, DateTime? sessionFrom = null)
+        {
+            if (log == null || !log.GuardKept) return null;
+            var ev = new SessionEvents();
+            foreach (var kv in log.Guard)
+            {
+                var p = LogKeys.Of(kv.Key).P;   // minute|block or minute|parry
+                if (p.Length < 2 || !InFilter(p[0], "", w, "", nowUtc, log.Span, sessionFrom)) continue;
+                if (p[1] == EventLog.GuardBlock) ev.Blocks += (int)kv.Value; else if (p[1] == EventLog.GuardParry) ev.Parries += (int)kv.Value;
+            }
+            return ev;
+        }
+
         /// <summary>A window with nothing in it on a page that counts days (Voyages, Deeds): says the window and where more is.</summary>
         static Block DayEmpty(PanelInput input, TimeWindow w) =>
             Empty(w == TimeWindow.Session ? NothingYet + " this session" : "Nothing " + (w == TimeWindow.Today ? "today" : "in the " + WindowLabel(w).ToLowerInvariant()), DayEmptyLine);
         public const string DayEmptyLine = "Choose a longer window, or All for everything.";
 
         /// <summary>The line of a page that leaves something out in a day window, because that thing has no days.</summary>
+        /// <summary>
+        /// 0.8.2 (I; Joost's friend on 0.6.5, whose Battle pages showed parts empty without a reason): what a fellow's page needs from their
+        /// Hearthwoven, part by part, the version that first sent what the part reads (0.7 and 0.8.0 were never released alone: in the wild an
+        /// older copy is 0.6.5 or 0.8.1):
+        ///   NeedsLive (0.7): 10 min to 3 h on Battle (live updates, FellowShortWhy); NeedsFoeCounts (0.8.0): the "×N" counts and marks on Damage >
+        ///   By foe and Defense; NeedsFeed (0.8.2): Battle > Feed and Last fight; NeedsGuard (0.8.2): blocks and parries in a fellow's Session.
+        /// A page whose part is missing for that reason says it once, in one form (OlderLine). Foes, Overview and Deaths read only the minute log
+        /// and the totals, which 0.6.5 already sends: they need nothing newer.
+        /// </summary>
+        public const string NeedsLive = "0.7.0", NeedsFoeCounts = "0.8.0", NeedsFeed = "0.8.2", NeedsGuard = "0.8.2";
+
+        /// <summary>A fellow's copy comes from a Hearthwoven older than <paramref name="need"/> (a copy that names no version, or one that cannot be read,
+        /// is not called older).</summary>
+        public static bool OlderThan(PanelInput i, string need) => i != null && !i.IsSelf && VersionOf(i.ModVersion) is System.Version v && VersionOf(need) is System.Version n && v < n;
+        static System.Version VersionOf(string s)
+        {
+            var digits = new string((s ?? "").TakeWhile(c => char.IsDigit(c) || c == '.').ToArray()).Trim('.');   // "0.8.2-rc1" -> "0.8.2"
+            return System.Version.TryParse(digits.Contains(".") ? digits : digits + ".0", out var v) ? v : null;
+        }
+
+        /// <summary>The one line a fellow's page says when part of it waits for their Hearthwoven (0.8.2, I): "Tor's Hearthwoven is 0.6.5: this page
+        /// fills in once they update." <paramref name="fills"/>: what fills in, with its verb ("the ×N counts fill in").</summary>
+        public static string OlderLine(PanelInput i, string fills = "this page fills in") =>
+            Name(i) + "'s Hearthwoven is " + (string.IsNullOrEmpty(i?.ModVersion) ? "older" : i.ModVersion) + ": " + fills + " once they update.";
+
+        /// <summary>A fellow's Session on Defense when their copy keeps no minutes of their blocks (GuardIn null: a Hearthwoven before 0.8.2).</summary>
+        public static string FellowBlocksAll(PanelInput i) => OlderLine(i, "blocks and parries here fill in");
         public const string NoDaysServerBook = "The server's cargo book has no days: choose All to see it.",
-                            NoDaysBlocks = "Blocks and parries show in Session and longer windows.",
-                            FellowBlocksAll = "Other players' blocks and parries show in All.",
                             ClippedLine = "A very full day kept only its largest kinds: a few small ones may be missing here.",
                             ClippedMinuteLine = "A very busy minute kept only its largest kinds: a few small ones may be missing here.";
         /// <summary>The clipped line of a window: a day row's or (a short window) a minute's.</summary>

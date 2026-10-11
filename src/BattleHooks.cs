@@ -15,6 +15,10 @@ namespace Hearthwoven
     ///   - the creature's network object destroyed (ZDOMan.HandleDestroyedZDO, which every PC runs: FoeGone);
     ///   - once a second (Tick, from Plugin.Update): a fight ends after a minute without hits, waiting kills and destroys are settled.
     /// Players and tamed creatures are never foes here (they stay in the damage tally as before).
+    /// 0.9 (work/hearthwoven-0.8.5/fights/DESIGN.md): each hit also says whether the foe is a boss (Character.IsBoss, the same flag that gives it the
+    /// game's boss bar, EnemyHud) and where it stood (Spot: the arena rule, on this PC only); held blocks and parries come from FeatsHooks' block
+    /// hook, your deaths from ClientHooks' death hook; once a second Watch reads whether you are in an interior and which (dungeon runs) and the
+    /// bosses loaded here (their health, for boss fights a fellow started).
     ///
     /// Battle.DealtAfterArmour (off by default, a developer setting; ARMOUR-SCOPE.md section 7): your damage after the foe's resistances and
     /// armour, measured where the game applies them, on the PC that controls the foe. When that PC is yours it is recorded here; when it is a
@@ -47,7 +51,7 @@ namespace Hearthwoven
             if (hit == null || !Foe(target)) return;
             var z = target.GetZDOID(); if (z.IsNone()) return;
             var id = Of(z); var rec = Plugin.Battle; Wire(rec);
-            rec.Dealt(DateTime.UtcNow, id, kind, target.m_name, ClientHooks.Biome(), hit.m_damage);
+            rec.Dealt(DateTime.UtcNow, id, kind, target.m_name, ClientHooks.Biome(), hit.m_damage, target.IsBoss(), SpotOf(target));
             ReadAttackers(ZDOMan.instance?.GetZDO(z), id, rec);
         }
 
@@ -61,7 +65,7 @@ namespace Hearthwoven
             {
                 var id = Of(hit.m_attacker);
                 var a = hit.GetAttacker();
-                if (a != null) { if (Foe(a)) rec.Received(DateTime.UtcNow, id, source, a.m_name, ClientHooks.Biome(), hit.m_damage); }
+                if (a != null) { if (Foe(a)) rec.Received(DateTime.UtcNow, id, source, a.m_name, ClientHooks.Biome(), hit.m_damage, a.IsBoss(), SpotOf(a)); }
                 else if (rec.Knows(id)) rec.Received(DateTime.UtcNow, id, null, null, ClientHooks.Biome(), hit.m_damage);   // no longer loaded: the kind as first seen
                 return;
             }
@@ -69,6 +73,24 @@ namespace Hearthwoven
             if (slot < 0 || dot[slot].Id.IsNone || Time.time - dot[slot].At >= 30f) return;   // the same 30 s as ClientHooks.Source
             rec.Received(DateTime.UtcNow, dot[slot].Id, dot[slot].Kind, dot[slot].Token, ClientHooks.Biome(), hit.m_damage);
         }
+
+        /// <summary>0.9: where a creature stands, for the arena rule (this PC only, never shared or saved).</summary>
+        internal static Spot SpotOf(Component c)
+        {
+            if (c == null) return default;
+            var p = c.transform.position;
+            return new Spot(p.x, p.y, p.z);
+        }
+
+        /// <summary>0.9: a block of yours that held (FeatsHooks.Block), against the foe whose hit it was; a parry by the game's rule.</summary>
+        internal static void Blocked(HitData hit, Character attacker, bool parry)
+        {
+            if (hit == null || hit.m_attacker.IsNone() || (attacker != null && !Foe(attacker))) return;
+            Plugin.Battle.Blocked(DateTime.UtcNow, Of(hit.m_attacker), parry);
+        }
+
+        /// <summary>0.9: you died (ClientHooks.Died): counted in the running fight, every open boss fight and the dungeon run you are in.</summary>
+        internal static void Died() => Plugin.Battle.Died(DateTime.UtcNow);
 
         // who set you burning (fire, spirit) or poisoned you: the ticks carry no attacker (ClientHooks.DotSource keeps the prefab, this the creature)
         struct Dot { public FoeId Id; public string Kind, Token; public float At; }
@@ -131,6 +153,7 @@ namespace Hearthwoven
             {
                 var rec = Plugin.Battle; Wire(rec); var utc = DateTime.UtcNow; rec.Tick(utc);
                 if (rec.FightOn && now >= nextNear) { nextNear = now + BattleRecorder.NearEvery; NearYou(rec, utc); }
+                if (!Panel.SampleMode.On) Watch(rec, utc);
             }
             catch (Exception e) { HookGuard.Fail(e, "BattleHooks.Tick"); }
         }
@@ -152,6 +175,42 @@ namespace Hearthwoven
                 rec.Near(utc, p.GetPlayerName(), BattleRecorder.NearEvery);
             }
         }
+
+        /// <summary>
+        /// 0.9, once a second. Dungeon runs: you are in an interior by the game's own rule (Character.InInterior: y above 3000, where Location.Awake
+        /// builds every dungeon, 5000 m above its entrance); which one is the location of that zone (Location.GetZoneLocation, the game's own lookup
+        /// for a point inside), named by its prefab ("Crypt2") and its own label when it has one (m_discoverLabel, "$location_dvergrboss"), looked
+        /// up only when the zone changes. Boss fights: every boss loaded here
+        /// (Character.GetAllCharacters, the game's list on this PC; IsBoss), its health left (GetHealthPercentage: the creature's network record,
+        /// synced to every PC) and place. Reads only; no allocation but the place name once per interior.
+        /// </summary>
+        static void Watch(BattleRecorder rec, DateTime utc)
+        {
+            var me = Player.m_localPlayer; if (me == null) return;
+            var at = me.transform.position;
+            if (Character.InInterior(at))
+            {
+                var zone = Spot.ZoneOf(at.x, at.z);
+                if (placeKind == null || zone != placeZone)
+                {
+                    placeZone = zone;
+                    var loc = Location.GetZoneLocation(at);
+                    placeKind = loc != null ? Utils.GetPrefabName(loc.gameObject) : "Interior";
+                    placeToken = loc != null ? loc.m_discoverLabel : null;   // the label the game itself uses for a found place (Player.UpdateBiome)
+                }
+                rec.Inside(utc, placeKind, zone, placeToken);
+            }
+            else { placeKind = null; rec.Inside(utc, null, 0); }
+            var all = Character.GetAllCharacters(); if (all == null) return;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var c = all[i];
+                if (c == null || !c.IsBoss() || c.IsDead() || !Foe(c)) continue;
+                var z = c.GetZDOID(); if (z.IsNone()) continue;
+                rec.BossSeen(utc, Of(z), Prefab(c), c.m_name, c.GetHealthPercentage(), SpotOf(c));
+            }
+        }
+        static string placeKind, placeToken; static long placeZone;
 
         // ---------- the game's kill message and the destroyed creature ----------
 
@@ -330,10 +389,27 @@ namespace Hearthwoven
             try
             {
                 var rec = Plugin.Battle; Wire(rec); rec.Tick(DateTime.UtcNow);
-                input.Battle = rec; input.FoeBook = Plugin.FoeBook; input.FoesSince = Plugin.FoesSince; input.FoesPending = Plugin.FoesPending(); input.FoesFromUtc = Plugin.FoesFromUtc;
+                input.Battle = rec; input.BossLog = Plugin.BossLog; input.FoeBook = Plugin.FoeBook; input.FoesSince = Plugin.FoesSince; input.FoesPending = Plugin.FoesPending(); input.FoesFromUtc = Plugin.FoesFromUtc;
                 if (DealtAfterArmour) { input.DealtArmourSession = Plugin.DealtArmour; input.DealtArmourMinutes = Plugin.DealtArmourMinutes; }
             }
             catch (Exception e) { HookGuard.Fail(e, "BattleHooks.Into"); }
+            // 0.9: the fight pages' book (FightAdapter): this session's group fights, boss fights and runs from every record, then the saved ones;
+            // none at all: null, and Last fight keeps its 0.8 page
+            try
+            {
+                var book = FightAdapter.Build(Plugin.FightSides(), Plugin.BossLog, Plugin.RunLog, DateTime.UtcNow, PlaceName);
+                input.Fights = book.Fights.Count > 0 ? book : null;
+            }
+            catch (Exception e) { input.Fights = null; HookGuard.Fail(e, "BattleHooks.Into fights"); }
+        }
+
+        /// <summary>A dungeon's name in the player's language from the game's own label for it ("$location_dvergrboss": "Infested Citadel"); null:
+        /// the game has none for it (the page names the land and "dungeon").</summary>
+        static string PlaceName(string kind, string token)
+        {
+            if (string.IsNullOrEmpty(token) || Localization.instance == null) return null;
+            var name = Localization.instance.Localize(token);
+            return string.IsNullOrEmpty(name) || name.StartsWith("$") || name.StartsWith("[") ? null : name;
         }
     }
 }

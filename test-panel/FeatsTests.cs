@@ -62,6 +62,7 @@ static class FeatsTests
         PanelInput JoostWall() { var jw = Joost(); if (jw != null) jw.Character["BuildClusterDefense"] = 3; return jw; }
         PanelState Feats(string page, string sel = null, string player = "") =>
             new PanelState { Chapter = Chapter.Feats, Player = player, FeatSel = sel ?? "", Page = { [Chapter.Feats] = page } };
+        var brewers = Brewers(when); var seven = Brewers(when, "Ylva", "Bryn", "Sigrid");
         (string name, PanelInput inp, PanelState st)[] shots = new (string name, PanelInput inp, PanelState st)[]
         {
             ("feats", full, Feats("earned")),
@@ -76,6 +77,8 @@ static class FeatsTests
             ("feats-together-early", FeatsSample.EarlyGroup(when), Feats("together", "copperwed")),   // 0.7: the Swamp's feats wait, Copper Wed to Tin under its riddle, The Hall Well Fed I
             ("feats-together-wellfed", FeatsSample.EarlyGroup(when), Feats("together", "wellfed")),
             ("feats-together-tor", tor, Feats("together", "bogiron", "Tor")),   // a fellow's book: the same group numbers
+            ("feats-together-meadhall", brewers, Feats("together", "meadhall")),   // 0.8.2: everyone who brewed (four), never "+3 more"
+            ("feats-together-meadhall-seven", seven, Feats("together", "meadhall")),   // 0.8.2: seven brewers, the legend in columns, the area taller
             ("feats-overview", full, Deeds(null)),
             ("feats-defense", tor, new PanelState { Chapter = Chapter.Battle, Player = "Tor", Page = { [Chapter.Battle] = "defense" } }),
             ("feats-tor", tor, Feats("earned", player: "Tor")),
@@ -87,10 +90,40 @@ static class FeatsTests
         {
             var v = PanelModel.Build(s.inp, s.st);
             if (s.name.StartsWith("feats-joost", StringComparison.Ordinal)) PanelModel.AddPlayers(v, s.inp.PlayerName, new[] { s.inp.PlayerName }, "", true);   // his own book, alone that evening
-            else PanelModel.AddPlayers(v, "Rowan", group, s.st.Player, true, bookKey: s.st.BookKey);
+            else PanelModel.AddPlayers(v, "Rowan", s.inp == seven ? group.Concat(SevenMore).ToArray() : group, s.st.Player, true, bookKey: s.st.BookKey);
             return "  \"" + s.name + "\": " + PanelModel.ToJson(v, islands: true);
         }));
     }
+    /// <summary>The fellows a group of seven adds to the world's four (sample names, never a real player's).</summary>
+    public static readonly string[] SevenMore = { "Ylva", "Bryn", "Sigrid" };
+
+    /// <summary>
+    /// 0.8.2 (Joost in game: The Mead Hall's "Who brewed" ended in "+3 more"): the world with every fellow brewing mead bases, so the Mead Hall's
+    /// crew holds the four of them; with <paramref name="more"/> names, as many more fellows who share and only brew (each Tor's shared copy under
+    /// their own name and id, its counters emptied but for their mead bases), so the crew holds seven and the other feats stay the world's.
+    /// </summary>
+    public static PanelInput Brewers(DateTime when, params string[] more)
+    {
+        var (full, _) = World(when);
+        var mead = new Dictionary<string, float> { ["Edda"] = 7, ["Tor"] = 5, ["Finch"] = 3, ["Ylva"] = 4, ["Bryn"] = 2, ["Sigrid"] = 1 };
+        var tor = full.Fellows.First(f => f.PlayerName == "Tor");
+        long id = 900;
+        foreach (var name in more)
+        {
+            var f = tor.ShallowCopy();
+            f.PlayerName = name; f.PlayerId = ++id; f.FellowKey = null; f.Events = new SessionEvents(); f.Fellows = null;
+            f.ItemsCrafted = new Dictionary<string, float>(); f.Character = new Dictionary<string, float>(); f.ItemsPickedUp = new Dictionary<string, float>(); f.PiecesPlaced = new Dictionary<string, float>();
+            full.Fellows.Add(f);
+        }
+        foreach (var f in full.Fellows)
+        {
+            f.ItemsCrafted = new Dictionary<string, float>(f.ItemsCrafted ?? new Dictionary<string, float>());
+            if (mead.TryGetValue(f.PlayerName, out var n)) f.ItemsCrafted["$item_meadbasehealth"] = n;
+        }
+        foreach (var f in full.Fellows) f.Fellows = full.Fellows.Where(x => x != f).Concat(new[] { full }).ToList();
+        return full;
+    }
+
     // ---------- Joost's real book (feats-real): the 0.6 RC on his own character showed "0 of 16 earned" ----------
 
     /// <summary>

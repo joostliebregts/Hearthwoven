@@ -67,13 +67,13 @@ static class DefenceTypesTests
               pics["Tree"].Tone == "type" && pics["Tree"].Icon == "vocab:dmg-blunt" && pics["Tree"].Value == "<1",
               "defence (B25): every source has a picture: Lox its trophy, Bat the foe mark, Smoke and a falling tree the swatch of their damage type");
 
-        // Your armour (own book): each foe row's types carry what reached you of what hit your armour, adding up to the row
+        // Your armour (own book): each foe row's types carry what got through and what your armor stopped, adding up to the row (what reached your armor)
         var world = PanelSample.Full(now);
         var bst = new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.Session }; bst.Page[Chapter.Battle] = "defense"; bst.View["Battle/defense/view"] = PanelModel.ArmourId;
         var foes = PanelModel.Content(PanelModel.Build(world, bst)).FirstOrDefault(b => b.Kind == "armour" && b.Title == PanelModel.ArmourByFoe);
-        Check(foes != null && foes.Items.Count > 0 && foes.Items.All(f => f.Items.Count > 0 && f.Items.All(p => p.Title != null && p.Value != null && p.Value2 != null && p.Value2 != "0") &&
-              Math.Abs(f.Items.Sum(p => Count(p.Value)) - Count(f.Value)) < 0.01 && Math.Abs(f.Items.Sum(p => Count(p.Value2)) - Count(f.Value2)) < 0.01),
-              "defence types: Your armour's foe rows give per damage type what reached you of what hit your armour, adding up to the row");
+        Check(foes != null && foes.Items.Count > 0 && foes.Items.All(f => f.Items.Count > 0 && f.Items.All(p => p.Title != null && p.Value != null && p.Value2 != null && Count(p.Value) + Count(p.Value2) > 0 &&
+              p.Text.EndsWith(" %")) && Math.Abs(f.Items.Sum(p => Count(p.Value) + Count(p.Value2)) - Count(f.Value)) < 0.01),
+              "defence types: Your armour's foe rows give per damage type what got through and what your armor stopped (its line the share stopped), adding up to the row");
         return fails;
     }
 }

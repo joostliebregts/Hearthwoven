@@ -233,7 +233,7 @@ namespace Hearthwoven.Panel
             {
                 PlayerName = s.PlayerName, PlayerId = s.PlayerId, NowUtc = s.NowUtc, SessionStartUtc = s.SessionStartUtc, ToLocal = s.ToLocal, IsSelf = s.IsSelf,
                 Character = ch, ItemsCrafted = new Dictionary<string, float>(s.ItemsCrafted) { ["$item_trinketbronzehealth"] = 1 }, PiecesPlaced = placed, ItemsPickedUp = s.ItemsPickedUp, EnemyKills = s.EnemyKills,
-                SkillLevels = s.SkillLevels, SkillProgress = s.SkillProgress, ItemKind = s.ItemKind, StationDish = s.StationDish, GatherKind = s.GatherKind,
+                SkillLevels = s.SkillLevels, SkillProgress = s.SkillProgress, ItemKind = s.ItemKind, StationDish = s.StationDish, GatherKind = s.GatherKind, Rock = s.Rock, TreeOf = s.TreeOf,
                 PieceKind = t => t.StartsWith("$piece_sapling_") ? "planted" : oldKind(t),
                 Session = s.Session, Events = s.Events, Log = s.Log, Fellows = s.Fellows, PlayerNames = s.PlayerNames, Book = s.Book ?? CargoSample.Book(s.PlayerName),   // 0.6: born near (Deeds > Taming)
                 DisplayName = t => DeedsNames.TryGetValue(t, out var n) ? n : oldName(t),

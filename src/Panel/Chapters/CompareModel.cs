@@ -27,13 +27,13 @@ namespace Hearthwoven.Panel
         public const string CompareTarget = "compare:toggle";
         /// <summary>The change mark's arrows and words (never green or red: the mark does not judge).</summary>
         public const string CompareUp = "▲ ", CompareDown = "▼ ", CompareNew = "new", CompareSame = "same", CompareUnderOne = "<1 %";
-        public const string CompareNowHead = "now", CompareBeforeHead = "before";
         /// <summary>The bar colour of a row that is a thing, not an item or a damage type (a tree, a weapon, a foe): the ranking's gold.</summary>
         public const string CompareRowColour = "#e8a948";
         /// <summary>At most this many rows per block; the rest as "Other (n kinds)", as the bar form folds.</summary>
         public const int CompareMaxRows = 9;
 
-        public const string CompareNeedsDay = "Compare needs a day window. Pick Today or 7 days to set it beside the one before.";
+        /// <summary>The greyed chip's reason on All, Session and the short windows (Joost, 0.8.1: "needs a day window" confused; plain words now).</summary>
+        public const string CompareNeedsDay = "Compare sets today beside yesterday, or 7 days beside the 7 before. Pick Today or 7 days.";
         public const string CompareOwnBook = "Compare works in your own book.";
         public const string CompareArmourLine = "What your armor stopped is shown for this period only.";
         /// <summary>0.8, with the Everyone chip (PICKS.md section 3: only Battle > Damage By player compares the group, from the fellows' damage
@@ -60,8 +60,20 @@ namespace Hearthwoven.Panel
             : c == Chapter.Battle ? page == "damage" || page == "defense"
             : c == Chapter.Voyages && (page == "sailing" || page == "cargo");
 
-        /// <summary>"the 7 days before", "yesterday": what the number before is, where it stands beside a number now.</summary>
-        public static string BeforeLabel(TimeWindow w) => w == TimeWindow.Today ? "yesterday" : "the " + DaysOf(w) + " days before";
+        /// <summary>"yesterday", "the 7 before": what the number before is, where it stands beside a number now, and the compare rows' column head
+        /// over it. 0.8.1 (Joost): the heads name the periods, not "now" and "before".</summary>
+        public static string BeforeLabel(TimeWindow w) => w == TimeWindow.Today ? "yesterday" : "the " + DaysOf(w) + " before";
+
+        /// <summary>"today", "these 7 days": the compare rows' column head over the numbers now.</summary>
+        public static string NowLabel(TimeWindow w) => w == TimeWindow.Today ? "today" : "these " + DaysOf(w) + " days";
+
+        /// <summary>A hero number's comparison as one line after it (Joost, 0.8.1: "new" sat over "0 yesterday" like a label): a change mark leads,
+        /// "▲ 12 % from 86 yesterday"; "new" and "same" follow the number before, "0 yesterday · new". MarkFirst says where the mark goes.</summary>
+        public static (bool markFirst, string words) HeroCompare(Block n)
+        {
+            var then = n.Before + (string.IsNullOrEmpty(n.BeforeLabel) ? "" : " " + n.BeforeLabel);
+            return ChangeParts(n.Change).dir != 0 ? (true, "from " + then) : (false, then + " ·");
+        }
 
         /// <summary>"7 days against the 7 before", "today against yesterday".</summary>
         static string Against(TimeWindow w) => w == TimeWindow.Today ? "today against yesterday" : DaysOf(w) + " days against the " + DaysOf(w) + " before";
@@ -229,7 +241,8 @@ namespace Hearthwoven.Panel
                 if (w == TimeWindow.SinceInstall && IsDayWindow(state.Window) && view.Windows.Any(c => c.Id == state.Window.ToString())) w = state.Window;   // a greyed day window pressed (B17)
             }
             var p = new ComparePeriods { Window = w ?? TimeWindow.SinceInstall };
-            if (!input.IsSelf) return Greyed(p, Name(input) + " shares totals, not days, so there is no earlier stretch to set beside this one. " + CompareOwnBook);
+            if (!input.IsSelf) return Greyed(p, (input.DayDealt != null ? Name(input) + "'s copy shares damage dealt per day, not the day history Compare reads. "   // 0.9: their Damage has days now
+                                                                         : Name(input) + " shares totals, not days, so there is no earlier stretch to set beside this one. ") + CompareOwnBook);
             // 0.8 the Everyone chip: the group's page compares only on Battle > Damage, By player (each fellow's damage dealt per day)
             var group = ShowsEveryone(input, state, view.Page) || view.EveryoneOn;   // Meals draws its own group view (MealsModel.cs)
             if (group && !(view.Active == Chapter.Battle && view.Page == "damage")) return Greyed(p, CompareEveryoneOff);
@@ -546,7 +559,7 @@ namespace Hearthwoven.Panel
                 rows.Add((shape, n, v, nv, bv));
             }
             if (rows.Count == 0) return b;
-            if (rows.Count > CompareMaxRows)   // the smallest past the ninth as one quiet row, summed when the amounts are counts
+            if (rows.Count > CompareMaxRows && look != RowLook.Person)   // the smallest past the ninth as one quiet row, summed when the amounts are counts; people never fold (0.8.2: everyone shows)
             {
                 var rest = rows.Skip(CompareMaxRows - 1).ToList(); rows = rows.Take(CompareMaxRows - 1).ToList();
                 double rn = rest.Sum(r => r.n), rv = rest.Sum(r => r.v);
@@ -566,7 +579,8 @@ namespace Hearthwoven.Panel
                 };
             }).ToList();
             var cmp = new Block { Kind = CompareRowsKind, Id = b.Id, Icon = keepCap && b.Kind != "dmgmix" ? b.Icon : null, Title = keepCap ? b.Title : null, Value = keepCap ? b.Value : null, Note = keepCap ? (b.Kind == "sources" ? b.Text : b.Note) : null,
-                                  Text = head ?? (keepCap ? null : b.Title), Src = b.Src, Source = b.Source, Items = items };
+                                  Text = head ?? (keepCap ? null : b.Title), Src = b.Src, Source = b.Source, Items = items,
+                                  NowHead = NowLabel(x.Window), BeforeHead = x.BeforeLabel };   // the column heads name the periods ("today", "yesterday")
             if (total && keepCap && string.IsNullOrEmpty(cmp.Value) && kind != "time") cmp.Value = NAtLeast(rows.Sum(r => r.n));   // the foes' sum, as the cap's total
             if (!string.IsNullOrEmpty(cmp.Value) && keepCap)
             {

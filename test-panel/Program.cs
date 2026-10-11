@@ -429,9 +429,9 @@ Check(PanelModel.AboutRows.Any(r => r.label == "Feats" && r.text.StartsWith("A m
       PanelModel.Content(aboutReads).SelectMany(b => b.Items ?? new List<Block>()).Any(r => r.Kind == "readrow" && r.Title == "Feats"),
       "About > What it reads: one row says what a feat is, that none is a rank, and what Unsung means");
 Check(aboutSharing.Heading == "Sharing" && PanelModel.Content(aboutSharing).SelectMany(b => b.Items ?? new List<Block>()).Where(b => b.Kind == "readrow").Select(b => b.Title).SequenceEqual(new[] { "What fellow players see", "Turn sharing on or off", "What stays private", "Where your counts go" }) &&
-      aboutText.Contains("You see theirs the same way") && aboutText.Contains("ShareWithGroup") && aboutText.Contains("nobody sees yours") && aboutText.Contains("Where you died and which worlds you played") && aboutText.Contains("Remove Hearthwoven.dll") && !aboutText.Contains("(co-op)") &&
+      aboutText.Contains("You see theirs the same way") && aboutText.Contains("ShareWithGroup") && aboutText.Contains("nobody sees yours") && aboutText.Contains("never see where you died, which worlds you played, or the name of a player who does not share") && aboutText.Contains("Remove Hearthwoven.dll") && !aboutText.Contains("(co-op)") &&
       PanelModel.AboutRows.Any(r => r.label == "Feats" && r.text.Contains("A title is earned by its own count") && r.text.Contains("no combined score")) && PanelModel.AboutRows.All(r => r.label != "Titles"),
-      "ISC-6 About > Sharing: what fellow players see, how to switch it (the setting and where), what stays private, where the counts go, how to uninstall; the Titles line moved to What it reads, under Feats");
+      "ISC-6 About > Sharing: what fellow players see, how to switch it (the setting and where), what stays private (0.8.2: the names of players who do not share too), where the counts go, how to uninstall; the Titles line moved to What it reads, under Feats");
 // K5 (SOURCES.md fix 4): says once what comes from the character (every world; misses co-op hits in a fellow player's area and pickups onto a
 // carried stack) and that Hearthwoven counts since install, except Battle's time windows; never "this book shows the current session"
 Check(aboutText.Contains("in every world") && aboutText.Contains("a fellow player's PC hosts") && aboutText.Contains("onto a stack you already carry") &&
@@ -518,9 +518,25 @@ Check(eddaBattle.Scope == "All biomes · all foes · Edda, last shared, 8 Oct 00
     {
         edda.ViewerSessionStartUtc = b33Mid; edda.OnThisSession = true;
         var b33Cut = PanelModel.Damage(edda.Log, TimeWindow.Session, "", edda.NowUtc, PanelModel.SessionFrom(edda));
-        var b33Def = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.Session, Page = { [Chapter.Battle] = "defense" } });
-        Check(!PanelModel.Content(b33Def).Any(b => b.Kind == "guard") && PanelModel.AllText(b33Def).Contains(PanelModel.FellowBlocksAll),
-              "REVIEW-07 #2: a fellow's blocks and parries (one tally of their whole session) leave Session and say so, never counted from before you came in");
+        // 0.8.2 (Joost: "Other players' blocks and parries show in All. Why?"): their blocks and parries per minute (EventLog.Guard) are cut at
+        // your session's start as their damage is; a copy from before 0.8.2 (one untimed tally of their whole session) leaves Session and says so
+        var guardKeep = (new Dictionary<string, float>(edda.Log.Guard), edda.Log.GuardKept);
+        try
+        {
+            edda.Log.Guard.Clear(); edda.Log.GuardKept = true;
+            string Min(int m) => EventLog.Bucket(b33Mid.AddMinutes(m));
+            edda.Log.Guard[Min(-5) + "|block"] = 7; edda.Log.Guard[Min(-5) + "|parry"] = 2;   // before you came in
+            edda.Log.Guard[Min(2) + "|block"] = 3; edda.Log.Guard[Min(2) + "|parry"] = 1;     // after
+            var b33Def = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.Session, Page = { [Chapter.Battle] = "defense" } });
+            var b33Guard = Find(b33Def, "guard");
+            edda.Log.GuardKept = false;
+            var b33Old = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.Session, Page = { [Chapter.Battle] = "defense" } });
+            Check(b33Guard != null && b33Guard.Value == "2" && b33Guard.Value2 == "1" && !PanelModel.AllText(b33Def).Contains(PanelModel.FellowBlocksAll(edda)) &&
+                  !PanelModel.Content(b33Old).Any(b => b.Kind == "guard") && PanelModel.AllText(b33Old).Count(t => t.StartsWith("Edda's Hearthwoven is " + edda.ModVersion + ": blocks and parries")) == 1,
+                  "0.8.2 blocks: a fellow's Session counts their blocks and parries from your session's start (2 blocks + 1 parry, not the 7 + 2 before you came in); a copy from before 0.8.2 leaves them out and says it once: " +
+                  PanelModel.AllText(b33Old).FirstOrDefault(t => t.StartsWith("Edda's Hearthwoven is")));
+        }
+        finally { edda.Log.Guard.Clear(); foreach (var kv in guardKeep.Item1) edda.Log.Guard[kv.Key] = kv.Value; edda.Log.GuardKept = guardKeep.Item2; }
         edda.OnThisSession = false;
         var b33Off = PanelModel.Build(edda, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.Session, Page = { [Chapter.Battle] = "damage" } });
         Check(b33Rows.Count > 1 && b33Cut.Count > 0 && b33Cut.Count < b33Rows.Count && b33Cut.All(r => r.Bucket.AddMinutes(edda.Log.Span) > b33Mid) &&
@@ -534,8 +550,9 @@ var stale = PanelModel.Build(oldCopy, new PanelState { Chapter = Chapter.Battle,
 Check(stale.Windows.Where(w => !w.Disabled).Select(w => w.Id).SequenceEqual(new[] { "Session" }) && stale.Windows.Count == 9 && stale.HeadingWindow == null && PanelModel.AllText(stale).Any(s => s.Contains("8 Oct 00:05")) && !PanelModel.AllText(stale).Contains("No damage received"),
       "snapshot: a fellow's book offers only the window it can show (their last shared session; the others greyed, not dropped) and says when the copy is from, not that nothing happened");
 var staleOv = PanelModel.Build(oldCopy, new PanelState { Chapter = Chapter.Battle });
-Check(staleOv.WindowWhy?.EndsWith("Edda shares the last session only") == true && !PanelModel.StepView(new PanelState { Chapter = Chapter.Battle }, staleOv, 1) && !staleOv.Keys.Any(k => k.EndsWith("Window")),
-      "snapshot: the greyed window chips say why (Joost 2026-10-09; 0.8 layout D+: their hover reason), and the view key does not cycle into a greyed window");
+Check(staleOv.WindowWhy?.EndsWith(PanelModel.SharedWindowsLine(oldCopy)) == true && staleOv.WindowWhy.StartsWith("Edda's Hearthwoven is " + oldCopy.ModVersion + ": 10 min to 3 h fill in once they update.") && staleOv.WindowWhy.EndsWith("Days and totals are not shared.") &&
+      !PanelModel.StepView(new PanelState { Chapter = Chapter.Battle }, staleOv, 1) && !staleOv.Keys.Any(k => k.EndsWith("Window")),
+      "snapshot: the greyed window chips say why (Joost 2026-10-09; 0.8 layout D+: their hover reason; 0.8.2: " + staleOv.WindowWhy + "), and the view key does not cycle into a greyed window");
 edda.Fellows = new List<PanelInput> { input }; input.Fellows = new List<PanelInput> { edda };
 var cooking = Show(input, Chapter.Deeds, "cooking");
 Check(cooking.Heading == "Cooking" && Find(cooking, "ranking").Items.Single().Title == "Edda" && Find(cooking, "ranking").Items.Single().Value == "2" && Find(cooking, "ranking").Note == null && Find(cooking, "ranking").Src == "fellows",
@@ -568,7 +585,7 @@ Check(foodNow.Items.Single(e => e.Kind == "end" && e.Tone == "right").Value == "
 Check(Show(eddaNow, Chapter.Deeds).Scope == "Edda, as of 8 Oct 00:00" && Show(edda, Chapter.Deeds).Scope == "Edda, last shared, 8 Oct 00:05",
       "K3 scope (0.7 overview, RecordedScope): a since-install copy says as of its latest record, never since install; an older copy still says last shared");
 var eddaFoes = Show(eddaNow, Chapter.Battle, "foes", s => s.Window = TimeWindow.SinceInstall);
-Check(Find(eddaFoes, "foetable").Items.Select(r => r.Value).SequenceEqual(new[] { "900", "40" }) && eddaFoes.StripNote == "Edda, as of 8 Oct 00:00" && eddaFoes.WindowWhy == "Edda shares the last session and the totals" &&
+Check(Find(eddaFoes, "foetable").Items.Select(r => r.Value).SequenceEqual(new[] { "900", "40" }) && eddaFoes.StripNote == "Edda, as of 8 Oct 00:00" && eddaFoes.WindowWhy == PanelModel.SharedWindowsLine(eddaNow) && eddaFoes.WindowWhy.EndsWith(" Days are not shared.") &&
       Show(eddaNow, Chapter.Battle).Scope.EndsWith("Edda, last shared, 8 Oct 00:00"),
       "K3 battle (0.7): a fellow's Foes read their damage since install, dated as of their latest record (never \"since install\"); the windowed overview keeps last shared");
 var bare = PanelInput.FromSnapshot("{\"name\":\"Finch\"}");
@@ -661,7 +678,7 @@ explorer.History = null;
 // "Choose a longer window, or All for everything since install"): one calm empty state, its heading and one line, nothing above or under it
 var quietDef = PanelModel.Build(explorer, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastThirtyMinutes, Page = { [Chapter.Battle] = "defense" } });
 var quietDefText = PanelModel.Content(quietDef).Where(b => b.Kind == "empty" || b.Kind == "note").ToList();
-Check(quietDefText.Count == 1 && quietDefText[0].Kind == "empty" && quietDefText[0].Title == "Nothing in the last 30 minutes" && quietDefText[0].Text == PanelModel.NoDaysBlocks &&
+Check(quietDefText.Count == 1 && quietDefText[0].Kind == "empty" && quietDefText[0].Title == "Nothing in the last 30 minutes" && quietDefText[0].Text == PanelModel.DayEmptyLine &&
       !PanelModel.AllText(quietDef).Any(t => t.Contains("since install")),
       "B19: an empty 30 minutes on Defence is one empty state with one line: " + string.Join(" | ", quietDefText.Select(b => b.Title + " / " + b.Text)));
 explorer.KnownBiomes = null;
@@ -902,15 +919,20 @@ fails += BattleFilterTests.Run();   // Battle's filters: the biome tiles, Damage
 fails += BuildingFacetTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // the same bar on Deeds > Building (test-panel/BuildingFacetTests.cs)
 fails += BarFormTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.7: the one bar form's colours, list and numbers (test-panel/BarFormTests.cs)
 fails += CookingFacetTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // the same bar on Deeds > Cooking (test-panel/CookingFacetTests.cs)
+fails += LegendFilterTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.8.2: a bar's legend items filter as its parts do, every bar of a filtered page filters or says why not (test-panel/LegendFilterTests.cs)
 fails += MealsTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.8.1 Deeds > Meals: what each player ate, split by who cooked it (test-panel/MealsTests.cs)
 fails += SortTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // the sort control over the item lists (test-panel/SortTests.cs)
+fails += ManyKindsTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.8.1: a long-played book with hundreds of kinds: every list folds (test-panel/ManyKindsTests.cs)
 fails += GatherTests.Run();   // B12: what counts as wood and mining (test-panel/GatherTests.cs)
+fails += TreeNamesTests.Run();   // 0.8.2: a tree the book has no word for by the game's name, its logs folded in (test-panel/TreeNamesTests.cs)
+fails += RocksTests.Run(now);   // 0.8.2: Mining's pickaxe hits per rock by the game's names, split rocks as one, the rest one quiet row (test-panel/RocksTests.cs)
 fails += UxTests.Run(now);   // 0.8: the skill beside its component, the growth lines from the day history (test-panel/UxTests.cs)
 fails += UnderOneTests.Run();   // 0.6.5: an amount between 0 and 1 says "under 1", never "0" (test-panel/UnderOneTests.cs)
 fails += ReviewFixTests.Run();   // 0.6.5 review fixes, one test each (test-panel/ReviewFixTests.cs)
 fails += NavTests.Run(input);   // Backspace: back to the page you came from (test-panel/NavTests.cs)
 fails += FeatsTests.Run();   // Feats: the table, noticing, the ledger, the page with its detail area, Known for, the band (test-panel/FeatsTests.cs)
 fails += GroupFeatsTests.Run();   // 0.7 group feats: the gate, the veil, one sum without double counting, tiers that stick, "knownBiomes" in the snapshot (test-panel/GroupFeatsTests.cs)
+fails += EveryoneShownTests.Run(now);   // 0.8.2: no list of people says "+N more" or folds a person away; a fold of things is a click (test-panel/EveryoneShownTests.cs)
 var textGroup = Sample(); textGroup.PlayerId = 11; textGroup.Fellows = CompanyFellows(now);   // Company with three sharing
 var textSamples = new (string, PanelInput)[] { ("sample", input), ("voyager", voyager), ("battle", Program.BattleSample()), ("deeds", DeedsTests.Rich(input)), ("company", textGroup), ("edda", edda), ("edda-since", eddaNow) };   // edda-since (0.7): a copy with their since-install totals
 fails += PanelTextTests.Run(textSamples);   // every label fits, no "at least" (test-panel/PanelTextTests.cs)
@@ -924,16 +946,24 @@ fails += LedTests.Run(now);   // 0.6: Heavy Keel best load and the animals led, 
 fails += ArmourPanelTests.Run(now);   // 0.7: Defence's Received / Your armour switch (test-panel/ArmourPanelTests.cs)
 fails += BattleRecPanelTests.Run(now);   // 0.8: the battle record as the Battle pages read it (test-panel/BattleRecPanelTests.cs)
 fails += BattleFeedTests.Run(now);   // 0.8: the battle pages: x N only where counted, the feed's view kept, the last fight's fellows (test-panel/BattleFeedTests.cs)
+fails += FellowFeedTests.Run(now);   // 0.8.2: a fellow's Feed and Last fight as their copy shares it, in their words; an older copy; their Session from yours (test-panel/FellowFeedTests.cs)
+fails += FellowWindowsTests.Run(now);   // 0.8.2 (H): a live fellow's 10 min to 3 h from their minute log (their pages, Everyone); a copy not live keeps them greyed with why (test-panel/FellowWindowsTests.cs)
+fails += DayTypesPanelTests.Run(now);   // 0.9: Everyone's Damage on Today to 30 days from each fellow's day split by weapon kind and type, the whole-day line, an older copy's total row, a friend's own days (test-panel/DayTypesPanelTests.cs)
+fails += OlderCopyTests.Run(now);   // 0.8.2 (I): a copy from an older Hearthwoven: one line per page that misses something, in one form, none on this build's (test-panel/OlderCopyTests.cs)
+fails += RejoinTests.Run(now);   // 0.8.2 (J): a fellow who reconnected during yours keeps their earlier connection's fights in your Session; foe counts add up (test-panel/RejoinTests.cs)
+fails += KeptLogTests.Run(now);   // 0.8.2: your minutes kept across a restart: 1 h and 3 h reach back, Session does not; a fellow's kept minutes count once (test-panel/KeptLogTests.cs)
 fails += DefenceTypesTests.Run(now);   // 0.7 ISC-22: Defence > Received from per foe per damage type (test-panel/DefenceTypesTests.cs)
 fails += SelfCheckTests.Run();   // Dev.SelfCheck bookkeeping, the filter key Tab and the clash scan (test-panel/SelfCheckTests.cs)
 fails += PerfTests.Run();   // Dev.SelfCheck: the frame-cost meter and its one-minute line (test-panel/PerfTests.cs)
 fails += PerfPassTests.Run();   // 0.8: the idle frame, the JSON writer, the log key cache, the meter's bytes, the bench numbers (test-panel/PerfPassTests.cs)
+fails += HoverCostTests.Run(now);   // 0.8.2: the damage bars' hover makes no object per part, the page's one tag (test-panel/HoverCostTests.cs)
 fails += AwayTests.Run(now);   // 0.7: Company > Since you were away opens itself once after a long break; the story never says 0 (test-panel/AwayTests.cs)
 fails += FellowPanelTests.Run();   // same-name fellows each with a chip and a colour; the singleplayer line (test-panel/FellowPanelTests.cs)
 fails += EveryoneTests.Run(now);   // 0.8: the Everyone chip's group view adds up, its greyed windows and pages say why (test-panel/EveryoneTests.cs)
 fails += UsSpellingTests.Run();   // 0.8.1: US spelling (armor, defense, color, gray): no British form in a string literal of src/ (test-panel/UsSpellingTests.cs)
 fails += RichTextTests.Run(textSamples);   // richtext-fix: no model string holds a tag; tags only via Rich, rich text only via the kind map (test-panel/RichTextTests.cs)
 fails += CompareTests.Run(now);   // 0.8: Compare periods, this period beside the one before (test-panel/CompareTests.cs)
+fails += FightPagesTests.Run(now);   // 0.9: the fight pages add up every way, the outcome words, Runs and bosses nested, bring next time (test-panel/FightPagesTests.cs)
 
 var dump = Array.IndexOf(args, "--dump");
 if (dump >= 0 && dump + 1 < args.Length)
@@ -1000,9 +1030,15 @@ if (dump >= 0 && dump + 1 < args.Length)
                               "battle-damage-foe-compare", "everyone-battle-damage-compare", "everyone-woodcutting-compare-greyed" }) scenarios[n] = scenarios["deeds-woodcutting-compare"];
     var stokerS = Scenario("hall-smelters-stoker", "case: the group's smelters fed by Stoker's Chests (a smelter mod): 21 put in by hand, 1 650 by the chests", stoker);
     scenarios["feats-titles-stoker"] = scenarios["hall-smelters-stoker"];
+    // 0.8.2 (Joost in game: The Mead Hall's "Who brewed" ended in "+3 more"): FeatsTests.Brewers, every fellow brewing; then three more who share
+    scenarios["feats-together-meadhall"] = "case: every fellow brewed mead bases, so The Mead Hall's crew holds all four";
+    scenarios["feats-together-meadhall-seven"] = "case: a group of seven (Ylva, Bryn and Sigrid share and brew too), so The Mead Hall's crew holds seven";
     var emptyS = Scenario("battle-empty", "empty: a first evening with Hearthwoven, nothing measured yet", fresh);
     scenarios["battle-feed-empty"] = scenarios["battle-empty"];
     scenarios["deeds-meals-empty"] = "empty: a first evening with Hearthwoven, nothing eaten yet (Deeds > Meals)";
+    var mealsOutside = PanelSample.Full(now);   // Ylva, who does not share, cooked a bread and two fish wraps Rowan ate; a feast set out by someone not around the fire
+    SessionEvents.Add(mealsOutside.Events.AteFoodMadeBy, "Ylva|Bread", 1); SessionEvents.Add(mealsOutside.Events.AteFoodMadeBy, "Ylva|FishWraps", 2); SessionEvents.Add(mealsOutside.Events.AteFromFeastOf, "999|FeastMeadows", 1);
+    var mealsOutsideS = Scenario("everyone-meals-outside", "case: a cook outside the group (Ylva does not share) by name in gray, a feast whose maker is not known as Another player", mealsOutside);
     // 0.8.1 review 1: a fellow with a longer name whose copy is not live, so their group row says "as of" beside it: the name gives way, never the date
     var finchAsOf = PanelSample.Full(now); foreach (var f in finchAsOf.Fellows.Where(f => f.PlayerName == "Finch")) f.Timed = false;
     var finchAsOfS = Scenario("everyone-woodcutting-asof", "case: Finch sends no live updates, so their row says when their copy is from beside a longer name", finchAsOf);
@@ -1024,6 +1060,10 @@ if (dump >= 0 && dump + 1 < args.Length)
     var laterS = Scenario("deeds-farming-later", "install-later: the picked counters were first read two days after the install", installLater);
     var bigS = Scenario("deeds-farming-big", "stress: a long-played character, thousands of crops", DeedsTests.Big(Sample()));
     var layeredS = Scenario("deeds-farming-layered", "case: the live Flax case, the game's planted counter beside every plant counted", DeedsTests.Layered(Sample()));
+    // 0.8.1 (Joost's PC: his 385 piece kinds drew 2 630 objects on Building): a long-played book with hundreds of kinds, so render-check sees the folds
+    var manyKindsS = Scenario("deeds-building-manykinds", "stress: a long-played book with a mod-heavy hammer (400 piece kinds on 30 tabs): the grid folded, its last tile the Show all button", ManyKindsTests.World(now));
+    scenarios["deeds-building-manykinds-bycategory"] = "stress: the same book By category: the tabs past eight fold into one Other group, each group's grid short, ending on Show all";
+    scenarios["deeds-building-manykinds-showall"] = "stress: the same book after Show all: every piece, the full list as before 0.8.1 (this visit only)";
     var moddedHallS = Scenario("deeds-building-modded", "case: Joost's modded hammer in game (0.6.2): nineteen tabs with \"Misc\" and \"Misc.\", twenty materials; the bars fold past eight parts", BuildingSample.Modded(PanelSample.Full(now)));
     // salvage (0.8): the old hall taken down and a new one begun, few pieces built yet, so the materials recovered sit in view (the world's hall is too long
     // for the shot): three kinds as the bar form, and one kind as one tile; no game data for the pieces' tabs, so no filter bar
@@ -1037,6 +1077,8 @@ if (dump >= 0 && dump + 1 < args.Length)
                             Rebuild(new Dictionary<string, float> { ["$piece_woodwall"] = 24, ["$piece_stonewall1x1"] = 6 }, null));
     var rebuildOneS = Scenario("deeds-building-recovered-one", "case: one stone corner taken down: 24 stone recovered, one kind as one tile",
                                Rebuild(new Dictionary<string, float> { ["$piece_stonewall1x1"] = 6 }, new Dictionary<string, float> { ["$item_stone"] = 24 }));
+    var miningHeroS = Scenario("deeds-mining-hero", "case: Mining's long hero, stone and ore brought in, pickaxe hits with their date, the Pickaxes skill and its growth line (0.8.2: one baseline, the skill on the first line)", RocksTests.HeroScenario(now));
+    var rocksS = Scenario("deeds-mining-rocks", "case: a pickaxe on a tin deposit, plain rocks (one broken into its pieces), a stump and a berry bush (0.8.2)", RocksTests.Scenario(now));
     var recentEmpty = PanelSample.Full(now); recentEmpty.Deeds = new DeedLog(); recentEmpty.SessionStartUtc = now.AddMinutes(-4);   // a session four minutes old: nothing gathered yet
     var recentEmptyS = Scenario("deeds-recent-empty", "empty: a session four minutes old, nothing gathered yet (Deeds > Recent)", recentEmpty);
     // 0.7: Company > Since you were away (Chapters/AwayModel.cs): back after a break, the fellows' marks as your PC last saw them (AwayTests.Scenario)
@@ -1062,7 +1104,40 @@ if (dump >= 0 && dump + 1 < args.Length)
     Hearthwoven.Panel.BattleSample.Session(longFoe, now, new[] { "Edda", "Tor" }, new[] { "Edda", "Tor", "Finch" });
     var longFoeS = Scenario("battle-damage-foe-long", "case: three Greydwarf Shamans in the last fight: a long foe name with its \"×3\" in By foe and Last fight (REVIEW-081 #7)", longFoe);
     scenarios["battle-lastfight-long"] = scenarios["battle-feed-long"] = scenarios["battle-damage-foe-long"];
+    // 0.8.2 (the hover's cost, HoverCostTests): a long feed, 100 more foes in the session in 20 fights of five, the newest FeedTop drawn, every
+    // part's name and number on hover through the page's one tag
+    var feed100S = Scenario("battle-feed-100", "case: a long feed: 100 more foes in this session, 20 fights of five, each hit with three damage types; the newest 40 drawn (HoverCostTests.LongFeed)", HoverCostTests.LongFeed(now));
+    // 0.8.2 (Joost in game, Battle > Foes: The Queen's Dealt read "12 6…"): a long-played book whose top foes dealt 123 456 and 12 645, so the
+    // Dealt column shows a 6-digit number with its space beside a full bar (render-check measures the column's room against "123 456")
+    var bigFoes = PanelSample.Full(now);
+    bigFoes.DamageSinceInstall.Dealt["SeekerQueen|Bows|pierce"] = 98000; bigFoes.DamageSinceInstall.Dealt["SeekerQueen|Swords|slash"] = 25456;
+    bigFoes.DamageSinceInstall.Dealt["SeekerBrute|Swords|slash"] = 12645;
+    bigFoes.DamageSinceInstall.Dealt["Greydwarf_Shaman|Swords|slash"] = 3400; bigFoes.DamageSinceInstall.Dealt["Charred_Archer|Swords|slash"] = 2900;   // the longest foe names (0.8.2: the name box fits them)
+    { var foe = bigFoes.Foe; bigFoes.Foe = p => p == "SeekerQueen" ? new PanelModel.FoeData { Trophy = "TrophySeekerQueen", Modifiers = { ["pierce"] = "Resistant", ["fire"] = "Weak" } } : p == "SeekerBrute" ? new PanelModel.FoeData { Trophy = "TrophySeekerBrute", Modifiers = { ["frost"] = "Weak" } } : foe?.Invoke(p);
+      var dn = bigFoes.DisplayName; bigFoes.DisplayName = k => k == "SeekerQueen" ? "The Queen" : k == "SeekerBrute" ? "Seeker Soldier" : k == "Charred_Archer" ? "Charred Marksman" : dn?.Invoke(k); }
+    var bigFoesS = Scenario("battle-foes-big", "case: a long-played book whose top foes dealt 123 456 (The Queen) and 12 645 (Seeker Soldier): 6- and 5-digit numbers whole in the Dealt column; Greydwarf Shaman and Charred Marksman, the longest foe names, whole", bigFoes);
     var torBeforeS = Scenario("tor-battle-damage-foe-before", "case: Tor was playing before you came in: Tor's counts per foe show in All", torBefore);
+    // 0.9 fight pages (Chapters/FightPages.cs): the fight book the fight adapter will fill (v09-fights), not in the world yet (PanelSampleFights.cs)
+    var fightsLiveS = Scenario("battle-bossfight", "case (0.9): the fight pages' sample, The Queen fought now in the Infested Citadel (the fights are not in the world until the fight adapter lands)", FightsSample.With(PanelSample.Full(now), true));
+    var fightsAfterS = Scenario("battle-lastfight-group", "case (0.9): the fight pages' sample after the fights: the newest a Greydwarf camp", FightsSample.With(PanelSample.Full(now), false));
+    foreach (var n in new[] { "battle-bossfight-open", "battle-bossfight-numbers", "battle-bossfight-stacked", "battle-runs", "battle-fight-bonemass", "battle-fight-queen-reset", "battle-run-mine" }) scenarios[n] = scenarios["battle-bossfight"];
+    // 0.8.2 (H): Edda logged out five minutes ago, so her copy is not live: 10 min to 3 h greyed, the pointer on 10 min shows why
+    var eddaOff = books["Edda"].ShallowCopy(); eddaOff.Trail = null; eddaOff.ReceivedUtc = now.AddMinutes(-5);
+    var eddaOffS = Scenario("edda-battle-offline", "case: Edda's last update came five minutes ago (not playing now): her 10 min to 3 h greyed, the reason under 10 min", eddaOff);
+    // 0.8.2 (I): Edda's copy as Hearthwoven 0.6.5 sends it (SampleWorld.OlderJson): the pages that miss something say it once
+    var eddaOld = SampleWorld.Share(SampleWorld.Make(now).owns[SampleWorld.Edda], now, "0.6.5"); var eddaBook = books["Edda"];
+    eddaOld.Fellows = eddaBook.Fellows; eddaOld.NowUtc = eddaBook.NowUtc; eddaOld.ViewerName = eddaBook.ViewerName; eddaOld.PlayerNames = eddaBook.PlayerNames; eddaOld.Trail = eddaBook.Trail;
+    eddaOld.ServerLive = true; eddaOld.Timed = false; eddaOld.OnThisSession = eddaBook.OnThisSession; eddaOld.ViewerSessionStartUtc = eddaBook.ViewerSessionStartUtc; eddaOld.ReceivedUtc = eddaBook.ReceivedUtc;
+    var eddaOldS = Scenario("edda-old-battle-defense", "case: Edda's copy as Hearthwoven 0.6.5 sends it: Defense says once what fills in when she updates", eddaOld);
+    scenarios["edda-old-battle-feed"] = "case: Edda's copy as Hearthwoven 0.6.5 sends it: no feed, and the one line why";
+    // 0.8.2 (J): Edda on 0.6.5 reconnected after her fights, so her new connection's copy has an empty log; the trail joins her earlier
+    // connection's under it, so her Session's Foes still show them (test-panel/RejoinTests.cs)
+    var eddaNew = eddaOld.ShallowCopy(); eddaNew.SessionId = "s2"; eddaNew.Log = new EventLog { Span = eddaOld.Log.Span, GuardKept = false }; eddaNew.Session = new DamageTally(); eddaNew.RecordedFromLog();
+    var eddaRejoin = new FellowTrail(eddaOld, now.AddMinutes(-30)); eddaRejoin.Add(eddaNew, now.AddMinutes(-20));
+    var eddaRejoined = eddaRejoin.Joined(eddaNew); eddaRejoined.Trail = eddaBook.Trail;
+    var eddaRejoinedS = Scenario("edda-rejoined-battle-foes", "case: Edda (Hearthwoven 0.6.5) reconnected after her fights: her new copy's log is empty, her Session's Foes still show them from her earlier connection", eddaRejoined);
+    bool FoeRows(PanelInput b) => PanelModel.Content(PanelModel.Build(b, As("Edda", Chapter.Battle, "foes", s => { s.Window = TimeWindow.Session; s.WindowPicked = true; }))).Any(x => x.Kind == "foetable");
+    Check(FoeRows(eddaRejoined) && !FoeRows(eddaNew), "J preview: Edda's Session Foes after her reconnect show her earlier connection's fights; her new copy alone showed none");
     PanelState Battle(TimeWindow w, string page = null, Dictionary<string, List<string>> facets = null)
     {
         var s = new PanelState { Chapter = Chapter.Battle, Window = w }; if (page != null) s.Page[Chapter.Battle] = page;
@@ -1070,7 +1145,7 @@ if (dump >= 0 && dump + 1 < args.Length)
         return s;
     }
     PanelState Armour(TimeWindow w) { var s = Battle(w, "defense"); s.View["Battle/defense/view"] = PanelModel.ArmourId; return s; }
-    PanelState FoesOpen(string foe) { var s = Battle(TimeWindow.Session, "foes"); s.View[PanelModel.FoeOpenKey] = foe; return s; }   // 0.7: a foe's ranking open
+    PanelState FoesOpen(string foe, TimeWindow w = TimeWindow.Session) { var s = Battle(w, "foes"); s.View[PanelModel.FoeOpenKey] = foe; return s; }   // 0.7: a foe's ranking open
     var swamp = new Dictionary<string, List<string>> { [PanelModel.BattleOverviewFilter + "|biome"] = new List<string> { "Swamp" } };
     PanelState Page(Chapter c, string page, Action<PanelState> more = null) { var s = new PanelState { Chapter = c }; if (page != null) s.Page[c] = page; more?.Invoke(s); return s; }
     PanelState Together(string category = null, string window = null) => Page(Chapter.Company, "together", s => { if (category != null) s.View["Company/together/category"] = category; if (window != null) s.View["Company/together/window"] = window; });
@@ -1080,6 +1155,13 @@ if (dump >= 0 && dump + 1 < args.Length)
     void Numbers(PanelState s) => s.ShowNumbers = true;   // 0.7: the About these numbers box open (the Y key)
     PanelState Numbered(PanelState s) { s.ShowNumbers = true; return s; }
     PanelState Ev(PanelState s) { s.Everyone = true; return s; }   // 0.8: the Everyone chip on
+    // 0.8.2: a part chosen from its legend item: that row's own target (BarFormOf, PartTarget) followed, as a press on it does in game
+    Action<PanelState> FromLegend(string bar, string part) => s =>
+    {
+        var v = PanelModel.Build(world, Page(s.Chapter, s.PageOf(s.Chapter)));
+        var b = PanelModel.Content(v).SelectMany(x => x.Kind == "filterbar" ? x.Items : new List<Block> { x }).First(x => (x.Kind == "facetbar" || x.Kind == "composition") && x.Title == bar);
+        PanelModel.FollowFacet(s, PanelModel.PartTarget(b, PanelModel.BarFormOf(b.Items).Rows.First(r => r.Title == part).Part));
+    };
     var shots = new (string name, PanelInput inp, PanelState st, bool sharing)[]
     {
         ("battle-10min", world, Battle(TimeWindow.LastTenMinutes), true),
@@ -1112,8 +1194,11 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("tor-meals", books["Tor"], As("Tor", Chapter.Deeds, "meals"), true),
         ("everyone-meals", world, Ev(Page(Chapter.Deeds, "meals")), true),
         ("everyone-meals-player", world, Ev(Page(Chapter.Deeds, "meals", s => s.View["Deeds/meals/group"] = PanelModel.MealsPlayerView)), true),
+        ("everyone-meals-outside", mealsOutsideS, Ev(Page(Chapter.Deeds, "meals")), true),
         ("deeds-cooking-open", world, Page(Chapter.Deeds, "cooking", s => s.OpenFilters.Add(PanelModel.CookFilter)), true),
         ("deeds-cooking-stamina", world, Page(Chapter.Deeds, "cooking", s => s.Facets[PanelModel.CookFilter + "|boost"] = new List<string> { "stamina" }), true),
+        ("deeds-cooking-meals", world, Page(Chapter.Deeds, "cooking", FromLegend("By type", "Meals")), true),   // 0.8.2: Meals chosen from By type's legend item
+        ("deeds-cooking-bykind", world, Page(Chapter.Deeds, "cooking", FromLegend(PanelModel.DishesByKind, "Carrot Soup")), true),   // 0.8.2: one dish chosen from Dishes by kind
         ("deeds-young", youngS, Page(Chapter.Deeds, null), true),
         ("deeds-unsung", youngS, Page(Chapter.Deeds, null, s => s.View["Deeds/overview/view"] = "unsung"), true),
         ("company", world, Page(Chapter.Company, null), true),
@@ -1147,7 +1232,8 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-foes", world, Battle(TimeWindow.Session, "foes"), true),
         ("battle-foes-type", world, Page(Chapter.Battle, "foes", s => s.View["Battle/foes/view"] = "type"), true),
         ("battle-foes-open", world, FoesOpen("Draugr"), true),   // 0.7: a foe's ranking open under its row
-        // 0.8 (Chapters/BattleFeedModel.cs): Damage by foe, the battle feed in its three views, the last fight, a fellow's greyed feed
+        ("battle-foes-open-hover", world, FoesOpen("Draugr"), true),   // 0.8.2 (Joost: the hover on every part): the pointer on Frost Arrow's Frost part, wide enough for its 52, its tag "Frost 52"
+        // 0.8 (Chapters/BattleFeedModel.cs): Damage by foe, the battle feed in its three views, the last fight, a fellow's feed (0.8.2: shared)
         ("battle-damage-foe", world, Page(Chapter.Battle, "damage", s => s.View["Battle/damage/view"] = "foe"), true),
         ("battle-damage-foe-all", world, Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.SinceInstall; s.View["Battle/damage/view"] = "foe"; }), true),
         ("battle-damage-foe-hover", world, Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.SinceInstall; s.View["Battle/damage/view"] = "foe"; }), true),   // 0.8 damage rows (PANEL_HOVER): the pointer on Greydwarf's Frost sliver, too narrow for its number: the number in its share's place
@@ -1156,6 +1242,16 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-feed-cards-less", feedLessS, Page(Chapter.Battle, PanelModel.FeedPage, s => s.View[PanelModel.FeedViewKey] = PanelModel.FeedCards), true),   // 0.8.1: "blunt <1" stays on one line
         ("battle-feed-timeline", world, Page(Chapter.Battle, PanelModel.FeedPage, s => s.View[PanelModel.FeedViewKey] = PanelModel.FeedTimeline), true),
         ("battle-feed-empty", emptyS, Page(Chapter.Battle, PanelModel.FeedPage), true),
+        // 0.9 fight pages (Chapters/FightPages.cs): A the fight (live, a boss row open, the group's, an attempt), C Runs and bosses, D a run
+        ("battle-bossfight", fightsLiveS, Page(Chapter.Battle, PanelModel.LastFightPage), true),
+        ("battle-bossfight-open", fightsLiveS, Page(Chapter.Battle, PanelModel.LastFightPage, s => s.View["Battle/" + PanelModel.LastFightPage + "/open"] = "SeekerQueen"), true),
+        ("battle-bossfight-numbers", fightsLiveS, Page(Chapter.Battle, PanelModel.LastFightPage, Numbers), true),
+        ("battle-bossfight-stacked", fightsLiveS, Page(Chapter.Battle, PanelModel.LastFightPage, s => s.View[PanelModel.FightLayoutKey] = PanelModel.FightStacked), true),   // the other layout, for Joost to pick
+        ("battle-lastfight-group", fightsAfterS, Page(Chapter.Battle, PanelModel.LastFightPage), true),
+        ("battle-runs", fightsLiveS, Page(Chapter.Battle, PanelModel.RunsPage), true),
+        ("battle-fight-bonemass", fightsLiveS, Page(Chapter.Battle, "fight:bonemass-1"), true),
+        ("battle-fight-queen-reset", fightsLiveS, Page(Chapter.Battle, "fight:queen-2"), true),
+        ("battle-run-mine", fightsLiveS, Page(Chapter.Battle, "fight:mine-1"), true),
         // 0.8.1 (Joost: "Battle feed, why can't I filter this?"): the window chips and the Biome and Foe rows; Foe = Troll open, so the fight of five
         // shows its Troll only ("1 of 5 foes"), and the last hour in Cards
         ("battle-feed-foe-troll", world, Page(Chapter.Battle, PanelModel.FeedPage, s => { s.Facets[PanelModel.FeedFilter + "|foe"] = new List<string> { "Troll" }; s.OpenFilters.Add(PanelModel.FeedFilter); }), true),
@@ -1164,8 +1260,14 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-damage-foe-long", longFoeS, Page(Chapter.Battle, "damage", s => s.View["Battle/damage/view"] = "foe"), true),   // REVIEW-081 #7: "Greydwarf Shaman ×3" whole
         ("battle-lastfight-long", longFoeS, Battle(TimeWindow.Session, PanelModel.LastFightPage), true),
         ("battle-feed-long", longFoeS, Battle(TimeWindow.Session, PanelModel.FeedPage), true),   // 0.8.1 the Log's damage bars: the last fight with five foes, three of them Greydwarf Shamans
+        ("battle-feed-100", feed100S, Battle(TimeWindow.Session, PanelModel.FeedPage), true),   // 0.8.2: a long feed, the page's one hover tag over 40 bars (HoverCostTests)
         ("battle-lastfight-numbers", world, Numbered(Battle(TimeWindow.Session, PanelModel.LastFightPage)), true),
         ("tor-battle-feed", books["Tor"], As("Tor", Chapter.Battle, PanelModel.FeedPage), true),
+        // 0.8.2 (Joost on a fellow's book: "why no feed? I want that in", "same for last fight"): Edda's feed and last fight as her copy shares them,
+        // Rowan as "Rowan (you)", Ylva (who does not share) as another player
+        ("edda-battle-feed", books["Edda"], As("Edda", Chapter.Battle, PanelModel.FeedPage), true),
+        ("edda-battle-feed-cards", books["Edda"], As("Edda", Chapter.Battle, PanelModel.FeedPage, s => s.View[PanelModel.FeedViewKey] = PanelModel.FeedCards), true),
+        ("edda-battle-lastfight", books["Edda"], As("Edda", Chapter.Battle, PanelModel.LastFightPage), true),
         ("battle-foes-keys", world, Page(Chapter.Battle, "foes", s => s.View[PanelModel.FoeCursorKey] = "Troll"), true),   // 0.8: the keys' cursor on Troll: its focus ring, every factor shown
         ("battle-defense", world, Battle(TimeWindow.Session, "defense"), true),
         // the day history (HISTORY-06.md): the one window set on the pages Joost asked for
@@ -1228,10 +1330,15 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("deeds-woodcutting", world, Page(Chapter.Deeds, "woodcutting"), true),
         ("deeds-woodcutting-hover", world, Page(Chapter.Deeds, "woodcutting"), true),   // 0.8 hover (PANEL_HOVER): the pointer on Corewood
         ("deeds-mining", world, Page(Chapter.Deeds, "mining"), true),
+        ("deeds-mining-rocks", rocksS, Page(Chapter.Deeds, "mining"), true),
+        ("deeds-mining-hero", miningHeroS, Page(Chapter.Deeds, "mining"), true),   // 0.8.2: the one-hero rule on Mining's long labels   // 0.8.2: the per-rock list by the game's names, the rest one quiet row
         ("deeds-building", world, Page(Chapter.Deeds, "building"), true),
         ("deeds-building-furniture-finewood", world, Page(Chapter.Deeds, "building", s => { s.Facets["Deeds/building/pieces|tab"] = new List<string> { "Furniture" }; s.Facets["Deeds/building/pieces|material"] = new List<string> { "Fine wood" }; }), true),
         ("deeds-building-open", world, Page(Chapter.Deeds, "building", s => s.OpenFilters.Add(PanelModel.BuildFilter)), true),
         ("deeds-building-modded", moddedHallS, Page(Chapter.Deeds, "building", s => s.OpenFilters.Add(PanelModel.BuildFilter)), true),
+        ("deeds-building-manykinds", manyKindsS, Page(Chapter.Deeds, "building"), true),
+        ("deeds-building-manykinds-bycategory", manyKindsS, Page(Chapter.Deeds, "building", s => s.View["Deeds/building/sort"] = PanelModel.SortGroup), true),
+        ("deeds-building-manykinds-showall", manyKindsS, Page(Chapter.Deeds, "building", s => s.ShowAll = PanelModel.ShowAllKey(s)), true),
         ("deeds-building-recovered", rebuildS, Page(Chapter.Deeds, "building"), true),          // 0.8: materials recovered, the bar form
         ("deeds-building-recovered-one", rebuildOneS, Page(Chapter.Deeds, "building"), true),   // 0.8: one kind, one tile
         ("deeds-building-focus", world, Page(Chapter.Deeds, "building", s => { s.FilterRow = 1; s.FilterCursor = 2; s.Facets["Deeds/building/pieces|tab"] = new List<string> { "Building", "Stonecutter" }; }), true),
@@ -1268,6 +1375,16 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("tor-battle-defense", books["Tor"], As("Tor", Chapter.Battle, "defense"), true),   // ISC-22: a fellow's Received from, per foe per damage type
         ("tor-battle-damage-foe", books["Tor"], As("Tor", Chapter.Battle, "damage", s => s.View["Battle/damage/view"] = "foe"), true),   // REVIEW-08 #2: a fellow's By foe in Session
         ("tor-battle-damage-foe-before", torBeforeS, As("Tor", Chapter.Battle, "damage", s => s.View["Battle/damage/view"] = "foe"), true),
+        // 0.8.2 (H; Joost on a friend's Battle > Foes: "Why are there no 10 min and 30 min on my friend's stats?"): Edda's copy is live, so her 10 min is open
+        ("edda-battle-foes-10min", books["Edda"], As("Edda", Chapter.Battle, "foes", s => { s.Window = TimeWindow.LastTenMinutes; s.WindowPicked = true; }), true),
+        ("edda-battle-damage-10min", books["Edda"], As("Edda", Chapter.Battle, "damage", s => { s.Window = TimeWindow.LastTenMinutes; s.WindowPicked = true; }), true),
+        ("edda-battle-damage-today", books["Edda"], As("Edda", Chapter.Battle, "damage", s => { s.Window = TimeWindow.Today; s.WindowPicked = true; s.View["Battle/damage/view"] = "type"; }), true),   // 0.9: her days from her shared parts, the whole-day line
+        ("edda-battle-offline", eddaOffS, As("Edda", Chapter.Battle, "damage", s => { s.Window = TimeWindow.LastTenMinutes; s.WindowPicked = true; }), true),   // PANEL_HOVER: the pointer on 10 min
+        // 0.8.2 (I): a friend on Hearthwoven 0.6.5: one line where a page misses something
+        ("edda-old-battle-defense", eddaOldS, As("Edda", Chapter.Battle, "defense"), true),
+        ("edda-old-battle-feed", eddaOldS, As("Edda", Chapter.Battle, PanelModel.FeedPage), true),
+        // 0.8.2 (J; Joost, a friend's Foes empty in Session after the friend reconnected): her earlier connection's fights, joined
+        ("edda-rejoined-battle-foes", eddaRejoinedS, As("Edda", Chapter.Battle, "foes", s => { s.Window = TimeWindow.Session; s.WindowPicked = true; }), true),
         ("sharing-off", world, Page(Chapter.Deeds, null), false),
         // 0.7 redesign (REDESIGN-RULES.md part 2, step 8): every page of part 5 with its "About these numbers" box open (Y). A page that has
         // not migrated yet builds no box, so its -numbers shot is its plain page; Battle's on All, where the periods differ
@@ -1321,8 +1438,17 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("everyone-battle-damage", world, Ev(Battle(TimeWindow.LastHour, "damage")), true),
         ("everyone-battle-damage-weapon", world, Ev(Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.LastHour; s.View["Battle/damage/group"] = "weapon"; })), true),
         ("everyone-battle-damage-type", world, Ev(Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.Session; s.View["Battle/damage/group"] = "type"; })), true),   // types down, players across (group-battle b)
-        ("everyone-battle-damage-7days", world, Ev(Battle(TimeWindow.SevenDays, "damage")), true),   // fellows share damage dealt per day as a total: By player only
+        ("everyone-battle-damage-7days", world, Ev(Battle(TimeWindow.SevenDays, "damage")), true),   // 0.9: each fellow's days by weapon kind and type: By player with splits, By weapon, By type
+        ("everyone-battle-damage-today", world, Ev(Battle(TimeWindow.Today, "damage")), true),   // 0.9: By player with every row's split, and the one line that each player's whole day counts
+        ("everyone-battle-damage-today-weapon", world, Ev(Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.Today; s.View["Battle/damage/group"] = "weapon"; })), true),
+        ("everyone-battle-damage-today-type", world, Ev(Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.Today; s.View["Battle/damage/group"] = "type"; })), true),
         ("everyone-battle-defense", world, Ev(Battle(TimeWindow.SinceInstall, "defense")), true),
+        // 0.8.2 (Joost in game, Battle > Foes, 1 h: "switch between my friends"): a row per foe kind for the group, its Dealt bar split by player; the
+        // open foe with Who hit it on top of Best and Worst; the pointer on Edda's part of the top foe's bar (PANEL_HOVER)
+        ("everyone-battle-foes", world, Ev(Battle(TimeWindow.LastHour, "foes")), true),
+        ("everyone-battle-foes-open", world, Ev(FoesOpen("Draugr", TimeWindow.LastHour)), true),
+        ("everyone-battle-foes-hover", world, Ev(Battle(TimeWindow.LastHour, "foes")), true),
+        ("battle-foes-big", bigFoesS, Battle(TimeWindow.SinceInstall, "foes"), true),   // 0.8.2: "123 456" and "12 645" whole beside their bars
         ("everyone-voyages-sailing", world, Ev(Page(Chapter.Voyages, "sailing")), true),
         ("everyone-voyages-cargo", world, Ev(Page(Chapter.Voyages, "cargo")), true),
         ("everyone-voyages-onfoot", world, Ev(Page(Chapter.Voyages, "onfoot")), true),
@@ -1423,7 +1549,7 @@ if (dump >= 0 && dump + 1 < args.Length)
     Check(groupSparks.Count == 0, "group pages: no growth line on any Everyone page (" + (groupSparks.Count == 0 ? "none of " + shots.Count(x => x.st.Everyone) + " shots with Everyone on" : string.Join(", ", groupSparks)) + ")");
     Check(islandsOff.Count == 0, "islands: every block of every preview page sits in exactly one island, none lost, none twice (" + islandsOff.Count + " off)");
     // 0.8 hover (BarHover, PICKS 4 B): a hovered-state shot names the bar (its place among the page's bars with a list) and the part the pointer is on
-    js += "window.PANEL_HOVER = {\"deeds-woodcutting-hover\": {\"bar\": 0, \"part\": 1}, \"battle-damage-hover\": {\"bar\": 0, \"part\": 5}, \"battle-damage-foe-hover\": {\"bar\": 1, \"part\": 3}, \"company-away-3days-hover\": {\"aw\": \"wood\", \"bar\": 1}};\n";
+    js += "window.PANEL_HOVER = {\"edda-battle-offline\": {\"win\": \"LastTenMinutes\"}, \"deeds-woodcutting-hover\": {\"bar\": 0, \"part\": 1}, \"battle-damage-hover\": {\"bar\": 0, \"part\": 5}, \"battle-damage-foe-hover\": {\"bar\": 1, \"part\": 3}, \"company-away-3days-hover\": {\"aw\": \"wood\", \"bar\": 1}, \"everyone-battle-foes-hover\": {\"bar\": 0, \"part\": 1}, \"battle-foes-open-hover\": {\"bar\": 0, \"part\": 1}};\n";
     js += "window.PANEL_RICH = [" + string.Join(", ", PanelRich.Kinds.Select(k => "\"" + k + "\"")) + "];   // richtext-fix: the block kinds whose labels have rich text on (PanelRich.Kinds)\n";
     System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "preview-data.js"), js);
     System.Console.WriteLine("wrote " + System.IO.Path.Combine(dir, "preview-data.js"));

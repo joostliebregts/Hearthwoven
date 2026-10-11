@@ -47,7 +47,8 @@ namespace Hearthwoven.Panel
         /// <summary>The lines a fellow's window says when it cannot be told (B33).</summary>
         public const string FellowNoDays = "Other players' days are not shared: choose Session or All for them.", RecentNotOn = "not on this session";
         // a fellow's book never says "you" (CoherenceWorld): the start of your session is said as its time, "since 21:40"
-        public static string FellowNotTimed(PanelInput f) => f != null && f.ServerLive ? Name(f) + "'s Hearthwoven is older: choose Session."   // the server is live, their copy is not
+        public static string FellowNotTimed(PanelInput f) => OlderThan(f, NeedsLive) ? OlderLine(f, "10 min to 3 h fill in")   // their Hearthwoven sends no live updates (0.8.2, I: the one line form)
+                                                           : f != null && f.ServerLive ? Name(f) + "'s Hearthwoven is older: choose Session."   // the server is live, their copy is not
                                                                                    : Name(f) + "'s numbers arrive only every few minutes on this server: choose Session.";
         public static string FellowNotOn(PanelInput f) => Name(f) + " has not played " + SinceViewer(f) + ".";
         public static string FellowWaiting(PanelInput f) => "Waiting for " + Name(f) + "'s numbers from the server.";

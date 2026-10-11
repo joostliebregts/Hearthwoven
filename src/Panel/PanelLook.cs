@@ -44,6 +44,8 @@ namespace Hearthwoven.Panel
         /// <summary>The one bar form's part (BAR-FORM.md): a white rounded rectangle, radius 5, nine-sliced, tinted per part; and its
         /// 2 px outline in the same shape (a chosen part).</summary>
         public static Sprite Rounded, RoundedEdge;
+        /// <summary>The same shape as a 1 px outline: Compare's period before, a quiet trace beside the solid bar now (0.8.1, Joost).</summary>
+        public static Sprite RoundedTrace;
         /// <summary>A feat's tier mark (B30, Joost: each tier its own achievement): a small square, all four corners rounded. Filled: Rounded;
         /// not reached yet: this outline, its rim thick enough to stay 1 px when drawn TierMarkScale times smaller (radius 5 / 2.5 = 2 px).</summary>
         public static Sprite TierMarkEdge;
@@ -55,10 +57,17 @@ namespace Hearthwoven.Panel
         /// <summary>0.8 Compare: the change mark's arrow, a small triangle pointing up (turned for down), white, tinted by the label's colour: the
         /// game's text faces may not hold the ▲ glyph (Chapters/CompareModel.cs ChangeParts).</summary>
         public static Sprite Triangle;
+        /// <summary>0.8.2 the opens mark (PanelUi.OpensMark): a chevron, drawn rather than typed (the game's text faces may not hold U+203A),
+        /// in a box ChevronW x ChevronH; its line runs (1.5, 1.5), (6.5, 7), (1.5, 12.5) from the box's top left, ChevronStroke wide, round
+        /// ends and corner, white, tinted by the caller. The preview's opensMark draws the same line (an SVG polyline).</summary>
+        public static Sprite Chevron;
+        public const float ChevronW = 8, ChevronH = 14, ChevronStroke = 1.8f;
         /// <summary>0.8 layout D+ (PanelUi.Islands): an island's ground, a white rounded rectangle, radius 10, nine-sliced, tinted IslandGround.</summary>
         public static Sprite Island;
-        /// <summary>The island's ground: a lighter, greyish wash over the plate (the preview's rgba(255, 240, 210, .04)).</summary>
-        public static readonly Color IslandGround = new Color(1f, 0.94f, 0.82f, 0.04f);
+        /// <summary>The island's ground: a lighter, greyish wash over the plate. The game blends in linear color space and the preview in sRGB,
+        /// so the game takes 0.4 % where the preview has rgba(255, 240, 210, .04): about (20, 18, 15) on the page's (10, 9, 7) in both. Joost picked
+        /// it in game (0.8.2, shade 4 of four tried with the temporary Dev.IslandShade; 4 % showed about (58, 53, 46), too loud).</summary>
+        public static readonly Color IslandGround = new Color(1f, 0.94f, 0.82f, 0.004f);
         public const float TierMarkScale = 2.5f;
         static bool resolved;
 
@@ -79,9 +88,10 @@ namespace Hearthwoven.Panel
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel fonts: " + e.Message); }
             Circle = Drawn(CircleTexture());
-            Rounded = RoundedSprite(false); RoundedEdge = RoundedSprite(true); TierMarkEdge = RoundedSprite(true, 2.5f);
+            Rounded = RoundedSprite(false); RoundedEdge = RoundedSprite(true); RoundedTrace = RoundedSprite(true, 1f); TierMarkEdge = RoundedSprite(true, 2.5f);
             Ring = Drawn(RingTexture(false)); HalfRing = Drawn(RingTexture(true)); PillEdge = PillSprite();
             Triangle = Drawn(TriangleTexture());
+            Chevron = Drawn(ChevronTexture());
             Island = IslandSprite();
             Debug.Log("[Hearthwoven] Hearthwoven panel uses font '" + (Body ? Body.name : "TMP default") + "', titles '" + (Title ? Title.name : "TMP default") +
                       "', digits '" + (Plain ? Plain.name : "TMP default") + "'" + (Plain == Body ? " (LiberationSans not found: the panel's own font)" : ""));
@@ -574,6 +584,25 @@ namespace Hearthwoven.Panel
                             if (fy >= 1 && fy <= h - 1 && Mathf.Abs(fx - w / 2f) <= half) hit++;
                         }
                     px[y * w + x] = new Color(1, 1, 1, hit / 16f);
+                }
+            t.SetPixels32(px); t.Apply(false, true);
+            return t;
+        }
+
+        // the opens mark's chevron (Chevron): its line in the ChevronW x ChevronH box, drawn at 4 texels a pixel, anti-aliased over one texel
+        static Texture2D ChevronTexture()
+        {
+            const int k = 4; int w = (int)ChevronW * k, h = (int)ChevronH * k;
+            var t = new Texture2D(w, h, TextureFormat.RGBA32, false) { name = "hearthwoven-chevron", wrapMode = TextureWrapMode.Clamp };
+            var line = new[] { new Vector2(1.5f, 1.5f), new Vector2(6.5f, 7f), new Vector2(1.5f, 12.5f) };   // from the top left, y down (the preview's polyline)
+            float Off(Vector2 p, Vector2 a, Vector2 b) { var ab = b - a; var u = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude); return (p - (a + u * ab)).magnitude; }
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    var p = new Vector2((x + 0.5f) / k, ChevronH - (y + 0.5f) / k);   // texture y runs up
+                    var d = Mathf.Min(Off(p, line[0], line[1]), Off(p, line[1], line[2]));
+                    px[y * w + x] = new Color(1, 1, 1, Mathf.Clamp01((ChevronStroke / 2 - d) * k + 0.5f));
                 }
             t.SetPixels32(px); t.Apply(false, true);
             return t;

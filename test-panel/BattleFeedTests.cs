@@ -16,6 +16,9 @@ static class BattleFeedTests
         Block Find(PanelView v, string kind) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == kind);
         PanelState Damage(TimeWindow w, Action<PanelState> more = null) { var s = new PanelState { Chapter = Chapter.Battle, Window = w, Page = { [Chapter.Battle] = "damage" } }; s.View["Battle/damage/view"] = "foe"; more?.Invoke(s); return s; }
         IEnumerable<Block> All(Block b) => new[] { b }.Concat((b?.Items ?? new List<Block>()).SelectMany(All));
+        // the page's fights: one feed block per fight, each its own island (0.8.1, FeedBlocks); the feed's lines between and after them
+        List<Block> Fights(PanelView v) => PanelModel.Content(v).Where(b => b.Kind == "feed").SelectMany(b => b.Items ?? new List<Block>()).ToList();
+        string FeedNote(PanelView v) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == PanelModel.FeedLineKind && b.Tone == "note")?.Text ?? "";
 
         // ---------- the "×N" only where the window has a count ----------
         var session = Find(PanelModel.Build(world, Damage(TimeWindow.Session)), "dealtfoes");
@@ -84,16 +87,16 @@ static class BattleFeedTests
             gr.Tick(now);
             var book = world.ShallowCopy(); book.Battle = gr;
             PanelView Feed(Action<PanelState> more = null) { var s = new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.FeedPage } }; more?.Invoke(s); return PanelModel.Build(book, s); }
-            IEnumerable<Block> Entries(PanelView v) => (Find(v, "feed")?.Items ?? new List<Block>()).SelectMany(f => f.Items ?? new List<Block>()).Where(e => e.Kind == "entry");
+            IEnumerable<Block> Entries(PanelView v) => Fights(v).SelectMany(f => f.Items ?? new List<Block>()).Where(e => e.Kind == "entry");
             var plain = Feed(); var gjall = Feed(s => s.Facets[PanelModel.FeedFilter + "|foe"] = new List<string> { "Gjall" });
-            var plainNote = Find(plain, "feed")?.Note ?? ""; var bar = Find(gjall, "filterbar"); var fight = Find(gjall, "feed")?.Items.FirstOrDefault();
-            Check(Entries(plain).Count() == PanelModel.FeedTop && Entries(plain).All(e => e.Id == "Root") && plainNote.StartsWith("8 more foes in this fight and 1 earlier fight this session (1 foe) not shown") && Find(plain, "feed").Items[0].Text.EndsWith("40 of 48 foes") &&
+            var plainNote = FeedNote(plain); var bar = Find(gjall, "filterbar"); var fight = Fights(gjall).FirstOrDefault();
+            Check(Entries(plain).Count() == PanelModel.FeedTop && Entries(plain).All(e => e.Id == "Root") && plainNote.StartsWith("8 more foes in this fight and 1 earlier fight this session (1 foe) not shown") && Fights(plain)[0].Text.EndsWith("40 of 48 foes") &&
                   Entries(gjall).Select(e => e.Id).SequenceEqual(new[] { "Gjall" }) && bar != null && bar.Text == "1 of 49 foes" && fight?.Text == "under a minute · 1 foe" &&
                   bar.Items.First(r => r.Kind == "facet" && r.Id == "foe").Items.Select(c => c.Id).SequenceEqual(new[] { "Root", "Gjall" }),
                   "BF 0.8.1 filter: the cap of " + PanelModel.FeedTop + " counts after the filter: 48 Roots hide the Gjall, Foe = Gjall finds its fight (" + bar?.Text + "); the Foe row most foes first; unfiltered note: " + plainNote);
             // a fight whose foes only partly pass shows those foes, "1 of 5 foes", and their damage (its heading adds up with its rows): the sample's Troll
             var troll = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.FeedPage }, Facets = { [PanelModel.FeedFilter + "|foe"] = new List<string> { "Troll" } } });
-            var trollFights = Find(troll, "feed")?.Items ?? new List<Block>();
+            var trollFights = Fights(troll);
             var mixed = trollFights.FirstOrDefault(f => (f.Text ?? "").Contains(" of "));
             var mixedEntries = mixed?.Items.Where(e => e.Kind == "entry").ToList() ?? new List<Block>();
             Check(trollFights.Count == 2 && trollFights.All(f => f.Items.Where(e => e.Kind == "entry").All(e => e.Id == "Troll")) && mixed != null && mixed.Text.EndsWith("1 of 5 foes") &&
@@ -102,7 +105,7 @@ static class BattleFeedTests
             // the window: 10 min shows only the foes hit in the last 10 minutes; the day windows and All are greyed, each with its reason; the title says it
             var ten = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastTenMinutes, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } });
             var feedFights = PanelModel.BattleFeed(world); var cut = now.AddMinutes(-10);
-            var tenFoes = Find(ten, "feed")?.Items.Sum(f => f.Items.Count(e => e.Kind == "entry")) ?? 0;
+            var tenFoes = Fights(ten).Sum(f => f.Items.Count(e => e.Kind == "entry"));
             var greyed = ten.Windows.Where(c => c.Disabled).ToList();
             Check(tenFoes == feedFights.Sum(f => f.Entries.Count(e => e.EndUtc >= cut)) && tenFoes > 0 && tenFoes < feedFights.Sum(f => f.Foes) && ten.Heading + ", " + ten.HeadingWindow == "Battle feed, last 10 minutes" &&
                   greyed.Select(c => c.Id).SequenceEqual(new[] { "Today", "SevenDays", "ThirtyDays", "SinceInstall" }) && greyed.Take(3).All(c => c.Why == PanelModel.FeedDaysWhy) && greyed[3].Why == PanelModel.FeedAllWhy,
@@ -118,7 +121,7 @@ static class BattleFeedTests
             later.Page[Chapter.Battle] = "damage"; var damage = PanelModel.Build(world, later);
             var week = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.SevenDays, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } });
             Check(reopened.ShownWindow == TimeWindow.LastHour && reopened.HeadingWindow == "last hour" && PanelModel.Chosen(later, PanelModel.FeedFilter, "biome").SequenceEqual(new[] { "Swamp" }) &&
-                  (Find(reopened, "feed")?.Items ?? new List<Block>()).SelectMany(f => f.Items).Where(e => e.Kind == "entry").All(e => e.Id == "Leech" || e.Id == "Draugr" || e.Id == "Blob") &&
+                  Fights(reopened).SelectMany(f => f.Items).Where(e => e.Kind == "entry").All(e => e.Id == "Leech" || e.Id == "Draugr" || e.Id == "Blob") &&
                   damage.ShownWindow == TimeWindow.Session && week.ShownWindow == TimeWindow.Session && week.Windows.First(c => c.Id == "Session").Selected,
                   "BF 0.8.1: the feed's window (1 h) and Biome choice are kept between sessions and reopen the feed on them; Damage keeps Session; 7 days chosen elsewhere shows Session on the feed");
             // review 0.8.1 batch 6: 1 h on the feed, then 7 days chosen on Deeds and the feed opened again: it keeps showing 1 h and keeps it noted,
@@ -134,7 +137,11 @@ static class BattleFeedTests
                   "BF 0.8.1 review batch 6: 1 h on the feed, then 7 days chosen on Deeds: the feed still shows 1 h (" + feedAfterDeeds.ShownWindow + ") and the next session opens on it (" + nextSession.ShownWindow + "), not Session");
             // review 0.8.1 batch 6: the last fight shown has no gap (the fight before it is outside the window, the filter or the cap); between two
             // fights shown the gap stays: the quiet time when they follow each other, else the time and how many fights lie between
-            List<string> Gaps(PanelView v) => (Find(v, "feed")?.Items ?? new List<Block>()).Select(f => f.Items.FirstOrDefault(x => x.Kind == "gap")?.Text).ToList();
+            List<string> Gaps(PanelView v)   // per fight shown, the quiet line under it (null: none)
+            {
+                var bs = PanelModel.Content(v).Where(b => b.Kind == "feed" || b.Kind == PanelModel.FeedLineKind).ToList();
+                return bs.Select((b, i) => (b, i)).Where(x => x.b.Kind == "feed").Select(x => x.i + 1 < bs.Count && bs[x.i + 1].Kind == PanelModel.FeedLineKind && bs[x.i + 1].Tone == "gap" ? bs[x.i + 1].Text : null).ToList();
+            }
             var hour = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastHour, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } });
             var draugr = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.FeedPage }, Facets = { [PanelModel.FeedFilter + "|foe"] = new List<string> { "Draugr" } } });
             var hourGaps = Gaps(hour); var draugrGaps = Gaps(draugr); var trollGaps = Gaps(troll);
@@ -144,8 +151,33 @@ static class BattleFeedTests
                   "BF 0.8.1 review batch 6: no gap under the last fight shown (1 h, Troll, Draugr); between fights shown the quiet time, or the time with the fights between (" + draugrGaps.FirstOrDefault(g => g != null && g.Contains("between")) + ")");
             // nothing in the window, or nothing for the choice: its own empty line, the bar stays to unchoose
             var none = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.FeedPage }, Facets = { [PanelModel.FeedFilter + "|biome"] = new List<string> { "Swamp" }, [PanelModel.FeedFilter + "|foe"] = new List<string> { "Troll" } } });
-            Check(Find(none, "empty")?.Title == PanelModel.NothingForChoice && Find(none, "filterbar") != null && Find(none, "feed") == null,
+            Check(Find(none, "empty")?.Title == PanelModel.NothingForChoice && Find(none, "filterbar") != null && Fights(none).Count == 0,
                   "BF 0.8.1: a choice with no foe (Swamp and Troll) says " + PanelModel.NothingForChoice + " and keeps the bar to clear it");
+            // 0.8.1 (Joost: every fight its own card): in Log, Cards and Timeline each fight is its own island, the filter bar one above them (closed
+            // too), the quiet time between two fights a plain line between the islands; the cap is the same: 48 Roots, one island of 40, the note after it
+            string Plan(PanelView v) => string.Join(" ", PanelModel.Islands(PanelModel.PlateOf(v)).Select(i => i.Span[0] + ":" + string.Join("+", i.Parts.Select(p => p.Block.Kind == PanelModel.FeedLineKind ? p.Block.Tone : p.Block.Kind))));
+            var views = PanelModel.FeedViews.Select(fv => PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.FeedPage }, View = { [PanelModel.FeedViewKey] = fv.id } })).ToList();
+            var plans = views.Select(Plan).ToList(); var n = feedFights.Count;
+            var want = "w:filterbar " + string.Join(" ", Enumerable.Range(0, n).Select(k => "w:feed" + (k + 1 < n ? " p:gap" : "")));
+            Check(plans.All(x => x == want) && views.All(v => Fights(v).Count == n) && Plan(plain) == "w:filterbar w:feed p:note" && Entries(plain).Count() == PanelModel.FeedTop,
+                  "BF 0.8.1 islands: each of the " + n + " fights its own island in Log, Cards and Timeline, the filter bar its own above them, the quiet time between them outside; 48 Roots: " + Plan(plain) + " (" + PanelModel.FeedTop + " foes)");
+            // REVIEW-081 0.8.2 pass: with a feed block per fight, the Log measured its columns per fight island, so a fight where nothing hurt you
+            // (no received column) got a track about 160 px longer than the fight beside it. The columns come from the page's fights, once
+            // (FeedPageEntries: every fight's entries, in order); Unity and the mirror both measure those, and render-check measures the drawn bars
+            // ("the battle feed's Log bars on one x and one track"). The sample's Log has both kinds of fight, so a per-fight measure would show
+            var logView = views.First(v => PanelModel.Content(v).Any(b => b.Kind == "feed" && b.Tone == PanelModel.FeedLog));
+            var logFights = Fights(logView).Where(f => f.Kind == "fight").ToList();
+            bool Hurt(Block fight) => (fight.Items ?? new List<Block>()).Any(e => e.Kind == "entry" && (e.Items ?? new List<Block>()).Any(p => p.Kind == PanelModel.FeedReceived));
+            var pageEntries = PanelModel.FeedPageEntries(PanelModel.Content(logView));
+            var src = AppContext.BaseDirectory;
+            while (src != null && !System.IO.File.Exists(System.IO.Path.Combine(src, "src", "Plugin.cs"))) src = System.IO.Path.GetDirectoryName(src);
+            string Source(params string[] p) => src == null ? "" : System.IO.File.ReadAllText(System.IO.Path.Combine(new[] { src, "src", "Panel" }.Concat(p).ToArray()));
+            var feedUi = Source("Chapters", "BattleFeedUi.cs"); var mirror = Source("preview", "panel-preview.html");
+            Check(PanelModel.Content(logView).Count(b => b.Kind == "feed") == logFights.Count && logFights.Count >= 2 && logFights.Any(Hurt) && logFights.Any(f => !Hurt(f)) &&
+                  pageEntries.SequenceEqual(logFights.SelectMany(f => f.Items.Where(e => e.Kind == "entry"))) &&
+                  feedUi.Contains("FeedPageColumns(col, fights)") && feedUi.Contains("PanelModel.FeedPageEntries(PanelModel.Content(fillView))") && mirror.Contains("const page = feedPageEntries()"),
+                  "BF 0.8.2 one track: the Log's columns come from all " + logFights.Count + " fights of the page (" + logFights.Count(Hurt) + " where something hurt you, " + logFights.Count(f => !Hurt(f)) +
+                  " where nothing did; " + pageEntries.Count + " entries), in Unity (PanelUi.FeedPageColumns) and the mirror (feedPageEntries), never one fight island's own");
         }
 
         // ---------- the feed's view, kept between sessions ----------

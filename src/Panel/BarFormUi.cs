@@ -13,6 +13,8 @@ namespace Hearthwoven.Panel
     /// rectangle; numbers inside a part only on damage-type bars, where they fit; every part its own sliver (at least 6 px, B39). The
     /// list under it: one row per part, a compact table that hugs its content (swatch and name, the number right-aligned, the share
     /// greyed), two columns side by side past four rows. Measures in PanelModel (BarFormBar ...); rows from PanelModel.BarFormOf.
+    /// 0.8.2 (Joost, one rule for the whole book): a part's click and its legend item's click are one (made once per row), so a legend
+    /// item filters wherever its part does, pressed the same way and lit the same way (BarHover).
     /// Mirrored by barForm() in preview/panel-preview.html.
     /// </summary>
     public partial class PanelUi
@@ -67,6 +69,8 @@ namespace Hearthwoven.Panel
             look = look ?? new BarLook();
             var form = PanelModel.BarFormOf(parts, numbers, look.Pairs);
             if (form.Rows.Count == 0) return;
+            // one click per row, for its part and its legend item alike; the folded part has none (its kinds are chosen by their chips)
+            var clicks = form.Rows.Select(r => r.Part.Id == PanelModel.FoldId ? null : look.Click?.Invoke(r.Part)).ToList();
             var box = VStack(col, 0);
             // 0.8 hover (PICKS 4 B, HoverUi.cs): a bar with a list lights part and row together; a one-part bar or a list without a bar needs none
             var hover = form.List && !look.NoBar ? box.gameObject.AddComponent<BarHover>() : null;
@@ -88,8 +92,7 @@ namespace Hearthwoven.Panel
                 var spans = PanelModel.BarParts(form.Rows.Select(r => r.Fraction).ToArray(), form.Rows.Select(r => r.Part.Fraction2).ToArray(), (6f + PanelModel.BarFormGap) / width);
                 for (int k = 0; k < form.Rows.Count; k++)
                 {
-                    var row = form.Rows[k]; var c = BarRowColour(row, look);
-                    var click = row.Part.Id == PanelModel.FoldId ? null : look.Click?.Invoke(row.Part);
+                    var row = form.Rows[k]; var c = BarRowColour(row, look); var click = clicks[k];
                     var seg = RoundedPart(bar, "Part", c, raycast: click != null || hover != null);
                     var r = seg.rectTransform;
                     r.anchorMin = new Vector2(spans[k].from, 0); r.anchorMax = new Vector2(spans[k].to, 1); r.pivot = new Vector2(0, 0.5f);
@@ -128,7 +131,7 @@ namespace Hearthwoven.Panel
                 }
                 if (form.List) Spacer(box, PanelModel.BarFormToList);
             }
-            if (form.List) BarList(box, form, look, hover);   // one part: no list, the head line says its name and total
+            if (form.List) BarList(box, form, look, hover, clicks);   // one part: no list, the head line says its name and total
             if (look.After > 0) Spacer(box, look.After);
         }
 
@@ -158,8 +161,9 @@ namespace Hearthwoven.Panel
             }
         }
 
-        // the list: a compact table per column (swatch and name | number, right-aligned | share, greyed), on the page's legend grid (LayLegends)
-        static void BarList(RectTransform box, BarForm form, BarLook look, BarHover hover = null)
+        // the list: a compact table per column (swatch and name | number, right-aligned | share, greyed), on the page's legend grid (LayLegends).
+        // clicks: each row's part click (BarWithList); a row with one acts on press like its part, its band the pointer target
+        static void BarList(RectTransform box, BarForm form, BarLook look, BarHover hover = null, List<Action> clicks = null)
         {
             var holder = Line(box, PanelModel.LegendGap, TextAnchor.UpperLeft);
             var left = VStack(holder, PanelModel.BarFormRowGap); left.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;
@@ -177,15 +181,19 @@ namespace Hearthwoven.Panel
                 var pct = Label(row, r.Share, BarListShare, PanelLook.Faint, align: TextAlignmentOptions.MidlineRight); pct.textWrappingMode = TextWrappingModes.NoWrap;
                 float extra = 0;
                 if (r.Part != null && Labelled(r.Part)) { var s = Since(row, 14, r.Part); extra = BarListCellGap + Mathf.Ceil(s.preferredWidth); }   // a part counted on this PC in a bar of other counts
-                if (hover != null)
+                var k = cells.Count; var click = clicks != null && k < clicks.Count ? clicks[k] : null;
+                if (hover != null || click != null)
                 {
                     // the row's band (behind its cells, a little wider than them) is its pointer target, clear until it or its part is pointed at
-                    var k = cells.Count;
                     var band = RoundedPart(row, "Lit", Color.clear, raycast: true); band.transform.SetAsFirstSibling();
                     band.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
                     var br = band.rectTransform; br.Stretch(); br.offsetMin = new Vector2(-8, -4); br.offsetMax = new Vector2(8, 4);
-                    hover.Bands[k] = band; hover.Names[k] = title; hover.Numbers[k] = n; hover.Shares[k] = pct; hover.NameColours[k] = title.color;
-                    var hp = row.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = k;
+                    if (hover != null)
+                    {
+                        hover.Bands[k] = band; hover.Names[k] = title; hover.Numbers[k] = n; hover.Shares[k] = pct; hover.NameColours[k] = title.color;
+                        var hp = row.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = k;
+                    }
+                    if (click != null) row.gameObject.AddComponent<Press>().Act = click;   // the part's own click: pressed, it chooses as the part does
                 }
                 cells.Add((row, name, title, n, pct, extra));
             }

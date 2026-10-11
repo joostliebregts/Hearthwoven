@@ -42,7 +42,19 @@ static class CompareTests
         {
             if (f.DealtByDay == null) continue;
             foreach (var kv in f.DealtByDay.ToList())
-                if (DateTime.TryParse(kv.Key, out var d)) { var e = DayHistory.DayKey(d.AddDays(-7)); if (!f.DealtByDay.ContainsKey(e)) f.DealtByDay[e] = (float)Math.Round(kv.Value * (0.5 + Hash(f.PlayerName) % 5 / 5.0)); }
+                if (DateTime.TryParse(kv.Key, out var d))
+                {
+                    var e = DayHistory.DayKey(d.AddDays(-7)); if (f.DealtByDay.ContainsKey(e)) continue;
+                    var factor = 0.5 + Hash(f.PlayerName) % 5 / 5.0;
+                    f.DealtByDay[e] = (float)Math.Round(kv.Value * factor);
+                    // 0.9: the same day by weapon kind and type, its parts scaled alike and adding up to that day's total, as a copy shares them
+                    if (f.DayDealt != null && f.DayDealt.TryGetValue(kv.Key, out var parts) && parts.Count > 0)
+                    {
+                        var scaled = parts.ToDictionary(x => x.Key, x => (float)Math.Round(x.Value * factor));
+                        var top = scaled.OrderByDescending(x => x.Value).First().Key; scaled[top] += f.DealtByDay[e] - scaled.Values.Sum();
+                        f.DayDealt[e] = scaled;
+                    }
+                }
         }
         return p;
     }
@@ -113,8 +125,15 @@ static class CompareTests
             var hero = items.First(b => b.Kind == "hero");
             var wood = items.FirstOrDefault(b => b.Kind == PanelModel.CompareRowsKind && b.Title == "Wood brought in");
             var trees = items.FirstOrDefault(b => b.Kind == PanelModel.CompareRowsKind && b.Title == null && b.Items.Any(r => r.Id == "Beech"));
-            Check(hero.Before != null && hero.Change != null && hero.BeforeLabel == "the 7 days before" && hero.Items.Where(n => n.Kind == "number").All(n => n.Before != null),
-                  "compare: the hero's numbers carry the 7 days before and the change (" + hero.Value + " " + hero.Change + ", " + hero.Before + " " + hero.BeforeLabel + ")");
+            Check(hero.Before != null && hero.Change != null && hero.BeforeLabel == "the 7 before" && hero.Items.Where(n => n.Kind == "number").All(n => n.Before != null),
+                  "compare: the hero's numbers carry the 7 before and the change (" + hero.Value + " " + hero.Change + ", " + hero.Before + " " + hero.BeforeLabel + ")");
+            // 0.8.1 (Joost): the column heads name the periods, and the hero's comparison is one line, the mark first for a change, after the
+            // number before for "new" and "same"
+            var todayWood = PanelModel.PlateOf(PanelModel.Build(two, Page(Chapter.Deeds, "woodcutting", TimeWindow.Today))).Items.FirstOrDefault(b => b.Kind == PanelModel.CompareRowsKind);
+            Check(wood.NowHead == "these 7 days" && wood.BeforeHead == "the 7 before" && todayWood?.NowHead == "today" && todayWood?.BeforeHead == "yesterday" &&
+                  PanelModel.HeroCompare(new Block { Before = "8", BeforeLabel = "yesterday", Change = "▼ 88 %" }) == (true, "from 8 yesterday") &&
+                  PanelModel.HeroCompare(new Block { Before = "0", BeforeLabel = "yesterday", Change = PanelModel.CompareNew }) == (false, "0 yesterday ·"),
+                  "compare: the heads say these 7 days and the 7 before, today and yesterday; the hero reads \"▼ 88 % from 8 yesterday\" and \"0 yesterday · new\"");
             Check(wood != null && trees != null && !items.Any(b => b.Kind == "composition" || b.Kind == "ranking"), "compare: every composition and ranking becomes compare rows");
             var max = wood.Items.Max(r => Math.Max(r.Fraction, r.Fraction2));
             Check(wood != null && wood.Items.All(r => r.Before != null && r.Change != null) && Math.Abs(max - 1) < 1e-4 && wood.Before != null

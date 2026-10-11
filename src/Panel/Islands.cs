@@ -28,7 +28,7 @@ namespace Hearthwoven.Panel
     /// body as a calm grid of islands. Each visual group is one island: a bar with its heading and legend, a ranking, a list, the hero. A heading
     /// (section) or a sort row joins the block under it, a sentence (note) the island above it; a sorted list keeps its group headings in one
     /// island; a filter is the head line of the island it filters (its bars in it, or the next one); a page's two columns are two half islands; Recent's
-    /// group has an island per player. A short legend (four parts or fewer, no pattern) and a ranking of four rows or fewer are half islands;
+    /// group has an island per player; the battle feed has an island per fight (Chapters/BattleFeedModel.cs FeedBlocks). A short legend (four parts or fewer, no pattern) and a ranking of four rows or fewer are half islands;
     /// a run of them pairs up, an odd one in the middle of the page spans the plate (a player's island stays a half). No divider lines: the
     /// islands set the groups apart.
     /// PanelUi draws these, the preview reads the same plan from the dump (PanelModel.ToJson, "islands").
@@ -81,9 +81,11 @@ namespace Hearthwoven.Panel
                             if (b.Open) { var box = new Island { Span = IslandPlain }; box.Parts.Add(part); islands.Add(box); }
                             continue;
                         case "section": case "sort": head.Add(part); continue;
-                        case "filterbar":   // the head line of what it filters: the island of its bars, or with none shown the next island
-                            if ((b.Items ?? new List<Block>()).Any(x => x.Kind == "facetbar" && x.Tone != "hidden") || b.Open) Put(IslandWide, part); else head.Add(part);
+                        case "filterbar":   // the head line of what it filters: the island of its bars, or with none shown the next island; the battle
+                                            // feed's its own island (it filters every fight, and each fight is an island of its own)
+                            if ((b.Items ?? new List<Block>()).Any(x => x.Kind == "facetbar" && x.Tone != "hidden") || b.Open || b.Id == FeedFilter) Put(IslandWide, part); else head.Add(part);
                             continue;
+                        case FeedLineKind: Put(IslandPlain, part); continue;   // the battle feed: the quiet time between two fight islands, what is left out, outside them
                         case "switch":
                             if (b != strip) Put(IslandPlain, new IslandPart { Block = b, Path = part.Path, Row = true });
                             var views = b.Items ?? new List<Block>();

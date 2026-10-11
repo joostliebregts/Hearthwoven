@@ -113,6 +113,54 @@ namespace Hearthwoven.Panel
         /// <summary>The cue at the foot of a feats grid that has rows below (fix4): that there is more, and how to reach it.</summary>
         public const string FeatsMore = "More below · wheel or A/D";   // the Titles page uses the same grid (B18)
 
+        // ---------- a group feat's crew: everyone, never "+N more" ----------
+
+        /// <summary>0.8.2 (Joost in game, The Mead Hall's "Who brewed" ended in "+3 more": "I want to see everyone, of course I want to see everyone"):
+        /// the crew row of a group feat's detail in the book's legend grammar, every person. The row's label on the left ("Who brewed"); right of it
+        /// the parts as one bar (CrewBar) and under the bar the legend: per person their mark, name, number and share, a compact table per column,
+        /// filled top to bottom as the book's legends are (BarListSplit), as many columns as fit beside the label (up to CrewColumnsMax), else one,
+        /// and as many rows as it takes. The detail area grows to the tallest crew of its page (FeatsUi.FeatDetailNeed); nothing is cut.</summary>
+        public const int CrewColumnsMax = 3;
+        /// <summary>The crew's measures (px): a row (the label's line, the bar's line, each legend row), the gap after the label, between two legend
+        /// columns and between a row's cells, and the detail area's foot under the last row.</summary>
+        public const float CrewRowH = 22, CrewLabelGap = 10, CrewColumnGap = 24, CrewCellGap = 8, FeatDetailFoot = 4;
+
+        /// <summary>True when the crew's parts make one bar: they add up to the group's number (Tone "share") and there is more than one person
+        /// (one person's bar would only say 100 %).</summary>
+        public static bool CrewBar(Block crew) => crew?.Tone == "share" && (crew.Items?.Count ?? 0) > 1;
+
+        /// <summary>The legend's columns and the rows per column for these cells (each person's mark and name, number and share, as drawn; 0 = none)
+        /// beside the label in <paramref name="room"/> px: the most columns, up to CrewColumnsMax, whose compact tables fit side by side, else one.
+        /// Every person is placed: columns x per is at least the count.</summary>
+        public static (int columns, int per) CrewFit(IList<(float name, float number, float share)> cells, float room)
+        {
+            var n = cells?.Count ?? 0;
+            if (n == 0) return (0, 0);
+            for (int k = Math.Min(CrewColumnsMax, n); k > 1; k--)
+            {
+                var per = BarListSplit(n, k);
+                float total = 0; int used = 0;
+                for (int from = 0; from < n; from += per, used++) total += (used > 0 ? CrewColumnGap : 0) + CrewColumnWidth(cells, from, Math.Min(n, from + per));
+                if (total <= room + 0.5f) return (used, per);
+            }
+            return (1, n);
+        }
+
+        /// <summary>One legend column's width: its widest name, then (where any) its widest number and its widest share, CrewCellGap apart.</summary>
+        public static float CrewColumnWidth(IList<(float name, float number, float share)> cells, int from, int to)
+        {
+            float name = 0, number = 0, share = 0;
+            for (int i = from; i < to; i++) { name = Math.Max(name, cells[i].name); number = Math.Max(number, cells[i].number); share = Math.Max(share, cells[i].share); }
+            return name + (number > 0 ? CrewCellGap + number : 0) + (share > 0 ? CrewCellGap + share : 0);
+        }
+
+        /// <summary>The crew's height: the bar's line when it has one, then one row per row of the legend (without a bar the first row sits on the label's line).</summary>
+        public static float CrewHeight(int rows, bool bar) => (bar ? CrewRowH : 0) + Math.Max(1, rows) * CrewRowH;
+
+        /// <summary>Where the crew's line starts in the detail's right column: under the rules (20 each, from 12), the progress line, Counted by and the
+        /// caveat (none, one line or two). FeatsUi.FeatDetailFill draws in this order; the mirror's featdetail() too.</summary>
+        public static float FeatCrewTop(int rules, int caveatLines) => 12 + rules * 20 + 4 + 24 + 20 + (caveatLines <= 0 ? 0 : caveatLines == 1 ? 20 : 38);
+
         // a fellow player's cooking, gear and voyages are the only things a feat is worked out from besides your own counts
         static double Hours(double seconds) => seconds / 3600.0;
 

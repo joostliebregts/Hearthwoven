@@ -14,7 +14,8 @@ namespace Hearthwoven
         public static string Build(string modVersion, long playerId, string playerName, PlayerProfile.PlayerStats[] stats,
                                    IEnumerable<SkillInfo> skills, string world, DamageTally damage, string session = "", SessionEvents events = null, EventLog log = null, bool share = false,
                                    SessionEvents eventsSinceInstall = null, DamageTally damageSinceInstall = null, BiomeTally biomeSinceInstall = null, System.DateTime? biomeFromUtc = null, FeatsLedger feats = null,
-                                   IDictionary<string, float> dealtByDay = null, IEnumerable<string> knownBiomes = null, string copyId = null, FoeShare foes = null)
+                                   IDictionary<string, float> dealtByDay = null, IEnumerable<string> knownBiomes = null, string copyId = null, FoeShare foes = null, FeedShare feed = null,
+                                   IDictionary<string, Dictionary<string, float>> dayDealt = null, string logBefore = null)
         {
             // Absolute values only: a resend after a reconnect or crash replaces, never adds.
             var j = new Json().Open()
@@ -64,6 +65,15 @@ namespace Hearthwoven
             // your damage dealt per local day, the last 30 days (HISTORY-06.md: the only part of the day history that is shared, under 1 KB),
             // so a fellow's Together can show your Today, 7 days and 30 days; an older reader ignores the key
             if (dealtByDay != null && dealtByDay.Count > 0) j.Dict("dealtByDay", dealtByDay);
+            // 0.9: the same days split by weapon kind and battle type ("melee|slash", DayHistory.DayDealt), so the group's By weapon and By type work on
+            // Today, 7 days and 30 days; written whenever the day history is loaded, also empty, so a reader can tell "nothing dealt" from an older
+            // Hearthwoven. Nested per day, so a live update carries only today's parts that changed. An older reader ignores the key
+            if (dayDealt != null)
+            {
+                j.Key("dayDealt").Open();
+                foreach (var kv in dayDealt) if (kv.Value != null && kv.Value.Count > 0) j.Dict(kv.Key, kv.Value);
+                j.Close();
+            }
             // the bests behind some feats (Heavy Keel's load, Long Lead's lead): number, day and biome, never a place
             feats?.WriteSharedBests(j);
             // the biomes this character found (0.7: the group feats' gate counts fellows' lands too; GROUP-FEATS.md 1.3): the game's own record mapped
@@ -72,8 +82,14 @@ namespace Hearthwoven
             var biomes = knownBiomes?.Where(b => !string.IsNullOrEmpty(b)).Distinct().Take(16).ToList();
             if (biomes != null && biomes.Count > 0) j.Raw("knownBiomes", "[" + string.Join(",", biomes.Select(Json.Q).ToArray()) + "]");
             // 0.8: the foes you fought per kind and what became of them, this session and since recording began (FoeShare: compact, at most 60 kinds
-            // each); the battle feed itself stays on your PC. An older reader ignores the key
+            // each). An older reader ignores the key
             foes?.WriteTo(j);
+            // 0.8.2: the battle feed itself, its newest 100 foes, names only of players who share (FeedShare); an older reader ignores the key
+            feed?.WriteTo(j);
+            // 0.8.2: your kept minutes of earlier connections in this world (KeptMinutes.SharedJson, written once per connection), beside measuredLog,
+            // which stays this connection's (the server's sessions and the report add measuredLog up per session); fellows join them for the short
+            // windows (FellowTrail.Joined). An older reader ignores the key; the server keeps it as sent, less death positions
+            if (!string.IsNullOrEmpty(logBefore)) j.Raw(KeptMinutes.SharedKey, logBefore);
             return j.Close().ToString();
         }
     }

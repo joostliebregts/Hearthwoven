@@ -303,27 +303,51 @@ namespace Hearthwoven.Panel
         public const float HeroSkillGap = 24f;
 
         /// <summary>
-        /// The hero row's one wrap rule (0.7, MERGE-NOTES G1/G3: "Farming lev" was clipped at the plate edge). PanelUi and the preview
-        /// measure the drawn parts and ask this where each goes: the hero's number first; each second number follows on the same line
-        /// (after its rule, sep wide) while it fits the column, else it starts the next line (no rule before it there); the skill keeps
-        /// to the right of the line the last number ends on when it fits there (at least HeroSkillGap from it), else it takes the next
-        /// line, on the right. Nothing is ever clipped. widths: the hero's number, then each second number, label included; skill: its
-        /// width, 0 = none. Returns the line of each number, in order, then the skill's (when there is one).
+        /// The hero row's one wrap rule (0.7, MERGE-NOTES G1/G3: "Farming lev" was clipped at the plate edge; 0.8.2, Joost in game on
+        /// Mining: the skill took a line of its own and made the hero taller). PanelUi and the preview measure the drawn parts and ask
+        /// this where each goes. The first line holds the hero's number and, on its right (at least HeroSkillGap away), the skill; each
+        /// second number follows on that line (after its rule, sep wide) while it fits beside them, else it starts the next line (no
+        /// rule before it there), where it has the whole column. So the hero never grows taller just for the skill: a line is only ever
+        /// added for a number. Where the numbers all fit but the skill does not, the skill takes its compact form (its name over its
+        /// level, <paramref name="compact"/> wide) when that keeps them on one line; it also takes it when even the hero's number and the
+        /// whole skill do not fit side by side. Only when not even that fits does the skill go under everything. Nothing is ever clipped.
+        /// widths: the hero's number, then each second number, label and date included; skill, compact: its widths, 0 = none.
+        /// Returns the line of each number, in order, then the skill's (when there is one); <paramref name="small"/>: the compact form.
         /// </summary>
-        public static int[] HeroLines(IList<float> widths, float sep, float skill, float column)
+        public static int[] HeroLines(IList<float> widths, float sep, float skill, float column, float compact, out bool small)
         {
             var n = widths?.Count ?? 0;
-            var lines = new int[n + (skill > 0 ? 1 : 0)];
-            int line = 0; float x = n > 0 ? widths[0] : 0;
-            for (int i = 1; i < n; i++)
+            small = false;
+            int[] Place(float first)   // the numbers, the first line holding `first` of room
             {
-                if (x + sep + widths[i] <= column) x += sep + widths[i];
-                else { line++; x = widths[i]; }
-                lines[i] = line;
+                var at = new int[n];
+                int line = 0; float x = n > 0 ? widths[0] : 0, room = first;
+                for (int i = 1; i < n; i++)
+                {
+                    if (x + sep + widths[i] <= room) x += sep + widths[i];
+                    else { line++; x = widths[i]; room = column; }
+                    at[i] = line;
+                }
+                return at;
             }
-            if (skill > 0) lines[n] = n == 0 || x + HeroSkillGap + skill <= column ? line : line + 1;
+            if (skill <= 0) return Place(column);
+            float hero = n > 0 ? widths[0] : 0;
+            bool Beside(float s) => hero + HeroSkillGap + s <= column;
+            bool OneLine(int[] at) => at.All(l => l == 0);
+            var full = Place(column - HeroSkillGap - skill);
+            var tight = compact > 0 ? Place(column - HeroSkillGap - compact) : null;
+            int[] plan; int skillLine = 0;
+            if (Beside(skill) && OneLine(full)) plan = full;
+            else if (tight != null && Beside(compact) && (OneLine(tight) || !Beside(skill))) { plan = tight; small = true; }
+            else if (Beside(skill)) plan = full;
+            else { plan = Place(column); skillLine = plan.Max() + 1; }   // not even the hero's number and the skill side by side: the skill under it all
+            var lines = new int[n + 1];
+            Array.Copy(plan, lines, n);
+            lines[n] = skillLine;
             return lines;
         }
+        /// <summary>HeroLines without a compact form of the skill.</summary>
+        public static int[] HeroLines(IList<float> widths, float sep, float skill, float column) => HeroLines(widths, sep, skill, column, 0, out _);
 
         // ---------- compact page tops (0.7, Joost in game, Deeds > Farming: the skill under the hero "uses too much vertical height"; then, 2026-10-09:
         // the skill stays at the right end of the hero's row, HeroLines puts it there, and the About button rides in the title strip) ----------

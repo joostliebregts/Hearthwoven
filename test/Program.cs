@@ -872,9 +872,14 @@ fails += ServerResilienceTests.Run();   // RESILIENCE-06 server items: atomic fi
 fails += ArmourTests.Run();   // 0.7: the armour ledger, its book on this PC (schema 4) and the short windows' buckets (test/ArmourTests.cs)
 fails += BattleRecTests.Run();   // 0.8: the battle record (one foe per creature, outcomes, fights, bounds, the book, what is shared; test/BattleRecTests.cs)
 fails += LiveSyncTests.Run();   // 0.7 live updates: a 10 s update's size, base + latest update = the next full copy, what the server keeps (test/LiveSyncTests.cs)
+fails += DayTypesTests.Run();   // 0.9: damage dealt per day by weapon kind and type in the shared copy: parts add up, bytes, the live update through the 0.8.1 server's checks (test/DayTypesTests.cs)
+fails += FeedShareTests.Run();   // 0.8.2: the battle feed in the shared copy: round trip through the live update, names only of players who share, a busy fight's bytes (test/FeedShareTests.cs)
+fails += FightGroupTests.Run();   // 0.9: fights as a group, boss fights, dungeon runs: four feeds join by the creatures' ids, the arena rule, run borders, no place shared, bytes (test/FightGroupTests.cs)
+fails += FightPagesRealTests.Run();   // 0.9: the fight pages drawn from the data layer's own recorded Queen fight (test/FightPagesRealTests.cs)
 fails += DeedLogTests.Run();   // 0.7 Deeds > Recent: deeds per minute as a time split of the session tallies, windows, cost; since last time (test/DeedLogTests.cs)
 fails += ResilienceTests.Run();   // 0.8: renamed characters, worlds made again under one name, two accounts with one id, the .bak as the last good copy, newer keys kept (test/ResilienceTests.cs)
 fails += HookGuardTests.Run();   // RESILIENCE-06 item 6: one guard for every Harmony hook, checked on the IL of each (test/HookGuardTests.cs)
+fails += KeptMinutesTests.Run();   // 0.8.2: your minutes kept across a restart: the file, world and character, the 3 h bound, the shared copy, its size and live updates (test/KeptMinutesTests.cs)
 
 System.Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
 return fails;

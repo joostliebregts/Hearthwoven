@@ -6,7 +6,7 @@ namespace Hearthwoven.Panel
 {
     /// <summary>
     /// Cooking's filter (Deeds > Cooking, 0.6.5; Joost 2026-10-09: "Why don't we have filters on cooking?"): the dishes as the same
-    /// filter bar Crafting and Building use (FacetModel.cs), over two rows, then the dish bar and the kitchen ledger of the dishes
+    /// filter bar Crafting and Building use (FacetModel.cs), over three rows, then the dish bar and the kitchen ledger of the dishes
     /// that pass. Only what the game's own data says about a dish, so a mod's dishes land where they belong:
     ///   Type       = how the game makes it (DishTypeOf): Meals (made in the crafting window, cauldron or prep table, with food value),
     ///                Grilled and Baked (what a cooking station hands out; Baked = a station that burns fuel, the oven), Feasts (what a
@@ -14,12 +14,15 @@ namespace Hearthwoven.Panel
     ///                fermenter takes). A dish the data cannot place is "Other", never its bare id.
     ///   Main boost = the biggest of the dish's health, stamina and eitr, the game's own food values (DishBoostOf); "Balanced" when
     ///                the two biggest are close; "Other" = no food value (a mead base, a dough) or not known.
+    ///   Dish       = the dish itself (0.8.2, Joost in game: Dishes by kind did not filter while By type did), most cooked first. It has
+    ///                no linked bar of its own: the page's Dishes by kind bar is its bar (PanelModel.LinkBar), whose parts and legend
+    ///                items choose a dish as By type's choose a type.
     /// The counts are the page's own unit, dishes cooked. It filters the dishes you made; who enjoyed your food is counted on your
     /// fellows' PCs per serving and stays whole, with one line that says so.
     /// </summary>
     public static partial class PanelModel
     {
-        public const string CookFilter = "Deeds/cooking/dishes", DishOther = "other";
+        public const string CookFilter = "Deeds/cooking/dishes", DishOther = "other", DishFacet = "dish";
 
         /// <summary>The fold test of the collapsed bar (FacetModel.Facets): the page's dish bar sits between the filter and the ledger,
         /// its head and thin track count above the list (px at scale 1), so the linked bars show only when the filter is opened.</summary>
@@ -78,6 +81,7 @@ namespace Hearthwoven.Panel
             var type = Ask(input.DishType, key); var boost = Ask(input.DishBoost, key);
             it.Values["type"] = DishTypes.Any(t => t.id == type) ? type : DishOther;
             it.Values["boost"] = DishBoosts.Any(b => b.id == boost) ? boost : DishOther;
+            it.Values[DishFacet] = key;
             return it;
         }
 
@@ -87,15 +91,19 @@ namespace Hearthwoven.Panel
             var items = dishes.Where(kv => kv.Value > 0).OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal)
                               .Select(kv => DishFacetItem(input, kv.Key, kv.Value)).ToList();
             if (items.Count == 0) return null;
+            // a chosen chip stays where its dish or type is not in this window (a day window), so it can be unchosen
             FacetDef Row(string id, string title, string sub, string barTitle, (string id, string label, bool always)[] options) => new FacetDef
             {
                 Id = id, Title = title, Sub = sub, BarTitle = barTitle,
-                Options = options.Where(o => o.always || items.Any(i => i.Values[id] == o.id)).Select(o => new FacetOption { Id = o.id, Label = o.label }).ToList(),
+                Options = options.Where(o => o.always || items.Any(i => i.Values[id] == o.id) || Chosen(state, CookFilter, id).Contains(o.id)).Select(o => new FacetOption { Id = o.id, Label = o.label }).ToList(),
             };
+            var dishOptions = items.Select(i => i.Key).Concat(Chosen(state, CookFilter, DishFacet).Where(k => items.All(i => i.Key != k)))
+                                   .Select(k => new FacetOption { Id = k, Label = Who(input, k) }).ToList();
             var defs = new List<FacetDef>
             {
                 Row("type", "Type", null, "By type", DishTypes),
                 Row("boost", "Main boost", "by food value", "By main boost", DishBoosts),
+                new FacetDef { Id = DishFacet, Title = "Dish", BarTitle = DishesByKind, Bar = false, Options = dishOptions },   // its bar is the page's Dishes by kind (LinkBar)
             };
             return Facets(state, CookFilter, defs, items, "cooked", src, "dish", "dishes", "No filter: every dish", CookAbove, overview: true);
         }

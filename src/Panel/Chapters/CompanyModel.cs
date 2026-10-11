@@ -542,7 +542,7 @@ namespace Hearthwoven.Panel
         static double DealtInWindow(PanelInput p, TimeWindow w, PanelInput viewer)
         {
             // Since install is not read here: Together has the totals. B33: Session is your session's span for everyone (a fellow's log from when you began)
-            if (!IsDayWindow(w)) return DealtRows(Damage(p.Log, w, "", viewer.NowUtc, p.IsSelf ? null : viewer.SessionStartUtc ?? p.ViewerSessionStartUtc)).Sum(r => (double)r.Amount);
+            if (!IsDayWindow(w)) return DealtRows(Damage(p.Log, w, "", viewer.NowUtc, p.IsSelf ? SessionFrom(p) : viewer.SessionStartUtc ?? p.ViewerSessionStartUtc)).Sum(r => (double)r.Amount);   // yours: 0.8.2, your kept minutes never in Session
             // a day window (HISTORY-06.md): your own day history; a fellow's shared damage dealt per day (their "dealtByDay", the last 30 days)
             if (p.IsSelf) { var c = InWindow(p, w); return c == null ? 0 : DealtRows(DamageSinceInstallRows(c)).Sum(r => (double)r.Amount); }
             if (p.DealtByDay == null) return 0;
@@ -559,7 +559,8 @@ namespace Hearthwoven.Panel
 
         /// <summary>One quiet line under a windowed Together, only when it tells something the bar cannot: a fellow player's latest
         /// shared record is older than the window (their copy may simply be out of date, so "nothing" would be a guess); nobody
-        /// dealt anything in the window; or, in This session, whose session a fellow player's number is. Null otherwise.</summary>
+        /// dealt anything in the window; or, in This session, whose session a fellow player's number is (0.9: in a day window, that each
+        /// player's whole day counts). Null otherwise.</summary>
         static Block TogetherWindowNote(PanelInput input, List<Fellow> people, Block together, PanelState state)
         {
             // a greyed day chip that was pressed (B17): All shows, and the one line says from when the chosen window works, as on every other page
@@ -586,6 +587,7 @@ namespace Hearthwoven.Panel
             else if (stale.Count > 0) text = "Nothing in this window from " + JoinNames(stale) + ": their latest shared record is older.";
             else if (dealt.Items.All(p => p.Fraction <= 0)) text = w == TimeWindow.Session ? "Nothing dealt this session." : "Nothing dealt in the " + WindowLabel(w).ToLowerInvariant() + ".";
             else if (w == TimeWindow.Session && others.Count > 0) text = WindowFellowSession;
+            else if (IsDayWindow(w) && others.Count > 0) text = DayWindowLine(w);   // 0.9: a fellow's day is their whole day, also before you came online
             return text == null ? null : new Block { Kind = "note", Text = text };
         }
 

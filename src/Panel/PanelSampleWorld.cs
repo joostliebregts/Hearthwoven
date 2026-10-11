@@ -31,6 +31,8 @@ namespace Hearthwoven.Panel
     public static class SampleWorld
     {
         public const string Rowan = "Rowan", Edda = "Edda", Finch = "Finch", Tor = "Tor";
+        /// <summary>0.8.2: a player near Edda who does not share (not one of Everyone): her shared feed says another player.</summary>
+        public const string Ylva = "Ylva";
         public const long RowanId = 11, EddaId = 77, TorId = 88, FinchId = 99;
         /// <summary>The one teamwork feast (0.8, B22): Rowan made it, Tor set it out, Edda enjoyed three servings. Its ZDO id, as the game writes one.</summary>
         public const string TeamworkFeast = "880001:41";
@@ -208,7 +210,10 @@ namespace Hearthwoven.Panel
             {
                 [Rowan] = RowanOwn(now), [Edda] = EddaOwn(now), [Finch] = FinchOwn(now), [Tor] = TorOwn(now),
             };
-            foreach (var kv in owns) BattleSample.Session(kv.Value, now, (kv.Key == Rowan ? new[] { Edda, Tor } : Everyone.Where(n => n != kv.Key)).ToArray(), kv.Key == Rowan ? new[] { Edda, Tor, Finch } : null);   // 0.8: the battle record, from each one's own log (PanelSampleBattle.cs)
+            // 0.8: the battle record, from each one's own log (PanelSampleBattle.cs); near Rowan Edda, Tor and Finch for a moment, near Edda (0.8.2, her
+            // shared Last fight) Rowan and Ylva, who does not share, so Edda's copy says another player
+            foreach (var kv in owns) BattleSample.Session(kv.Value, now, (kv.Key == Rowan ? new[] { Edda, Tor } : Everyone.Where(n => n != kv.Key)).ToArray(), kv.Key == Rowan ? new[] { Edda, Tor, Finch } : kv.Key == Edda ? new[] { Rowan, Ylva } : null);
+            foreach (var kv in owns) BattleSample.Guard(kv.Value);   // 0.8.2: blocks and parries per minute, and the session's tally
             // the feats come from the counters (and from what the others shared), so every book is first sent without them
             Dictionary<string, PanelInput> Copies() => owns.ToDictionary(kv => kv.Key, kv => Share(kv.Value, now));
             var copies = Copies();
@@ -230,8 +235,39 @@ namespace Hearthwoven.Panel
             return (owns, copies);
         }
 
-        /// <summary>A player's own record as a fellow receives it: through the snapshot the game sends and the reader it is read back by.</summary>
-        public static PanelInput Share(PanelInput own, DateTime now)
+        /// <summary>A player's own record as a fellow receives it: through the snapshot the game sends and the reader it is read back by.
+        /// <paramref name="version"/> (0.8.2, I): the copy as an older Hearthwoven sends it (OlderJson); null: this build's.</summary>
+        public static PanelInput Share(PanelInput own, DateTime now, string version = null)
+        {
+            var json = GroupShare.SharedCopy(ShareJson(own));
+            if (version != null) json = OlderJson(json, version);
+            var copy = PanelInput.FromSnapshot(json);
+            copy.NowUtc = now; copy.ViewerName = Rowan; copy.PlayerNames = own.PlayerNames;
+            copy.Book = own.Book;   // the server's book for them comes with the group list, not through their snapshot (GroupShare.BookOf)
+            Lookups(copy, false);
+            return copy;
+        }
+
+        /// <summary>
+        /// 0.8.2 (I): a copy as an older Hearthwoven sends it, from this build's: "mod" says the version, and what came later is left out. 0.6.5 (the
+        /// release before 0.8.1): no lands found, no live updates (copyId), no foe counts, feast records, recovered materials or Stoker feeding, no
+        /// feed, no block minutes; 0.8.1: no feed, no block minutes. Neither splits its days by weapon and type (0.9, dayDealt). Only these two are in
+        /// the wild (0.7 and 0.8.0 were never released alone).
+        /// </summary>
+        public static string OlderJson(string json, string version)
+        {
+            if (!(LiveDelta.Parse(json) is Dictionary<string, object> root)) return json;
+            root["mod"] = version;
+            var old = version == "0.6.5";
+            foreach (var k in old ? new[] { "knownBiomes", "copyId", "foes", "battleFeed", "dayDealt" } : new[] { "battleFeed", "dayDealt" }) root.Remove(k);
+            if (old) foreach (var m in new[] { "measuredThisSession", "measuredSinceInstall" })
+                if (root.TryGetValue(m, out var o) && o is Dictionary<string, object> d) foreach (var f in new[] { "chestFed", "setOutFeastMadeBy", "ateFromFeastAt", "recovered" }) d.Remove(f);
+            if (root.TryGetValue("measuredLog", out var l) && l is Dictionary<string, object> ld) ld.Remove("guard");
+            return LiveDelta.Write(root);
+        }
+
+        /// <summary>The snapshot a player's own record sends (Snapshot.Build, as Plugin builds it).</summary>
+        public static string ShareJson(PanelInput own)
         {
             var stats = new PlayerProfile.PlayerStats[1]; var s = new PlayerProfile.PlayerStats(); stats[0] = s;
             foreach (var kv in own.Character) s[(PlayerStatType)Enum.Parse(typeof(PlayerStatType), kv.Key)] = kv.Value;
@@ -249,14 +285,12 @@ namespace Hearthwoven.Panel
                 Name = kv.Key, Level = kv.Value,
                 Accumulator = (float)(own.SkillProgress[kv.Key] * (Math.Pow(Math.Floor(kv.Value) + 1, 1.5) * 0.5 + 0.5)),
             }).ToList();
-            var json = Snapshot.Build("0.6.0", own.PlayerId, own.PlayerName, stats, skills, "Midgard", own.Session, "s1", own.Events, own.Log, true,
+            // 0.8.2 (I): the copy names the Hearthwoven it came from, as the game's does (this build's: no page waits for a newer one)
+            var json = Snapshot.Build(Plugin.Version, own.PlayerId, own.PlayerName, stats, skills, "Midgard", own.Session, "s1", own.Events, own.Log, true,
                                       own.Events, own.DamageSinceInstall, own.BiomeSinceInstall, own.BiomeFromUtc, own.Feats,
-                                      own.History?.DealtByDay(PanelModel.LocalToday(own), 30), own.KnownBiomes, foes: BattleSample.ShareOf(own));   // their damage dealt per day, the lands they found and the foes they fought (0.8), as the game sends them
-            var copy = PanelInput.FromSnapshot(GroupShare.SharedCopy(json));
-            copy.NowUtc = now; copy.ViewerName = Rowan; copy.PlayerNames = own.PlayerNames;
-            copy.Book = own.Book;   // the server's book for them comes with the group list, not through their snapshot (GroupShare.BookOf)
-            Lookups(copy, false);
-            return copy;
+                                      own.History?.DealtByDay(PanelModel.LocalToday(own), 30), own.KnownBiomes, foes: BattleSample.ShareOf(own), feed: BattleSample.FeedOf(own),
+                                      dayDealt: own.History?.DayDealt(PanelModel.LocalToday(own), 30));   // their damage dealt per day (0.9: also by weapon kind and type), the lands they found, the foes they fought (0.8) and their battle feed (0.8.2), as the game sends them
+            return json;
         }
 
         static PanelInput Base(string name, long id, DateTime now)

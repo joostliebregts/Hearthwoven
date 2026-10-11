@@ -285,7 +285,9 @@ namespace Hearthwoven.Panel
         /// (path and place among its siblings, child count, active, the RectTransform, the components, a text's or image's properties), then the
         /// same view is drawn fresh, Dev.UiReuse's off path, laid out and written down the same way, and the two compared:
         /// "HW-CHECK PASS ui-reuse" or FAIL with the first difference. A kept object that carried something of its last life (a child, a component,
-        /// a property) shows as a difference. The greyed Everyone chip's reason tag is left out (it follows the pointer, kept or not).
+        /// a property) shows as a difference. Left out (UiParity.Skipped): the greyed Everyone chip's reason tag (it follows the pointer, kept or
+        /// not) and HoverMark's line, which the first hover makes and a kept tab, row or chip keeps (also out of its parent's child count and its
+        /// siblings' places, UiParity.Counted).
         /// </summary>
         void ReuseParity()
         {
@@ -320,6 +322,15 @@ namespace Hearthwoven.Panel
 
         static readonly List<RectTransform> uiObjects = new List<RectTransform>();
         static readonly List<Component> uiParts = new List<Component>();
+        static readonly List<string> uiNames = new List<string>();
+
+        // the names of an object's children, for UiParity.Counted
+        static List<string> ChildNames(Transform t)
+        {
+            uiNames.Clear();
+            for (int i = 0; i < t.childCount; i++) uiNames.Add(t.GetChild(i).name);
+            return uiNames;
+        }
 
         // every active object under the frame, in order, as one line each: what the parity check compares
         static List<string> UiLines(RectTransform top)
@@ -333,10 +344,11 @@ namespace Hearthwoven.Panel
             foreach (var r in uiObjects)
             {
                 var parentPath = r.parent != null && paths.TryGetValue(r.parent, out var pp) ? pp : "";
-                var path = parentPath + "/" + r.name + "#" + r.GetSiblingIndex();
+                var place = r.parent != null ? UiParity.Counted(ChildNames(r.parent), r.GetSiblingIndex()) : r.GetSiblingIndex();
+                var path = parentPath + "/" + r.name + "#" + place;
                 paths[r] = path;
-                if (path.Contains("/Why#")) continue;   // the greyed Everyone chip's reason tag: shown by the pointer
-                b.Clear().Append(path).Append(" children=").Append(r.childCount).Append(" active=").Append(r.gameObject.activeSelf ? 1 : 0)
+                if (UiParity.Skipped(path)) continue;   // the greyed Everyone chip's reason tag (shown by the pointer), HoverMark's line
+                b.Clear().Append(path).Append(" children=").Append(UiParity.Counted(ChildNames(r), r.childCount)).Append(" active=").Append(r.gameObject.activeSelf ? 1 : 0)
                  .Append(" anchors=").Append(V(r.anchorMin)).Append('/').Append(V(r.anchorMax)).Append(" pivot=").Append(V(r.pivot))
                  .Append(" pos=").Append(V(r.anchoredPosition)).Append(" size=").Append(V(r.sizeDelta)).Append(" scale=").Append(F(r.localScale.x)).Append(" parts=");
                 r.GetComponents(uiParts);
@@ -423,6 +435,23 @@ namespace Hearthwoven.Panel
     /// they are the same, else the first difference: the object's path with what differs in each, or the object one of them has and the other not.</summary>
     public static class UiParity
     {
+        /// <summary>HoverMark's line (HoverUi.cs): made on an object's first hover and kept after, so a kept tab, row or chip can carry one
+        /// that the fresh drawing has not made. Its own name, not "Hover" (a bar's focus ring, drawn fresh every time, stays checked).</summary>
+        public const string HoverLine = "HoverLine";
+
+        /// <summary>An object the parity lines leave out, with everything under it: the greyed Everyone chip's reason tag (it follows the
+        /// pointer) and HoverMark's line (REVIEW-081, 0.8.2 pass: a kept row carried it, a fresh one not, a false FAIL on every mouse page turn).</summary>
+        public static bool Skipped(string path) => path.Contains("/Why#") || path.Contains("/" + HoverLine + "#");
+
+        /// <summary>How many of the first <paramref name="upTo"/> names are not HoverMark's line: an object's place among its siblings (the
+        /// parent's child names, upTo its sibling index) or its child count (its own child names, upTo all), so the line changes neither.</summary>
+        public static int Counted(IReadOnlyList<string> names, int upTo)
+        {
+            int n = 0;
+            for (int i = 0; i < upTo && i < names.Count; i++) if (names[i] != HoverLine) n++;
+            return n;
+        }
+
         public static string Compare(List<string> kept, List<string> fresh)
         {
             int n = Math.Min(kept.Count, fresh.Count);

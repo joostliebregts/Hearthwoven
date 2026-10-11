@@ -42,6 +42,12 @@
   .players { position:absolute; right:64px; top:20px; height:48px; display:flex; gap:8px; }
   .entry { position:relative; display:flex; align-items:center; gap:14px; padding:0 20px 0 14px; white-space:nowrap; font-size:18px; color:var(--text); flex:none; }
   .entry.on { color:var(--gold); } .entry.noicon { padding-left:20px; }
+  /* 0.8.1 (Joost: one rule): anything you can point at shows it, a 1 px warm line at low opacity, no motion, no color change (HoverUi.HoverMark;
+     a pill or a skill chip says, it does not act; a bar part, a foe row or a greyed chip's reason light themselves) */
+  :is(.tab, .entry, .k-toggle, .chip:not(.off):not(.pill), .fcard, .tcard, .card.opens, .fb-chip, .b2-tile):hover { outline:1px solid rgba(232,194,122,.45); outline-offset:-1px; }
+  /* 0.8.2 (Joost on Battle > Foes: "that's not obvious that I can click on it"): a row, card or tile that opens something ends in the chevron
+     (PanelUi.OpensMark, PanelLook.Chevron): muted, 8 x 14, centred on its height, pointing down while what it opened is open (opensMark) */
+  .opens-mk { position:absolute; top:50%; width:8px; height:14px; margin-top:-7px; color:var(--muted); pointer-events:none; } .opens-mk.open { transform:rotate(90deg); }
   .chapters { position:absolute; left:32px; right:32px; top:77px; height:78px; display:flex; gap:12px; }
   .tab { flex:1; height:78px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:10px 4px 8px; font-size:20px; }
   .tab img { width:32px; height:32px; } .tab.on { color:var(--gold); } .tab.on img { filter: sepia(1) saturate(3) hue-rotate(-12deg) brightness(1.05); }
@@ -61,6 +67,7 @@
   .shield { -webkit-mask:url(../ui/shield.png) center/contain no-repeat; mask:url(../ui/shield.png) center/contain no-repeat; background-blend-mode:multiply; }
   .section { font-size:20px; color:var(--gold); margin-top:4px; }
   .note { font-size:var(--mintext); color:var(--faint); } .plain { font-size:15px; color:var(--muted); }
+  .note.more { height:22px; line-height:22px; color:var(--muted); font-style:italic; } [data-link] { cursor:pointer; }   /* 0.8.2: a fold's "+N more" is a click that shows the rest (PanelUi.MoreLink) */
   .hint { display:flex; gap:10px; font-size:17px; } .hint::before { content:""; width:3px; flex:none; background:var(--accent); }
   .stat { display:flex; gap:16px; align-items:center; } .stat .v { font-size:30px; } .stat .t { font-size:22px; } .stat .s { font-size:18px; color:var(--muted); } .stat .n { font-size:var(--mintext); color:var(--faint); }
   /* compact stat (fix3-rest, Heavy Keel on Voyages > Cargo): one line, the number and its name, the rest muted beside them */
@@ -115,7 +122,12 @@
   .fcard.waiting, .fdet.waiting { outline:1px dashed rgba(185,166,136,.7); outline-offset:-2px; } .fcard.waiting .m img, .fdet.waiting .m img { filter:grayscale(1) opacity(.28); }   /* not counted yet: a dashed rim, a fainter emblem */
   .fcard .nt { position:absolute; top:var(--nt, 39px); width:10px; height:10px; border-radius:2px; background:#76643f; } .fcard.waiting .nt.nx { box-shadow:inset 0 0 0 1px rgba(185,166,136,.7); } .fnotch { position:absolute; left:9px; top:44px; display:flex; gap:3px; } .fnotch i { display:block; width:12px; height:5px; background:#76643f; } .fnotch i.on { background:var(--gold); }   /* each reached notch in its tier's colour (inline) */
   .fdet { position:relative; height:184px; flex:none; } .fdet.earned { box-shadow:inset 0 0 0 1px var(--tier), inset 3px 0 0 var(--tier); }
-  .fdet .fcrew { position:absolute; left:292px; right:16px; height:22px; display:flex; align-items:center; gap:4px; font-size:14px; white-space:nowrap; } .fdet .fcrew .m { position:static; } .fdet .fcrew > span:first-child { font-size:var(--mintext); color:var(--faint); margin-right:6px; } .fdet .fcrew .cn { margin-right:10px; } .fdet .fcrew .cbar { display:flex; gap:2px; width:96px; height:8px; margin-right:14px; flex:none; } .fdet .fcrew .cbar i { display:block; height:8px; border-radius:3px; } .fdet .fcrew .sw { display:block; width:9px; height:9px; border-radius:2px; margin-right:2px; flex:none; } .fdet .fcrew .cv2 { color:var(--muted); margin-left:2px; margin-right:10px; }   /* B37: Who helped, the parts as one bar in the players' colours, then each one's part and share (FeatsUi.FeatCrew) */
+  .fdet > .fcrew { position:absolute; left:292px; right:16px; } .fdet .fcrew { height:22px; font-size:14px; white-space:nowrap; }   /* B37 + 0.8.2: Who helped, the parts as one bar, under it everyone in the legend grammar (FeatsUi.FeatCrew); placed by crewLay() */
+  .fdet .fcrew > *, .fdet .fcrew .ce > * { position:absolute; top:0; height:22px; line-height:22px; white-space:nowrap; } .fdet .fcrew .ce { position:static; }
+  .fdet .fcrew .fcl { left:0; font-size:var(--mintext); color:var(--faint); } .fdet .fcrew .cbar { display:flex; gap:2px; top:7px; height:8px; right:0; } .fdet .fcrew .cbar i { display:block; height:8px; border-radius:3px; flex:var(--f) 0 0; min-width:2px; }
+  .fdet .fcrew .sw { width:12px; height:12px; top:5px; border-radius:2px; } .fdet .fcrew .cmk { width:20px; height:20px; top:1px; } .fdet .fcrew .cmk .m { position:static; }
+  .fdet .fcrew .cn { font-size:var(--mintext); color:var(--text); } .fdet .fcrew .cnum { font-size:15px; font-weight:700; color:var(--text); text-align:right; } .fdet .fcrew .csh { font-size:14px; color:var(--faint); text-align:right; }
+  .fdet .fghost { position:absolute; left:292px; right:16px; top:0; visibility:hidden; pointer-events:none; } .fdet .fghost .fcrew, .fdet .fghost .cv { position:absolute; left:0; right:0; top:0; }   /* the page's other crews, measured for the area's height (FeatsUi.FeatDetailPage) */
   .fdet .mo i { color:var(--muted); }
   .fdet .m { position:absolute; left:16px; top:14px; } .fdet:not(.earned):not(.waiting) .m img { filter:grayscale(1) opacity(.5); }
   .fdet .dn { position:absolute; left:84px; top:12px; width:204px; height:30px; line-height:30px; font-size:22px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fdet.earned .dn { color:var(--text); }
@@ -156,6 +168,7 @@
   .bf-bar { position:relative; height:22px; } .bf-bar.thin { height:22px; } .bf-bar.tall { height:24px; }   /* 0.8 layout D+: 22; a grain or groundwork pattern keeps 24 (PanelModel.BarHeightOf) */
   .bf-seg { position:absolute; top:0; bottom:0; border-radius:5px; overflow:hidden; display:flex; align-items:center; justify-content:center; min-width:2px; }
   .bf-seg.sel { box-shadow:inset 0 0 0 2px var(--gold); }
+  .bf [data-pick] { cursor:pointer; }   /* 0.8.2: a part that filters and its legend item, one click (PanelModel.PartTarget) */
   .bf-seg .num { position:relative; font-size:15px; font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums; }
   .bf-veil { position:absolute; left:0; top:0; bottom:0; background:rgba(9,7,5,.45); }   /* the part counted before Hearthwoven: its colour at 55 % (diff-05) */
   .bf-list { display:flex; gap:10px; align-items:flex-start; margin-top:10px; }   /* fitBarForms lays it on the page's legend grid */
@@ -281,16 +294,18 @@
   .sortrow { display:flex; align-items:center; gap:6px; height:28px; } .sortrow .cap { font-size:14px; color:var(--muted); margin-right:4px; }   /* SortUi.SortRow */
   .section .swatch { display:inline-block; width:12px; height:12px; flex:none; }   /* a sort group heading: its category colour */
   .hr .chip.win { padding:0 8px; }   /* the nine window chips (HISTORY-06): tighter, so the heading keeps its full window name (PanelUi.WindowPad) */
-  .hero { display:flex; align-items:flex-end; }
-  .hero.wrapped { flex-direction:column; align-items:stretch; gap:12px; } .hline { display:flex; align-items:flex-end; }   /* PanelModel.HeroLines */
-  .hn { display:flex; align-items:flex-end; gap:14px; white-space:nowrap; }
+  /* 0.8.2 (Joost in game, Mining: the second number sat lower than the first): every number group, its label and its date on the hero number's
+     baseline (PanelUi.HeroNumber lifts the smaller ones); the rules and the skill stand on the bottom as before */
+  .hero { display:flex; align-items:baseline; }
+  .hero.wrapped { flex-direction:column; align-items:stretch; gap:12px; } .hline { display:flex; align-items:baseline; }   /* PanelModel.HeroLines */
+  .hn { display:flex; align-items:baseline; gap:14px; white-space:nowrap; }
   .hn .num { font-size:67px; line-height:.84; font-weight:700; color:var(--gold); }   /* 0.8 layout D+: 84 to 67, about 20 % smaller (FEEDBACK 12) */
   .hn .hw { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
   .spark { display:inline-flex; align-items:flex-end; gap:8px; } .spark.stack { flex-direction:column; align-items:flex-start; gap:1px; } .spark .cols { display:flex; align-items:flex-end; gap:2px; height:14px; }
   .spark .cols i { display:block; width:4px; background:rgba(232,194,122,.85); } .spark .cols i.z { height:1px; background:rgba(232,194,122,.35); }
   .spark .cap { font-size:var(--mintext); line-height:16px; color:var(--muted); white-space:nowrap; } .spark.off .cap { color:var(--faint); font-style:italic; }
   .bs-legend .spark { margin-left:4px; } .hn .hw.one { gap:2px; }
-  .hn .what { display:flex; align-items:baseline; gap:8px; font-size:26px; padding-bottom:2px; }
+  .hn .what { display:flex; align-items:baseline; gap:8px; font-size:26px; }
   .hn.second .num { font-size:43px; } .hn.second .what { font-size:20px; }
   .hn { position:relative; } .hero.tagged { padding-bottom:30px; }
   .hn .ftag { position:absolute; left:0; top:100%; margin-top:5px; height:22px; display:inline-flex; align-items:center; padding:0 9px; font-size:var(--mintext); font-style:italic; color:var(--faint); background:rgba(0,0,0,.45); box-shadow:inset 0 0 0 1px rgba(107,82,51,.7); white-space:nowrap; }
@@ -300,13 +315,11 @@
   .tri { display:inline-block; width:.62em; height:.54em; background:currentColor; clip-path:polygon(50% 0, 100% 100%, 0 100%); margin-right:.3em; flex:none; }
   .tri.dn { transform:rotate(180deg); }
   .cmark { display:inline-flex; align-items:center; white-space:nowrap; }
-  .hcmp { display:flex; flex-direction:column; gap:4px; margin-left:8px; padding-bottom:6px; }
-  .hcmp .cmark { font-size:20px; font-weight:700; color:var(--text); }
-  .hcmp .before { display:flex; align-items:baseline; gap:8px; white-space:nowrap; }
-  .hcmp .before b { font-size:34px; line-height:.9; font-weight:700; color:#8a7c66; } .hcmp .before span { font-size:15px; color:var(--muted); }
-  .hn.second .hcmp .cmark { font-size:15px; } .hn.second .hcmp .before b { font-size:26px; }   /* the second number's period before (one hero form, 0.8 layout D+) */
-  .hcmpline { display:flex; align-items:baseline; gap:10px; white-space:nowrap; margin-top:-2px; } .hcmpline .cmark { font-size:20px; font-weight:700; color:var(--text); align-self:center; }
-  .hcmpline b { font-size:34px; line-height:.9; font-weight:700; color:#8a7c66; } .hcmpline span:last-child { font-size:15px; color:var(--muted); }
+  /* 0.8.1 (Joost): the hero's comparison is one line after its words, on their baseline, in the text colour: the mark first for a change, after the number before for new and same (cmpLine) */
+  .hcmp { display:flex; align-items:baseline; gap:6px; margin-left:8px; padding-bottom:3px; white-space:nowrap; font-size:20px; color:var(--text); }
+  .hcmp .cmark, .hcmpline .cmark { font-weight:700; color:var(--text); }
+  .hn.second .hcmp { font-size:16px; }   /* the second number's period before (one hero form, 0.8 layout D+) */
+  .hcmpline { display:flex; align-items:baseline; gap:6px; white-space:nowrap; margin-top:-2px; font-size:20px; color:var(--text); }   /* Together: the same line under its hero */
   .cq { display:inline-flex; align-items:center; white-space:nowrap; font-size:14px; color:var(--faint); letter-spacing:0; text-transform:none; font-weight:400; }
   .cchip { position:relative; display:inline-flex; flex:none; }
   .ctag { position:absolute; right:0; top:calc(100% + 6px); z-index:40; width:max-content; max-width:360px; padding:8px 13px 9px; font-size:14px; line-height:1.38; color:var(--text);
@@ -320,7 +333,7 @@
   .crows .pic { width:20px; height:20px; flex:none; display:inline-flex; align-items:center; justify-content:center; }
   .crows .tr { position:relative; height:18px; }
   .crows .sol { position:absolute; left:0; top:2px; bottom:2px; border-radius:4px; overflow:hidden; }
-  .crows .out { position:absolute; left:0; top:-1px; bottom:-1px; border-radius:5px; box-shadow:inset 0 0 0 2px rgba(233,220,196,.75); }
+  .crows .out { position:absolute; left:0; top:-1px; bottom:-1px; border-radius:5px; box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--oc) 55%, transparent); }   /* the period before: a 1 px trace in the row's colour (0.8.1, Joost) */
   .crows .v { text-align:right; font-weight:700; font-size:17px; white-space:nowrap; } .crows .b { text-align:right; font-size:15px; color:#8a7c66; white-space:nowrap; }
   .crows .c { font-size:15px; color:var(--muted); white-space:nowrap; }
   .lw { font-size:max(var(--mintext), .32em); font-weight:400; margin-left:.25em; } .hero .rule { width:1px; height:34px; margin:0 34px; background:var(--rule); align-self:flex-end; }
@@ -348,6 +361,8 @@
   .bt-c { display:flex; align-items:center; gap:8px; flex:none; white-space:nowrap; overflow:hidden; }
   .bt-r { justify-content:flex-end; }
   .bt-bar { display:block; height:12px; border-radius:2px; flex:none; }
+  .bt-gd { position:relative; display:block; flex:none; } .bt-gd .dr-seg { border-radius:2px; }   /* 0.8.2 Everyone: a foe's Dealt bar split by player (BattleUi.GroupDealtBar) */
+  .bt-c.dl:has(.dr-seg.hov) > b { visibility:hidden; }   /* a part pointed at: the page's tag in the total's place (BarHover.TagHides) */
   .bt-cell { position:relative; display:flex; align-items:center; justify-content:center; width:42px; height:30px; border-radius:4px; background:rgba(0,0,0,.30); flex:none; }
   .bt-cell.weakness { background:#f3ecdc; }   /* battle-answers: cream "+" cell; gold stays "dealt" */
   .bt-cell .mk { position:absolute; left:1px; width:calc(50% - 2px); top:0; bottom:0; display:flex; align-items:center; justify-content:center; font-size:var(--mintext); font-weight:700; }
@@ -382,13 +397,17 @@
     -webkit-mask-box-image:url(../vocab/focus-ring.png) 14 / 14px stretch; }
   body.kbd .bt-foerow.cur::after { display:block; } body.kbd .bt-foerow.cur .bt-mc .ic { visibility:hidden; } body.kbd .bt-foerow.cur .bt-mc .fx { display:block; }
   .bt-open { background:rgba(242,232,214,.045); border-radius:5px; } .bt-open .bt-row { border-bottom:0; }
-  .bt-rank { display:grid; gap:0 24px; padding:4px 12px 12px; } .bt-rank .gh { display:flex; justify-content:space-between; align-items:center; height:23px; border-bottom:1px solid var(--rule); margin-bottom:5px; font-size:15px; font-weight:700; }
+  /* 0.8.2 (BattleUi.BattleRanking, Joost: Best compares with Best): a caption, then a row of islands (Arrows, Bolts, Weapons), for Best and for Worst */
+  .bt-rank { display:flex; flex-direction:column; gap:6px; padding:4px 12px 12px; } .bt-rrow { display:grid; gap:14px; } .bt-rank .isl { gap:0; }
+  .bt-rank .gh { display:flex; justify-content:space-between; align-items:center; gap:8px; height:22px; margin-bottom:6px; font-size:15px; font-weight:700; white-space:nowrap; }
   .bt-rank .gh small { font-size:var(--mintext); font-weight:400; color:var(--faint); } .bt-rank .sh { height:22px; line-height:22px; font-size:var(--mintext); font-style:italic; color:var(--muted); }
-  .bt-rank .ln { height:42px; font-size:15px; } .bt-rank .ln.unk { opacity:.5; } .bt-rank .ln > div { display:flex; align-items:center; gap:9px; white-space:nowrap; }
-  .bt-rank .ln .r1 { height:22px; } .bt-rank .ln .r2 { height:18px; font-size:var(--mintext); color:var(--muted); }
-  .bt-rank .ln .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; } .bt-rank .ln .st { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; font-style:italic; color:var(--faint); }
-  .bt-rank .ln .ch { display:inline-flex; align-items:center; gap:3px; } .bt-rank .ln .ex { width:44px; text-align:right; font-weight:700; flex:none; } .bt-rank .ln .r2 .pad { width:44px; flex:none; margin-left:-9px; }
-  .bt-rank .small { grid-column:1 / -1; font-size:var(--mintext); color:var(--faint); margin-top:6px; }
+  /* a line is a damage row (BattleUi.RankIsland): its name and status, then its number before its bar (feedBar: parts, numbers inside, the true line) */
+  .bt-rank .ln { height:50px; font-size:15px; } .bt-rank .ln.unk { opacity:.5; }
+  .bt-rank .ln .r1 { display:flex; align-items:center; gap:8px; height:20px; white-space:nowrap; } .bt-rank .ln .r2 { display:flex; align-items:flex-start; gap:8px; height:24px; margin-top:2px; }
+  .bt-rank .ln .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; } .bt-rank .ln .st { flex:none; font-size:var(--mintext); font-style:italic; color:var(--faint); }
+  .bt-rank .ln .ex { flex:none; height:20px; line-height:20px; text-align:right; font-weight:700; white-space:nowrap; }
+  .bt-rank .worst .gh, .bt-rank .worst .nm, .bt-rank .worst .ex { color:var(--muted); }   /* the Worst row: quieter (its parts' colours come stepped back from the model) */
+  .bt-rank .small { font-size:var(--mintext); color:var(--faint); }
   /* B41 (BattleUi.ItemBand): the "one item" band, a very faint warm tint with rounded corners, no edge; 12 / 10 / 12 px inside, 20 px between items */
   .bt-band { background:rgba(242,232,214,.045); border-radius:5px; padding:10px 12px 12px; }
   .bt-band.mix { margin-bottom:10px; } .bt-band.mix .bf { margin-top:8px; }
@@ -407,6 +426,7 @@
   .bt-fh { display:flex; align-items:center; height:34px; box-sizing:border-box; padding-bottom:2px; border-bottom:1px solid var(--rule); white-space:nowrap; }
   .bt-fh b { font-size:17px; color:var(--gold); } .bt-fh .r1 { font-size:15px; color:var(--muted); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; margin-left:6px; } .bt-fh .r2 { font-size:15px; color:var(--muted); margin-left:12px; }
   .bt-fl { display:flex; align-items:center; min-height:36px; padding:7px 0; box-sizing:border-box; border-bottom:1px solid rgba(107,82,51,.28); font-size:15px; }
+  .isl .bt-fh, .isl .bt-fl { border-bottom:0; }   /* 0.8.1: a fight in its own island has no rules (BattleFeedUi: the island's edge sets it apart, the rows' spacing parts them) */
   .bt-fl .t { width:78px; flex:none; font-size:14px; color:var(--faint); } .bt-fl .n { width:150px; flex:none; margin-right:8px; display:flex; align-items:center; gap:6px; font-size:16px; white-space:nowrap; overflow:hidden; } .bt-fl .n b { overflow:hidden; text-overflow:ellipsis; min-width:0; }
   .bt-fl .o { width:196px; flex:none; margin-right:8px; display:flex; align-items:center; gap:8px; color:var(--muted); white-space:nowrap; overflow:hidden; } .bt-fl .o span { overflow:hidden; text-overflow:ellipsis; } .bt-fl .d { flex:1; min-width:0; }
   .bt-cards { display:grid; gap:14px; margin-top:10px; } .bt-card { background:rgba(242,232,214,.045); border-radius:5px; padding:10px 12px 12px; box-sizing:border-box; min-width:0; }
@@ -418,6 +438,7 @@
   .bt-tl .ax, .bt-tg .ax { position:absolute; left:87px; top:0; bottom:0; width:2px; background:var(--rule); } .bt-tl.first .ax { top:8px; } .bt-tl.last .ax { bottom:auto; height:14px; } .bt-tl.first.last .ax { height:6px; }
   .bt-tl .mk { position:absolute; left:80.5px; top:5px; display:flex; padding:1px; border-radius:50%; background:#0f0b08; }
   .bt-tl .l1 { display:flex; align-items:center; gap:10px; height:26px; white-space:nowrap; } .bt-tl .l1 b { font-size:16px; } .bt-tl .l1 span { font-size:15px; color:var(--muted); } .bt-tl .d { font-size:15px; }
+  .feed-ln { padding:0 14px; font-size:var(--mintext); color:var(--faint); } .feed-ln.gap { font-style:italic; }   /* 0.8.1 (BattleFeedUi.FeedQuiet): the quiet time between the fight islands, what is left out after them */
   .bt-tg { position:relative; height:30px; padding-left:104px; line-height:30px; font-size:14px; font-style:italic; color:var(--faint); }
   .bt-ffs { display:flex; flex-wrap:wrap; gap:12px 28px; margin-top:2px; } .bt-ff .h { display:flex; align-items:center; gap:6px; height:24px; white-space:nowrap; } .bt-ff .h b { font-size:17px; margin-right:2px; }
   .bt-frc { display:flex; align-items:center; gap:8px; font-size:15px; white-space:nowrap; } .bt-frc > b { font-size:17px; } .bt-frc .p { display:inline-flex; align-items:center; gap:8px; margin-left:6px; } .bt-frc .p i { width:12px; height:12px; border-radius:3px; }
@@ -434,20 +455,35 @@
   .dr-seg { position:absolute; top:0; bottom:0; border-radius:2px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
   .dr-seg .num { font-size:14px; line-height:16px; font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums; }
   .dr-seg.hov { box-shadow:0 0 0 1px #f0cd86, 0 0 0 2px rgba(240,205,134,.9), 0 0 10px rgba(240,205,134,.55); z-index:2; }
+  /* 0.8.1 What your armor stopped (PanelUi.StoppedPart): the part an outline in its colour (--c), filled from the left by what got through; the stopped number in the outline */
+  .dr-seg.stop { box-shadow:inset 0 0 0 2px var(--c); } .dr-seg.stop.hov { box-shadow:inset 0 0 0 2px var(--c), 0 0 0 1px #f0cd86, 0 0 0 2px rgba(240,205,134,.9), 0 0 10px rgba(240,205,134,.55); }
+  .dr-got, .dr-left { position:absolute; top:0; bottom:0; display:flex; align-items:center; justify-content:center; } .dr-got { left:0; border-radius:2px; background:var(--c); }
   .dr-true { height:3px; margin-top:1px; border-radius:2px; background:rgba(232,194,122,.8); } .dr-true.recv { background:rgba(185,166,136,.8); }
   .dr-pcs { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:1px; font-size:14px; line-height:18px; color:var(--muted); }
   .dr-e { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; border-radius:5px; } .dr-e > i { width:10px; height:10px; border-radius:3px; flex:none; }
-  .dr-e .w { display:inline-grid; } .dr-e .w > span { grid-area:1 / 1; } .dr-e .b { visibility:hidden; color:#f6d896; } .dr-e:not(.swap) .b { display:none; }
-  .dr-e.hov { background:rgba(232,194,122,.15); box-shadow:5px 0 0 rgba(232,194,122,.15), -5px 0 0 rgba(232,194,122,.15); } .dr-e.hov .a { color:#f6d896; }
-  .dr-e.swap.hov .a { visibility:hidden; } .dr-e.swap.hov .b { visibility:visible; }
+  /* an entry is one label (PanelUi.DamageBar, 0.8.2): pointing at it or its part swaps its words for data-on (BarHover.OnWords) and back (data-off);
+     the ::after holds the words not shown, so the entry keeps the width of the longer of the two (PanelUi measures both) and nothing moves */
+  .dr-e .w { display:inline-flex; flex-direction:column; } .dr-e .w[data-on]::after { content:attr(data-on); height:0; overflow:hidden; visibility:hidden; }
+  .dr-e.hov .w[data-off]::after { content:attr(data-off); }
+  .dr-e.hov { background:rgba(232,194,122,.15); box-shadow:5px 0 0 rgba(232,194,122,.15), -5px 0 0 rgba(232,194,122,.15); } .dr-e.hov .w { color:#f6d896; }
   .bt-fl .d.fl { display:flex; align-items:center; gap:12px; } .drl { position:relative; flex:none; margin:-1px 0; } .bt-fl .rcv { flex:none; font-size:14px; line-height:18px; color:var(--muted); }
-  .dr-tip { position:absolute; top:-2px; height:20px; line-height:20px; padding:0 6px; box-sizing:border-box; border-radius:2px; background:#0f0b08; color:#f6d896; font-size:14px; font-weight:700; white-space:nowrap; display:none; z-index:3; }
-  .dr-tip.swap.hov { display:block; }   /* the Log's hover tag: only for a part too narrow for its number (PanelUi.DamageBar, shares false) */
+  .dr-tip { position:absolute; left:0; top:0; height:20px; line-height:20px; padding:0 6px; box-sizing:border-box; border-radius:2px; background:#0f0b08; color:#f6d896; font-size:14px; font-weight:700; white-space:nowrap; display:none; z-index:3; pointer-events:none; }
+  .dr-tip.on { display:block; }   /* the page's one hover tag (PanelUi.PageTag): over a part no share entry keys (no share line, a player's line, Foes' Dealt, the armor bar) */
   .bt-card .drl { margin:6px 0 0; } .bt-card .rcv { margin-top:6px; font-size:14px; line-height:18px; color:var(--muted); }   /* 0.8.1 the card's damage bar and its received words (PanelUi.FeedCards) */
   .bt-card .tl { height:3px; margin-top:3px; border-radius:2px; background:rgba(232,194,122,.8); }
   .dr-run + .dr-run { margin-top:0; } .dr-run:has(+ .dr-run) > .since { display:none; } .dr-run > .since { margin-top:6px; }   /* By weapon: the weapons as one list in one island (PanelUi.DamageRunRow: 6 px apart, the island's own gap) */
   .dr-list + .since, .dr-wrap + .since { margin-top:6px; }   /* the "Recorded from" line after a list: the island's 6 px in PanelUi */
   .dr-e > span:first-child:not(.w) { flex:none; }   /* a weapon kind's icon as the key */
+  /* 0.9 fight pages (Chapters/FightUi.cs): each block one box, its parts placed as PanelUi places them */
+  .ft { position:relative; flex:none; } .ft-a { position:absolute; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .ft-b { position:absolute; }
+  .ft-nums { position:absolute; display:flex; align-items:flex-end; } .ft-nums .rule { width:1px; height:34px; margin:0 24px; background:var(--rule); align-self:flex-end; } .ft-nums .hn.second .what { font-size:17px; }   /* PanelUi.FtHead: the numbers on the head row's foot, FtRuleGap either side of the rule */ .ft-ring { position:absolute; display:block; } .ft-ring img { position:absolute; left:0; top:0; width:100%; height:100%; }
+  .ft-ring i { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-style:normal; font-weight:700; color:var(--gold); }
+  .ft-track { position:absolute; border-radius:2px; background:rgba(255,240,210,.05); } .ft-fill { position:absolute; border-radius:2px; }
+  .ft-hatch { position:absolute; display:block; background:repeating-linear-gradient(135deg, var(--c) 0 2px, transparent 2px 6px); }
+  .ft-boss { position:absolute; border-radius:2px; background:rgba(232,194,122,.16); box-shadow:inset 0 0 0 1px rgba(232,194,122,.55); }
+  .ft-fall { position:absolute; width:14px; height:14px; } .ft-sw { position:absolute; display:block; border-radius:3px; } .ft-tree { position:absolute; display:block; background:rgba(107,82,51,.6); }
+  .ft-row { position:absolute; left:0; right:0; border-radius:4px; } .ft-row.opens:hover { background:rgba(242,232,214,.035); }
+  .ft-band { position:absolute; left:-6px; right:-6px; border-radius:6px; background:rgba(242,232,214,.045); }
   .dr-note { margin:2px 0 0 30px; height:18px; line-height:18px; font-size:14px; font-style:italic; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* a player's "live", "this PC" */
   .dr-quiet { height:20px; line-height:20px; font-size:16px; font-style:italic; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bt-stack { display:flex; height:14px; }
@@ -515,7 +551,8 @@
   .isl .crows { margin:0; } .isl .aboutnum { margin:0; }
   .isl .gr { border-bottom:0; } .isl .sk-gl { border-bottom:0; padding-bottom:0; } .isl .rows .r { border-bottom:0; }   /* no divider lines (Joost, part 4): the island sets the group apart */
   .isl > .bt-band { background:none; padding:0; border-radius:0; } .isl > .bt-band.mix { margin-bottom:0; }   /* a weapon's band is the island itself (BattleUi.ItemBand bare); a list of foes keeps its bands */
-  .hskill { display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex:none; padding-bottom:6px; } .hsk { display:flex; align-items:flex-end; gap:10px; }   /* the hero's right side: the growth line over the skill (one column, so the numbers keep their line) */
+  .hskill { display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex:none; padding-bottom:6px; align-self:flex-end; } .hsk { display:flex; align-items:flex-end; gap:10px; }
+  .hskill.compact .skl { flex-direction:column; align-items:flex-start; gap:4px; } .hskill.compact .skb { width:64px !important; }   /* 0.8.2: the skill's compact form, name over level (RecordedUi.SkillCompact) */   /* the hero's right side: the growth line over the skill (one column, so the numbers keep their line) */
   .earned.bare { box-shadow:none; }   /* a strip with nothing on its left (only the switch or About these numbers): no gold edge */
   .isl .section .since.under { flex-basis:100%; }
   .pp-isl { display:flex; flex-direction:column; gap:8px; } .pp-isl .pp-h { display:flex; align-items:center; gap:10px; height:34px; font-size:20px; }   /* Recent's group: a player's island */
@@ -536,6 +573,9 @@ const TONE = { poison:"#6fae3a", fire:"#e0582a", frost:"#8ec9e8", lightning:"#8d
   slash:"#a8a49b", pierce:"#c4bfb4", blunt:"#8a867e", chop:"#736f68", pickaxe:"#5f5b55", damage:"#9b8f80", ember:"#e8a948" };
 const PEOPLE = ["#d6ccb3", "#9b4a50", "#5f86a0", "#94a56c", "#c4923f", "#8f7599", "#4d7a69", "#80807c"];   // fallback only: the dump carries PanelModel.PlayerPalette
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" })[c]);
+// 0.8.2 the opens mark (PanelUi.OpensMark): the chevron's line as PanelLook.Chevron draws it, right px in from the end of what it marks
+const OPENS_RIGHT = 12, OPENS_ROOM = 8 + 6;   // PanelUi.OpensRight, OpensRoom (PanelLook.ChevronW + 6)
+const opensMark = (open, right = OPENS_RIGHT) => `<svg class="opens-mk${open ? " open" : ""}" style="right:${right}px" viewBox="0 0 8 14"><polyline points="1.5,1.5 6.5,7 1.5,12.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 // richtext-fix: a label the UI writes in TMP rich text (src/Panel/RichText.cs, Rich) shows its tags as letters unless rich text is on for
 // the block's kind. window.PANEL_RICH (preview-data.js, from PanelRich.Kinds: the map PanelUi.RichLabel reads) says which kinds; for any
 // other kind the bridge draws what the game would draw: the raw tags, escaped. The preview no longer forgives what the game does not.
@@ -570,7 +610,7 @@ const tiles = items => `<div class="tiles">${items.map(t => `<div class="tile">$
 const FADED_KEY = "faded = before install";   // PanelModel.FadedKey: drawn as a small chip where a legend ends (PanelUi.FadedChip)
 const FADED_TWIN = "faded = before install \u00b7 solid = since install";   // PanelModel.FadedKeyTwin: above a grid whose tiles carry both layers
 const fadedChip = (text = FADED_KEY) => `<span class="chip" style="height:22px;font-size:var(--mintext);font-style:italic;color:var(--faint);padding:0 9px">${text}</span>`;
-const note = n => n === FADED_KEY || n === FADED_TWIN ? `<div>${fadedChip(n)}</div>` : n ? `<div class="note">${esc(n)}</div>` : "";
+const note = (n, link) => n === FADED_KEY || n === FADED_TWIN ? `<div>${fadedChip(n)}</div>` : n ? `<div class="note${link ? " more" : ""}"${link ? ` data-link="${esc(link)}"` : ""}>${esc(n)}</div>` : "";   // link: a fold's "+N more" that shows the rest (Block.NoteLink, PanelUi.MoreLink)
 // a list icon (ADDENDUM-6): a vocab line icon when its sprite exists (a missing file hides itself, as in game: no icon)
 const listIcon = (icon, s) => icon && icon.startsWith("vocab:") ? `<span class="m" style="width:${s}px;height:${s}px">${btIc(icon, "#e8c27a", s)}</span>` : marker(icon, s);
 const entry = (c, h = 48, cls = "") => { const ic = hasIcon(c.icon) || (c.icon || "").startsWith("vocab:");
@@ -585,8 +625,8 @@ const sinceUnder = on => on ? `<span class="since under">${esc(typeof on === "st
 const unrec = (b, px) => b && b.unrecorded ? ` style="font-size:${Math.max(px, 14)}px;color:var(--muted);font-style:italic;font-weight:400"` : "";
 // the deed's skill in the hero's row (rule K, RecordedUi.HeroSkill): icon 28, name 15 muted, "level 34" bold, a 120 x 4 bar under the name
 const skillWords = s => `<span style="display:flex;flex-direction:column;gap:4px">
-  <span style="display:flex;align-items:baseline;gap:8px;white-space:nowrap"><span style="font-size:15px;color:var(--muted)">${esc(s.title)}</span><b style="font-size:15px;color:var(--text)">level ${esc(s.value)}</b></span>
-  ${s.progress >= 0 ? `<span style="display:block;width:120px;height:4px;background:#2b2117"><span style="display:block;height:4px;width:${(Math.max(0, Math.min(1, s.progress)) * 100).toFixed(1)}%;background:var(--gold)"></span></span>` : ""}</span>`;
+  <span class="skl" style="display:flex;align-items:baseline;gap:8px;white-space:nowrap"><span style="font-size:15px;color:var(--muted)">${esc(s.title)}</span><b style="font-size:15px;color:var(--text)">level ${esc(s.value)}</b></span>
+  ${s.progress >= 0 ? `<span class="skb" style="display:block;width:120px;height:4px;background:#2b2117"><span style="display:block;height:4px;width:${(Math.max(0, Math.min(1, s.progress)) * 100).toFixed(1)}%;background:var(--gold)"></span></span>` : ""}</span>`;
 // 0.8 (SkillsBesideUi.HeadSkills): a component's skills at its head row's right end, the hero skill's form, 24 px apart
 const headRowSkills = (b, icon = 22, bottom = 0) => { const sk = (b.items || []).filter(i => i.kind === "skill"); return sk.length ? `<span style="flex:1"></span><span style="display:flex;align-items:flex-end;gap:24px;flex:none;text-transform:none;letter-spacing:0;padding-bottom:${bottom}px">${sk.map(s => `<span style="display:flex;align-items:flex-end;gap:8px">${marker(s.icon, icon)}${skillWords(s)}</span>`).join("")}</span>` : ""; };
 // 0.8 layout D+ (PanelUi.HeroRight): the hero's right side, the growth line over the deed's skill (one column); HeroLines moves it as one. The growth
@@ -618,6 +658,7 @@ const fill = i => `background-color:${(i.colour || "").startsWith("person:") ? p
 const BF = { bar: 22, thin: 22, tall: 24, gap: 4, toList: 10, row: 22, rowGap: 6, colGap: 36, after: 0, columns: 3, max: 8 };
 const BF_FOLD = "…other", BF_OTHER = "#76706a";
 const bfOther = p => p.id === BF_FOLD || String(p.id || "").toLowerCase() === "other";   // PanelModel.IsOtherPart
+const bfPerson = p => /^person:/.test(p.colour || "") || /^person:/.test(p.icon || "");   // PanelModel.IsPersonPart: a bar of people never folds (0.8.2)
 function wholeShares(vals) {   // PanelModel.WholeShares: largest remainder, ties to the earlier one
   const tot = vals.reduce((a, v) => a + Math.max(0, v), 0); if (tot <= 0) return vals.map(() => 0);
   const raw = vals.map(v => Math.max(0, v) * 100 / tot), res = raw.map(Math.floor); let rest = 100 - res.reduce((a, v) => a + v, 0);
@@ -632,7 +673,7 @@ function barFormOf(parts, numbers) {   // PanelModel.BarFormOf
   let named = [], others = [];
   shown.forEach((p, k) => { const row = { part: p, title: p.title, value: p.value, colour: p.colour, fraction: p.fraction / sum, percent: pct[k], selected: !!p.selected, other: bfOther(p) };
     (row.other ? others : named).push(row); });
-  if (named.length + others.length > BF.max) {   // past 8 rows: the smallest parts and the Other part as one "Other (n kinds)" row
+  if (named.length + others.length > BF.max && !named.some(r => bfPerson(r.part))) {   // past 8 rows: the smallest parts and the Other part as one "Other (n kinds)" row; people never
     const rest = named.slice(BF.max - 1).concat(others), title = "Other (" + rest.length + (rest.length === 1 ? " kind)" : " kinds)"), value = bfSum(rest.map(r => r.part)), fraction = rest.reduce((a, r) => a + r.fraction, 0);
     named = named.slice(0, BF.max - 1);
     others = [{ part: { id: BF_FOLD, title, value, colour: BF_OTHER, fraction }, title, value, colour: BF_OTHER, fraction, percent: rest.reduce((a, r) => a + r.percent, 0), other: true }];
@@ -650,9 +691,12 @@ function barParts(fr, faded, minShare) {   // PanelModel.BarParts
 }
 // a part with a wood grain or groundwork pattern: the 0.6.5 fill exactly (fill(): the grain at the bar's height, a neutral "-n" grain multiplied by its lifted colour)
 const bfFill = (r, colour, sw) => r.part && r.part.pattern && /^vocab:grain-/.test(r.part.pattern) && !r.other ? fill({ colour, pattern: r.part.pattern }) + (sw ? "background-size:auto 16px;" : "") : `background:${colour}`;
-// opts: thin, noBar, length (0..1), colour (part -> css colour), after (the air after it, px; BarLook.After)
+// a part's click target, the same on the part and on its legend item (PanelModel.PartTarget, 0.8.2): none without the bar's partLink, none for the fold
+const partTarget = (link, p) => link && p && p.id && p.id !== BF_FOLD ? link + p.id : "";
+// opts: thin, noBar, length (0..1), colour (part -> css colour), after (the air after it, px; BarLook.After), link (the bar's partLink: its parts filter)
 function barForm(parts, numbers, opts = {}) {
   const f = barFormOf(parts, numbers); if (!f.rows.length) return "";
+  const pick = r => { const t = partTarget(opts.link, r.part); return t ? ` data-pick="${esc(t)}"` : ""; };   // BarFormUi: one click per row, for its part and its legend item
   const tall = (parts || []).some(p => p && p.fraction > 0 && /^vocab:grain-/.test(p.pattern || ""));   // PanelModel.BarHeightOf: a grain or groundwork pattern keeps the bar tall
   const col = r => opts.colour && r.part.id !== BF_FOLD ? opts.colour(r.part) : r.colour && r.colour.startsWith("person:") ? personColor(r.colour.slice(7)) : r.colour;
   const len = Math.min(1, Math.max(0, opts.length > 0 ? opts.length : 1)), width = Math.max(40, COLUMN * len);
@@ -662,9 +706,9 @@ function barForm(parts, numbers, opts = {}) {
     bar = `<div class="bf-bar${tall ? " tall" : opts.thin ? " thin" : ""}" style="width:${len < 1 ? width.toFixed(1) + "px" : "auto"}">${f.rows.map((r, k) => { const [a, b, fd] = spans[k], c = col(r);
       const veil = fd > a ? `<span class="bf-veil" style="width:${((fd - a) / (b - a) * 100).toFixed(2)}%"></span>` : "";
       const num = f.numbers && !r.other && r.value && !opts.thin ? ` data-num="${esc(r.value)}" data-c="${esc(c)}"` : "";
-      return `<span class="bf-seg${r.selected ? " sel" : ""}"${f.list ? ` data-k="${k}"` : ""}${num} style="left:calc(${(a * 100).toFixed(3)}% + ${BF.gap / 2}px);width:calc(${((b - a) * 100).toFixed(3)}% - ${BF.gap}px);${bfFill(r, c)}">${veil}</span>`; }).join("")}</div>`;
+      return `<span class="bf-seg${r.selected ? " sel" : ""}"${f.list ? ` data-k="${k}"` : ""}${pick(r)}${num} style="left:calc(${(a * 100).toFixed(3)}% + ${BF.gap / 2}px);width:calc(${((b - a) * 100).toFixed(3)}% - ${BF.gap}px);${bfFill(r, c)}">${veil}</span>`; }).join("")}</div>`;
   }
-  const row = (r, k) => `<span class="r"${opts.noBar ? "" : ` data-k="${k}"`}><span class="nm"><i class="sw" style="${bfFill(r, col(r), true)}"></i><span class="${r.selected ? "sel" : r.part.tone === "zero" ? "zero" : ""}">${esc(r.title)}</span></span><span class="val">${esc(r.value || "")}</span><span class="pc">${r.percent === 0 && r.fraction > 0 ? "&lt;1" : r.percent} %</span><span class="sn">${since(r.part.since)}</span></span>`;
+  const row = (r, k) => `<span class="r"${opts.noBar ? "" : ` data-k="${k}"`}${pick(r)}><span class="nm"><i class="sw" style="${bfFill(r, col(r), true)}"></i><span class="${r.selected ? "sel" : r.part.tone === "zero" ? "zero" : ""}">${esc(r.title)}</span></span><span class="val">${esc(r.value || "")}</span><span class="pc">${r.percent === 0 && r.fraction > 0 ? "&lt;1" : r.percent} %</span><span class="sn">${since(r.part.since)}</span></span>`;
   const tab = (rows, at = 0) => `<div class="bf-tab">${rows.map((r, k) => row(r, k + at)).join("")}</div>`;
   const list = !f.list ? "" : `<div class="bf-list">${tab(f.rows)}</div>`;   // fitBarForms lays it out in as many columns as fit
   return `<div class="bf${opts.noBar ? " nobar" : ""}${!f.list ? " nolist" : ""}"${opts.after != null ? ` style="margin-bottom:${opts.after}px"` : ""}>${bar}${list}</div>`;
@@ -710,9 +754,9 @@ function compareRows(b) {
     return `<span class="pic"><i style="width:12px;height:12px;border-radius:3px;display:inline-block;${r.pattern ? bfFill({ part: r, other: false }, c, true) : `background:${c}`}"></i></span>`; };
   const fillOf = r => r.pattern && /^vocab:grain-/.test(r.pattern) ? bfFill({ part: r, other: false }, col(r)) : `background:${col(r)}`;
   const cap = (b.title || b.value) ? `<div class="cmp-h">${esc(b.title)}${b.value ? `<span class="tot">${esc(b.value)}</span>` : ""}${cmpQual(b)}${b.note ? `<span class="q">${esc(b.note)}</span>` : ""}</div>` : "";
-  const head = `<span class="h l">${esc(b.text || "")}</span><span class="h r">now</span><span class="h r">before</span><span></span><span class="rule"></span>`;
+  const head = `<span class="h l">${esc(b.text || "")}</span><span class="h r">${esc(b.nowHead || "")}</span><span class="h r">${esc(b.beforeHead || "")}</span><span></span><span class="rule"></span>`;
   const row = r => `<span class="nm${r.id === BF_FOLD ? " other" : ""}">${pic(r)}<span>${esc(r.title)}</span></span>
-    <span class="tr">${r.fraction > 0 ? `<span class="sol" style="width:max(4px, ${(r.fraction * 100).toFixed(2)}%);${fillOf(r)}"></span>` : ""}${r.fraction2 > 0 ? `<span class="out" style="width:max(8px, ${(r.fraction2 * 100).toFixed(2)}%)"></span>` : ""}</span>
+    <span class="tr">${r.fraction > 0 ? `<span class="sol" style="width:max(4px, ${(r.fraction * 100).toFixed(2)}%);${fillOf(r)}"></span>` : ""}${r.fraction2 > 0 ? `<span class="out" style="width:max(8px, ${(r.fraction2 * 100).toFixed(2)}%);--oc:${col(r)}"></span>` : ""}</span>
     <span class="v">${esc(r.value || "")}</span><span class="b">${esc(r.before || "")}</span><span class="c">${changeMark(r.change)}</span>`;
   return cap + `<div class="crows" style="grid-template-columns:minmax(${nameMin}px, max-content) ${trackW} minmax(${nowW}px, max-content) minmax(${nowW}px, max-content) minmax(${chW}px, max-content);column-gap:${gap}px;--namemax:${nameMax}px">${head}${rows.map(row).join("")}</div>`;
 }
@@ -721,7 +765,7 @@ function composition(b) {
   // the helm of" wrapped to three lines beside "Recorded from 1 October · this PC")
   const quals = `${since(b.since)}${b.note && b.note !== FADED_KEY ? `<span class="q">${esc(b.note)}</span>` : ""}${b.text ? `<span class="q" style="font-style:italic;text-transform:none;letter-spacing:0">${esc(b.text)}</span>` : ""}`, under = COLUMN < 500 && quals;   // a half island (0.8 layout D+: a wide one keeps them on the title's line)
   return `<div class="cmp">${b.title || b.value ? `<div class="cmp-h">${esc(b.title)}<span class="tot">${esc(b.value)}</span>${under ? "" : quals}</div>${under ? `<div class="cmp-h" style="margin-top:0">${quals.replace('class="since"', 'class="since" style="margin-left:0"')}</div>` : ""}` : ""}
-    ${barForm(b.items, numbersOnBar(b), { thin: b.tone === "thin", noBar: b.tone === "single", length: barLength(b) })}${b.note === FADED_KEY ? `<div>${fadedChip()}</div>` : ""}</div>`;
+    ${barForm(b.items, numbersOnBar(b), { thin: b.tone === "thin", noBar: b.tone === "single", length: barLength(b), link: b.partLink })}${b.note === FADED_KEY ? `<div>${fadedChip()}</div>` : ""}</div>`;
 }
 // biome strip: dealt rises, received hangs (the model gives both bar heights on one scale), the emblem on the tile colour,
 // the death mark with its count, a defeated boss on the boss ring (its trophy is a game sprite: the initial stands in)
@@ -764,7 +808,7 @@ function ladderSvg(level, prog, glow, w, h, rl, rr, big, k = 1) {   // k: the ov
 // zones-wording (Joost 2026-10-09: the skill strip took a full-width band): a page's own skill is a small chip in the heading row, left of the
 // pill (PanelUi.HeadRight); only a strip with a scope (Battle's weapon skills) stays on the plate
 const headSkills = items => (items || []).filter(b => b.kind === "ladders" && b.tone === "strip" && (b.items || []).every(g => !g.text)).flatMap(b => b.items.flatMap(g => g.items));
-const skillChip = s => `<span class="chip icon" style="color:var(--muted)">${marker(s.icon, 18)}${esc(s.title)}&nbsp;<b style="color:${s.level > 0 ? "var(--gold)" : "var(--faint)"}">level ${esc(s.value)}</b></span>`;
+const skillChip = s => `<span class="chip icon pill" style="color:var(--muted)">${marker(s.icon, 18)}${esc(s.title)}&nbsp;<b style="color:${s.level > 0 ? "var(--gold)" : "var(--faint)"}">level ${esc(s.value)}</b></span>`;
 function ladders(b) {
   if (b.tone === "strip" && (b.items || []).every(g => !g.text)) return "";
   if (b.tone === "strip") {   // the skill beside a page's deed (PanelUi.SkillStrip): the ladder at a third of its size, icon and name, the level under
@@ -869,13 +913,14 @@ function counts(b) {
     <span class="ct-l" style="font-size:${large ? 19 : 16}px;color:${large ? "var(--text)" : "var(--muted)"}">${esc(i.title)}</span>${i.colour ? `<span class="ct-edge" style="background:${i.colour}"></span>` : ""}</div>`).join("")}</div>` + bar;
 }
 // as DeedsUi.ItemGrid (fix2 6): compact tiles at least 168 wide, 8 apart, as many per line as the column holds (four across
-// the plate, two in a half column); picture left, count big and name small (two lines at most) on the right
+// the plate, two in a half column); picture left, count big and name small (two lines at most) on the right; 0.8.1: a folded grid's last
+// tile is the Show all button (DeedsModel.FoldTiles), its words in gold as PanelUi draws them
 function itemgrid(b) {
   const per = Math.max(1, Math.min(6, Math.floor((COLUMN + 8) / 176))), second = b.items.some(i => i.value2), lab = b.items.some(i => i.since);
   const textW = Math.floor((COLUMN - 8 * (per - 1)) / per) - 54, wraps = b.items.some(i => (i.title || "").length * 6.7 > textW);
   const h = 46 + (wraps ? 14 : 0) + (second ? 14 : 0) + (lab ? 14 : 0);
   return `<div class="ig" style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(i => `<div class="ig-t k-track" style="height:${h}px">
-    ${i.colour ? `<span class="edge" style="background:${i.colour}"></span>` : ""}<span class="ig-p">${pic(i.icon, 32)}</span><span class="ig-x"><span class="ig-n">${esc(i.value)}</span><span class="ig-l">${i.tone === "fuel" ? rich("itemgrid", `${esc(i.title)}<span class="fuel">fuel</span>`, T.plain(i.title) + " " + T.size(T.i(T.ink("fuel", INK.faint)), 14)) : esc(i.title)}</span>${i.value2 ? `<span class="ig-s">${layered(i, INK.text, false, "itemgrid") || esc(i.value2)} ${esc(i.text)}</span>` : ""}${i.since ? `<span class="since" style="margin:0;font-size:var(--mintext)">since install</span>` : ""}</span></div>`).join("")}</div>` + sinceUnder(b.since) + note(b.note);
+    ${i.colour ? `<span class="edge" style="background:${i.colour}"></span>` : ""}<span class="ig-p">${pic(i.icon, 32)}</span><span class="ig-x"><span class="ig-n">${esc(i.value)}</span><span class="ig-l"${i.id === "items:showall" ? ' style="color:var(--gold)"' : ""}>${i.tone === "fuel" ? rich("itemgrid", `${esc(i.title)}<span class="fuel">fuel</span>`, T.plain(i.title) + " " + T.size(T.i(T.ink("fuel", INK.faint)), 14)) : esc(i.title)}</span>${i.value2 ? `<span class="ig-s">${layered(i, INK.text, false, "itemgrid") || esc(i.value2)} ${esc(i.text)}</span>` : ""}${i.since ? `<span class="since" style="margin:0;font-size:var(--mintext)">since install</span>` : ""}</span></div>`).join("")}</div>` + sinceUnder(b.since) + note(b.note);
 }
 // the filter bar (FacetUi.cs): chip rows with live counts, the chosen chips as tokens + result line + Clear all, linked bars with legends
 function filterbar(b) {
@@ -895,7 +940,7 @@ function filterbar(b) {
     ? `<div class="fb-app">${lead}${toks.length ? toks.map(tok).join("") : esc(applied.title)}<span style="flex:1"></span><span>${esc(applied.text)}</span>${toks.length ? `<span class="fb-clear k-track">Clear all</span>` : ""}</div>`
     : `<div class="fb-app fb-head"><span class="fb-name${open ? " on" : ""}">${esc(b.title || "Filter")}</span>${kc}${toks.length ? toks.map(tok).join("") : esc(applied.value || "all")}<span style="flex:1"></span><span>${esc(applied.text)}</span>${toks.length ? `<span class="fb-clear k-track">Clear all</span>` : ""}<span class="fb-clear k-track">${open ? "Hide filters" : "Show filters"}</span></div>`;
   // a linked bar: its head, then the one bar form (FacetUi.FacetBar); the chosen part outlined and named in gold
-  const bar = f => `<div class="cmp-h">${esc(f.title)}${f.value ? `<span class="tot">${esc(f.value)}</span>` : ""}${f.note ? `<span class="q" style="letter-spacing:0;text-transform:none">${esc(f.note)}</span>` : ""}</div>${barForm(f.items, false)}`;   // 0.8 layout D+: one heading style, each with its total (FacetUi.FacetBar)
+  const bar = f => `<div class="cmp-h">${esc(f.title)}${f.value ? `<span class="tot">${esc(f.value)}</span>` : ""}${f.note ? `<span class="q" style="letter-spacing:0;text-transform:none">${esc(f.note)}</span>` : ""}</div>${barForm(f.items, false, { link: f.partLink })}`;   // 0.8 layout D+: one heading style, each with its total (FacetUi.FacetBar); its parts and legend items choose (0.8.2)
   return `<div class="fb">${app}${inline || !open ? "" : rows.map(row).join("")}${bars.filter(f => f.tone !== "hidden").map(f => { const c = its.find(x => x.kind === "comparerows" && x.id === f.id); return c ? compareRows(c) : bar(f); }).join("")}</div>`;   // 0.8 Compare: the bar's compare rows in its place
 }
 // the kitchen ledger (Cooking) adds a source line under the name (text) and the row's total at the right (value, note), as VoyagesHallUi.Ledger
@@ -907,7 +952,7 @@ const band = b => `<div class="bd k-track">${marker(b.icon, 34)}<span class="bd-
 // 0.7 Recent (DeedsUi.People): a gain's number bold before its name (muted); "Not recorded" (unrecorded) and a quiet line muted, no picture
 // 0.8 layout D+ (DeedsUi.PersonIsland): Recent's group, one player per island: the shield and name, their items under it in two columns
 const ppItem = (i, s) => `<span class="pp-it">${i.icon ? pic(i.icon, s) : ""}${i.value ? `<b style="font-size:18px">${esc(i.value)}</b>` : ""}<span${i.value || i.unrecorded || i.tone === "quiet" ? ` style="font-size:15px;color:var(--muted)${i.unrecorded || i.tone === "quiet" ? ";font-style:italic" : ""}"` : ""}>${esc(i.title)}</span>${since(i.since)}</span>`;
-const personIsland = p => `<div class="pp-isl"><div class="pp-h">${marker(p.icon, 34)}<span>${esc(p.title)}</span>${p.note ? `<i class="pp-more">${esc(p.note)}</i>` : ""}</div><div class="pp-items">${(p.items || []).map(i => ppItem(i, 30)).join("")}</div></div>`;
+const personIsland = p => `<div class="pp-isl"><div class="pp-h">${marker(p.icon, 34)}<span>${esc(p.title)}</span>${p.note ? `<i class="pp-more"${p.noteLink ? ` data-link="${esc(p.noteLink)}"` : ""}>${esc(p.note)}</i>` : ""}</div><div class="pp-items">${(p.items || []).map(i => ppItem(i, 30)).join("")}</div></div>`;
 const people = b => b.tone === "island" ? personIsland(b.items[0]) : b.tone === "recent" ? recentPeople(b) : b.items.map(p => `<div class="pp-row">${marker(p.icon, 38)}<span class="pp-nm">${esc(p.title)}</span>${(p.items || []).map(i => `<span class="pp-it">${i.icon ? pic(i.icon, 34) : ""}${i.value ? `<b style="font-size:18px">${esc(i.value)}</b>` : ""}<span${i.value || i.unrecorded || i.tone === "quiet" ? ` style="font-size:15px;color:var(--muted)${i.unrecorded || i.tone === "quiet" ? ";font-style:italic" : ""}"` : ""}>${esc(i.title)}</span>${since(i.since)}</span>`).join("")}</div>`).join("");
 // ---------- page layout (slice 3): the widths PanelUi gives (content 790, plate inside 741, a column its share) ----------
 let COLUMN = 889;
@@ -925,7 +970,10 @@ const layered = (n, solid, words, kind) => n.faded && n.solid ? rich(kind,
   T.ink(T.plain(n.faded) + lt("before install", words) + " +", INK.faint) + " " + (solid ? T.ink(T.plain(n.solid) + lt("since install", words), solid) : T.plain(n.solid) + lt("since install", words))) : null;
 // 0.8 Compare (CompareUi.ChangeMarkUi, HeroBefore, CompareQualifier): the arrow as a shape, then its words; the hero's number before, faded
 const changeMark = m => { if (!m) return ""; const up = m.startsWith("\u25B2 "), dn = m.startsWith("\u25BC "); return `<span class="cmark">${up || dn ? `<i class="tri${dn ? " dn" : ""}"></i>` : ""}${esc(up || dn ? m.slice(2) : m)}</span>`; };
-const heroBefore = n => n.before == null ? "" : `<div class="hcmp">${changeMark(n.change)}<span class="before"><b>${esc(n.before)}</b>${n.beforeLabel ? `<span>${esc(n.beforeLabel)}</span>` : ""}</span></div>`;
+// the hero's comparison as one line after the number (PanelModel.HeroCompare; Joost, 0.8.1): the mark first for a change, after the number before for "new" and "same"
+const cmpLine = n => { if (n.before == null) return ""; const then = n.before + (n.beforeLabel ? " " + n.beforeLabel : ""), arrow = /^[\u25B2\u25BC] /.test(n.change || "");
+  return arrow ? `${changeMark(n.change)}<span>from ${esc(then)}</span>` : `<span>${esc(then)} \u00B7</span>${changeMark(n.change)}`; };
+const heroBefore = n => n.before == null ? "" : `<div class="hcmp">${cmpLine(n)}</div>`;
 const cmpQual = b => b.before == null ? "" : `<span class="cq">${changeMark(b.change)}, ${esc(b.before)}${b.beforeLabel ? " " + esc(b.beforeLabel) : ""}</span>`;
 // 0.8 growth line (GrowthLinesUi.Spark): a gold column per day (6 px, 2 apart, up to 22 px), a kept day with nothing a 1 px mark, the caption after
 const spark = (sp, stacked) => { const off = sp.tone === "off", days = off ? Array.from({ length: 14 }, () => ({ tone: "zero" })) : (sp.items || []);
@@ -948,9 +996,10 @@ const sw = b => b === STRIP_SWITCH ? (b.title ? `<div class="swcap">${esc(b.titl
 function cards(b) {
   const per = Math.max(1, Math.min(4, Math.floor((COLUMN + 12) / 182)));
   return `<div class="cards" style="grid-template-columns:repeat(${per}, 1fr);${b.items.every(c => c.tone === "unsung") ? "grid-auto-rows:92px" : ""}">${b.items.map(c => { const s = (c.items || [])[0];
-    if (c.tone === "unsung") return `<div class="card" style="height:92px"><div class="ct" style="color:var(--muted)">${hasIcon(c.icon) ? `<span style="opacity:.6;display:inline-flex">${marker(c.icon, 24)}</span>` : ""}${esc(c.title)}</div><div style="position:absolute;left:12px;right:12px;top:42px;font-size:15px;line-height:1.25;color:var(--text)">${esc(c.text)}</div></div>`;
-    return `<div class="card"><div class="ct">${hasIcon(c.icon) ? marker(c.icon, 24) : ""}${esc(c.title)}</div><div class="cn">${esc(c.value)}</div>
-      <div class="cl"><span class="w">${esc(c.text)}</span>${since(c.since)}</div>${s ? `<div class="cs"><b>${esc(s.value)}</b><span class="w">${esc(s.title)}</span>${since(s.since)}</div>` : ""}</div>`; }).join("")}</div>`;
+    const opens = !!c.id;   // PanelUi.Cards: a card with a page to open is a ClickTarget with the opens mark (its words keep clear of it)
+    if (c.tone === "unsung") return `<div class="card${opens ? " opens" : ""}" style="height:92px"><div class="ct" style="color:var(--muted)">${hasIcon(c.icon) ? `<span style="opacity:.6;display:inline-flex">${marker(c.icon, 24)}</span>` : ""}${esc(c.title)}</div><div style="position:absolute;left:12px;right:${12 + (opens ? OPENS_ROOM : 0)}px;top:42px;font-size:15px;line-height:1.25;color:var(--text)">${esc(c.text)}</div>${opens ? opensMark(false) : ""}</div>`;
+    return `<div class="card${opens ? " opens" : ""}"><div class="ct">${hasIcon(c.icon) ? marker(c.icon, 24) : ""}${esc(c.title)}</div><div class="cn">${esc(c.value)}</div>
+      <div class="cl"><span class="w">${esc(c.text)}</span>${since(c.since)}</div>${s ? `<div class="cs"><b>${esc(s.value)}</b><span class="w">${esc(s.title)}</span>${since(s.since)}</div>` : ""}${opens ? opensMark(false) : ""}</div>`; }).join("")}</div>`;
 }
 // ---------- Farming's crop grid (PanelUi Chapters/CropsUi.cs): compact tiles with two thin paired bars and their numbers ----------
 function cropgrid(b) {
@@ -1051,7 +1100,7 @@ function grouprows(b) {
 }
 // Recent with Everyone on (RecentUi.RecentPeople): per player the shield and name, "+N more" under it; the gains three across, a long name on two lines
 const recentPeople = b => b.items.map(p => { const its = p.items || [], alone = its.length === 1 && !its[0].value;
-  return `<div class="rp-row"><span class="rp-who">${marker(p.icon, 38)}<b>${esc(p.title)}</b>${p.note ? `<i>${esc(p.note)}</i>` : ""}</span><span class="rp-grid${alone ? " alone" : ""}">${its.map(i => `<span class="rp-it">${i.icon ? pic(i.icon, 34) : ""}${i.value ? `<b>${esc(i.value)}</b>` : ""}<span${i.unrecorded || i.tone === "quiet" ? ' style="font-style:italic"' : i.value ? "" : ' style="font-size:17px;color:var(--text)"'}>${esc(i.title)}</span></span>`).join("")}</span></div>`; }).join("");
+  return `<div class="rp-row"><span class="rp-who">${marker(p.icon, 38)}<b>${esc(p.title)}</b>${p.note ? `<i${p.noteLink ? ` data-link="${esc(p.noteLink)}"` : ""}>${esc(p.note)}</i>` : ""}</span><span class="rp-grid${alone ? " alone" : ""}">${its.map(i => `<span class="rp-it">${i.icon ? pic(i.icon, 34) : ""}${i.value ? `<b>${esc(i.value)}</b>` : ""}<span${i.unrecorded || i.tone === "quiet" ? ' style="font-style:italic"' : i.value ? "" : ' style="font-size:17px;color:var(--text)"'}>${esc(i.title)}</span></span>`).join("")}</span></div>`; }).join("");
 // the chip (EveryoneUi.EveryoneChip): the row's last entry after a thin gold rule, its icon a tiny bar in the player colours (an icon, not data);
 // on: the chosen row with a gold glow; greyed: dimmed with its second line, the reason in a tag under the row (a "-hover" shot shows it)
 const everyoneChip = v => {
@@ -1397,7 +1446,7 @@ function together(b) {
   const rows = windowed ? rowOf(pick) + `<div style="font-size:var(--mintext);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:2px">${esc(b.note)}</div>` + cats.filter(c => c !== pick).map(rowOf).join("") : cats.map(rowOf).join("");
   const full = `<div style="display:flex;flex-wrap:wrap;gap:6px 4px">${cats.map(c => chip(c.title, "", c === pick)).join("")}</div>
     ${windows ? sw(windows) : cats.some(c => c.id === "dealt") ? `<div style="height:28px;flex:none"></div>` : ""}
-    ${hero({ value: pick.value, title: pick.text, note: pick.note })}${pick.before != null ? `<div class="hcmpline">${changeMark(pick.change)}<b>${esc(pick.before)}</b><span>${esc(pick.beforeLabel || "")}</span></div>` : ""}
+    ${hero({ value: pick.value, title: pick.text, note: pick.note })}${pick.before != null ? `<div class="hcmpline">${cmpLine(pick)}</div>` : ""}
     <div class="tg-bar">${(b.items || []).some(i => i.kind === "comparerows" && i.id === pick.id) ? compareRows(b.items.find(i => i.kind === "comparerows" && i.id === pick.id)) : barForm(parts, false, { colour: p => personColor(p.id) })}</div>
     ${tgScope(b, pick)}
     <div style="display:flex;align-items:center;margin-top:4px"><span style="font-size:var(--mintext);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">${esc(b.text)}</span>${legend}</div>
@@ -1444,26 +1493,57 @@ const btCell = (m, size = 18) => { const mk = m.tone === "weakness" ? "+" : m.to
 const btMeter = f => { const u = Math.max(0, Math.min(4, f / 0.5)); return `<span class="bt-meter">${[0, 1, 2, 3].map(i => `<i><b style="width:${(Math.max(0, Math.min(1, u - i)) * 100).toFixed(1)}%"></b></i>`).join("")}</span>${u <= 0 ? `<span class="bt-meter-x">&times;</span>` : ""}`; };
 const btMeterCell = m => `<span class="bt-mc" title="${esc(m.value || "")}"><span class="ic"${m.tone === "immunity" ? ' style="opacity:.4"' : ""}>${btIc(m.icon, m.colour, 16)}</span><span class="fx">${esc(m.value || "")}</span>${btMeter(m.fraction || 0)}</span>`;
 // the ranking under an open foe (BattleUi.BattleRanking): Arrows · Bolts · Weapons side by side, a status per line, the small print under
+// 0.8.2 Everyone: Who hit it, first in the open foe (BattleUi.WhoHitIsland): its caption and the window's words, one island of damage rows on one scale
+function btWhoHit(who) {
+  const rows = (who.items || []).filter(i => i.kind === "source"); if (!rows.length) return "";
+  const outer = COLUMN; COLUMN = COLUMN - 2 * 12 - 2 * 14;   // the band's padding (BtBandPadX), the island's (IslandPad)
+  try { return `<div class="bt-cap">${esc(who.title)}${who.text ? `<span class="q">${esc(who.text)}</span>` : ""}</div><div class="isl whohit">${dmgRows(rows, true)}</div>`; }
+  finally { COLUMN = outer; }
+}
 function btRanking(rk) {
-  const gs = (rk.items || []).filter(g => g.kind === "rankgroup");
-  const line = it => it.kind === "rankhead" ? `<div class="sh">${esc(it.title)}</div>`
-    : `<div class="ln${it.tone === "unknown" ? " unk" : ""}"><div class="r1"><span class="nm">${esc(it.title)}</span><span class="ex">${esc(it.value)}</span></div><div class="r2"><span class="st">${esc(it.text || "")}</span>${(it.items || []).map(p => `<span class="ch">${btIc(p.icon, p.colour, 14)}${esc(p.value)}</span>`).join("")}<span class="pad"></span></div></div>`;
-  return `<div class="bt-rank" style="grid-template-columns:repeat(${gs.length}, minmax(0, 1fr))">${gs.map(g => `<div><div class="gh">${esc(g.title)}<small>${esc(g.text || "")}</small></div>${(g.items || []).map(line).join("")}</div>`).join("")}<div class="small">${esc(rk.note || "")}</div></div>`;
+  const groups = r => (r.items || []).filter(g => g.kind === "rankgroup"), rows = (rk.items || []).filter(r => r.kind === "rankrow");
+  const who = (rk.items || []).find(r => r.kind === "whohit"), whoHtml = who ? btWhoHit(who) : "";
+  if (!rows.length) return `<div class="bt-rank">${whoHtml}</div>`;
+  // one number column for the whole detail, its widest number (bold 15 px), so every bar starts at one x on one scale (BattleUi.BattleRanking)
+  const cx = btRanking.cx || (btRanking.cx = document.createElement("canvas").getContext("2d")); cx.font = '700 15px "Averia Serif Libre", Georgia, serif';
+  const numW = Math.max(24, ...rows.flatMap(groups).flatMap(g => g.items || []).filter(i => i.value).map(i => Math.ceil(cx.measureText(i.value).width * 1.04) + 2));
+  const line = (it, gw) => `<div class="ln${it.tone === "unknown" ? " unk" : ""}"><div class="r1"><span class="nm">${esc(it.title)}</span><span class="st">${esc(it.text || "")}</span></div>`
+    + `<div class="r2"><span class="ex" style="width:${numW}px">${esc(it.value)}</span>${feedBar(it, gw - numW - 8, "part", true)}</div></div>`;
+  const island = (g, gw) => `<div class="isl${g.tone === "worst" ? " worst" : ""}"><div class="gh">${esc(g.title)}<small>${esc(g.text || "")}</small></div>${(g.items || []).map(it => line(it, gw)).join("")}${g.note ? `<div class="sh">${esc(g.note)}</div>` : ""}</div>`;   // BattleUi.RankIsland
+  const out = rows.map(r => { const gs = groups(r), gw = (COLUMN - 2 * 12 - 14 * (gs.length - 1)) / gs.length - 2 * 14;
+    return `<div class="bt-cap">${esc(r.title)}${r.text ? `<span class="q">${esc(r.text)}</span>` : ""}</div><div class="bt-rrow" style="grid-template-columns:repeat(${gs.length}, minmax(0, 1fr))">${gs.map(g => island(g, gw)).join("")}</div>`; });
+  return `<div class="bt-rank">${whoHtml}${out.join("")}<div class="small">${esc(rk.note || "")}</div></div>`;
+}
+// 0.8.2 (Joost in game: The Queen's "12 6…"): the Dealt column, its bar at most BT_FOE_BAR and a 6-digit number with its space whole after it
+// (BattleUi.BtFoeDealt, BtFoeBar, BtFoeDealtH, BtFoeNumGap; render-check measures "123 456" in the room left)
+const BT_FOE_DEALT = 112, BT_FOE_BAR = 40, BT_FOE_DEALT_H = 10;
+// the foe's name after its trophy, BattleUi.BtFoeName - BtFoeNamePad wide (0.8.2: "Greydwarf Shaman" and "Charred Marksman" whole), cut there as TMP does
+const BT_FOE_NAME = 184, BT_FOE_NAME_ROOM = 184 - 34;
+// BattleUi.GroupDealtBar (Everyone): the foe's Dealt bar split in the players' colors, 1 px apart; pointing at a part rings it, and the foe's total
+// gives its place to the page's tag, whose part it is and the number (its words where the total's start: data-tag-x, kept before data-tag-max)
+function btDealtBar(r) {
+  const parts = (r.items || []).filter(i => i.kind === "part"), w = Math.max(2, Math.min(1, Math.max(0, r.fraction || 0)) * BT_FOE_BAR);
+  if (!parts.length) return `<i class="bt-bar" style="height:${BT_FOE_DEALT_H}px;width:${w.toFixed(1)}px;background:#e8a948"></i>`;
+  const span = w + 1, spans = barParts(parts.map(p => p.fraction), [], Math.min(0.5, 2 / span));
+  const segs = parts.map((p, k) => { const left = spans[k][0] * span, pw = Math.max(1, (spans[k][1] - spans[k][0]) * span - 1);
+    return `<span class="dr-seg" data-k="${k}" data-tip="${esc(p.title + " " + p.value)}" style="left:${left.toFixed(2)}px;width:${pw.toFixed(2)}px;background:${cssColour(p.colour)}"></span>`; }).join("");
+  return `<span class="bf bt-gd" data-tag-x="${(w + 8 - 6).toFixed(1)}" data-tag-max="${BT_FOE_DEALT + 166}" data-tag-top="${(BT_FOE_DEALT_H - 20) / 2}" style="width:${w.toFixed(1)}px;height:${BT_FOE_DEALT_H}px">${segs}</span>`;
 }
 function btFoes(b) {
   const arrows = b.items.some(r => r.items.some(i => i.kind === "arrow"));
   const types = (b.items.find(r => r.items.some(i => i.kind === "mod")) || { items: [] }).items.filter(i => i.kind === "mod");
-  const x0 = 176 + 100 + (arrows ? 134 : 0), tw = types.length ? (COLUMN - x0) / types.length : 0;
-  const c = (w, html, st = "") => `<span class="bt-c" style="width:${w}px;${st}">${html}</span>`;
+  const opens = b.items.some(r => r.tone === "opens"), BT_OPENS_RIGHT = 4, BT_OPENS_W = BT_OPENS_RIGHT + 8 + 4;   // BattleUi.BtOpensRight, BtOpensW: every row keeps the mark's room
+  const x0 = BT_FOE_NAME + BT_FOE_DEALT + (arrows ? 166 : 0), tw = types.length ? (COLUMN - x0 - (opens ? BT_OPENS_W : 0)) / types.length : 0;   // BtFoeArrow (0.8.2): the longest arrow names whole
+  const c = (w, html, st = "", cls = "") => `<span class="bt-c${cls ? " " + cls : ""}" style="width:${w}px;${st}">${html}</span>`;
   // live-polish (PanelUi.BattleFoeTable): one header row: the headings on the line over the rule, each type's icon over its column and its
   // name above the icon tilted 40 degrees (no abbreviations; the tilted names run parallel and never touch). No key (0.7): About (Y) says it
-  const head = `<div class="bt-row head" style="height:84px;font-size:var(--mintext);align-items:flex-end;padding-bottom:3px;box-sizing:border-box">${c(176, "Foe")}${c(100, "Dealt")}${arrows ? c(134, `<i style="color:var(--gold);font-size:var(--mintext)">Best arrow</i>`) : ""}
+  const head = `<div class="bt-row head" style="height:84px;font-size:var(--mintext);align-items:flex-end;padding-bottom:3px;box-sizing:border-box">${c(BT_FOE_NAME, "Foe")}${c(BT_FOE_DEALT, "Dealt")}${arrows ? c(166, `<i style="color:var(--gold);font-size:var(--mintext)">Best arrow</i>`) : ""}
     ${types.map(t => c(tw, `<span style="position:absolute;left:${(tw - 18) / 2}px;top:${84 - 26}px">${btIc(t.icon, t.colour, 18)}</span><i style="position:absolute;left:${tw / 2 - 6}px;top:${84 - 36 - 10}px;height:20px;line-height:20px;font-size:var(--mintext);color:${t.colour};white-space:nowrap;transform:rotate(-40deg);transform-origin:left center">${esc(t.title)}</i>`, "overflow:visible;position:relative;align-self:stretch;height:100%")).join("")}</div>`;
   const rows = b.items.map(r => { const a = r.items.find(i => i.kind === "arrow"), mods = r.items.filter(i => i.kind === "mod"), rk = r.items.find(i => i.kind === "ranking");
-    const row = `<div class="bt-row bt-foerow${r.tone === "opens" ? " opens" : ""}${r.note === "cursor" ? " cur" : ""}" style="height:40px">${c(176, btSlot(r.icon, 22) + `<span style="font-size:16px">${esc(r.title)}</span>`)}
-      ${c(100, `<i class="bt-bar" style="height:10px;width:${Math.max(2, r.fraction * 44).toFixed(1)}px;background:#e8a948"></i><b style="font-size:16px">${esc(r.value)}</b>`)}
-      ${arrows ? c(134, a ? btSlot(a.icon, 18) + `<span style="font-size:var(--mintext)">${esc(a.title)}</span>` : "") : ""}
-      ${mods.map(m => c(tw, btMeterCell(m), "justify-content:center;overflow:visible")).join("")}</div>`;
+    const row = `<div class="bt-row bt-foerow${r.tone === "opens" ? " opens" : ""}${r.note === "cursor" ? " cur" : ""}" style="height:40px">${c(BT_FOE_NAME, btSlot(r.icon, 22) + `<span class="fn" style="font-size:16px;max-width:${BT_FOE_NAME_ROOM}px;overflow:hidden;text-overflow:ellipsis">${esc(r.title)}</span>`)}
+      ${c(BT_FOE_DEALT, btDealtBar(r) + `<b style="font-size:16px">${esc(r.value)}</b>`, r.items.some(i => i.kind === "part") ? "overflow:visible;position:relative;z-index:2" : "", "dl")}
+      ${arrows ? c(166, a ? btSlot(a.icon, 18) + `<span style="font-size:var(--mintext)">${esc(a.title)}</span>` : "") : ""}
+      ${mods.map(m => c(tw, btMeterCell(m), "justify-content:center;overflow:visible")).join("")}${r.tone === "opens" ? opensMark(r.selected, BT_OPENS_RIGHT) : ""}</div>`;
     return r.selected && rk ? `<div class="bt-open">${row}${btRanking(rk)}</div>` : row; }).join("");
   return `<div>${head}${rows}</div>` + btSince(b);
 }
@@ -1506,7 +1586,7 @@ function btSources(b) {   // BattleUi.BattleSources: the caption (By foe: the ma
 // 0.8 damage rows (PanelUi.DamageRows, Chapters/DamageRowsUi.cs; Joost's damage bars, density-feedback/DAMAGE-BARS.md): one row per foe, picture,
 // name and "x N" with the marks under them, the number before the bar, the bar's zero at a quarter of the track (one scale for the list), each
 // part's number inside it where it fits at 14 px, the true length from zero under the bar (gold for dealt, quiet for received), the types'
-// shares on one line; a part too narrow for its number shows the number in its share's place on hover
+// shares on one line; pointing at any part shows its name and number in its share's place (0.8.2: every part, PanelModel.DamageHoverWords)
 const DR = { who: 200, whoMax: 230, num: 64, col: 12, gap: 3, min: 4, floor: 0.25 };
 const drWidth = f => DR.floor + (1 - DR.floor) * Math.min(1, Math.max(0, f || 0));   // PanelModel.DamageBarWidth
 const drTrue = f => Math.min(1, Math.max(0, f || 0));   // PanelModel.DamageTrueWidth
@@ -1523,6 +1603,22 @@ function drWhoW(rows) {
   return Math.min(DR.whoMax, Math.max(DR.who, ...rows.map(r => { cx.font = '17px "Averia Serif Libre", Georgia, serif'; const nm = 30 + w(r.title || "") + 2;
     if (!r.value2) return nm; cx.font = '700 14px "Averia Serif Libre", Georgia, serif'; return nm + 8 + w(r.value2) + 16; })));
 }
+// PanelModel.DamageStoppedTone (What your armor stopped): the part's line says its share stopped (Text, "Poison 20 %"); on hover the numbers it holds
+// PanelModel.DamageHoverWords for a stopped part: "Pierce 12 got through, 6 stopped" (ArmourKeyThrough, ArmourStoppedWord), the numbers it has
+const drStopWords = (t, got, stop) => { const some = v => v && v !== "0", ns = [some(got) ? got + " got through" : null, some(stop) ? stop + " stopped" : null].filter(Boolean); return ns.length ? t + " " + ns.join(", ") : t; };
+// PanelModel.DamageHoverWords: what pointing at any part of a damage bar shows, its name and number ("Frost 120"); a stopped part the numbers it holds
+const drHover = x => drStopped(x) ? drStopWords(x.title, x.value, x.part.value2) : x.value ? x.title + " " + x.value : x.title;
+// a part no share entry keys carries its hover words (data-tip): the page's one tag says them over it (PanelUi.PageTag), centred on the part and
+// kept inside its track; no element of its own
+const drTip = x => ` data-tip="${esc(drHover(x))}"`;
+const drStopped = x => !!(x.part && x.part.tone === "stopped");
+// PanelUi.StoppedPart: the fill (what got through, at least 3 px of each piece that has an amount) and the outline's inside, each holding its number
+function drStoppedInside(x, w) {
+  const f = Math.max(0, Math.min(1, x.part.fraction2 || 0)), m = Math.min(3, w / 2), fw = f <= 0 ? 0 : f >= 1 ? w : Math.max(m, Math.min(w - m, w * f));
+  const some = v => v && v !== "0", c = cssColour(x.colour);
+  return (fw > 0 ? `<span class="dr-got" style="width:${fw.toFixed(2)}px"${some(x.value) ? ` data-num="${esc(x.value)}" data-c="${esc(c)}"` : ""}></span>` : "") +
+    (w - fw > 0 && some(x.part.value2) ? `<span class="dr-left" style="left:${fw.toFixed(2)}px;width:${(w - fw).toFixed(2)}px" data-num="${esc(x.part.value2)}" data-ink="${esc(legible(c))}"></span>` : "");
+}
 // fixed: the columns a weapons run keeps ({ num, who }, DR_RUN), else the list's own
 function dmgRows(rows, dealt, fixed) {
   if (!rows.length) return "";
@@ -1537,10 +1633,14 @@ function dmgRows(rows, dealt, fixed) {
     let bar = "";
     if (f.rows.length) {
       const barW = trackW * drWidth(r.fraction), span = barW + DR.gap, spans = barParts(f.rows.map(x => x.fraction), [], (DR.min + DR.gap) / span);
-      const segs = f.rows.map((x, k) => `<span class="dr-seg" data-k="${k}"${x.value && !x.other ? ` data-num="${esc(x.value)}" data-c="${esc(cssColour(x.colour))}"` : ""} style="left:${(spans[k][0] * span).toFixed(2)}px;width:${Math.max(1, (spans[k][1] - spans[k][0]) * span - DR.gap).toFixed(2)}px;background:${cssColour(x.colour)}"></span>`).join("");
-      const key = x => weapon(x.part.icon) ? btIc(x.part.icon, cssColour(x.colour), 14) : `<i style="background:${cssColour(x.colour)}"></i>`;   // a weapon kind's icon in its colour (By type), else the swatch
       const mix = r.tone === "player" ? barFormOf((r.items || []).filter(i => i.kind === "mix"), true, false) : null;   // a player's line: their damage by type, keyed to no part
-      const pcs = mix ? mix.rows.map(x => `<span class="dr-e">${key(x)}<span class="w"><span class="a">${esc(x.title + " " + share(x))}</span></span></span>`).join("") : f.rows.map((x, k) => `<span class="dr-e${x.value && x.other ? " swap" : ""}" data-k="${k}">${key(x)}<span class="w"><span class="a">${esc(x.title + " " + share(x))}</span>${x.value ? `<span class="b">${esc(x.title + " " + x.value)}</span>` : ""}</span></span>`).join("");
+      // 0.8.2: pointing at any part shows its name and number: its entry's words swap to them (.swap, data-on), or, a player's row (no entry
+      // keys the part), the page's one tag says them over the bar (PanelUi.DamageBar)
+      const segs = f.rows.map((x, k) => { const w = Math.max(1, (spans[k][1] - spans[k][0]) * span - DR.gap), at = `left:${(spans[k][0] * span).toFixed(2)}px;width:${w.toFixed(2)}px`;
+        return drStopped(x) ? `<span class="dr-seg stop" data-k="${k}"${mix ? drTip(x) : ""} style="${at};--c:${cssColour(x.colour)}">${drStoppedInside(x, w)}</span>`
+          : `<span class="dr-seg" data-k="${k}"${x.value && !x.other ? ` data-num="${esc(x.value)}" data-c="${esc(cssColour(x.colour))}"` : ""}${mix ? drTip(x) : ""} style="${at};background:${cssColour(x.colour)}"></span>`; }).join("");
+      const key = x => weapon(x.part.icon) ? btIc(x.part.icon, cssColour(x.colour), 14) : `<i style="background:${cssColour(x.colour)}"></i>`;   // a weapon kind's icon in its colour (By type), else the swatch
+      const pcs = mix ? mix.rows.map(x => `<span class="dr-e">${key(x)}<span class="w">${esc(x.title + " " + share(x))}</span></span>`).join("") : f.rows.map((x, k) => `<span class="dr-e swap" data-k="${k}">${key(x)}<span class="w" data-on="${esc(drHover(x))}">${esc(drStopped(x) ? x.title + " " + x.part.text : x.title + " " + share(x))}</span></span>`).join("");
       bar = `<div><div class="dr-track"><div class="dr-fill" style="width:${barW.toFixed(2)}px">${segs}</div></div><div class="dr-true${dealt ? "" : " recv"}" style="width:${Math.max(2, trackW * drTrue(r.fraction)).toFixed(2)}px"></div><div class="dr-pcs">${pcs}</div></div>`;
     }
     if (!bar && r.text) bar = `<div class="dr-quiet">${esc(r.text)}</div>`;   // a player with no number: their words where the bar would be
@@ -1566,22 +1666,29 @@ const dmgPlayers = b => `<div class="bt-cap" style="margin-top:2px">${esc(b.titl
 // PanelModel.DamageWidestNumber: the run's largest total at most (this row's shown amount plus its rounding, over its fraction), every digit an 8
 const drWidest = r => { if (!r.value) return ""; const less = r.value === "<1";   // PanelModel.LessThanOne
   const v = less ? 1 : parseFloat(String(r.value).replace(/[\s,'’٬ ]/g, "")) || 0, big = r.fraction > 0 && r.fraction < 1 ? (v + (less ? 0 : 0.5)) / r.fraction : v; return bfN(big).replace(/[0-9]/g, "8"); };   // never a digit short of the largest
-// after layout: a part's number inside it where it fits (digits at 13 or 12 px, anything else 14) with 3 px either side (in the ink that reads on it); a part it does not fit
-// shows the number in its share's place on hover (PanelUi: HoverUi's SwapOn)
+// after layout: a part's number inside it where it fits (digits at 13 or 12 px, anything else 14) with 3 px either side (in the ink that reads on it);
+// pointing at any part shows its name and number, the number fits or not (0.8.2: its entry's words, or the page's tag)
 function fitDmgRows() {
-  for (const s of document.querySelectorAll(".dr-seg[data-num]")) {
-    s.querySelectorAll(".num").forEach(x => x.remove());
-    const hex = (s.dataset.c || "#e8a948").replace("#", ""), ch = i => { const v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-    const lum = 0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4);
-    const sp = document.createElement("span"); sp.className = "num"; sp.textContent = s.dataset.num; sp.style.color = lum > 0.18 ? "#140f0a" : "#f7edd6"; s.appendChild(sp);
-    // PanelUi.BarDigits: digits only at 13 px, or the --bardigits floor (12) to fit (PanelLook.MinBarDigits); anything else the 14 px floor
-    if (/^[\d\s\u00a0\u2009\u202f]+$/.test(s.dataset.num) && /\d/.test(s.dataset.num)) {
-      sp.classList.add("digits"); sp.style.fontSize = "13px";
-      if (sp.offsetWidth + 6 > s.clientWidth) sp.style.fontSize = getComputedStyle(document.documentElement).getPropertyValue("--bardigits").trim();
-    }
-    const fits = sp.offsetWidth + 6 <= s.clientWidth; if (!fits) sp.remove();
-    s.closest(".dr, .drl").querySelectorAll(`.dr-e[data-k="${s.dataset.k}"], .dr-tip[data-k="${s.dataset.k}"]`).forEach(e => e.classList.toggle("swap", !fits));   // its share entry (damage rows) or its tag (the feed's Log)
+  for (const s of document.querySelectorAll(".dr-seg[data-num]")) drNum(s, s.dataset.num, drInk(s.dataset.c), s.clientWidth);
+  // a stopped part (PanelUi.StoppedPart): the got-through number in the fill, the stopped number in the outline (2 px edge)
+  for (const box of document.querySelectorAll(".dr-seg.stop [data-num]")) { const got = box.classList.contains("dr-got"); drNum(box, box.dataset.num, got ? drInk(box.dataset.c) : box.dataset.ink, box.clientWidth - (got ? 0 : 2)); }
+}
+// the ink of a number on a part's colour (FacetUi.SegmentInk): near-black on a light colour, warm cream on a dark one
+function drInk(c) {
+  const hex = (c || "#e8a948").replace("#", ""), ch = i => { const v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4) > 0.18 ? "#140f0a" : "#f7edd6";
+}
+// PanelUi.BarDigits: a number inside its box with 3 px clear either side, digits only at 13 px, or the --bardigits floor (12) to fit (PanelLook.MinBarDigits);
+// anything else the 14 px floor. False (and no number) when it does not fit in room
+function drNum(box, text, ink, room) {
+  box.querySelectorAll(".num").forEach(x => x.remove());
+  const sp = document.createElement("span"); sp.className = "num"; sp.textContent = text; sp.style.color = ink; box.appendChild(sp);
+  if (/^[\d\s\u00a0\u2009\u202f]+$/.test(text) && /\d/.test(text)) {
+    sp.classList.add("digits"); sp.style.fontSize = "13px";
+    if (sp.offsetWidth + 6 > room) sp.style.fontSize = getComputedStyle(document.documentElement).getPropertyValue("--bardigits").trim();
   }
+  const fits = sp.offsetWidth + 6 <= room; if (!fits) sp.remove();
+  return fits;
 }
 { const fb = fitBarForms; fitBarForms = function () { fb(); fitDmgRows(); }; }
 // ---------- 0.8 Battle (Chapters/BattleFeedUi.cs, BattleFeedModel.cs) ----------
@@ -1602,7 +1709,7 @@ function btFeedLine(e) {   // BattleFeedUi.FeedLine: "dealt fire 26 · blunt 18 
 }
 const btFightHead = f => `<div class="bt-fh"><b>${esc(f.title)}</b><span class="r1">${esc("· " + f.text + (f.note ? " · " + f.note : ""))}</span><span class="r2">${esc([f.value ? "dealt " + f.value : null, f.value2 ? "received " + f.value2 : null].filter(Boolean).join(" · "))}</span></div>`;
 // 0.8.1 the Log (BattleFeedUi.FeedLog): time, the foe, what became of it, then the dealt damage as a damage bar on one track for the whole page (its zero
-// at a quarter, the true-length line, the numbers inside the parts, no share line; a part too narrow for its number shows it in a tag over the bar on
+// at a quarter, the true-length line, the numbers inside the parts, no share line; each part's name and number in a tag over the bar on
 // hover), and what you received after it as quiet words in a column as wide as the page's widest (170 at most, then it wraps)
 const FD = { name: 150, nameMax: 200, out: 196, outLeast: "defeated by you", rest: 78 + 8 + 8, recvMax: 150, recvGap: 12 };
 // the outcome column: the page's widest outcome words, "defeated by you" at least, 196 at most (PanelUi.FeedColumns)
@@ -1621,14 +1728,13 @@ function feedRecvW(es) {
   const ws = es.map(feedRecv).filter(Boolean).map(t => Math.ceil(cx.measureText(t).width * 1.04) + 2);
   return ws.length ? Math.min(FD.recvMax, Math.max(...ws)) : 0;
 }
-function feedBar(e, trackW) {
-  const f = barFormOf((e.items || []).filter(p => p.kind === "dealt"), true, false); if (!f.rows.length) return `<span class="drl" style="width:${trackW}px"></span>`;
+// kind: the parts' Kind ("dealt" in the feed, "part" in the Foes detail); quiet: the true line in the quiet colour (not damage dealt)
+function feedBar(e, trackW, kind = "dealt", quiet = false) {
+  const f = barFormOf((e.items || []).filter(p => p.kind === kind), true, false); if (!f.rows.length) return `<span class="drl" style="width:${trackW}px"></span>`;
   const barW = trackW * drWidth(e.fraction), span = barW + DR.gap, spans = barParts(f.rows.map(x => x.fraction), [], (DR.min + DR.gap) / span);
-  const cx = feedBar.cx || (feedBar.cx = document.createElement("canvas").getContext("2d")); cx.font = '700 14px "Averia Serif Libre", Georgia, serif';
-  const segs = f.rows.map((x, k) => { const left = spans[k][0] * span, w = Math.max(1, (spans[k][1] - spans[k][0]) * span - DR.gap), tip = x.title + " " + x.value, tw = Math.ceil(cx.measureText(tip).width * 1.04) + 12;
-    return `<span class="dr-seg" data-k="${k}"${x.value ? ` data-num="${esc(x.value)}" data-c="${esc(x.colour)}"` : ""} style="left:${left.toFixed(2)}px;width:${w.toFixed(2)}px;background:${x.colour}"></span>`
-      + (x.value ? `<span class="dr-tip" data-k="${k}" style="left:${Math.max(0, Math.min(trackW - tw, left + w / 2 - tw / 2)).toFixed(1)}px">${esc(tip)}</span>` : ""); }).join("");
-  return `<div class="bf drl" style="width:${trackW}px"><div class="dr-track"><div class="dr-fill" style="width:${barW.toFixed(2)}px">${segs}</div></div><div class="dr-true" style="width:${Math.max(2, trackW * drTrue(e.fraction)).toFixed(2)}px"></div></div>`;
+  const segs = f.rows.map((x, k) => { const left = spans[k][0] * span, w = Math.max(1, (spans[k][1] - spans[k][0]) * span - DR.gap);
+    return `<span class="dr-seg" data-k="${k}"${x.value ? ` data-num="${esc(x.value)}" data-c="${esc(cssColour(x.colour))}"` : ""}${drTip(x)} style="left:${left.toFixed(2)}px;width:${w.toFixed(2)}px;background:${cssColour(x.colour)}"></span>`; }).join("");   // 0.8.2: every part's name and number in the page's tag on hover
+  return `<div class="bf drl" style="width:${trackW}px"><div class="dr-track"><div class="dr-fill" style="width:${barW.toFixed(2)}px">${segs}</div></div><div class="dr-true${quiet ? " recv" : ""}" style="width:${Math.max(2, trackW * drTrue(e.fraction)).toFixed(2)}px"></div></div>`;
 }
 const btLogRow = (e, trackW, recvW, nameW, outW) => { const rcv = feedRecv(e);
   return `<div class="bt-fl"><span class="t">${esc(e.text)}</span><span class="n" style="width:${nameW}px">${btSlot(e.icon, 22)}<b>${esc(e.title)}</b></span><span class="o" style="width:${outW}px">${btMark(e.tone)}<span>${esc(e.note)}</span></span><span class="d fl">${feedBar(e, trackW)}${recvW ? `<span class="rcv" style="width:${recvW}px">${rcv ? esc(rcv) : ""}</span>` : ""}</span></div>`; };
@@ -1639,9 +1745,18 @@ function btCards(es) {   // BattleFeedUi.FeedCards: three to a row, each foe its
 }
 const btTimeline = (es, gap) => es.map((e, k) => `<div class="bt-tl${k === 0 ? " first" : ""}${k === es.length - 1 && !gap ? " last" : ""}"><span class="t">${esc(e.text)}</span><span class="ax"></span><span class="mk">${btMark(e.tone)}</span><div class="l1"><b>${esc(e.title)}</b><span>${esc(e.note)}</span></div><div class="d">${btFeedLine(e)}</div></div>`).join("")
   + (gap ? `<div class="bt-tg"><span class="ax"></span>${esc(gap.text)}</div>` : "");
+// REVIEW-081 0.8.2 pass: every fight is its own feed block (FeedBlocks), so the Log's columns are measured over every fight of the page, once
+// (PanelModel.FeedPageEntries, PanelUi.FeedPageColumns): one x and one track for every bar of the feed, never a fight island's own
+let FEED_PAGE = null;
+function feedPageEntries() {
+  if (FEED_PAGE) return FEED_PAGE;
+  const es = [];
+  (function walk(bs) { for (const b of bs || []) { if (b.kind === "feed") { for (const f of b.items || []) if (f.kind === "fight") es.push(...(f.items || []).filter(x => x.kind === "entry")); } else walk(b.items); } })(window.CURRENT.blocks);
+  return FEED_PAGE = es;
+}
 function btFeed(b) {   // BattleFeedUi.BattleFeed: the fights newest first, Log · Cards · Timeline over the same entries
   const fights = b.items.filter(f => f.kind === "fight");
-  const all = fights.flatMap(f => f.items.filter(x => x.kind === "entry")), recvW = feedRecvW(all), nameW = feedNameW(all), outW = feedOutW(all), trackW = Math.max(80, COLUMN - FD.rest - nameW - outW - (recvW ? recvW + FD.recvGap : 0));   // one track for the page
+  const page = feedPageEntries(), all = page.length ? page : fights.flatMap(f => f.items.filter(x => x.kind === "entry")), recvW = feedRecvW(all), nameW = feedNameW(all), outW = feedOutW(all), trackW = Math.max(80, COLUMN - FD.rest - nameW - outW - (recvW ? recvW + FD.recvGap : 0));   // one track for the page
   return fights.map((f, i) => { const es = f.items.filter(x => x.kind === "entry"), gap = f.items.find(x => x.kind === "gap");
     const body = b.tone === "cards" ? btCards(es) : b.tone === "timeline" ? btTimeline(es, i + 1 < fights.length ? gap : null) : es.map(e => btLogRow(e, trackW, recvW, nameW, outW)).join("");
     return `<div style="margin-top:${i ? (b.tone === "timeline" ? 6 : 22) : 0}px">${btFightHead(f)}${body}</div>`; }).join("") + note(b.note);
@@ -1652,21 +1767,19 @@ function btFightFoes(b) {   // BattleFeedUi.FightFoes: the caption (the count, "
     <div class="dr-wrap" style="margin-top:6px">${dmgRows(b.items.filter(i => i.kind === "foe"), true)}</div>`;
 }
 const btFightReceived = b => `<div class="bt-frc"><b>${esc(b.value)}</b><span style="color:var(--muted)">${esc(b.title + ", " + b.text + ((b.items || []).length ? ":" : ""))}</span>${(b.items || []).map(p => `<span class="p"><i style="background:${cssColour(p.colour)}"></i>${esc(p.title)} <b>${esc(p.value)}</b></span>`).join("")}</div>`;
-// Defence > Your armour (BattleUi.BattleArmour): one bar per type or foe on one scale, solid = reached you, hollow outline = stopped by your armour
+// Defense > What your armor stopped (BattleUi.BattleArmour, 0.8.1): the caption, the view's one bar ("82 % stopped" in front, BattleUi.ArmourBar) with
+// the key under it, both from the rows' track x, then damage rows on one scale (dmgRows): a part as wide as what reached your armor, filled = what
+// got through, the outline in its colour = what your armor stopped
 function btArmour(b) {
-  const track = COLUMN - 170 - 118 - 12, hollow = c => `border:2px solid ${c};box-sizing:border-box;background:transparent`;
-  const key = b.tone === "key" ? `<div class="bt-key"><span class="k"><span style="width:22px;height:14px;background:var(--muted)"></span>reached you</span><span class="k"><span style="width:22px;height:14px;${hollow("var(--muted)")}"></span>stopped by your armor</span></div>` : "";
-  return `<div class="bt-cap" style="margin-top:2px">${esc(b.title)}${b.text ? `<span class="q">${esc(b.text)}</span>` : ""}</div>${key}
-    ${b.items.map(r => { const reached = Math.max(0, Math.min(1, r.fraction)) * track, whole = Math.max(2, Math.min(1, r.fraction2) * track);
-      return `<div class="bt-row" style="height:30px;border:0"><span class="bt-c" style="width:170px">${(r.icon || "").startsWith("vocab:dmg-") ? `<span style="width:22px;height:22px;flex:none;border-radius:4px;background:${r.colour};display:inline-flex;align-items:center;justify-content:center">${btIc(r.icon, "#16110b", 16)}</span>` : btSlot(r.icon, 22)}<span style="font-size:16px">${esc(r.title)}</span></span>
-      <span style="width:${track}px;flex:none;display:flex;height:14px">${r.items.map(p => `<i style="width:${(p.fraction * reached).toFixed(1)}px;flex:none;background:${p.colour}"></i>`).join("")}${whole - reached >= 1 ? `<i style="width:${(whole - reached).toFixed(1)}px;flex:none;${hollow(r.colour)}"></i>` : ""}</span>
-      <span class="bt-c bt-r" style="width:50px"><b style="font-size:17px">${esc(r.value)}</b></span><span style="width:62px;margin-left:6px;font-size:14px;color:var(--muted);white-space:nowrap">of ${esc(r.value2)}</span></div>${btArmourTypes(r)}`; }).join("")}`;
-}
-// a foe's row: per damage type what reached you of what hit your armour, one line that wraps, under the name (BattleUi.ArmourTypes)
-function btArmourTypes(r) {
-  const parts = (r.items || []).filter(p => p.value);
-  if (!parts.length) return "";
-  return `<div style="display:flex;flex-wrap:wrap;gap:2px 18px;padding-left:30px;margin:-2px 0 4px">${parts.map(p => `<span style="display:inline-flex;align-items:center;gap:5px;height:24px;white-space:nowrap"><span style="width:18px;height:18px;flex:none;background:${p.colour};display:inline-flex;align-items:center;justify-content:center">${btIc(p.icon, "#16110b", 14)}</span><b style="font-size:15px">${esc(p.value)}</b><span style="font-size:14px;color:var(--muted)">of ${esc(p.value2)}</span><span style="font-size:14px;color:var(--muted)">${esc(p.title)}</span></span>`).join("")}</div>`;
+  const rows = b.items.filter(r => r.kind === "armourrow"), bar = b.items.find(r => r.kind === "armorbar");
+  const trackX = drWhoW(rows) + DR.col + drNumW(rows.map(r => r.value)) + DR.col, w = Math.max(80, COLUMN - trackX);
+  const sw = (fill, outline) => `<span style="position:relative;width:22px;height:14px;flex:none;${outline ? "box-shadow:inset 0 0 0 2px var(--muted)" : ""}">${fill ? `<span style="position:absolute;left:0;top:0;bottom:0;width:${fill}px;background:var(--muted)"></span>` : ""}</span>`;
+  const key = b.tone === "key" ? `<div class="bt-key" style="margin-top:6px;padding-left:${trackX}px"><span class="k">${sw(9, true)}reached your armor</span><span class="k">${sw(22, false)}got through</span><span class="k">${sw(0, true)}stopped by your armor</span></div>` : "";   // PanelModel.ArmourKeyWhole, ArmourKeyThrough, ArmourKeyStopped
+  const part = bar && barFormOf((bar.items || []).filter(i => i.kind === "part"), true).rows[0];
+  const one = part ? `<div style="display:flex;align-items:center;height:20px;margin-top:6px"><span style="width:${trackX}px;flex:none;display:flex;align-items:baseline;gap:6px;white-space:nowrap"><b style="font-size:20px">${esc(bar.value)}</b><span style="font-size:17px;color:var(--muted)">${esc(bar.text)}</span></span>
+      <div class="bf dr-track" style="width:${w}px;flex:none"><div class="dr-fill" style="width:${w}px"><span class="dr-seg stop" data-k="0"${drTip(part)} style="left:0;width:${w}px;--c:${cssColour(part.colour)}">${drStoppedInside(part, w)}</span></div></div></div>` : "";   // 0.8.2: its numbers in the page's tag on hover
+  return `<div class="bt-cap" style="margin-top:2px">${esc(b.title)}${b.text ? `<span class="q">${esc(b.text)}</span>` : ""}</div>${one}${key}
+    <div class="dr-wrap" style="margin-top:6px">${dmgRows(rows, false)}</div>`;
 }
 function btStrip(b) {
   const n = b.items.length, apart = n > 1 && b.items[n - 1].id === "Ocean" ? 10 : 0, weight = b.items.reduce((a, t) => a + Math.max(1, t.fraction), 0), avail = COLUMN - 4 * (n - 1) - apart;
@@ -1692,6 +1805,7 @@ function btDeaths(b) {
 // ---------- feats (Chapters/FeatsUi.cs): card grid, the one fixed detail area, Known for, the owner-page band ----------
 const TIERS = ["", "#c27a4a", "#c9d2da", "#f0c862"], tierColour = (l, c) => l <= 0 ? "" : c <= 1 || l >= 3 ? TIERS[3] : TIERS[l];   // PanelModel.TierColour
 function feats(b) {
+  window.FEAT_CARDS = b.items;   // the page's cards, for the detail area's height (featdetail)
   const per = Math.max(1, Math.min(b.tone === "titles" ? 3 : 4, Math.floor((COLUMN + 8) / 188)));   // the Titles page: three across (FeatsUi.FeatsBlock, B18)
   return `<div class="fgrid"><div class="feats"${b.tone === "titles" ? ' data-per="3"' : ""} style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(c => {
     const earned = c.tone === "earned";
@@ -1707,6 +1821,14 @@ function feats(b) {
 // FeatsUi.FeatCard: the emblem and its marks as one block in the card's middle; on a 52 px card the emblem steps down to 33 so the 10 px marks fit
 const featLay = (h, notched) => { const s = notched ? Math.min(36, h - 19) : 36, mt = notched ? Math.floor((h - s - 13) / 2) : h <= 52 ? 5 : Math.floor((h - 36) / 2); return { s, mt, nt: mt + s + 3, left: 9 + Math.floor((36 - s) / 2) }; };
 const featMark = (icon, h, notched) => { const l = featLay(h, notched); return marker(icon, l.s).replace('style="', `style="left:${l.left}px;top:${l.mt}px;`); };
+// FeatsUi.FeatCrew (0.8.2, Joost: "I want to see everyone"): the label, the parts as one bar (PanelModel.CrewBar), every person as a legend entry
+// (their mark, name, number, share); crewLay() measures and places them, as the game does
+function crewHtml(d, at) {
+  const cr = (d.items || []).find(x => x.kind === "crew"), shared = cr.tone === "share", bar = shared && cr.items.length > 1;
+  const cbar = bar ? `<span class="cbar">${cr.items.map(p => `<i style="--f:${p.fraction};background:${personColor(p.title)}"></i>`).join("")}</span>` : "";
+  const ents = cr.items.map(p => `<span class="ce">${p.value ? `<i class="sw" style="background:${personColor(p.title)}"></i>` : `<span class="cmk">${marker(p.icon, 20)}</span>`}<span class="cn">${esc(p.title)}</span>${p.value ? `<span class="cnum">${esc(p.value)}</span>` : ""}${shared && p.note ? `<span class="csh">${esc(p.note)}</span>` : ""}</span>`).join("");
+  return `<div class="fcrew" data-rules="${(d.items || []).filter(x => x.kind === "rule").length}" data-bar="${bar ? 1 : 0}" ${at}><span class="fcl">${esc(cr.title)}</span>${cbar}${ents}</div>`;
+}
 function featdetail(b) {
   const earned = b.tone === "earned", it = k => (b.items || []).filter(x => x.kind === k);
   let y = 12, h = "";
@@ -1722,9 +1844,10 @@ function featdetail(b) {
   if (cv) h += `<div class="cv" style="top:${y}px">${esc(cv.text)}</div>`;
   y += cv ? 38 : 0;   // no caveat (B37: the counting is said in Counted by): no room kept for one
   const cr = it("crew")[0];   // a group feat: who helped with their parts and shares (B37, FeatsUi.FeatCrew), or who carried: shields by name
-  const shared = cr && cr.tone === "share";
-  const cbar = shared && cr.items.length > 1 ? `<span class="cbar">${cr.items.map(p => `<i style="width:${Math.max(2, Math.round((96 - 2 * (cr.items.length - 1)) * p.fraction))}px;background:${personColor(p.title)}"></i>`).join("")}</span>` : "";
-  if (cr && y + 4 <= 180) h += `<div class="fcrew" data-top="${y}" style="top:${y}px"><span>${esc(cr.title)}</span>${cbar}${cr.items.map(p => p.value ? `<i class="sw" style="background:${personColor(p.title)}"></i><span>${esc(p.title)}</span><span class="cv2">${esc(shared ? p.value + " · " + p.note : p.value)}</span>` : `${marker(p.icon, 20)}<span class="cn">${esc(p.title)}</span>`).join("")}</div>`;
+  if (cr) h += crewHtml(b, `style="top:${y}px"`);
+  // the page's other crews, hidden: the area takes the tallest one's height, so a hover never moves the grid (FeatsUi.FeatDetailPage)
+  const others = (window.FEAT_CARDS || []).map(c => (c.items || [])[0]).filter(d => d && d.kind === "featdetail" && d.id !== b.id && (d.items || []).some(x => x.kind === "crew"));
+  if (others.length) h += `<div class="fghost">${others.map(d => { const c = (d.items || []).find(x => x.kind === "caveat"); return `<div>${c ? `<div class="cv">${esc(c.text)}</div>` : ""}${crewHtml(d, "")}</div>`; }).join("")}</div>`;
   const mo = it("moment")[0];
   const moH = mo ? `<div class="mo">${rich("featdetail", esc(mo.text) + (mo.note ? ` <i>${esc(mo.note)}</i>` : ""), T.plain(mo.text) + (mo.note ? " " + T.i(T.ink(T.plain(mo.note), INK.muted)) : ""))}</div>` : "";   // left column, under what the feat honours (FeatsUi.FeatDetailFill)
   return `<div class="fdet k-track${earned ? " earned" : ""}${b.tone === "waiting" ? " waiting" : ""}"${b.colour ? ` style="--tier:${b.colour}"` : ""}>${marker(b.icon, 56)}<div class="dn">${esc(b.title)}</div>${b.value ? `<div class="dt">${esc(b.value)}</div>` : ""}<div class="dl"><div class="dh">${esc(b.text)}</div>${moH}</div>${h}</div>`;
@@ -1738,6 +1861,210 @@ function featband(b) {   // fix4: the feat and the titles, one flat strip (Feats
   const cap = STRIP_SWITCH && STRIP_SWITCH.title ? `${fpart || tpart ? `<span class="ea-rule"></span>` : ""}<span class="ea-cap">${esc(STRIP_SWITCH.title)}</span>` : "", note = window.CURRENT.stripNote;
   const apart = STRIP_ABOUT || STRIP_SWITCH || note ? `<span class="ea-about">${note ? `<span class="ea-note">${esc(note)}</span>` : ""}${STRIP_SWITCH ? `<span class="ea-sw">${swChips(STRIP_SWITCH)}</span>` : ""}${STRIP_ABOUT ? aboutBoth(STRIP_ABOUT) : ""}</span>` : "";
   return `<div class="earned${apart ? " one" : ""}${fpart || tpart ? "" : " bare"}">${fpart}${fpart && tpart ? `<span class="ea-rule"></span>` : ""}${tpart}${cap}${apart}</div>`;
+}
+// ---------- 0.9 fight pages (Chapters/FightUi.cs, FightPages.cs): the head, the foe rows with two bars, the players' table, Runs and bosses ----------
+// every part placed as PanelUi places it (Box): the same Ft measures, each block one box as tall as its rows, the island's 6 px only round it
+const FT = { topH: 48, ring: 44, door: 46, nameX: 58, name: 26, nameLeast: 20, land: 15, num: 43, numLabel: 17, numGap: 14, ruleGap: 24, laneTop: 8, laneH: 20, lanePad: 10, keyLineH: 20,
+  who: 190, whoMax: 240, indent: 22, pic: 22, bossPic: 26, numMin: 44, colGap: 10, sep: 18, chev: 18, foeGap: 4, subIndent: 38,
+  playerRow: 24, cellNum: 52, cellBarMin: 80, cellBarMax: 110, cellStat: 62, cellStop: 56, cellDeaths: 96, deathBar: 48, cellGap: 10, nameMin: 190,
+  date: 60, listPic: 28, listWho: 236, listLine1: 24, listLine2: 20, listGap: 8, addRow: 26, keyGap: 14, swatch: 10, track: 20, barH: 24 };
+const ftCx = document.createElement("canvas").getContext("2d");
+const ftW = (t, px, bold) => { ftCx.font = `${bold ? "700 " : ""}${px}px "Averia Serif Libre", Georgia, serif`; return Math.ceil(ftCx.measureText(t || "").width * 1.04) + 2; };   // PanelUi.FtWidth: TMP's width plus 2
+const ftBadgeW = t => { ftCx.font = '700 14px "Averia Serif Libre", Georgia, serif'; return Math.ceil(ftCx.measureText(t || "").width * 1.04) + 16; };   // PanelUi.BadgeWidth
+const ftItems = (b, kind) => (b && b.items || []).filter(i => i.kind === kind);
+const ftAt = (x, top, w, h, html, st = "", cls = "ft-a") => `<div class="${cls}" style="left:${x.toFixed(1)}px;top:${top.toFixed(1)}px;width:${Math.max(0, w).toFixed(1)}px;height:${h}px;${st}">${html}</div>`;
+// BtText: one line, centred in its box (the box grows to the font's line, PanelUi.LineBox), cut with an ellipsis
+const ftText = (x, top, w, h, text, px, colour, o = {}) => !text ? "" : ftAt(x, top, w, h, esc(text), `font-size:${px}px;line-height:${h}px;color:${colour};${o.bold ? "font-weight:700;" : ""}${o.italic ? "font-style:italic;" : ""}${o.right ? "text-align:right;" : ""}${o.caps ? "letter-spacing:.14em;text-transform:uppercase;" : ""}`);
+// the boss's ring (Codex's ring over the game's trophy; here the boss's initial stands in for the trophy, as on the Battle overview)
+const ftRing = (name, x, top, size) => `<span class="ft-ring" style="left:${x}px;top:${top}px;width:${size}px;height:${size}px"><img src="../vocab/boss-ring.png" alt=""><i style="font-size:${Math.max(14, Math.round(size * 0.42))}px">${esc((name || "?").replace(/^The /, "")[0])}</i></span>`;
+// PanelUi.FtBar: the book's damage bar (DamageBar, no share line), its parts' numbers inside, its true length under it, hover on its parts
+const ftBar = (parts, kind, fraction, dealt, x, top, w) => parts.length ? ftAt(x, top, w, FT.barH, feedBar({ items: parts, fraction }, w, kind, !dealt), "", "ft-b") : "";
+const ftTrack = (x, top, w, h) => `<div class="ft-track" style="left:${x.toFixed(1)}px;top:${top}px;width:${w.toFixed(1)}px;height:${h}px"></div>`;
+const ftSwatch = (x, top, colour, w = FT.swatch, h = FT.swatch) => `<i class="ft-sw" style="left:${x.toFixed(1)}px;top:${top}px;width:${w}px;height:${h}px;background:${colour}"></i>`;
+const ftHatch = (x, top, w, h, colour) => `<i class="ft-hatch" style="left:${x.toFixed(1)}px;top:${top}px;width:${w.toFixed(1)}px;height:${h}px;--c:${colour}"></i>`;
+// one key: its caption in small capitals, then swatch and words per entry (PanelUi.FtKeyRun); [html, where it ends]
+function ftKeyRun(key, x, top) {
+  let h = "";
+  if (key.title) { const cw = ftW(key.title.toUpperCase(), 14) + Math.ceil(key.title.length * 14 * 0.14); h += ftText(x, top, cw + 4, FT.keyLineH, key.title, 14, "var(--muted)", { caps: true }); x += cw + 10; }
+  for (const e of ftItems(key, "key")) { h += ftSwatch(x, top + (FT.keyLineH - FT.swatch) / 2, cssColour(e.colour)); x += FT.swatch + 5; const tw = ftW(e.title, 14); h += ftText(x, top, tw, FT.keyLineH, e.title, 14, "var(--muted)"); x += tw + FT.keyGap; }
+  return [h, x - FT.keyGap];
+}
+// A, D: the head (PanelUi.FtHead): the boss in its ring or the dungeon's door, its name over its land, the group's dealt and received in the hero's
+// second form on one baseline at the right; under them the boss's lane or the run's line
+function fightHead(b) {
+  const run = b.tone === "run", lane = ftItems(b, "lane")[0], line = ftItems(b, "runline")[0], W = COLUMN, nums = ftItems(b, "number");
+  let h = run ? ftAt(0, (FT.topH - FT.door) / 2, FT.door, FT.door, btIc(b.icon, "#e8c27a", FT.door))
+    : b.tone === "group" ? ftAt(0, (FT.topH - FT.ring) / 2, FT.ring, FT.ring, `<img src="${vocab(b.icon)}" alt="" style="width:30px;height:30px">`, `background:${b.colour};border-radius:5px;display:flex;align-items:center;justify-content:center`)   // the land's tile and emblem (PanelUi.FtHead)
+    : ftRing(b.title, 0, (FT.topH - FT.ring) / 2, FT.ring);
+  // the name over its land, given the room the numbers leave: a long name steps down (26 to 20); still too long, the numbers say their words
+  // short ("dealt" for "dealt together"), and only then is the name cut (PanelUi.FtHead)
+  const numsW = brief => nums.reduce((a, n) => a + ftW(n.value, FT.num, true) + FT.numGap + ftW(brief && n.text ? n.text : n.title, FT.numLabel), 0) + (nums.length - 1) * (FT.ruleGap * 2 + 1);
+  const fit = room => { let s = FT.name; while (s - 2 >= FT.nameLeast && ftW(b.title, s, true) > room) s -= 2; return s; };
+  let room = Math.max(60, W - numsW(false) - FT.nameX - 16), size = fit(room), brief = false;
+  if (ftW(b.title, size, true) > room && nums.some(n => n.text)) { brief = true; room = Math.max(60, W - numsW(true) - FT.nameX - 16); size = fit(room); }
+  h += `<div class="ft-nums" style="right:0;top:0;height:${FT.topH}px">${nums.map((n, k) => (k ? `<span class="rule"></span>` : "") + heroNum(brief && n.text ? { ...n, title: n.text } : n, true)).join("")}</div>`;   // the hero's second form, on the head row's foot (not a page hero: fitHeroes leaves it)
+  h += ftText(FT.nameX, 0, room, 30, b.title, size, "var(--text)", { bold: true }) + ftText(FT.nameX, 28, room, 20, b.text, FT.land, "var(--muted)");
+  let y = FT.topH, under = "";
+  if (lane) { y += FT.laneTop; const [lh, extra] = ftLane(lane, 0, W, y, true); under += lh; y += FT.laneH + extra; }
+  if (line) { y += FT.laneTop; under += ftRunLine(line, W, y); y += FT.laneH + FT.keyLineH; }
+  return `<div class="ft" style="height:${y}px">${h}${under}</div>`;
+}
+// the boss's health (PanelUi.FightLane, FtListLane): what is left in its land's colour with "64 % left" in it, the last minute hatched after it,
+// the rest the faint track; the note in the empty part of the track, or under it when the track has no room. [html, height added under it]
+function ftLane(l, x, w, top, note) {
+  const c = cssColour(l.colour) || "#9b8f80", left = Math.max(0, Math.min(1, l.fraction || 0)) * w, was = Math.max(0, Math.min(1, l.fraction2 || 0)) * w, P = FT.lanePad;
+  let h = ftTrack(x, top, w, FT.laneH);
+  if (was > left + 1) h += ftHatch(x + left, top, was - left, FT.laneH, c);
+  if (left > 0) { h += `<div class="ft-fill" style="left:${x}px;top:${top}px;width:${left.toFixed(1)}px;height:${FT.laneH}px;background:${c}"></div>`;
+    if (l.value && ftW(l.value, 14, true) <= left - 2 * P) h += ftText(x + P, top, left - 2 * P, FT.laneH, l.value, 14, drInk(c), { bold: true }); }
+  if (l.tone === "won") h += ftAt(x + P, top + (FT.laneH - 18) / 2, 18, 18, btIc("vocab:boss-mark", "#e8c27a", 18)) + ftText(x + P + 24, top, 200, FT.laneH, l.title, 14, "var(--text)");
+  if (!note || !l.text) return [h, 0];
+  const sw = l.tone === "live" && was > left + 1, nw = ftW(l.text, 14), lead = sw ? 18 + 6 : 0;
+  if (nw + lead + P + 8 <= w - Math.max(left, was)) return [h + (sw ? ftHatch(x + w - P - nw - lead, top + (FT.laneH - 12) / 2, 18, 12, c) : "") + ftText(x + w - P - nw, top, nw, FT.laneH, l.text, 14, "var(--muted)"), 0];
+  const t2 = top + FT.laneH;   // no room in the track: the note under the lane, from its start
+  return [h + (sw ? ftHatch(x, t2 + (FT.keyLineH - 12) / 2, 18, 12, c) : "") + ftText(x + lead, t2, w - lead, FT.keyLineH, l.text, 14, "var(--muted)"), FT.keyLineH];
+}
+// D: a run in to out (PanelUi.FightRunLine): each fight a burst in the land's colour, a boss fight a gold band with the crown, each fall the death mark;
+// under it the two ends and the key
+function ftRunLine(l, w, top) {
+  const c = cssColour(l.colour) || "#9b8f80", spans = ftItems(l, "span"), falls = ftItems(l, "fall"), X = f => Math.max(0, Math.min(1, f || 0)) * w;
+  let h = ftTrack(0, top, w, FT.laneH);
+  for (const s of spans.filter(s => s.tone === "boss")) { const x0 = X(s.fraction), x1 = Math.max(x0 + 24, X(s.fraction2));
+    h += `<div class="ft-boss" style="left:${x0.toFixed(1)}px;top:${top}px;width:${(x1 - x0).toFixed(1)}px;height:${FT.laneH}px"></div>` + ftAt(x0 + 4, top + (FT.laneH - 16) / 2, 16, 16, btIc("vocab:boss-mark", "#e8c27a", 16)); }
+  for (const s of spans.filter(s => s.tone !== "boss")) { const x0 = X(s.fraction), x1 = Math.max(x0 + 3, X(s.fraction2));
+    h += `<div class="ft-fill" style="left:${x0.toFixed(1)}px;top:${top + 4}px;width:${(x1 - x0).toFixed(1)}px;height:${FT.laneH - 8}px;background:${c}"></div>`; }
+  for (const f of falls) h += `<img class="ft-fall" src="../vocab/death.png" alt="" style="left:${Math.max(0, Math.min(w - 14, X(f.fraction) - 7)).toFixed(1)}px;top:${top + (FT.laneH - 14) / 2}px">`;
+  const k = top + FT.laneH;
+  h += ftText(0, k, 120, FT.keyLineH, l.value, 14, "var(--muted)") + ftText(w - 120, k, 120, FT.keyLineH, l.value2, 14, "var(--muted)", { right: true });
+  const parts = [["fight", l.text]].concat(l.note ? [["boss", l.note]] : []).concat(falls.length ? [["fall", "fall"]] : []);   // PanelModel.FallWord
+  let x = (w - (parts.reduce((a, p) => a + ftW(p[1], 14), 0) + parts.length * 22 + (parts.length - 1) * FT.keyGap)) / 2;
+  for (const [kind, words] of parts) {
+    h += kind === "fall" ? `<img class="ft-fall" src="../vocab/death.png" alt="" style="left:${(x + 2).toFixed(1)}px;top:${k + (FT.keyLineH - 14) / 2}px">`
+       : kind === "boss" ? `<div class="ft-boss" style="left:${x.toFixed(1)}px;top:${k + (FT.keyLineH - 12) / 2}px;width:16px;height:12px"></div>` : ftSwatch(x, k + (FT.keyLineH - 12) / 2, c, 16, 12);
+    x += 22; const lw = ftW(words, 14); h += ftText(x, k, lw, FT.keyLineH, words, 14, "var(--muted)"); x += lw + FT.keyGap;
+  }
+  return h;
+}
+// the columns of a list of two-bar rows (PanelUi.FoeCols): the name column (the widest picture, name and ×N, FT.who to FT.whoMax), each column's
+// number (its widest), the two tracks sharing what is left (dealt the larger), the chevron's room
+function ftFoeCols(rows, subs) {
+  const who = Math.min(FT.whoMax, Math.max(FT.who, ...rows.map(r => (r.tone === "add" ? FT.indent : 0) + (r.tone === "boss" ? FT.bossPic : FT.pic) + 8 + ftW(r.title, 17) + (r.value2 ? 8 + ftBadgeW(r.value2) : 0))));
+  const all = rows.concat(subs), nd = Math.max(FT.numMin, ...all.map(r => r.value ? ftW(r.value, 17) : 0)), nr = Math.max(FT.numMin, ...all.map(r => r.note ? ftW(r.note, 17) : 0));
+  const room = Math.max(160, COLUMN - who - FT.colGap - nd - FT.colGap - FT.sep - nr - FT.colGap - FT.chev), wd = Math.round(room * 0.55), wr = room - wd;
+  const xd = who + FT.colGap + nd + FT.colGap, g = { who, nd, nr, wd, wr, xd, xr: xd + wd + FT.sep + nr + FT.colGap };
+  // stacked (PanelModel.FightStacked): a block of one column gives it all the room after the name and its number (PanelUi.FoeCols)
+  const hasD = all.some(r => r.value), hasR = all.some(r => r.note);
+  if (hasD && !hasR) { g.wd = Math.max(80, COLUMN - xd - FT.chev); g.wr = 0; }
+  else if (hasR && !hasD) { g.xr = who + FT.colGap + nr + FT.colGap; g.wr = Math.max(80, COLUMN - g.xr - FT.chev); g.wd = 0; }
+  return g;
+}
+// a row's two bars (PanelUi.FtRowBars): what was dealt (gold number; its parts the players, or a player's types), what was received (its types)
+const ftRowBars = (row, g, top) => (row.value ? ftText(g.who + FT.colGap, top, g.nd, FT.track, row.value, 17, "var(--gold)", { right: true }) : "") + ftBar(ftItems(row, "part"), "part", row.fraction, true, g.xd, top, g.wd)
+  + (row.note ? ftText(g.xr - FT.colGap - g.nr, top, g.nr, FT.track, row.note, 17, "var(--text)", { right: true }) : "") + ftBar(ftItems(row, "rpart"), "rpart", row.fraction2, false, g.xr, top, g.wr);
+// the foe rows (PanelUi.FightFoeRows): the boss first in its ring, the foes around it indented; an open row and its players' own rows on one band
+function fightFoeRows(b) {
+  const rows = ftItems(b, "foe"); if (!rows.length) return "";
+  const g = ftFoeCols(rows, rows.flatMap(r => ftItems(r, "sub")));
+  let h = "", y = 0;
+  rows.forEach((row, i) => {
+    if (i) y += FT.foeGap;
+    const subs = ftItems(row, "sub"), y0 = y;
+    if (row.selected) h += `<div class="ft-band" style="top:${y0 - 4}px;height:${(1 + subs.length) * FT.barH + subs.length * FT.foeGap + 8}px"></div>`;
+    const x0 = row.tone === "add" ? FT.indent : 0, pw = row.tone === "boss" ? FT.bossPic : FT.pic, nx = x0 + pw + 8, chip = row.value2 ? ftBadgeW(row.value2) + 8 : 0, nw = Math.min(ftW(row.title, 17), g.who - nx - chip);
+    h += `<div class="ft-row opens${row.selected ? " open" : ""}" style="top:${y}px;height:${FT.barH}px">${opensMark(row.selected, 2)}</div>`;
+    h += row.tone === "boss" ? ftRing(row.title, x0, y + (FT.track - FT.bossPic) / 2, FT.bossPic) : ftAt(x0, y + (FT.track - FT.pic) / 2, FT.pic, FT.pic, btSlot(row.icon, FT.pic), "display:flex");
+    h += ftText(nx, y, nw, FT.track, row.title, 17, "var(--text)") + (chip ? ftAt(nx + nw + 8, y, chip - 8, FT.track, btBadge(row.value2), "display:flex;align-items:center;overflow:visible") : "");
+    h += ftRowBars(row, g, y); y += FT.barH;
+    for (const s of subs) { y += FT.foeGap; h += ftAt(FT.subIndent, y + (FT.track - 20) / 2, 20, 20, marker(s.icon, 20), "display:flex") + ftText(FT.subIndent + 28, y, g.who - FT.subIndent - 28, FT.track, s.title, 16, "var(--text)") + ftRowBars(s, g, y); y += FT.barH; }
+  });
+  // the keys under the rows (PanelUi.FtKeys): DEALT and the players from the left; RECEIVED and the types from the received column (or ending at the
+  // island's edge; still too long, on a line of its own)
+  const dkey = ftItems(b, "dkey")[0], rkey = ftItems(b, "rkey")[0];
+  if (dkey || rkey) {
+    y += 2; const [dh, dEnd] = dkey ? ftKeyRun(dkey, 0, y) : ["", 0]; h += dh;
+    if (rkey) { const rw = ftKeyRun(rkey, 0, y)[1]; let x = dkey ? Math.max(g.xr - g.nr - FT.colGap, dEnd + 24) : 0; if (x + rw > COLUMN) x = COLUMN - rw;
+      if (x < (dkey ? dEnd : 0) + 24) { y += FT.keyLineH; x = 0; } h += ftKeyRun(rkey, x, y)[0]; }
+    y += FT.keyLineH;
+  }
+  return `<div class="ft" style="height:${y}px">${h}</div>`;
+}
+// the players' table (PanelUi.FightPlayers): a fixed width per column, the name column the rest; each column's word right-aligned over its number
+const ftCellW = (id, bar) => id === "dealt" || id === "received" ? FT.cellNum + 8 + bar : id === "deaths" ? FT.cellDeaths : id === "stopped" ? FT.cellStop : FT.cellStat;
+function fightPlayers(b) {
+  const cols = ftItems(b, "col"), bars = cols.filter(c => c.id === "dealt" || c.id === "received").length;
+  const fixedW = cols.filter(c => c.id !== "dealt" && c.id !== "received").reduce((a, c) => a + ftCellW(c.id, 0), 0) + cols.length * FT.cellGap;
+  const bar = bars ? Math.max(FT.cellBarMin, Math.min(FT.cellBarMax, (COLUMN - FT.nameMin - fixedW - bars * (FT.cellNum + 8)) / bars)) : 0;
+  const widths = cols.map(c => ftCellW(c.id, bar)), nameW = COLUMN - widths.reduce((a, w) => a + w, 0) - cols.length * FT.cellGap;
+  const xs = []; let x = nameW; for (const w of widths) { x += FT.cellGap; xs.push(x); x += w; }
+  let h = ftText(0, 0, nameW, FT.keyLineH, b.title, 14, "var(--muted)", { caps: true }), firstHead = COLUMN;
+  cols.forEach((c, k) => { const end = xs[k] + (c.id === "dealt" || c.id === "received" ? FT.cellNum : widths[k]), tw = ftW(c.title, 14);
+    h += ftText(end - tw, 0, tw, FT.keyLineH, c.title, 14, "var(--muted)") + (c.icon ? ftAt(end - tw - 20, (FT.keyLineH - 16) / 2, 16, 16, btIc(c.icon, "#b9a688", 16)) : "");
+    firstHead = Math.min(firstHead, end - tw - (c.icon ? 20 : 0)); });
+  // the dealt split's key on the head line when it fits before the first column's word, else on a line of its own under the rows (PanelUi.FightPlayers)
+  // after the caption where it fits, else in the caption's place (the rows say they are the players), else under the rows
+  const dkey = ftItems(b, "dkey")[0], keyX = ftW((b.title || "").toUpperCase(), 14) + Math.ceil((b.title || "").length * 14 * 0.14) + 12;
+  const after = !!dkey && ftKeyRun(dkey, keyX, 0)[1] + 12 <= firstHead, alone = !!dkey && !after && ftKeyRun(dkey, 0, 0)[1] + 12 <= firstHead, keyUnder = !!dkey && !after && !alone;
+  if (after) h += ftKeyRun(dkey, keyX, 0)[0]; else if (alone) h = h.replace(/^<div[^>]*>[^<]*<\/div>/, "") + ftKeyRun(dkey, 0, 0)[0];
+  let y = FT.keyLineH;
+  for (const p of (b.items || []).filter(i => i.kind === "player" || i.kind === "quiet")) {
+    const nw = Math.min(ftW(p.title, 17, true), nameW - 30), bt = y + (FT.playerRow - FT.track) / 2;
+    h += ftAt(0, y + (FT.playerRow - 20) / 2, 20, 20, marker(p.icon, 20), "display:flex") + ftText(30, y, nw, FT.playerRow, p.title, 17, "var(--text)", { bold: true })
+       + (p.note ? ftText(30 + nw + 8, y, Math.max(0, nameW - 30 - nw - 8), FT.playerRow, p.note, 14, "var(--faint)", { italic: true }) : "");
+    if (p.kind === "quiet") { h += ftText(xs[0] || 0, y, COLUMN - (xs[0] || 0), FT.playerRow, p.text, 16, "var(--muted)", { italic: true }); y += FT.playerRow; continue; }
+    cols.forEach((c, k) => { const cx = xs[k];
+      if (c.id === "dealt" || c.id === "received") { const d = c.id === "dealt";
+        h += ftText(cx, bt, FT.cellNum, FT.track, d ? p.value : p.value2, 17, d ? "var(--gold)" : "var(--text)", { right: true }) + ftBar(ftItems(p, d ? "part" : "rpart"), d ? "part" : "rpart", d ? p.fraction : p.fraction2, d, cx + FT.cellNum + 8, bt, bar); }
+      else if (c.id === "deaths") { const d = ftItems(p, "deaths")[0], n = d ? d.value : "0";
+        h += n === "0" ? ftText(cx, bt, widths[k], FT.track, n, 17, "var(--faint)", { right: true })
+          : `<img class="ft-fall" src="../vocab/death.png" alt="" style="left:${cx}px;top:${bt + (FT.track - 16) / 2}px;width:16px;height:16px">` + ftText(cx + 18, bt, 22, FT.track, n, 17, "var(--text)", { right: true, bold: true }) + ftBar(ftItems(d, "rpart"), "rpart", 1, false, cx + widths[k] - FT.deathBar, bt, FT.deathBar); }
+      else { const v = (ftItems(p, "stat").find(s => s.id === c.id) || {}).value || ""; h += ftText(cx, bt, widths[k], FT.track, v, 17, v === "0" ? "var(--faint)" : "var(--text)", { right: true }); } });
+    y += FT.playerRow;
+  }
+  if (keyUnder) { y += 2; h += ftKeyRun(dkey, 0, y)[0]; y += FT.keyLineH; }
+  return `<div class="ft" style="height:${y}px">${h}</div>`;
+}
+// C: Runs and bosses (PanelUi.FightList): NOW or EARLIER with its total and where the fight on now is, the players' key at the right; then the rows on one
+// scale: the day over the time, the boss or the door, the name and how long over how it ended, the number, the bar by player, the ›
+function fightList(b) {
+  const rows = ftItems(b, "fight");
+  const capW = ftW((b.title || "").toUpperCase(), 14) + Math.ceil((b.title || "").length * 14 * 0.14);
+  let h = ftText(0, 0, capW + 4, FT.keyLineH, b.title, 14, "var(--muted)", { caps: true }), x = capW + 10;
+  if (b.value) { const vw = ftW(b.value, 15, true); h += ftText(x, 0, vw, FT.keyLineH, b.value, 15, "var(--text)", { bold: true }); x += vw + 8; }
+  if (b.text) { const tw = ftW(b.text, 14); h += ftText(x, 0, tw, FT.keyLineH, b.text, 14, "var(--muted)"); x += tw + 12; }
+  if (b.note) { const nw = ftW(b.note, 14); h += ftAt(x, (FT.keyLineH - 16) / 2, 16, 16, btIc("vocab:find-dungeon", "#b9a688", 16)) + ftText(x + 22, 0, nw, FT.keyLineH, b.note, 14, "var(--muted)"); x += 22 + nw + 12; }
+  const key = ftItems(b, "dkey")[0];
+  if (key) { const kw = ftKeyRun(key, 0, 0)[1]; if (COLUMN - kw >= x) h += ftKeyRun(key, COLUMN - kw, 0)[0]; }
+  const withNested = rows.concat(rows.flatMap(r => ftItems(r, "fight"))), all = withNested.concat(withNested.flatMap(r => ftItems(r, "foe")));
+  const num = Math.max(FT.numMin, ...all.map(r => r.value ? ftW(r.value, 17) : 0)), numX = FT.date + FT.listWho + FT.colGap, barX = numX + num + FT.colGap, barW = Math.max(80, COLUMN - barX - FT.chev - FT.colGap);
+  let y = FT.keyLineH + 6, first = true;
+  const gap = () => { if (!first) y += FT.listGap; first = false; };
+  // the foes around the boss fight on now, a row each on the list's scale, under its row, under a run too (PanelUi.FtListAdds)
+  const adds = (row, nested) => { for (const add of ftItems(row, "foe")) {
+      gap(); const px = FT.date + FT.listPic + 6, nx = px + FT.pic + 8, chip = add.value2 ? ftBadgeW(add.value2) + 8 : 0, nw = Math.min(ftW(add.title, 17), FT.date + FT.listWho - nx - chip);
+      h += ftAt(px, y + (FT.track - FT.pic) / 2, FT.pic, FT.pic, btSlot(add.icon, FT.pic), "display:flex") + ftText(nx, y, nw, FT.track, add.title, 17, "var(--text)")
+         + (chip ? ftAt(nx + nw + 8, y, chip - 8, FT.track, btBadge(add.value2), "display:flex;align-items:center;overflow:visible") : "")
+         + ftText(numX, y, num, FT.track, add.value, 17, "var(--gold)", { right: true }) + ftBar(ftItems(add, "part"), "part", add.fraction, true, barX, y, barW);
+      y += FT.addRow; } };
+  for (const row of rows) {
+    gap(); h += ftListRow(row, false, y, numX, num, barX, barW); y += FT.listLine1 + FT.listLine2; adds(row, false);
+    for (const n of ftItems(row, "fight")) { gap(); h += ftListRow(n, true, y, numX, num, barX, barW); y += FT.listLine1 + FT.listLine2; adds(n, true); }   // a boss fight on now in its run: its foes under it
+  }
+  return `<div class="ft" style="height:${y}px">${h}</div>`;
+}
+function ftListRow(row, nested, y, numX, num, barX, barW) {
+  const live = !!row.selected, L1 = FT.listLine1, px = FT.date + (nested ? FT.indent : 0), pic = nested ? FT.listPic - 4 : FT.listPic;
+  let h = `<div class="ft-row opens" style="top:${y}px;height:${L1 + FT.listLine2}px">${opensMark(false, 2)}</div>`;
+  if (row.value2) h += ftText(0, y, FT.date - 4, L1, row.value2, 15, live ? "var(--gold)" : "var(--text)", { bold: true });
+  if (row.pill) h += row.value2 ? ftText(0, y + L1, FT.date - 4, FT.listLine2, row.pill, 14, "var(--faint)") : ftText(0, y, FT.date - 4, L1, row.pill, 14, "var(--faint)");
+  if (nested) h += `<i class="ft-tree" style="left:${FT.date + 8}px;top:${y - FT.listGap - 4}px;width:1px;height:${L1 / 2 + FT.listGap + 4}px"></i><i class="ft-tree" style="left:${FT.date + 8}px;top:${y + L1 / 2}px;width:${FT.indent - 10}px;height:1px"></i>`;
+  h += row.tone === "run" ? ftAt(px, y + (L1 - pic) / 2, pic, pic, btIc(row.icon, "#e8c27a", pic)) : ftRing(row.title, px, y + (L1 - pic) / 2, pic);
+  const nx = px + pic + 8, room = FT.date + FT.listWho - nx, nw = Math.min(ftW(row.title, 17), room);
+  h += ftText(nx, y, nw, L1, row.title, 17, "var(--text)") + (row.text ? ftText(nx + nw + 8, y, Math.max(0, room - nw - 8), L1, row.text, 14, "var(--muted)") : "");
+  let ox = nx;
+  if (row.tone !== "run") { h += ftAt(ox, y + L1 + (FT.listLine2 - 13) / 2, 13, 13, btMark(live ? "fighting" : row.note === "Won" ? "defeated" : "away", 13), "display:flex"); ox += 13 + 6; }
+  h += ftText(ox, y + L1, FT.date + FT.listWho - ox, FT.listLine2, row.note, 14, row.note === "Won" ? "var(--text)" : "var(--muted)");
+  const lane = ftItems(row, "lane")[0];   // the fight on now: the boss's health in the row's second line, under its bar (PanelUi.FtListRow)
+  return h + ftText(numX, y, num, FT.track, row.value, 17, "var(--gold)", { right: true }) + ftBar(ftItems(row, "part"), "part", row.fraction, true, barX, y, barW) + (lane ? ftLane(lane, barX, barW, y + L1, false)[0] : "");
 }
 function block(b) {
   if (b.kind !== "dmgmix") DR_RUN = null;   // a weapons run ends where another block comes between (PanelUi.DamageRunRow)
@@ -1757,7 +2084,7 @@ function block(b) {
     case "filterbar": return filterbar(b);
     case "ledger": return ledger(b) + note(b.note);
     case "cropgrid": return cropgrid(b);
-    case "strip": return strip(b) + note(b.note);   // PanelUi draws a strip's note under it (a layered entry's key)
+    case "strip": return strip(b) + note(b.note, b.noteLink);   // PanelUi draws a strip's note under it (a layered entry's key)
     case "grades": return grades(b);
     case "band": return band(b);
     case "people": return people(b);
@@ -1786,8 +2113,13 @@ function block(b) {
     case "guard": return btGuard(b);
     case "sources": case "dealtfoes": return btSources(b);   // dealtfoes: Damage > By foe (0.8)
     case "feed": return btFeed(b);   // 0.8 (BattleFeedUi.cs)
+    case "feedline": return `<div class="feed-ln${b.tone === "gap" ? " gap" : ""}">${esc(b.text)}</div>`;   // 0.8.1 (BattleFeedUi.FeedQuiet): between the fight islands, outside them
     case "fightfoes": return btFightFoes(b);
     case "fightreceived": return btFightReceived(b);
+    case "fighthead": return fightHead(b);   // 0.9 fight pages (Chapters/FightUi.cs)
+    case "fightfoerows": return fightFoeRows(b);
+    case "fightplayers": return fightPlayers(b);
+    case "fightlist": return fightList(b);
     case "headlink": return "";   // in the heading row (PanelUi.HeadRight)
     case "armour": return btArmour(b);   // 0.7: Defence > Your armour
     case "deathstrip": return btStrip(b);
@@ -1810,7 +2142,7 @@ function block(b) {
       <span class="tr k-track">${i.fraction > 0 ? `<span class="fl" style="width:calc(${(i.fraction * 100).toFixed(2)}% - 6px);background-color:${TONE[i.tone] || TONE.ember}"></span>` : ""}</span><span class="vl">${esc(i.value)}</span></div>`).join("")
       + (b.value ? `<div class="axis"><span>0</span><span>${esc(b.value)}</span></div>` : "") + sinceUnder(b.since) + note(b.note);
     case "rows": return `<div class="rows">${b.items.map(i => `<div class="r">${i.icon && i.icon.startsWith("vocab:") ? `<span style="width:34px;flex:none;display:flex;justify-content:center">${btIc(i.icon, "#b9a688", 26)}</span>` : hasIcon(i.icon) ? marker(i.icon, 34) : b.items.some(x => x.icon) ? `<span style="width:34px;flex:none"></span>` : ""}<span class="t">${esc(i.title)}</span><span class="v"${unrec(i, 16)}>${esc(i.value)}</span>${b.items.some(x => x.since) ? `<span style="width:92px;flex:none">${since(i.since)}</span>` : ""}</div>`).join("")}</div>` + sinceUnder(b.since) + note(b.note);
-    case "titles": return `<div class="titles">${b.items.map(t => `<div class="tcard k-row">${marker(t.icon, 40)}<div class="tn">${esc(t.title)}</div><div class="tv">${esc(t.value)}</div></div>`).join("")}</div>`;
+    case "titles": return `<div class="titles">${b.items.map(t => `<div class="tcard k-row">${marker(t.icon, 40)}<div class="tn">${esc(t.title)}</div><div class="tv" style="width:${190 - OPENS_ROOM}px">${esc(t.value)}</div>${opensMark(false)}</div>`).join("")}</div>`;   // PanelUi.Titles: each opens its page
     case "thread": return `<div class="thread"><div class="ends"><span>${esc(b.title)}</span><span>${esc(b.text)}</span></div>` +
       b.items.map((t, i) => `<div class="fr"><div class="item">${slot(112)}<span>${esc(t.title)}</span></div>
         <div class="mid"><span>${esc(t.value)} ${esc(t.title.toLowerCase())}${since(t.since)}</span><img src="../ui/thread.png" alt=""></div>
@@ -1832,7 +2164,7 @@ function islands(plate) {
     const parts = isl.parts.map(p => ({ p, b: partAt(plate, p) }));
     const html = parts.map(({ p, b }) => p.row ? swRow(b, null) : p.only != null ? personIsland(b.items[p.only]) : b.kind === "aboutnumbers" ? aboutBox(b) : block(b)).join("");
     COLUMN = was;
-    return !html.trim() ? "" : isl.span === "plain" ? `<div class="isl-plain">${html}</div>` : `<div class="isl ${isl.span}${parts.some(x => x.b.kind === "hero") ? " hero-isl" : ""}">${html}</div>`;
+    return !html.trim() ? "" : isl.span === "plain" ? `<div class="isl-plain">${html}</div>` : `<div class="isl ${isl.span}${parts.some(x => x.b.kind === "hero" || x.b.kind === "fighthead") ? " hero-isl" : ""}">${html}</div>`;   // 0.9: a fight's head is its hero (IslandsUi)
   };
   let out = "";
   for (let i = 0; i < plan.length; i++)
@@ -1842,7 +2174,7 @@ function islands(plate) {
   return out;
 }
 // a greyed window chip with its own reason (Choice.Why, PanelUi.WindowChip): the tag under it while the pointer is on it, or now under the pressed one (WindowTip)
-const windowChip = w => `<span class="cchip">${chip(w.label, "", w.selected, true).replace('class="chip', 'class="chip win')}<span class="ctag wtag${window.CURRENT.windowTip === w.id ? " on" : ""}">${esc(w.why)}</span></span>`;
+const windowChip = w => `<span class="cchip" data-win="${esc(w.id)}">${chip(w.label, "", w.selected, true).replace('class="chip', 'class="chip win')}<span class="ctag wtag${window.CURRENT.windowTip === w.id ? " on" : ""}">${esc(w.why)}</span></span>`;
 
 const name = new URLSearchParams(location.search).get("view") || "deeds";
 const v = window.CURRENT = window.PANEL_DATA[name];
@@ -1861,7 +2193,7 @@ const bookChip = () => viewed > 0 ? `<span style="flex:none;padding:2px 10px;bor
 if (plate) {
   const right = v.hasFilters ? v.windows.map(w => w.disabled && w.why ? windowChip(w) : chip(w.label, "", w.selected, w.disabled).replace('class="chip', 'class="chip win')).join("")   // a window a fellow's copy cannot show: greyed (PanelUi.Chip off), its reason under it on hover (0.8 layout D+)
                                + (v.compare ? `<span style="width:0;flex:none"></span>` + compareChip(v.compare.label, v.compare.selected, v.compare.disabled, v.compare.why, v.compare.tip) : "")   // 0.8: Compare, 8 px after
-                             : headSkills(plate.items).map(skillChip).join("") + (plate.pill ? chip(plate.pill, plate.pillIcon, false) : "")
+                             : headSkills(plate.items).map(skillChip).join("") + (plate.pill ? chip(plate.pill, plate.pillIcon, false).replace('class="chip', 'class="chip pill') : "")
                                + plate.items.filter(b => b.kind === "headlink").map(h => `<span class="chip icon" style="margin-left:4px">${marker(h.icon, 18)}${esc(h.title)}</span>`).join("");   // 0.8: a chip that opens a page (PanelUi.HeadRight)
   COLUMN = 840;
   const band = plate.items.some(b => b.kind === "featband");
@@ -1892,9 +2224,42 @@ document.getElementById("app").innerHTML = `
 // fallback font, a plate was cut short of its content and cut a line in two)
 function fitPlates() {
 // FeatsUi.FeatDetailFill: a long feat name steps down from 22 to 16 px (2 at a time) before it would be cut (measured once the font is in)
-// FeatsUi.FeatDetailFill: a one-line caveat leaves its second line to the crew; the crew shows only where it fits (above the foot, 180)
-for (const cr of document.querySelectorAll(".fdet .fcrew")) { const cv = cr.parentElement.querySelector(".cv"), oneLine = cv && (r => (r.selectNodeContents(cv), r.getBoundingClientRect().height <= 20))(document.createRange()), top = +cr.dataset.top - (oneLine ? 18 : 0);
-  cr.style.top = top + "px"; cr.style.display = top + 22 <= 180 ? "" : "none"; }
+// FeatsUi.FeatDetailFill / FeatCrew (0.8.2): a one-line caveat leaves its second line to the crew (PanelModel.FeatCrewTop); every person shows,
+// in as many legend columns as fit beside the label (PanelModel.CrewFit, up to 3), filled top to bottom; the area grows to the page's tallest crew
+function crewLay(cr, cv, place) {
+  const oneLine = cv && (r => (r.selectNodeContents(cv), r.getBoundingClientRect().height <= 20))(document.createRange());
+  const top = 12 + +cr.dataset.rules * 20 + 4 + 24 + 20 + (cv ? (oneLine ? 20 : 38) : 0), rw = cr.clientWidth, bar = cr.dataset.bar === "1";
+  const W = el => { if (!el) return 0; el.style.width = ""; return Math.ceil(el.getBoundingClientRect().width) + 2; };
+  const lab = cr.querySelector(".fcl"), lw = W(lab), ents = [...cr.querySelectorAll(".ce")];
+  const cells = ents.map(e => ({ name: (e.querySelector(".sw") ? 12 + 8 : 20 + 4) + W(e.querySelector(".cn")), num: W(e.querySelector(".cnum")), share: W(e.querySelector(".csh")) }));
+  const colW = (f, t) => { let a = 0, n = 0, c = 0; for (let i = f; i < t; i++) { a = Math.max(a, cells[i].name); n = Math.max(n, cells[i].num); c = Math.max(c, cells[i].share); } return { a, n, c, w: a + (n ? 8 + n : 0) + (c ? 8 + c : 0) }; };
+  const n = cells.length, room = rw - lw - 10; let per = n;
+  for (let k = Math.min(3, n); k > 1; k--) { const p = Math.ceil(n / k); let tot = 0, used = 0; for (let f = 0; f < n; f += p, used++) tot += (used ? 24 : 0) + colW(f, Math.min(n, f + p)).w; if (tot <= room + 0.5) { per = p; break; } }
+  if (place) {
+    cr.style.top = top + "px"; lab.style.width = lw + "px";
+    const cb = cr.querySelector(".cbar"); if (cb) cb.style.left = (lw + 10) + "px";
+    let cx = lw + 10; const y0 = bar ? 22 : 0;
+    for (let f = 0; f < n; f += Math.max(1, per)) {
+      const t = Math.min(n, f + per), c = colW(f, t);
+      for (let i = f; i < t; i++) {
+        const e = ents[i], y = y0 + (i - f) * 22, mk = e.querySelector(".sw, .cmk"), nm = e.querySelector(".cn"), nu = e.querySelector(".cnum"), sh = e.querySelector(".csh");
+        const pad = mk.classList.contains("sw") ? 20 : 24;
+        mk.style.left = cx + "px"; mk.style.top = (y + (mk.classList.contains("sw") ? 5 : 1)) + "px";
+        nm.style.left = (cx + pad) + "px"; nm.style.top = y + "px"; nm.style.width = (c.a - pad) + "px";
+        if (nu) { nu.style.left = (cx + c.a + 8) + "px"; nu.style.top = y + "px"; nu.style.width = c.n + "px"; }
+        if (sh) { sh.style.left = (cx + c.a + (c.n ? 8 + c.n : 0) + 8) + "px"; sh.style.top = y + "px"; sh.style.width = c.c + "px"; }
+      }
+      cx += c.w + 24;
+    }
+  }
+  return Math.max(184, top + (bar ? 22 : 0) + Math.max(1, per) * 22 + 4);
+}
+for (const det of document.querySelectorAll(".fdet")) {
+  const real = det.querySelector(":scope > .fcrew"); let H = 184;
+  if (real) H = Math.max(H, crewLay(real, det.querySelector(":scope > .cv"), true));
+  for (const g of det.querySelectorAll(".fghost > div")) H = Math.max(H, crewLay(g.querySelector(".fcrew"), g.querySelector(".cv"), false));
+  det.style.height = H + "px"; const dl = det.querySelector(".dl"); if (dl) dl.style.height = (H - 78) + "px";
+}
 // FeatsUi.FeatCard (B30): the next tier's words too long for the card: the number and its unit only (one line, never wrapped)
 for (const fw of document.querySelectorAll(".fcard .fw[data-short]")) if (fw.scrollWidth > fw.clientWidth + 1) fw.textContent = fw.dataset.short;
 for (const dn of document.querySelectorAll(".fdet .dn")) { dn.style.fontSize = ""; for (let s = 20; s >= 16 && dn.scrollWidth > dn.clientWidth + 1; s -= 2) dn.style.fontSize = s + "px"; }
@@ -1984,13 +2349,22 @@ function fitTitles(e, t) {
   // B38: one row and no room even for "TITLES +2 more": the titles stay on the Titles page (FeatsUi.FeatBandBlock)
   if (e.classList.contains("one") && !fits()) { t.style.display = "none"; const r = e.querySelector(".ea-rule"); if (r) r.style.display = "none"; }
 }
-// the hero row's one wrap rule (PanelModel.HeroLines, PanelUi.Hero): measure the drawn parts, then a second number or the skill that does not
-// fit the column moves to the next line (no rule before a number that starts a line); nothing is clipped at the plate's edge
-function heroLines(widths, sep, skill, column) {
-  const lines = widths.map(() => 0); let line = 0, x = widths.length ? widths[0] : 0;
-  for (let i = 1; i < widths.length; i++) { if (x + sep + widths[i] <= column) x += sep + widths[i]; else { line++; x = widths[i]; } lines[i] = line; }
-  if (skill > 0) lines.push(!widths.length || x + 24 + skill <= column ? line : line + 1);   // 24 = PanelModel.HeroSkillGap
-  return lines;
+// the hero row's one wrap rule (PanelModel.HeroLines, PanelUi.Hero): measure the drawn parts; the first line holds the hero's number and the skill
+// on its right, a second number that does not fit beside them moves to the next line (no rule before a number that starts a line), so the
+// skill never takes a line of its own (0.8.2); its compact form (name over level) when that keeps the numbers on one line; nothing is clipped
+function heroLines(widths, sep, skill, compact, column) {
+  const n = widths.length, G = 24;   // 24 = PanelModel.HeroSkillGap
+  const place = first => { const at = widths.map(() => 0); let line = 0, x = n ? widths[0] : 0, room = first;
+    for (let i = 1; i < n; i++) { if (x + sep + widths[i] <= room) x += sep + widths[i]; else { line++; x = widths[i]; room = column; } at[i] = line; } return at; };
+  if (!(skill > 0)) return { lines: place(column), small: false };
+  const hero = n ? widths[0] : 0, beside = s => hero + G + s <= column, one = at => at.every(l => l === 0);
+  const full = place(column - G - skill), tight = compact > 0 ? place(column - G - compact) : null;
+  let plan, small = false, at = 0;
+  if (beside(skill) && one(full)) plan = full;
+  else if (tight && beside(compact) && (one(tight) || !beside(skill))) { plan = tight; small = true; }
+  else if (beside(skill)) plan = full;
+  else { plan = place(column); at = Math.max(...plan) + 1; }   // not even the hero's number and the skill side by side: the skill under it all
+  return { lines: [...plan, at], small };
 }
 function fitHeroes() {
   document.querySelectorAll(".hero .hspark").forEach(sp => sp.style.display = "");   // measured again below, once the lines are settled
@@ -1999,8 +2373,12 @@ function fitHeroes() {
     const kids = [...h.children], nums = kids.filter(k => k.classList.contains("hn")), rules = kids.filter(k => k.classList.contains("rule")),
           sk = kids.find(k => k.classList.contains("hskill") && k.style.display !== "none"), rest = kids.find(k => k.classList.contains("hrest"));
     rules.forEach(r => r.style.display = "");
+    if (sk) sk.classList.remove("compact");
     const w = el => el.getBoundingClientRect().width, sep = rules.length ? w(rules[0]) + parseFloat(getComputedStyle(rules[0]).marginLeft) + parseFloat(getComputedStyle(rules[0]).marginRight) : 0;
-    const lines = heroLines(nums.map(w), sep, sk ? w(sk) : 0, h.clientWidth);
+    let compact = 0; const whole = sk ? w(sk) : 0;
+    if (sk && sk.querySelector(".skl")) { sk.classList.add("compact"); compact = w(sk); sk.classList.remove("compact"); }   // RecordedUi.CompactSaving
+    const { lines, small } = heroLines(nums.map(w), sep, whole, compact, h.clientWidth);
+    if (sk && small) sk.classList.add("compact");
     if (!lines.some(l => l > 0)) continue;
     const L = [], on = i => { while (L.length <= i) { const d = document.createElement("div"); d.className = "hline"; L.push(d); } return L[i]; };
     on(0).appendChild(nums[0]);
@@ -2051,14 +2429,37 @@ const LROWS = (n => { const need = (r, g) => n * r + Math.max(0, n - 1) * g + 4;
     kc("W", 32 + Math.min(190 - 34, Math.ceil(tw) + 10), 147); kc("S", 32 + 83, Math.min(180 + 2 + n * (LROWS[0] + LROWS[1]) + 4, 760 - 72 - 26)); } }
 document.getElementById("caption").textContent = `Preview "${name}": PanelModel output on fictional sample data, drawn with PanelUi's layout and the UI kit sprites. Empty slots and icon places hold the game's own sprites in game.`;
 // 0.8 hover (BarHover): pointing at a part or its row lights both; window.PANEL_HOVER names a bar and a part for a hovered-state shot
-// (the PNG cannot point: the dump says which part the pointer is on, PanelUi does the same on pointer enter)
-{ const light = (bf, k, on) => bf.querySelectorAll(`[data-k="${k}"]`).forEach(e => e.classList.toggle("hov", on));
+// (the PNG cannot point: the dump says which part the pointer is on, PanelUi does the same on pointer enter).
+// 0.8.2: a lit entry's words swap for its part's name and number (data-on, BarHover.OnWords); a part no entry keys (data-tip) moves the page's
+// one tag over it (PanelUi.PageTag, HoverTag): made with the page when it has such a part, one element for the page, never one per part.
+// Centred on the part and kept inside its track, or from the bar's data-tag-x (Foes' Dealt: the total's place, kept before data-tag-max)
+{ const home = document.querySelector(".content > .plate") || document.querySelector(".content .blocks");
+  const tip = home && document.querySelector("[data-tip]") ? home.insertAdjacentElement("afterbegin", Object.assign(document.createElement("span"), { className: "dr-tip page-tip" })) : null;
+  let tipFor = null;
+  const tag = (seg, on) => {
+    if (!tip) return;
+    if (!on) { if (tipFor === seg) { tip.classList.remove("on"); tipFor = null; } return; }
+    tip.textContent = seg.dataset.tip; tip.classList.add("on"); tipFor = seg;
+    const H = home.getBoundingClientRect(), tw = tip.offsetWidth, bar = seg.closest("[data-tag-x]"), P = seg.getBoundingClientRect();
+    let x, top;
+    if (bar) { const B = bar.getBoundingClientRect(); x = B.left + Math.max(0, Math.min(+bar.dataset.tagMax - tw, +bar.dataset.tagX)); top = B.top + +bar.dataset.tagTop; }
+    else { const T = (seg.closest(".dr-track") || seg).getBoundingClientRect(); x = Math.max(T.left, Math.min(T.right - tw, P.left + P.width / 2 - tw / 2)); top = P.top - 2; }
+    tip.style.left = (x - H.left + home.scrollLeft).toFixed(1) + "px"; tip.style.top = (top - H.top + home.scrollTop).toFixed(1) + "px";
+  };
+  const light = (bf, k, on) => bf.querySelectorAll(`[data-k="${k}"]`).forEach(e => {
+    e.classList.toggle("hov", on);
+    const w = e.classList.contains("swap") && e.querySelector(".w[data-on]");
+    if (w) { if (w.dataset.off == null) w.dataset.off = w.textContent; w.textContent = on ? w.dataset.on : w.dataset.off; }
+    if (e.dataset.tip != null) tag(e, on);
+  });
+  document.fonts.ready.then(() => { if (tipFor) tag(tipFor, true); });   // placed again once the font is in (the page's rows may have moved)
   addEventListener("mouseover", e => { const t = e.target.closest && e.target.closest(".bf [data-k]"); if (t) light(t.closest(".bf"), t.dataset.k, true); });
   addEventListener("mouseout", e => { const t = e.target.closest && e.target.closest(".bf [data-k]"); if (t && !(e.relatedTarget && t.contains(e.relatedTarget))) light(t.closest(".bf"), t.dataset.k, false); });
   addEventListener("mouseover", e => { const t = e.target.closest && e.target.closest(".aws"); if (!t) return; t.classList.add("hov"); document.querySelectorAll(`.awt[data-aw="${t.dataset.aw}"]`).forEach(x => x.classList.add("hov")); });
   addEventListener("mouseout", e => { const t = e.target.closest && e.target.closest(".aws"); if (!t) return; t.classList.remove("hov"); document.querySelectorAll(".awt.hov").forEach(x => x.classList.remove("hov")); });
   const h = (window.PANEL_HOVER || {})[name];
-  if (h && h.aw) { const bars = [...new Set([...document.querySelectorAll(".aws")].map(x => x.parentElement))], t = bars[h.bar] && bars[h.bar].querySelector(`.aws[data-aw="${h.aw}"]`);
+  if (h && h.win) { const tag = document.querySelector(`.cchip[data-win="${h.win}"] .wtag`); if (tag) tag.classList.add("on"); }   // 0.8.2: the pointer on a greyed window chip: its reason shows
+  else if (h && h.aw) { const bars = [...new Set([...document.querySelectorAll(".aws")].map(x => x.parentElement))], t = bars[h.bar] && bars[h.bar].querySelector(`.aws[data-aw="${h.aw}"]`);
     if (t) { t.classList.add("hov"); document.querySelectorAll(`.awt[data-aw="${h.aw}"]`).forEach(x => x.classList.add("hov")); } }
   else if (h) { const bf = [...document.querySelectorAll(".bf")].filter(b => b.querySelector("[data-k]"))[h.bar]; if (bf) light(bf, h.part, true); } }
 // ?scroll=N scrolls the page's plate by N px (the plate scrolls in game; the static preview only shows the top without this)

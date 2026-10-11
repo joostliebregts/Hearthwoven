@@ -612,7 +612,7 @@ namespace Hearthwoven
                     var key = Fellows.Receive(job.Shown);
                     if (key == null) continue;
                     ReceivedUtc[key] = job.Utc;   // the copy grew: Recent and the marks see it
-                    if (job.Copy != null) { FellowCopies.Put(key, job.Shown, job.Copy); Trails.Add(key, job.Flat, job.SinceInstall, job.Utc); }
+                    if (job.Copy != null) { FellowCopies.Put(key, job.Shown, job.Copy); Trails.Add(key, job.Flat, job.SinceInstall, job.Utc, job.Copy); }   // 0.8.2 (J): the trail notes its connection
                 }
                 catch (Exception e) { if (!liveWarnedShow) Debug.LogWarning("[Hearthwoven] live update not shown: " + e.Message); liveWarnedShow = true; }
             }

@@ -61,9 +61,8 @@ static class MealsTests
               "meals, Everyone By player: a row per player in the fixed order, each split by whose cooking it was, the hero their sum and the meals cooked by another player beside it: "
               + string.Join(" / ", g.Select(r => r.Title + " " + r.Value + " (" + Parts(r) + ")")));
 
-        // a cook who is not around the fire (Ylva, no Hearthwoven) is Another player in the quiet grey, never a name or a person colour: the
-        // group's colours stay Cooking's (REVIEW-081 batch 5: an outside cook took a person colour of their own, and one whose name sorts
-        // before a member's moved that member's colour)
+        // a cook outside the group (Ylva, no Hearthwoven) shows by name in gray, never with a person color, so the group's colors stay
+        // Cooking's (REVIEW-081 batch 5; Joost in game: the name says who it was, the gray says they are not in the group)
         var visit = PanelSample.Full(now);
         SessionEvents.Add(visit.Events.AteFoodMadeBy, "Ylva|Bread", 1);
         var vm = Show(visit, true);
@@ -71,11 +70,16 @@ static class MealsTests
         var vc = PanelModel.Build(visit, cookSt);
         foreach (var v in new[] { vm, vc }) PanelModel.AddPlayers(v, "Rowan", visit.Fellows.Select(f => f.PlayerName), "", true);   // the player row, as PanelUi adds it
         var bread = Rows(vm).Items.First(r => r.Title == "Bread");
-        Check(Parts(bread) == "You=4,Edda=3,Another player=1" && bread.Items.Last().Colour == PanelModel.BarOtherColour && AddsUp(vm)
-              && vm.PersonColors.Count == vc.PersonColors.Count && vm.PersonColors.All(kv => vc.PersonColors.TryGetValue(kv.Key, out var c) && c == kv.Value)
-              && !PanelModel.AllText(vm).Any(t => t.Contains("Ylva")),
-              "meals, Everyone: a cook outside the group is Another player in grey, unnamed, and the person colours are Cooking's: " + Parts(bread) + " / "
+        var ylva = bread.Items.Last();
+        Check(Parts(bread) == "You=4,Edda=3,Ylva=1" && ylva.Colour == PanelModel.OutsideGrays[0] && ylva.Icon == null && AddsUp(vm)
+              && vm.PersonColors.Count == vc.PersonColors.Count && vm.PersonColors.All(kv => vc.PersonColors.TryGetValue(kv.Key, out var c) && c == kv.Value),
+              "meals, Everyone: a cook outside the group shows by name in gray with no person color, and the person colors are Cooking's: " + Parts(bread) + " / "
               + string.Join(",", vm.PersonColors.OrderBy(kv => kv.Key).Select(kv => kv.Key + "=" + kv.Value)));
+        // the grays: outside cooks and Another player take the two grays in turn, so two side by side part; Gathered keeps its own
+        var mixed = PanelModel.CookParts(new Dictionary<string, double> { ["Rowan"] = 2, ["Ylva"] = 1, [PanelModel.OutsideCook] = 1, [PanelModel.NoCook] = 1 }, "Rowan", c => c, c => c == "Rowan");
+        Check(string.Join(",", mixed.Select(p => p.Title + ":" + p.Colour)) == "Rowan:person:Rowan,Ylva:" + PanelModel.OutsideGrays[0] + ",Another player:" + PanelModel.OutsideGrays[1] + ",Gathered:" + PanelModel.GatheredGray
+              && PanelModel.GatheredGray != PanelModel.OutsideGrays[0] && PanelModel.GatheredGray != PanelModel.OutsideGrays[1],
+              "meals: outside cooks and Another player alternate the two grays, Gathered keeps its own: " + string.Join(", ", mixed.Select(p => p.Title + " " + p.Colour)));
 
         // a long menu: past MealsTop dishes the smallest fold into one row, so the rows still add up to every meal; a feast set out by someone
         // not around the fire counts, its cook Another player

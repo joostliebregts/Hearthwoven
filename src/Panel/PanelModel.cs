@@ -48,6 +48,9 @@ namespace Hearthwoven.Panel
         public string ViewKey = "F";                        // flips the page's view switch; F: bound by no mod in the group's client profile, nor by the panel
         /// <summary>The page's "About these numbers" box is open (the numbers key, or its button); kept across pages until pressed again or the panel closes.</summary>
         public bool ShowNumbers;
+        /// <summary>0.8.1: the page whose item grids show every tile (PanelModel.ShowAllKey; Show all pressed). Never saved: leaving the page
+        /// (PanelModel.Visited) or opening the book clears it, so every visit starts folded.</summary>
+        public string ShowAll;
         public string NumbersKey = "Y";                     // shows and hides "About these numbers" (Panel.NumbersKey); Y: no game default, no group mod binds it
         public string BookKey = "B";                        // 0.8: steps whose book the page shows, as the player row's chips do (Panel.BookKey; StepBook)
         public string FeatSel = "";                         // the Feats chapter: the feat the detail area shows (mouse hover, A/D); "" = the first card of the view
@@ -84,6 +87,9 @@ namespace Hearthwoven.Panel
     public class Block
     {
         public string Kind, Id, Icon, Title, Value, Text, Note, Tone;
+        /// <summary>The click target of the block's Note, when the Note is a fold's "+N more" (0.8.2: never a dead "+N more"): Recent's strips and a
+        /// player's gains open every kind with ShowAllTarget. null: the Note is plain words.</summary>
+        public string NoteLink;
         /// <summary>Where the numbers come from, machine-readable for the source marks: "character" (the game's own counters
         /// since the character was made), "measured" (Hearthwoven on this PC, or the player's own shared record), "fellows"
         /// (recorded on fellow players' PCs). Items inherit their block's source.</summary>
@@ -123,6 +129,9 @@ namespace Hearthwoven.Panel
         public string KeyCap;
         /// <summary>filterbar: the chip rows (and the linked bars) are shown: the focus is in, or the header was opened. false = collapsed to its header line.</summary>
         public bool Open;
+        /// <summary>facetbar, composition (0.8.2): its parts filter the page: a part's click target is this plus the part's id (PanelModel.PartTarget),
+        /// on the part and on its legend item alike; null = its parts do not filter.</summary>
+        public string PartLink;
         /// <summary>ranking: rows side by side (2 = two columns); 0 or 1 = one column.</summary>
         public int Columns;
         /// <summary>plate: the pill on the right of the heading row (the page's title badges, "Woodcutter") and its icon; null = none.</summary>
@@ -141,9 +150,11 @@ namespace Hearthwoven.Panel
 
         // ---------- 0.8 Compare periods (Chapters/CompareModel.cs) ----------
         /// <summary>While comparing: the number the period before held, as shown ("86"), and the change mark ("▲ 12 %", "new", "same"); on a hero
-        /// number and a cap's total BeforeLabel says what the period before is ("the 7 days before"). On a compare row (Kind "row" of
+        /// number and a cap's total BeforeLabel says what the period before is ("the 7 before", "yesterday"). On a compare row (Kind "row" of
         /// "comparerows") Value is now, Before the period before, Fraction and Fraction2 their lengths on the block's one scale.</summary>
         public string Before, Change, BeforeLabel;
+        /// <summary>comparerows: its column heads, the two periods named ("today" and "yesterday", "these 7 days" and "the 7 before").</summary>
+        public string NowHead, BeforeHead;
         /// <summary>switch: a chip that sits after its chips, not one of its views (Compare beside Together's window chips): Selected = on, Tone
         /// OffTone = greyed with Text its reason, Open = the reason's tag is showing.</summary>
         public Block Chip;
@@ -193,7 +204,7 @@ namespace Hearthwoven.Panel
         /// reason shows now, the one just pressed (B17's line, no longer on the plate).</summary>
         public string WindowWhy, WindowTip;
         /// <summary>0.8 layout D+ (PageHead.cs): a fellow's book says whose copy it is and when at the strip's right end ("Edda, as of 8 Oct 00:28").</summary>
-        public string StripNote;
+        public string StripNote;   // 0.9: on a fight's page, the "bring next time" line (Chapters/FightPages.cs BringLine)
     }
 
     /// <summary>
@@ -496,13 +507,17 @@ namespace Hearthwoven.Panel
         {
             ("yggashoot", "Yggdrasil shoot"), ("swamptree", "Ancient tree"), ("beech", "Beech"), ("birch", "Birch"), ("oak", "Oak"), ("pine", "Pine"), ("fir", "Fir"),
         };
-        /// <summary>A tree's plain kind: its logs and log halves fold into it ("FirTree_log_half" -> "Fir"); any other tree
-        /// (a mod's) by its name without the log, stub and number suffixes.</summary>
+        /// <summary>A tree's plain kind: its logs and log halves fold into it ("FirTree_log_half" -> "Fir"); any other tree (the
+        /// Ashlands' Scorched Tree, a mod's) by the game's name of the tree it is or fell from (PanelInput.TreeOf, 0.8.2: the logs carry
+        /// only "Log"), else by its name without the log, stub and number suffixes ("AshlandsTreeLogHalf1" -> "Ashlands Tree").</summary>
         public static string TreeKind(PanelInput i, string prefab)
         {
             var low = (prefab ?? "").ToLowerInvariant();
             foreach (var t in TreeKinds) if (low.Contains(t.word)) return t.name;
-            var bare = System.Text.RegularExpressions.Regex.Replace(prefab ?? "", "(?i)_(log|stub).*$", "");
+            var tree = Ask(i?.TreeOf, prefab);
+            var named = tree != null ? GameName(i, tree) : null;
+            if (named != null) return named;
+            var bare = System.Text.RegularExpressions.Regex.Replace(prefab ?? "", "(?i:_(log|stub).*$)|(?<=[a-z])Log(Half)?[0-9]*$", "");
             bare = System.Text.RegularExpressions.Regex.Replace(bare, "[_0-9]+$", "");
             return Who(i, bare.Length > 0 ? bare : prefab);
         }
@@ -515,22 +530,120 @@ namespace Hearthwoven.Panel
         };
         /// <summary>The picture of a tree kind (TreeKind's name): "vocab:tree-beech"; "" for a kind without one.</summary>
         public static string TreeIcon(string kind) { foreach (var t in TreeSprites) if (t.kind == kind) return "vocab:" + t.sprite; return ""; }
-        static readonly (string word, string sprite)[] RockSprites =
+        // name: the game's English name of the vanilla deposit (its $piece_deposit_* token), only for when the game data gives none (0.8.2)
+        static readonly (string word, string sprite, string name)[] RockSprites =
         {
-            ("copper", "item:CopperOre|vocab:rock-copper"), ("tin", "item:TinOre|vocab:rock-tin"), ("silver", "item:SilverOre|vocab:rock-silver"),
-            ("scrap", "item:IronScrap|vocab:rock-scrap"), ("mudpile", "item:IronScrap|vocab:rock-scrap"),
-            ("obsidian", "item:Obsidian|vocab:rock-stone"), ("flametal", "item:FlametalOreNew|item:FlametalOre|vocab:rock-stone"), ("meteorite", "item:FlametalOre|vocab:rock-stone"),
-            ("blackmarble", "item:BlackMarble|vocab:rock-stone"), ("leviathan", "item:Chitin|vocab:rock-stone"),
-            ("rock", "item:Stone|vocab:rock-stone"), ("stone", "item:Stone|vocab:rock-stone"),
+            ("copper", "item:CopperOre|vocab:rock-copper", "Copper Deposit"), ("tin", "item:TinOre|vocab:rock-tin", "Tin Deposit"),
+            ("silvervein", "item:SilverOre|vocab:rock-silver", "Silver Vein"), ("silver", "item:SilverOre|vocab:rock-silver", "Silver Deposit"),
+            ("scrap", "item:IronScrap|vocab:rock-scrap", null), ("mudpile", "item:IronScrap|vocab:rock-scrap", "Muddy Scrap Pile"),
+            ("obsidian", "item:Obsidian|vocab:rock-stone", "Obsidian Deposit"), ("flametal", "item:FlametalOreNew|item:FlametalOre|vocab:rock-stone", null), ("meteorite", "item:FlametalOre|vocab:rock-stone", null),
+            ("blackmarble", "item:BlackMarble|vocab:rock-stone", null), ("leviathan", "item:Chitin|vocab:rock-stone", null),
+            ("rock", "item:Stone|vocab:rock-stone", PlainRock), ("stone", "item:Stone|vocab:rock-stone", PlainRock),
         };
         /// <summary>The picture of a rock, vein or pile by its prefab ("rock4_copper" -> rock-copper, "MudPile" -> rock-scrap, any
         /// other rock -> rock-stone); "" when the name says nothing the set has a picture for. Every deposit shows the game's own
         /// ore icon (copper, tin, silver, iron scrap from the mud pile, stone) when the item exists at runtime (PanelLook.Icon: "a|b" = first that resolves), our sketch otherwise.</summary>
         public static string RockIcon(string prefab)
         {
+            var w = RockWord(prefab);
+            if (w == null) return "";
+            var sprite = RockSprites.First(r => r.word == w).sprite;
+            return sprite.Contains(":") ? sprite : "vocab:" + sprite;
+        }
+        /// <summary>The word of the set a rock's prefab holds ("MineRock_Tin" -> "tin", "Rock_4" -> "rock"); null = none.</summary>
+        static string RockWord(string prefab)
+        {
             var low = (prefab ?? "").ToLowerInvariant();
-            foreach (var r in RockSprites) if (low.Contains(r.word)) return r.sprite.Contains(":") ? r.sprite : "vocab:" + r.sprite;
-            return "";
+            foreach (var r in RockSprites) if (low.Contains(r.word)) return r.word;
+            return null;
+        }
+
+        /// <summary>
+        /// A thing a pickaxe hit, as the game data has it (GameData.Rock, 0.8.2). Whole: the rock a split piece came from (a rock
+        /// that breaks apart on its first hit is replaced by its fractured self, Destructible.m_spawnWhenDestroyed: "rock4_forest" ->
+        /// "rock4_forest_frac", so the piece's hits are the rock's). Mined: a rock, ore vein or pile (RockMined). Drop: the item
+        /// prefab it mainly drops ("TinOre"), its picture when its name has none in the set.
+        /// </summary>
+        public class RockData { public string Whole; public bool Mined; public string Drop; }
+
+        /// <summary>An item Mining counts (RockMined: what a rock drops): stone and ore by the vanilla list or the game data, or another pickaxe find.</summary>
+        public static bool MinedItem(string token, string gatherKind) => VanillaMining.Contains(token ?? "") || gatherKind == "mining" || gatherKind == PickaxeFinds;
+        /// <summary>
+        /// Whether a thing a pickaxe hit is mined (0.8.2), from its components (GatherKindOf's reading): a rock or vein (MineRock,
+        /// MineRock5) the pickaxe works on; a Destructible only when it drops stone, ore or another pickaxe find, or breaks apart into a
+        /// mined rock ("rock4_forest" drops nothing itself). A stump, a berry bush, a nest or a pot the pickaxe also breaks is no rock.
+        /// </summary>
+        public static bool RockMined(string component, string pickaxe, bool dropsMining, bool splitsIntoMined)
+        {
+            if (pickaxe == "Immune" || pickaxe == "Ignore") return false;
+            if (component == "MineRock" || component == "MineRock5") return true;
+            return component == "Destructible" && (dropsMining || splitsIntoMined);
+        }
+
+        /// <summary>The rock a split piece came from, by its name when the game data has no answer (the tests, a removed mod):
+        /// "rock4_forest_frac" -> "rock4_forest", "giant_helmet1_destruction" -> "giant_helmet1".</summary>
+        public static string WholeRockByName(string prefab)
+        {
+            var w = System.Text.RegularExpressions.Regex.Replace(prefab ?? "", "(?i)_(frac|fractured|destruction)(_[a-z]+)?$", "");
+            return w.Length > 0 ? w : prefab;
+        }
+
+        /// <summary>The game's own name for its plain rocks (highstone, widestone and MineRock_Stone carry "Rock"): what a rock is
+        /// called when the game gives it no name at all ("Rock_4", "rock4_forest").</summary>
+        public const string PlainRock = "Rock";
+
+        /// <summary>
+        /// A rock's name: the game's own (the whole rock's, else the piece's: "Tin Deposit"); without one, the vanilla deposit's name by
+        /// the word in its prefab, "Rock" for a plain rock (also a mined thing whose prefab says nothing), else the prefab cleaned of its
+        /// numbers and the "MineRock" family name ("MineRock_Meteorite" -> "Meteorite"). Never a raw prefab name.
+        /// </summary>
+        public static string RockName(PanelInput i, string whole, string piece)
+        {
+            var n = GameName(i, whole) ?? (piece != whole ? GameName(i, piece) : null);
+            if (n != null) return n;
+            var w = RockWord(whole);
+            if (w == null) return PlainRock;
+            return RockSprites.First(r => r.word == w).name ?? Prettify(System.Text.RegularExpressions.Regex.Replace(whole, "(?i)^minerock_?|(?<=[A-Za-z])[0-9]+", ""));
+        }
+
+        /// <summary>The game's own name for a prefab or token, or null when it gives none (PanelInput.DisplayName: never a raw token).</summary>
+        static string GameName(PanelInput i, string key)
+        {
+            var n = Ask(i?.DisplayName, key);
+            return string.IsNullOrWhiteSpace(n) || n.StartsWith("$") || n.StartsWith("[") ? null : n;
+        }
+
+        public const string OtherThingsHit = "Other things hit", OtherThingsHitIcon = "title:miner";
+
+        /// <summary>
+        /// Pickaxe hits per rock (Mining, 0.8.2; Joost in game: "Mine Rock Tin", "Rock4 forest" and "Rock4 forest frac" apart,
+        /// "Blueberry Bush" and "Stubbe" without a picture). One row per rock by its name (RockName): a split piece's hits are its
+        /// rock's, and rocks of one name are one row. What is no rock (RockMined: a stump, a bush) is one quiet last row, "Other
+        /// things hit", so the rows still add up to the pickaxe hits beside the hero. Only how the list groups: nothing recorded
+        /// changes. A rock's picture by its name (RockIcon), else the game's icon of what it drops, else the stone sketch.
+        /// </summary>
+        public static Block RockHits(PanelInput i)
+        {
+            var rows = new Dictionary<string, (double hits, string icon, double most)>();
+            double other = 0;
+            foreach (var kv in i?.Events?.PickaxeHits ?? new Dictionary<string, float>())
+            {
+                if (kv.Value <= 0) continue;
+                RockData data = null;
+                try { data = i.Rock?.Invoke(kv.Key); } catch { data = null; }
+                var whole = data?.Whole ?? WholeRockByName(kv.Key);
+                if (!(data?.Mined ?? RockWord(whole) != null)) { other += kv.Value; continue; }
+                var name = RockName(i, whole, kv.Key);
+                var icon = RockIcon(whole);
+                if (icon == "") icon = (data?.Drop != null ? "item:" + data.Drop + "|" : "") + "vocab:rock-stone";
+                rows.TryGetValue(name, out var r);
+                rows[name] = (r.hits + kv.Value, kv.Value > r.most ? icon : r.icon, Math.Max(r.most, kv.Value));
+            }
+            var list = rows.OrderByDescending(r => r.Value.hits).ThenBy(r => r.Key, StringComparer.Ordinal).Take(other > 0 ? GatherTop - 1 : GatherTop)
+                           .Select(r => new KeyValuePair<string, double>(r.Key, r.Value.hits)).ToList();
+            if (other > 0) list.Add(new KeyValuePair<string, double>(FoldId, other));
+            return Ranking(list, k => k == FoldId ? OtherThingsHit : k, k => k == FoldId ? OtherThingsHitIcon : rows[k].icon, SrcPc,
+                           top: GatherTop, columns: 2, keepOrder: true, colour: k => k == FoldId ? BarOtherColour : null);
         }
         /// <summary>Axe hits per tree kind (since install, exact), logs and log halves folded into their tree.</summary>
         public static Dictionary<string, double> TreeHits(PanelInput i)
@@ -608,10 +721,11 @@ namespace Hearthwoven.Panel
 
         /// <summary>
         /// B33 on every page with windows (Joost 2026-10-10: "Session" is YOUR session's span): on a fellow's book their Session counts from
-        /// when you started playing this time (their log's rows are timed, so what they did before you came in is left out); null on your own
-        /// book, or when the start of your session is not known.
+        /// when you started playing this time (their log's rows are timed, so what they did before you came in is left out); null when the start
+        /// of your session is not known. On your own book (0.8.2): where this connection began when your log holds kept minutes of earlier ones
+        /// (LogSessionFromUtc, KeptMinutes), so they stay out of Session; null when the log is this session's alone.
         /// </summary>
-        public static DateTime? SessionFrom(PanelInput input) => input != null && !input.IsSelf ? input.ViewerSessionStartUtc : null;
+        public static DateTime? SessionFrom(PanelInput input) => input == null ? null : !input.IsSelf ? input.ViewerSessionStartUtc : input.LogSessionFromUtc;
 
         /// <summary>A fellow who did not play during your session (B33): not seen in the world this connection, or their latest record is older
         /// than your session's start. Their Session then says so ("Edda has not played since 21:40."), never as if they had been there.</summary>
@@ -978,8 +1092,10 @@ namespace Hearthwoven.Panel
                     items = new[] { ("overview", "Overview", ListOverview) }.Concat(SkillNames(input).Select(s => (s, SkillName(input, s), "skill:" + s)));
                     break;
             }
-            // 0.8: a fellow's copy carries no feed: the feed and the last fight stay in the list, greyed, and their page says why
-            return items.Select(x => new Choice { Id = x.id, Label = x.label, Icon = x.icon, Disabled = c == Chapter.Battle && input != null && !input.IsSelf && (x.id == FeedPage || x.id == LastFightPage) }).ToList();
+            // 0.8: a fellow's copy without a feed (0.8.2: one from before 0.8.2, FeedShare): the feed and the last fight stay in the list, greyed, and their page says why
+            var list = items.Select(x => new Choice { Id = x.id, Label = x.label, Icon = x.icon, Disabled = c == Chapter.Battle && input != null && !input.IsSelf && input.SharedFeed == null && (x.id == FeedPage || x.id == LastFightPage) }).ToList();
+            if (c == Chapter.Battle) FightEntries(input, list);   // 0.9: Runs and bosses, and Last fight as "Boss fight" while one is on (Chapters/FightPages.cs)
+            return list;
         }
 
         /// <summary>"your" on your own page, "their" on a fellow player's book (sample-one: a fellow's book never speaks to the reader about them).</summary>
@@ -1002,7 +1118,7 @@ namespace Hearthwoven.Panel
 
         // ---------- the panel ----------
 
-        public static PanelView Build(PanelInput input, PanelState state) => WithFeatMemo(() => SettleHead(input, state, CompareOrPlain(input, state, BuildView(input, state))));   // L6: feat numbers once per render (FeatsModel.FeatMemo); 0.8: Compare periods (CompareModel.cs), then the page head (PageHead.cs)
+        public static PanelView Build(PanelInput input, PanelState state) => WithFeatMemo(() => FoldItemGrids(state, SettleHead(input, state, CompareOrPlain(input, state, BuildView(input, state)))));   // L6: feat numbers once per render (FeatsModel.FeatMemo); 0.8: Compare periods (CompareModel.cs), then the page head (PageHead.cs); 0.8.1: long item grids folded (DeedsModel.cs)
 
         static PanelView BuildView(PanelInput input, PanelState state)
         {
@@ -1017,18 +1133,20 @@ namespace Hearthwoven.Panel
             if (state.ShowAbout) view.List.AddRange(AboutList.Select(x => new Choice { Id = x.id, Label = x.label }));
             else view.List.AddRange(ListOf(input, state.Chapter));
             var page = state.ShowAbout ? state.AboutPage : state.PageOf(state.Chapter);
-            if (view.List.Count > 0 && !view.List.Any(l => l.Id == page))   // Deeds opens on its Overview (Recent sits above it); Company still opens on Fireside (Since you were away is chosen, or opens by itself)
+            if (view.List.Count > 0 && !view.List.Any(l => l.Id == page) && !(state.Chapter == Chapter.Battle && !state.ShowAbout && FightOn(input, page) != null))   // 0.9: a fight's own page belongs to Runs and bosses (FightPages.cs); Deeds opens on its Overview (Recent sits above it); Company still opens on Fireside (Since you were away is chosen, or opens by itself)
                 page = !state.ShowAbout && state.Chapter == Chapter.Deeds ? "overview"
                      : state.Chapter == Chapter.Company && !state.ShowAbout && view.List.Count > 1 && view.List[0].Id == AwayPage ? view.List[1].Id : view.List[0].Id;
             view.Page = page;
             var place = new PanelPlace { Chapter = state.Chapter, Page = page, Player = state.Player ?? "", About = state.ShowAbout };
             SettleWait(state, place, input);   // a greyed day window pressed on another page: back to the last window that worked (B17)
-            if (state.Chapter == Chapter.Battle && !state.ShowAbout && !input.IsSelf)
+            // a fellow's Battle pages show their Session or All; 0.8.2: not the feed, whose shared foes carry their own times, so its chips (FeedWindowChips)
+            // offer the short windows on their book as on yours
+            if (state.Chapter == Chapter.Battle && !state.ShowAbout && !input.IsSelf && page != FeedPage)
             {
-                var wanted = state.Window == TimeWindow.SinceInstall && input.SharedSinceInstall ? TimeWindow.SinceInstall : TimeWindow.Session;
+                var wanted = WindowShared(input, state.Window) || (page == "damage" && FellowDaysOpen(input, state.Window)) ? state.Window : TimeWindow.Session;   // 0.8.2 (H): 10 min .. 3 h too while their copy is live; 0.9: their days on Damage
                 if (wanted != state.Window) { state = (PanelState)CopyOf.Invoke(state, null); state.Window = wanted; }
             }
-            foreach (var l in view.List) l.Selected = l.Id == page;
+            foreach (var l in view.List) l.Selected = l.Id == (state.ShowAbout ? page : ListEntryOf(state.Chapter, page));
             var titles = Titles(input);
             foreach (var t in titles.Where(t => !state.ShowAbout && t.Chapter == state.Chapter && t.Page == page))
                 view.Badges.Add(new Choice { Id = t.Id, Label = t.Title, Icon = "title:" + t.Id });
@@ -1058,8 +1176,9 @@ namespace Hearthwoven.Panel
             // the chips say the window short (10 min, 7 days, All): the heading says it in full ("Defence, last 7 days"); Battle says it on
             // every window, the day-window pages only when it is not All (there All is the page as it always was)
             // a fellow's last shared session is said on the plate's first line with its date ("Tor, last shared session, 8 Oct 00:10"): the heading
-            // stays the page's name, so it is not cut by the nine chips
-            if (view.HasFilters && view.ShownWindow.HasValue && (state.Chapter == Chapter.Battle || view.ShownWindow != TimeWindow.SinceInstall) && (input.IsSelf || view.ShownWindow != TimeWindow.Session)
+            // stays the page's name, so it is not cut by the nine chips; 0.8.2 (H): every window on a fellow's book, now that their 10 min to 3 h
+            // open: the book's badge stands before the title and the chosen chip says the window, as Everyone's tag does
+            if (view.HasFilters && view.ShownWindow.HasValue && (state.Chapter == Chapter.Battle || view.ShownWindow != TimeWindow.SinceInstall) && input.IsSelf
                 && !(view.Recorded && view.ShownWindow == TimeWindow.SinceInstall)   // a 0.7 page on All: the automatic "Recorded from" label speaks instead (rule W.2)
                 && !view.EveryoneOn)   // 0.8: the "Everyone" tag stands before the title and the chosen chip says the window (PICKS: the heading never truncates)
                 view.HeadingWindow = WindowLabelFor(input, view.ShownWindow.Value).ToLowerInvariant();
@@ -1167,9 +1286,14 @@ namespace Hearthwoven.Panel
         static Block WindowEmpty(PanelInput input, TimeWindow window)
         {
             var session = window == TimeWindow.Session;
-            var b = Empty(session ? NothingYet + " this session" : window == TimeWindow.Today ? "Nothing today" : "Nothing in the " + WindowLabel(window).ToLowerInvariant(),
-                          input.IsSelf ? (session ? "Fight something and it fills up." : DayEmptyLine)
-                                       : "Choose Session to see " + Name(input) + "'s last session.");
+            // 0.8.2 (I): a fellow's empty Session said "Choose Session to see <name>'s last session." with Session chosen (Joost, a friend's Foes):
+            // their Session is your session's span (B33), so it says since when, and where their earlier fights are
+            var fellowSince = session && !input.IsSelf && SessionFrom(input).HasValue;
+            var b = Empty(fellowSince ? "Nothing " + SinceViewer(input) : session ? NothingYet + " this session" : window == TimeWindow.Today ? "Nothing today" : "Nothing in the " + WindowLabel(window).ToLowerInvariant(),
+                          input.IsSelf || IsDayWindow(window) ? (session ? "Fight something and it fills up." : DayEmptyLine)   // 0.9: a fellow's day (their Damage) as your own
+                                       : fellowSince ? (input.SharedSinceInstall ? "Choose All for " + Name(input) + "'s totals." : Name(input) + "'s earlier sessions are not shared.")
+                                       : session ? "Choose Session to see " + Name(input) + "'s last session."
+                                       : "Choose a longer window, or Session for " + Name(input) + "'s fights " + SinceViewer(input) + ".");   // 0.8.2 (H): a live fellow's quiet short window
             b.Tone = SinceInstallTone; return b;
         }
         static Block Empty(string title, string text = null) => new Block { Kind = "empty", Title = title, Text = text };
@@ -1234,9 +1358,9 @@ namespace Hearthwoven.Panel
             ("Feats", "A moment worth telling, earned by doing it: a rule, a number and a date, never a rank. Unsung ones are not earned yet. A title is earned by its own count; there is no combined score."),
             ("Your armor", "Battle > Defense, What your armor stopped: each hit as it reached your armor and as it left it, on this PC from the day this version first ran. Falls, drowning and cold never meet armor; What hurt you counts them too."),
             // fix4-rest (review: the page opened with Titles and the one thing that matters sat in the third row): what is shared, how to switch it, what stays private, where it goes
-            ("What fellow players see", "Fellow players who run Hearthwoven see your counts in their own book: deeds, fights, voyages, skills, feats and the lands you found. You see theirs the same way."),
+            ("What fellow players see", "Fellow players who run Hearthwoven see your counts in their own book: deeds, fights foe by foe, voyages, skills, feats and the lands you found. You see theirs the same way."),
             ("Turn sharing on or off", "Set ShareWithGroup in your mod manager's config editor (Gale or r2modman). It is on by default, and a change works while the game runs. Off: you see only your own book, and nobody sees yours."),
-            ("What stays private", "Where you died and which worlds you played are left out of what fellow players see. Hearthwoven only reads the game and never changes your world."),
+            ("What stays private", "Fellow players never see where you died, which worlds you played, or the name of a player who does not share. Hearthwoven only reads the game and never changes your world."),
             ("Where your counts go", "To the server you play on, when it runs Hearthwoven; a server without it keeps nothing. Switching sharing off stops fellow players seeing your counts, not the server keeping them. Remove Hearthwoven.dll to uninstall it."),
         };
         // 0.7: no "Faded" row (no faded parts are left on a page; REDESIGN-RULES.md part 5, G8, SOURCE-MATRIX row 136)
@@ -1362,7 +1486,7 @@ namespace Hearthwoven.Panel
                         if (brought != null) { brought.Title = null; brought.Value = null; brought.Text = null; Add(view, brought); }
                         if (earlier && brought != null) view.Blocks.Add(new Block { Kind = "note", Text = EarlierIncomplete });   // rule A.3: beside the bar, where the worked page's one line stands
                         Add(view, PickaxeFindsKey(input, named));
-                        var rocks = pickaxeHits > 0 ? Ranking(D(input.Events.PickaxeHits), named, RockIcon, SrcPc, top: GatherTop, columns: 2) : null;
+                        var rocks = pickaxeHits > 0 ? RockHits(input) : null;   // 0.8.2: per rock by the game's name, split pieces folded in, the rest one quiet row
                         if (rocks != null) Group(view, "Pickaxe hits per rock", rocks);
                         MiningNumbers(view, input);
                     }
@@ -1400,7 +1524,7 @@ namespace Hearthwoven.Panel
             if (brought != null) { Add(view, Hero((brought.Value, "stone and ore brought in", SrcPc, null))); brought.Title = null; brought.Value = null; brought.Text = null; Add(view, brought); }
             SkillBeside(view, src, "Pickaxes");
             Add(view, PickaxeFindsKey(src, named));
-            if (rockHits > 0) Group(view, "Pickaxe hits per rock", Ranking(D(src.Events.PickaxeHits), named, RockIcon, SrcPc, top: GatherTop, columns: 2));
+            if (rockHits > 0) Group(view, "Pickaxe hits per rock", RockHits(src));
             if (view.Blocks.Count == 0) view.Blocks.Add(DayEmpty(src, w));
             if (src.Window.Clipped) view.Blocks.Add(new Block { Kind = "note", Text = ClippedLineOf(src.Window) });
             Plate(view, "title:miner");
@@ -1515,14 +1639,19 @@ namespace Hearthwoven.Panel
             view.Recorded = true;
             // 0.8: the feed and the last fight are this session's, on your own book (Chapters/BattleFeedModel.cs): no window chips
             if (page == FeedPage) { view.Scope = input.IsSelf ? "This session · your fights" : "This session"; BattleFeedView(input, view, state); return; }
+            // 0.9 (Chapters/FightPages.cs): with the fights the book knows, Last fight is the group's fight page; Runs and bosses and each fight's own page
+            if (FightOn(input, page) is FightView fight) { FightPage(input, view, state, page, fight); return; }
+            if (page == RunsPage && input.Fights != null) { RunsView(input, view, state); return; }
+            if (IsFightPage(page)) { view.Heading = RunsLabel; view.Blocks.Add(Empty(FightGone, FightGoneText)); Plate(view, "ui:chapter-battle"); return; }
             if (page == LastFightPage) { view.Scope = input.IsSelf ? "This session · your last fight" : "This session"; BattleLastFight(input, view, state); return; }
             // every Battle page has the one window set (HISTORY-06.md): the log's short windows, the day history's days, All. A day window
             // reads a copy of the input whose totals are the window's rows (InWindow), so it takes the since-install path of each page
             var windowed = page == "overview" || page == "damage" || page == "deaths" || page == "foes" || page == "defense";
-            var w = windowed ? WindowChips(input, state, view, AllWindows) : state.Window;
+            // 0.9: a fellow's Damage opens their days when their copy splits them by weapon kind and type (FellowDaysOpen, FellowInWindow)
+            var w = windowed ? WindowChips(input, state, view, AllWindows, open: page == "damage" ? (i, x) => WindowOpen(i, x) || FellowDaysOpen(i, x) : (Func<PanelInput, TimeWindow, bool>)null) : state.Window;
             if (w == TimeWindow.SinceInstall) BattleNumbers(input, view);   // "About these numbers" on All only (BattleModel.cs)
             var day = IsDayWindow(w);
-            var src = day ? InWindow(input, w) ?? input : input;
+            var src = day ? (input.IsSelf ? InWindow(input, w) : FellowInWindow(input, w)) ?? input : input;
             // Since install (and a day window) is the total this PC folded: damage by foe, cause and type, with no biome and no time, and
             // deaths only counted; so no biome choice on Damage there, and the deaths listed are the ones of this session's log
             var since = w == TimeWindow.SinceInstall || day;
@@ -1536,7 +1665,7 @@ namespace Hearthwoven.Panel
             var now = input.NowUtc;
             var rows = since ? DamageSinceInstallRows(src) : Damage(input.Log, w, "", now, SessionFrom(input));   // B33: a fellow's Session from your session's start
             var taken = rows.Where(r => r.Dir == "taken").ToList();
-            var deaths = Deaths(input.Log, since ? TimeWindow.Session : w, "", now, since ? null : SessionFrom(input));
+            var deaths = Deaths(input.Log, since ? TimeWindow.Session : w, "", now, since && !input.IsSelf ? null : SessionFrom(input));   // your own: this session's (0.8.2: never your kept minutes')
             if (day) { var start = WindowStartUtc(input, w); deaths = deaths.Where(d => !start.HasValue || d.Time >= start.Value).ToList(); }   // the falls of this session that lie in the day window
             if (windowed)
             {
@@ -1545,25 +1674,21 @@ namespace Hearthwoven.Panel
                 // All has no window word (rule W.2: the page's own dates say when); a fellow's All says whose copy and as of when (rule E)
                 view.Scope = (chosen.Count > 0 ? string.Join(" and ", chosen.OrderBy(BiomeRank).Select(BiomeName)) + " combat" : "All biomes") + " · all foes" +
                              (w == TimeWindow.SinceInstall || (!input.IsSelf && w == TimeWindow.Session) ? "" : " · " + WindowLabel(w).ToLowerInvariant()) +   // a fellow's Session is said once below
-                             (input.IsSelf ? "" : " · " + (w == TimeWindow.SinceInstall ? RecordedScope(input)
-                                 : w == TimeWindow.Session && SessionFrom(input).HasValue ? Name(input) + ", " + SinceViewer(input) : Name(input) + ", " + SessionScope(input)));   // B33: their Session is your session's span
+                             (input.IsSelf ? "" : " · " + (w == TimeWindow.SinceInstall || day ? RecordedScope(input)   // 0.9: a fellow's day window, their copy as of when
+                                 : w == TimeWindow.Session && SessionFrom(input).HasValue ? Name(input) + ", " + SinceViewer(input)   // B33: their Session is your session's span
+                                 : w != TimeWindow.Session ? Name(input) + ", " + GroupLive : Name(input) + ", " + SessionScope(input)));   // 0.8.2 (H): a short window, a live copy
             }
             else view.Scope = RecordedScope(input);
             // B33: a fellow who did not play during your session shows no numbers in Session, never as if they had been there
             if (windowed && w == TimeWindow.Session && SessionFrom(input).HasValue && FellowOffThisSession(input))
             {
                 view.Heading = view.List.FirstOrDefault(l => l.Selected)?.Label ?? "Battle";
-                view.Blocks.Add(Empty(NothingYet + " this session", FellowNotOn(input)));
+                // 0.8.2 (I; Joost, a friend's Foes empty in Session): their battle record is quiet since your session began; when they are in the
+                // world they have played, only not fought, so the line says that
+                view.Blocks.Add(Empty(NothingYet + " this session", input.OnThisSession == true ? Name(input) + " has not fought " + SinceViewer(input) + "." : FellowNotOn(input)));
                 return;
             }
-            // a fellow's copy can be older than the window: say when it is from, never "nothing happened"
-            var cutoff = Cutoff(w, now);
-            if (windowed && !input.IsSelf && cutoff.HasValue && (!input.LastRecordedUtc.HasValue || input.LastRecordedUtc.Value.AddMinutes(SpanOf(input)) <= cutoff.Value))
-            {
-                view.Heading = input.LastRecordedUtc.HasValue ? Name(input) + " last shared " + Local(input, input.LastRecordedUtc.Value).ToString("d MMM HH:mm", Inv) : "No record from " + Name(input) + " yet";
-                view.Blocks.Add(Empty(w == TimeWindow.Session ? "Nothing this session" : "Nothing in the " + WindowLabel(w).ToLowerInvariant(), "Choose This session to see " + Name(input) + "'s last session."));
-                return;
-            }
+            // (0.8.2, H: a fellow's 10 min .. 3 h open only while their copy is live, so a quiet window is a quiet window: no "last shared" here)
             // ch-battle (Chapters/BattleModel.cs): Damage, Defense, Deaths, Foes from the approved prototypes
             if (page == "damage") { BattleDamage(src, view, state, page, rows, w); return; }
             if (page == "defense") { BattleDefense(input, src, view, w); ArmourSwitch(input, view, state, page, w); return; }   // 0.7: Received / Your armour (Chapters/ArmourModel.cs)
@@ -1602,7 +1727,7 @@ namespace Hearthwoven.Panel
                         // labelled as advice (review 4: "Bring Poison resistance mead" read as data)
                         foreach (var h in Hints(rows, deaths).Take(HintTop)) view.Blocks.Add(new Block { Kind = "note", Tone = "hint", Text = TipWord + h, Source = TagMeasured });
                         // the window and biome are the heading row's choices; a fellow's copy also says whose it is, on the plate
-                        Plate(view, "ui:chapter-battle", PlateText(input, windowed: true));
+                        Plate(view, "ui:chapter-battle", PlateText(input, windowed: true, w: w));
                         return;
                     }
             }
@@ -2089,6 +2214,7 @@ namespace Hearthwoven.Panel
         {
             if (FollowFacet(s, target)) return;   // a filter bar's chip, token, bar part or Clear all (FacetModel.cs)
             if (target == NumbersTarget) { s.ShowNumbers = !s.ShowNumbers; return; }   // the "About these numbers" button (RecordedModel.cs)
+            if (target == ShowAllTarget) { s.ShowAll = ShowAllKey(s); return; }   // 0.8.1: a folded item grid's Show all tile (DeedsModel.cs)
             if (target == CompareTarget) { s.Compare = !s.Compare; s.CompareTip = false; return; }   // the Compare chip (CompareModel.cs)
             if (target != null && target.StartsWith(ViewTarget, StringComparison.Ordinal))
             {
@@ -2453,9 +2579,12 @@ namespace Hearthwoven.Panel
                  .Num("count", b.Count).Num("level", b.Level).Num("progress", b.Progress).Num("practised", b.Practised ? 1 : 0).Str("pill", b.Pill ?? "").Str("pillIcon", b.PillIcon ?? "");
                 j.Num("columns", b.Columns);
                 j.Str("keyCap", b.KeyCap ?? "").Num("open", b.Open ? 1 : 0);
+                if (b.PartLink != null) j.Str("partLink", b.PartLink);   // 0.8.2: written only on a bar whose parts filter
                 if (!string.IsNullOrEmpty(b.RecordedFrom)) j.Str("recordedFrom", b.RecordedFrom);   // 0.7 (RecordedModel.cs): written only when set, so the older pages' data stays as it was
                 if (b.Unrecorded) j.Num("unrecorded", 1);
+                if (!string.IsNullOrEmpty(b.NoteLink)) j.Str("noteLink", b.NoteLink);   // 0.8.2: a "+N more" that opens the rest, written only when set
                 if (b.Before != null) j.Str("before", b.Before).Str("change", b.Change ?? "").Str("beforeLabel", b.BeforeLabel ?? "");   // 0.8 Compare: written only when set
+                if (b.NowHead != null) j.Str("nowHead", b.NowHead).Str("beforeHead", b.BeforeHead ?? "");   // 0.8.1: the compare rows' column heads
                 if (b.Chip != null) { j.Key("chip"); B(b.Chip); }
                 j.Key("items").OpenArr(); foreach (var i in b.Items ?? new List<Block>()) B(i); j.CloseArr();
                 if (islands && b.Kind == "plate" && ReferenceEquals(b, PlateOf(v))) IslandsJson(j, b);   // 0.8 layout D+: the page's islands (Islands.cs), dumps only
@@ -2468,7 +2597,7 @@ namespace Hearthwoven.Panel
         /// <summary>Every player-visible string in the view (for the no-em-dash check and localisation review).</summary>
         public static IEnumerable<string> AllText(PanelView v)
         {
-            IEnumerable<string> Of(Block b) => new[] { b.Title, b.Value, b.Value2, b.Text, b.Note, b.Pill, b.Before, b.Change, b.BeforeLabel }.Concat((b.Items ?? new List<Block>()).SelectMany(Of)).Concat(b.Chip != null ? Of(b.Chip) : Enumerable.Empty<string>());
+            IEnumerable<string> Of(Block b) => new[] { b.Title, b.Value, b.Value2, b.Text, b.Note, b.Pill, b.Before, b.Change, b.BeforeLabel, b.NowHead, b.BeforeHead }.Concat((b.Items ?? new List<Block>()).SelectMany(Of)).Concat(b.Chip != null ? Of(b.Chip) : Enumerable.Empty<string>());
             return new[] { v.Title, v.Owner, v.Scope, v.Heading, v.ShareNote, v.EveryoneSub, v.EveryoneWhy, v.WindowWhy, v.StripNote,   // 0.8 layout D+: the window chips' reason, the strip's note (PageHead.cs)
                            v.Windows.FirstOrDefault(c => c.Id == v.WindowTip)?.Why }   // the pressed chip's own reason, shown now (the others only on hover)
                 .Concat(new[] { v.Chapters, v.List, v.Badges, v.Toggle, v.Windows, v.Biomes, v.Players }.SelectMany(cs => cs.Select(c => c.Label)))

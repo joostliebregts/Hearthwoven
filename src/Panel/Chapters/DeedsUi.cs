@@ -185,7 +185,7 @@ namespace Hearthwoven.Panel
 
         const float GridTileW = PanelModel.ItemTileMinWidth, GridGap = PanelModel.ItemTileGap, GridPic = 32, GridTileH = 46, GridLine = 14;
 
-        static void ItemGrid(RectTransform col, Block b)
+        static void ItemGrid(RectTransform col, Block b, Func<string, Action> link = null)
         {
             var items = b.Items ?? new List<Block>();
             if (items.Count == 0) return;
@@ -211,6 +211,11 @@ namespace Hearthwoven.Panel
                 name.lineSpacing = -12; name.maxVisibleLines = 2; name.overflowMode = TextOverflowModes.Ellipsis;   // two short lines at most
                 if (name.preferredWidth > textW) wraps = true;
                 if (i.Tone == PanelModel.FuelTone) FuelMark(name, i.Title);   // Hall: a fuel item says so (fix2 7)
+                if (i.Id == PanelModel.ShowAllTarget && link?.Invoke(i.Id) is Action all)   // 0.8.1: a folded grid's last tile shows every tile where it stands
+                {
+                    name.color = PanelLook.Gold;
+                    tile.GetComponent<Image>().raycastTarget = true; tile.gameObject.AddComponent<Press>().Act = all;
+                }
                 Edge(tile, i.Colour);   // its trader's or its part's colour, a thin edge on the left (fix2 7)
                 if (!string.IsNullOrEmpty(i.Value2))
                 {
@@ -261,8 +266,7 @@ namespace Hearthwoven.Panel
                 var click = string.IsNullOrEmpty(i.Id) || i.Id.IndexOf('/') < 0 ? null : link?.Invoke(i.Id);
                 if (click == null) continue;
                 var hit = entry.gameObject.AddComponent<Image>(); hit.color = Color.clear; hit.raycastTarget = true;
-                var button = entry.gameObject.AddComponent<Button>(); button.targetGraphic = hit; button.transition = Selectable.Transition.None;
-                button.onClick.AddListener(() => click());
+                ClickTarget(hit, click);
             }
         }
 
@@ -300,10 +304,10 @@ namespace Hearthwoven.Panel
 
         // ----- people: a fellow's shield and name, then the things they put to good use, by picture and name -----
 
-        static void People(RectTransform col, Block b)
+        static void People(RectTransform col, Block b, Func<string, Action> link = null)
         {
-            if (b.Tone == PanelModel.IslandPersonTone && b.Items?.Count == 1) { PersonIsland(col, b.Items[0]); return; }   // 0.8 layout D+: Recent's group, a player per island (IslandsUi.cs)
-            if (b.Tone == PanelModel.RecentGroupTone) { RecentPeople(col, b); return; }   // 0.8: Recent with Everyone on, a grid per player (Chapters/RecentUi.cs), where the list is kept whole
+            if (b.Tone == PanelModel.IslandPersonTone && b.Items?.Count == 1) { PersonIsland(col, b.Items[0], link); return; }   // 0.8 layout D+: Recent's group, a player per island (IslandsUi.cs)
+            if (b.Tone == PanelModel.RecentGroupTone) { RecentPeople(col, b, link); return; }   // 0.8: Recent with Everyone on, a grid per player (Chapters/RecentUi.cs), where the list is kept whole
             foreach (var p in b.Items ?? new List<Block>())
             {
                 var row = Line(col, 14); Size(row, -1, islanded ? 52 : 60);

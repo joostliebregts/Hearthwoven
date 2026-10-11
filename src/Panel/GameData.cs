@@ -18,6 +18,9 @@ namespace Hearthwoven.Panel
     ///   The standing tree's own drops are left out: they are resin, cones and seeds,
     ///   not wood. PanelModel checks the vanilla names first;
     /// - pieces: TerrainOp/TerrainModifier = groundwork, Plant = planted, Feast = feast, the rest built;
+    /// - what a pickaxe hits (0.8.2, Mining's per-rock list): the rock a split piece came from (Destructible.m_spawnWhenDestroyed or
+    ///   m_spawnWhenDamaged), whether it is mined (PanelModel.RockMined) and the item it mainly drops (ore first, then stone);
+    /// - trees (0.8.2, Woodcutting's lists): the tree each log and log half fell from (TreeBase.m_logPrefab, TreeLog.m_subLogPrefab);
     /// - piece categories (B16): the hammer tab's label from the piece tables, else the enum's name, else, for a mod's category
     ///   (an enum value past the vanilla ones, whose ToString is only the number), the name its mod gave it: the enum as Jotunn
     ///   and similar libraries extend Enum.GetNames/GetValues, or Jotunn's own book of categories by reflection (no reference to
@@ -43,11 +46,17 @@ namespace Hearthwoven.Panel
         static readonly HashSet<int> catLogged = new HashSet<int>();
         static bool jotunnLooked; static Type jotunnPieces;
         static readonly Dictionary<string, Sprite> pieceIcons = new Dictionary<string, Sprite>();
+        static readonly Dictionary<string, PanelModel.RockData> rocks = new Dictionary<string, PanelModel.RockData>();   // Deeds: Mining (prefab a pickaxe hits -> its rock)
+        static readonly Dictionary<string, string> trees = new Dictionary<string, string>();   // Deeds: Woodcutting (tree, log or log half -> its tree)
         static bool ready;
 
         public static string ItemKind(string token) { Ensure(); return token != null && items.TryGetValue(token, out var k) ? k : null; }
         public static string GatherKind(string token) { Ensure(); return token != null && gather.TryGetValue(token, out var k) ? k : null; }
         public static string PieceKind(string token) { Ensure(); return token != null && pieces.TryGetValue(token, out var k) ? k : null; }
+        /// <summary>A thing a pickaxe hits, by its prefab ("rock4_forest_frac"): the rock it is part of, whether that is mined, what it mainly drops; null = not known.</summary>
+        public static PanelModel.RockData Rock(string prefab) { Ensure(); return prefab != null && rocks.TryGetValue(prefab, out var r) ? r : null; }
+        /// <summary>The tree a tree, log or log half prefab is or fell from ("AshlandsTreeLogHalf1" -> a Scorched Tree's prefab); null = not known.</summary>
+        public static string TreeOf(string prefab) { Ensure(); return prefab != null && trees.TryGetValue(prefab, out var t) ? t : null; }
         /// <summary>A planted piece's harvest: the item prefab its grown plant's Pickable yields ("Barley"); null = not a crop.</summary>
         public static string CropOf(string token) { Ensure(); return token != null && crops.TryGetValue(token, out var k) ? k : null; }
         /// <summary>The game's item type of an item token ("OneHandedWeapon"); null = not known.</summary>
@@ -175,6 +184,41 @@ namespace Hearthwoven.Panel
         /// <summary>The game's own sprite of a piece by its name token ("$piece_woodwall"), as the build menu shows it.</summary>
         public static Sprite PieceIcon(string token) { Ensure(); return token != null && pieceIcons.TryGetValue(token, out var s) ? s : null; }
 
+        /// <summary>
+        /// Mining's per-rock list (0.8.2): for every prefab a pickaxe can hit, the rock it is part of (a split piece -> the rock that
+        /// spawned it, followed up to a few steps), whether that rock is mined (its own components, or the piece it breaks into), and
+        /// the item it mainly drops: ore a smelter takes first, then anything Mining counts, then whatever comes first.
+        /// </summary>
+        static void Rocks(List<(string name, string component, string pickaxe, DropTable table, GameObject split)> hit, HashSet<string> smelted)
+        {
+            var whole = new Dictionary<string, string>();   // a split piece -> the rock that spawned it
+            var own = new Dictionary<string, (bool mined, string drop, string split, string component, string pickaxe)>();
+            foreach (var h in hit)
+            {
+                if (own.ContainsKey(h.name)) continue;
+                string ore = null, mined = null, first = null;
+                foreach (var dd in h.table?.m_drops ?? new List<DropTable.DropData>())
+                {
+                    var shared = dd.m_item ? dd.m_item.GetComponent<ItemDrop>()?.m_itemData?.m_shared : null;
+                    if (shared == null || string.IsNullOrEmpty(shared.m_name)) continue;
+                    first = first ?? dd.m_item.name;
+                    if (mined == null && PanelModel.MinedItem(shared.m_name, gather.TryGetValue(shared.m_name, out var k) ? k : null)) mined = dd.m_item.name;
+                    if (ore == null && smelted.Contains(shared.m_name)) ore = dd.m_item.name;
+                }
+                var split = h.split && (h.split.GetComponent<MineRock5>() || h.split.GetComponent<MineRock>() || h.split.GetComponent<Destructible>()) ? h.split.name : null;
+                if (split != null && split != h.name && !whole.ContainsKey(split)) whole[split] = h.name;
+                own[h.name] = (PanelModel.RockMined(h.component, h.pickaxe, mined != null, false), ore ?? mined ?? first, split, h.component, h.pickaxe);
+            }
+            foreach (var kv in own)
+            {
+                var w = kv.Key;
+                for (int n = 0; n < 4 && whole.TryGetValue(w, out var up); n++) w = up;
+                var top = own[w];
+                var piece = top.split != null && own.TryGetValue(top.split, out var s) ? s : default;   // what the whole rock breaks into
+                rocks[kv.Key] = new PanelModel.RockData { Whole = w, Mined = top.mined || PanelModel.RockMined(top.component, top.pickaxe, false, piece.mined), Drop = top.drop ?? piece.drop ?? kv.Value.drop };
+            }
+        }
+
         // the game's own word for a material the panel does not know by name (a mod's bar)
         static string LocalizedName(string token) { try { return Localization.instance != null ? Localization.instance.Localize(token) : token; } catch { return token; } }
 
@@ -228,6 +272,8 @@ namespace Hearthwoven.Panel
                 var refined = new HashSet<string>();   // what smelters, kilns and refineries make
                 var smelted = new HashSet<string>();   // what they take in: ore (0.6.5)
                 var creature = new HashSet<string>();   // what any creature drops (CharacterDrop): a pickup of it can be a kill's loot (0.6.5)
+                var hit = new List<(string name, string component, string pickaxe, DropTable table, GameObject split)>();   // what a pickaxe can hit (0.8.2)
+                var fell = new Dictionary<string, string>();   // a log -> the tree that drops it, a log half -> its log (0.8.2)
                 void Gather(DropTable table, string component, HitData.DamageModifiers mods)
                 {
                     var kind = PanelModel.GatherKindOf(component, mods.m_chop.ToString(), mods.m_pickaxe.ToString());
@@ -238,10 +284,17 @@ namespace Hearthwoven.Panel
                     if (!go) continue;
                     Piece(go);
                     var log = go.GetComponent<TreeLog>(); if (log) Gather(log.m_dropWhenDestroyed, "TreeLog", log.m_damages);
+                    var standing = go.GetComponent<TreeBase>();
+                    if (standing) { trees[go.name] = go.name; if (standing.m_logPrefab && !fell.ContainsKey(standing.m_logPrefab.name)) fell[standing.m_logPrefab.name] = go.name; }
+                    if (log && log.m_subLogPrefab && log.m_subLogPrefab.name != go.name && !fell.ContainsKey(log.m_subLogPrefab.name)) fell[log.m_subLogPrefab.name] = go.name;
                     var rock = go.GetComponent<MineRock>(); if (rock) Gather(rock.m_dropItems, "MineRock", rock.m_damageModifiers);
                     var rock5 = go.GetComponent<MineRock5>(); if (rock5) Gather(rock5.m_dropItems, "MineRock5", rock5.m_damageModifiers);
                     var destructible = go.GetComponent<Destructible>(); var dropper = go.GetComponent<DropOnDestroyed>();
                     if (destructible && dropper) Gather(dropper.m_dropWhenDestroyed, "Destructible", destructible.m_damages);
+                    if (rock) hit.Add((go.name, "MineRock", rock.m_damageModifiers.m_pickaxe.ToString(), rock.m_dropItems, null));
+                    else if (rock5) hit.Add((go.name, "MineRock5", rock5.m_damageModifiers.m_pickaxe.ToString(), rock5.m_dropItems, null));
+                    else if (destructible) hit.Add((go.name, "Destructible", destructible.m_damages.m_pickaxe.ToString(), dropper ? dropper.m_dropWhenDestroyed : null,
+                                                    destructible.m_spawnWhenDestroyed ? destructible.m_spawnWhenDestroyed : destructible.m_spawnWhenDamaged));
                     var cooker = go.GetComponent<CookingStation>();
                     if (cooker && cooker.m_conversion != null)
                         foreach (var c in cooker.m_conversion)
@@ -271,6 +324,13 @@ namespace Hearthwoven.Panel
                         var kind = PanelModel.GatheredItemKind(d.Value, refined.Contains(shared.m_name), creature.Contains(shared.m_name), smelted.Contains(shared.m_name));
                         if (kind != null) gather[shared.m_name] = kind;
                     }
+                Rocks(hit, smelted);
+                foreach (var kv in fell)   // each log and half up to its tree, a few steps at most
+                {
+                    var t = kv.Value;
+                    for (int n = 0; n < 4 && !trees.ContainsKey(t) && fell.TryGetValue(t, out var up); n++) t = up;
+                    if (trees.TryGetValue(t, out var top) && !trees.ContainsKey(kv.Key)) trees[kv.Key] = top;
+                }
                 // main material: every recipe's ingredients (ObjectDB.m_recipes), judged by PanelModel.MainMaterial; a bar is an ingredient some smelter makes
                 if (ObjectDB.instance.m_recipes != null)
                     foreach (var r in ObjectDB.instance.m_recipes)

@@ -25,6 +25,7 @@ namespace Hearthwoven.Panel
                 if (s.History.Count > HistoryMax) s.History.RemoveAt(0);
             }
             s.Here = here; s.GoingBack = false;
+            if (s.ShowAll != null && s.ShowAll != ShowAllKey(s)) s.ShowAll = null;   // 0.8.1: Show all lasts one visit of its page (DeedsModel.cs)
         }
 
         /// <summary>Backspace: back to the page you came from. False when there is nowhere to go back to.</summary>

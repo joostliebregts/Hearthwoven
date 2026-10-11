@@ -51,8 +51,9 @@ static class RecordedBattleTests
         var armour = Show(world, "defense", TimeWindow.SinceInstall, s => s.View["Battle/defense/view"] = PanelModel.ArmourId);
         var stopped = Named(armour, PanelModel.ArmourStopped);
         var ledger = Named(armour, PanelModel.ArmourByType);
+        // 0.8.1: the stopped count is the view's one bar inside the type block, whose caption says the ledger's "Recorded from" date
         Check(stopped != null && ledger != null && stopped.From.HasValue && ledger.From == stopped.From && ledger.Text == PanelModel.ArmourFromLine(world) &&
-              stopped.RecordedFrom == "from " + PanelModel.RecordDate(world, stopped.From.Value),
+              ledger.Items.Contains(stopped) && ledger.Text == PanelModel.RecordedFromLine(world, stopped.From.Value),
               "battle 0.7, defence Your armour: the stopped count and the armour rows carry the ledger's own date, the same as its \"Recorded from\" line");
 
         // Your armour on All has its own box (MERGE-NOTES G5: the chapter's box spoke of foes, hits and deaths there); Received keeps the chapter's

@@ -271,6 +271,7 @@ namespace Hearthwoven.Panel
         {
             state.ShowAbout = false;   // always reopen on the page, not on About
             state.ShowNumbers = false;   // and with "About these numbers" shut
+            state.ShowAll = null;   // and every item grid folded (0.8.1, Show all lasts one visit)
             KeyFocus = false; pointerKnown = false;   // the hotkey that opened the panel is not a move inside it: no focus ring yet
             PanelLook.Resolve();
             PanelLook.RetryMissing();
@@ -421,7 +422,9 @@ namespace Hearthwoven.Panel
 
         static readonly Dictionary<string, string> names = new Dictionary<string, string>();
 
-        // prefab name or $token -> the game's localized name
+        // prefab name or $token -> the game's localized name. A prefab's name is the one the game shows when you look at it: a creature's,
+        // a piece's, a rock's or vein's own (an empty one skipped), else its hover text (0.8.2: an ore deposit such as "MineRock_Tin" is a
+        // Destructible named only there, "$piece_deposit_tin"; a tree too), else what it yields when picked (a berry bush), else the item's
         static string Localized(string key)
         {
             if (string.IsNullOrEmpty(key)) return null;
@@ -432,18 +435,27 @@ namespace Hearthwoven.Panel
                 if (token == null)
                 {
                     var go = ZNetScene.instance ? ZNetScene.instance.GetPrefab(key) : null;
+                    string Own(string t) => string.IsNullOrEmpty(t) ? null : t;
                     if (go)
                     {
-                        var ch = go.GetComponent<Character>(); if (ch) token = ch.m_name;
-                        var pc = go.GetComponent<Piece>(); if (token == null && pc) token = pc.m_name;
-                        var r5 = go.GetComponent<MineRock5>(); if (token == null && r5) token = r5.m_name;
-                        var r = go.GetComponent<MineRock>(); if (token == null && r) token = r.m_name;
+                        var ch = go.GetComponent<Character>(); if (ch) token = Own(ch.m_name);
+                        var pc = go.GetComponent<Piece>(); if (token == null && pc) token = Own(pc.m_name);
+                        var r5 = go.GetComponent<MineRock5>(); if (token == null && r5) token = Own(r5.m_name);
+                        var r = go.GetComponent<MineRock>(); if (token == null && r) token = Own(r.m_name);
                     }
                     if (token == null)
                     {
                         var item = go ? go : ObjectDB.instance ? ObjectDB.instance.GetItemPrefab(key) : null;
                         var drop = item ? item.GetComponent<ItemDrop>() : null;
                         if (drop) token = drop.m_itemData.m_shared.m_name;
+                    }
+                    if (token == null && go)
+                    {
+                        var hover = go.GetComponent<HoverText>(); if (!hover) hover = go.GetComponentInChildren<HoverText>(true);
+                        if (hover) token = Own(hover.m_text);
+                        var pick = go.GetComponent<Pickable>();
+                        var yield = pick && pick.m_itemPrefab ? pick.m_itemPrefab.GetComponent<ItemDrop>() : null;
+                        if (token == null && pick) token = Own(pick.m_overrideName) ?? (yield ? Own(yield.m_itemData?.m_shared?.m_name) : null);
                     }
                 }
                 n = token != null && Localization.instance != null ? Localization.instance.Localize(token) : null;
@@ -462,16 +474,18 @@ namespace Hearthwoven.Panel
             if (SampleMode.On) return SampleFellow(name, self);   // Dev.SampleData (PanelSampleUi.cs)
             var key = string.IsNullOrEmpty(name) || !GroupShare.Sharing() ? null : GroupShare.Fellows.KeyOfLabel(name, self.PlayerName);
             if (key == null || !GroupShare.Group.TryGetValue(key, out var json)) return null;
+            var trail = GroupShare.Trails.Of(key);
             var other = FellowCopies.Of(key, json);   // the server resends unchanged copies: read once
             if (other == null) return null;
+            other = trail?.Joined(other) ?? other;   // 0.8.2 (J): a fellow who reconnected during yours keeps their earlier connections' log in your Session
             other.PlayerName = name;   // the label: chips, colours and pages follow this person, not whoever else has the name
             other.NowUtc = self.NowUtc; other.DisplayName = Localized; other.PlayerNames = self.PlayerNames; other.ViewerName = self.PlayerName;
             other.ItemKind = GameData.ItemKind; other.GatherKind = GameData.GatherKind; other.PieceKind = GameData.PieceKind; other.ItemToken = GameData.ItemToken; other.RecipeYield = GameData.RecipeYield; other.StationDish = GameData.StationDish; other.DishType = GameData.DishType; other.DishBoost = GameData.DishBoost;
             other.Foe = BattleGame.Foe; other.Arrows = BattleGame.Arrows;
-            other.CropOf = GameData.CropOf; other.ItemType = GameData.ItemType; other.MainMaterial = GameData.MainMaterial; other.PieceTab = GameData.PieceTab; other.PieceMaterial = GameData.PieceMaterial;
+            other.CropOf = GameData.CropOf; other.Rock = GameData.Rock; other.TreeOf = GameData.TreeOf; other.ItemType = GameData.ItemType; other.MainMaterial = GameData.MainMaterial; other.PieceTab = GameData.PieceTab; other.PieceMaterial = GameData.PieceMaterial;
             other.Book = GroupShare.BookOf(key, GroupShare.Fellows.NameOf(key));   // 0.6: their part of the server's book, which came with the group list
             other.ReceivedUtc = GroupShare.ReceivedAt(key); other.SeenBefore = Plugin.Marks?.BeforeOf(key);   // 0.7 Recent: when this copy came, and how your PC saw them before this session
-            other.Trail = GroupShare.Trails.Of(key); other.Timed = GroupShare.ServerLive && LiveFellows.CopyIdOf(json).Length > 0; other.ServerLive = GroupShare.ServerLive;   // B33: their numbers inside your session
+            other.Trail = trail; other.Timed = GroupShare.ServerLive && LiveFellows.CopyIdOf(json).Length > 0; other.ServerLive = GroupShare.ServerLive;   // B33: their numbers inside your session
             other.OnThisSession = GroupShare.Joins.SeenThisConnection(GroupShare.Fellows.NameOf(key)); other.ViewerSessionStartUtc = self.SessionStartUtc;
             other.Cached = GroupShare.IsCached(key);   // B23: shown from this PC until the server's copy comes
             return other;
@@ -499,12 +513,13 @@ namespace Hearthwoven.Panel
             var input = new PanelInput
             {
                 NowUtc = DateTime.UtcNow, SessionStartUtc = SessionStart,
-                Session = Plugin.Session, Events = Plugin.EventsSinceInstall, Log = Plugin.Log, DamageSinceInstall = Plugin.DamageSinceInstall, BiomeSinceInstall = Plugin.BiomeSinceInstall, BiomeFromUtc = Plugin.BiomeFromUtc, DisplayName = Localized,
+                Log = Plugin.LogWithEarlier, LogSessionFromUtc = Plugin.LogSessionFromUtc,   // 0.8.2: your kept minutes of earlier connections under this session's, for 10 min .. 3 h (KeptMinutes)
+                Session = Plugin.Session, Events = Plugin.EventsSinceInstall, DamageSinceInstall = Plugin.DamageSinceInstall, BiomeSinceInstall = Plugin.BiomeSinceInstall, BiomeFromUtc = Plugin.BiomeFromUtc, DisplayName = Localized,
                 SessionOnly = Plugin.Events, History = Plugin.History, Pending = Plugin.PendingDay(),   // the day windows (HISTORY-06.md): the saved days plus what this session counted since the last save
                 ArmourSession = Plugin.Armour, ArmourMinutes = Plugin.ArmourMinutes, ArmourSince = Plugin.ArmourSince, ArmourBook = Plugin.ArmourBook, ArmourPending = Plugin.ArmourPending(), ArmourFromUtc = Plugin.ArmourFromUtc,   // Defence's armour view (0.7)
                 ItemKind = GameData.ItemKind, GatherKind = GameData.GatherKind, PieceKind = GameData.PieceKind, ItemColour = PanelLook.IconColour,
                 Foe = BattleGame.Foe, Arrows = BattleGame.Arrows, Gear = BattleGame.Gear, Owned = OwnedNow(),   // Foes' ranking (0.7): bolts and weapons, what you carry
-                CropOf = GameData.CropOf, ItemType = GameData.ItemType, MainMaterial = GameData.MainMaterial, PieceTab = GameData.PieceTab, PieceMaterial = GameData.PieceMaterial, ItemToken = GameData.ItemToken, RecipeYield = GameData.RecipeYield, StationDish = GameData.StationDish, DishType = GameData.DishType, DishBoost = GameData.DishBoost,
+                CropOf = GameData.CropOf, Rock = GameData.Rock, TreeOf = GameData.TreeOf, ItemType = GameData.ItemType, MainMaterial = GameData.MainMaterial, PieceTab = GameData.PieceTab, PieceMaterial = GameData.PieceMaterial, ItemToken = GameData.ItemToken, RecipeYield = GameData.RecipeYield, StationDish = GameData.StationDish, DishType = GameData.DishType, DishBoost = GameData.DishBoost,
                 PlayerNames = new Dictionary<long, string>(),
                 Book = GroupShare.Sharing() ? GroupShare.OwnBook : null,   // 0.6: your part of the server's book (cargo loaded and unloaded, born near), while you share
                 Solo = ZNet.IsSinglePlayer,   // singleplayer: one line where fellow players would be (PanelModel.SoloNote)
@@ -904,6 +919,7 @@ namespace Hearthwoven.Panel
         void Fill(PanelView v)
         {
             personColors = v.PersonColors;
+            fillView = v; feedLogCols = null;   // the feed's Log measures its columns over this page's fights, once (Chapters/BattleFeedUi.cs)
             var pageKey = v.Active + "/" + v.Page + "/" + state.Player;
             var newPage = pageKey != lastPage; lastPage = pageKey;
             lastFillNew = newPage; chromeKept = false; fills++;   // the parity check's notes (PanelReuse.cs)
@@ -1026,6 +1042,7 @@ namespace Hearthwoven.Panel
             scrollers.RemoveAll(x => !x.Rect || x.Rect.transform.IsChildOf(content));   // the grids of the page just left, or of this page's last drawing
             featCards.Clear(); featDetail = null; featsArea = null;   // 0.8.1: nothing outlives the page it points into (Clear may keep a plain object for reuse: PanelReuse.cs)
             Clear(content);
+            NewPageTag(content);   // 0.8.2: the page's one hover tag, made with its first bar that needs it (Chapters/DamageRowsUi.cs)
             if (plate != null)
             {
                 // the page on its plate: the plate's own line first, then its blocks at the plate's width
@@ -1060,6 +1077,7 @@ namespace Hearthwoven.Panel
                 foreach (var t in v.Toggle) { var they = t.Id == "they"; Toggle(row, t, () => { state.TheyReceived = they; Render(true); }); }
             }
             if (plate == null) foreach (var b in v.Blocks) Draw(content, b);
+            PageTagOnTop();   // drawn over every block
             foreach (var x in scrollers)   // an inner area that does not place itself is given back where it stood (the feats grid places itself: FeatsBlock)
                 if (x.Rect && x.Rect.content && !x.Placed && KeptScroll(x.Key) is float at) x.Rect.content.anchoredPosition = new Vector2(x.Rect.content.anchoredPosition.x, at);
             MarkFill(1);   // the page's own blocks made
@@ -1232,7 +1250,7 @@ namespace Hearthwoven.Panel
         void Draw(RectTransform col, Block b)
         {
             // composition and hero write their note in their own line; the layout boxes hold blocks, not a note
-            if (DrawVocab(col, b, LinkTo, Draw)) { if (b.Kind != "composition" && b.Kind != PanelModel.CompareRowsKind && b.Kind != "hero" && b.Kind != "cropgrid" && b.Kind != "featband" && !PanelModel.IsBox(b)) Note(col, b.Note); return; }   // the strip says its own words (B18: its titles were drawn twice)
+            if (DrawVocab(col, b, LinkTo, Draw)) { if (b.Kind != "composition" && b.Kind != PanelModel.CompareRowsKind && b.Kind != "hero" && b.Kind != "cropgrid" && b.Kind != "featband" && !PanelModel.IsBox(b) && !PanelModel.IsFightKind(b.Kind)) Note(col, b.Note, b.NoteLink); return; }   // the strip says its own words (B18: its titles were drawn twice)
             switch (b.Kind)
             {
                 case "section":
@@ -1284,11 +1302,22 @@ namespace Hearthwoven.Panel
             }
         }
 
-        void Note(RectTransform col, string note)
+        void Note(RectTransform col, string note, string link = null)
         {
             if (string.IsNullOrEmpty(note)) return;
             if (note == PanelModel.FadedKey || note == PanelModel.FadedKeyTwin) { FadedChip(Line(col, 0), note); return; }   // the faded key: a chip, not a sentence
+            if (link != null) { Size(MoreLink(Label(col, note, PanelLook.MinText, PanelLook.Muted, style: FontStyles.Italic), LinkTo(link)), -1, 22); return; }   // a fold's "+N more" (Block.NoteLink)
             Label(col, note, 14, PanelLook.Faint);
+        }
+
+        /// <summary>0.8.2 (never a dead "+N more"): a fold's "+N more" as the Titles strip draws it (muted, italic, the floor), now a click that
+        /// shows the rest (Block.NoteLink); it lights when pointed at, as everything that acts does (Press).</summary>
+        static TextMeshProUGUI MoreLink(TextMeshProUGUI label, Action click)
+        {
+            label.textWrappingMode = TextWrappingModes.NoWrap;
+            if (click == null) return label;
+            label.raycastTarget = true; label.gameObject.AddComponent<Press>().Act = click;
+            return label;
         }
 
         // "faded = before install": a small quiet chip (the kit's dark track), where a legend ends; returns its width
@@ -1432,11 +1461,10 @@ namespace Hearthwoven.Panel
             {
                 var target = t.Id;
                 var cell = Kit(grid, t.Title, "row", raycast: true);
-                var button = cell.gameObject.AddComponent<UnityEngine.UI.Button>(); button.targetGraphic = cell;
-                button.onClick.AddListener(() => Safe(() => { PanelModel.Jump(state, target); Render(true); })());
+                ClickTarget(cell, Safe(() => { PanelModel.Jump(state, target); Render(true); }), opens: true);
                 var m = Marker(cell.rectTransform, t.Icon, 40, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0, 0.5f); m.anchoredPosition = new Vector2(12, 0);
-                var name = Label(cell.transform, t.Title, 17, PanelLook.Gold); name.rectTransform.Box(60, 6, 190, 22);
-                var value = Label(cell.transform, t.Value, 14, PanelLook.Muted, style: FontStyles.Italic); value.rectTransform.Box(60, 27, 190, 32);
+                var name = Label(cell.transform, t.Title, 17, PanelLook.Gold); name.rectTransform.Box(60, 6, 190 - OpensRoom, 22);   // clear of the opens mark
+                var value = Label(cell.transform, t.Value, 14, PanelLook.Muted, style: FontStyles.Italic); value.rectTransform.Box(60, 27, 190 - OpensRoom, 32);
             }
         }
 
@@ -1485,7 +1513,7 @@ namespace Hearthwoven.Panel
             if (child == null) child = (c, x) => { if (!DrawVocab(c, x, link, null)) Label(c, x.Title ?? x.Text ?? "", 15, PanelLook.Text); };
             switch (b.Kind)
             {
-                case "composition": Composition(col, b); return true;
+                case "composition": Composition(col, b, link); return true;
                 case PanelModel.CompareRowsKind: CompareRows(col, b); return true;   // 0.8 Compare: the bar form in compare mode (Chapters/CompareUi.cs)
                 case "biomes": BiomeStrip(col, b, link); return true;
                 case "ladders": Ladders(col, b); return true;
@@ -1500,13 +1528,13 @@ namespace Hearthwoven.Panel
                 case "biometiles": BiomeTiles(col, b); return true;
                 case "ranking": Ranking(col, b); return true;   // Chapters/DeedsUi.cs
                 case "counts": Counts(col, b); return true;
-                case "itemgrid": ItemGrid(col, b); return true;
+                case "itemgrid": ItemGrid(col, b, link); return true;
                 case "filterbar": FilterBar(col, b, link); return true;   // FacetUi.cs
                 case "ledger": Ledger(col, b); return true;   // Chapters/VoyagesHallUi.cs (fix2 7)
                 case "strip": Strip(col, b, link); return true;
                 case "grades": Grades(col, b); return true;
                 case "band": Band(col, b); return true;
-                case "people": People(col, b); return true;
+                case "people": People(col, b, link); return true;
                 case "hero": Hero(col, b, link); return true;
                 case "aboutnumbers": AboutNumbersBox(col, b, link); return true;   // 0.7: the page's button and box (RecordedUi.cs)
                 case "cards": Cards(col, b, link); return true;
@@ -1527,7 +1555,8 @@ namespace Hearthwoven.Panel
                 case "knownfor": KnownForBlock(col, b, link); return true;
                 case "featband": FeatBandBlock(col, b, link); return true;
                 case "damagegrid": case "dmgmix": case "foetable": case "foetypes": case "guard": case "sources": case "armour": case "deathstrip": case "deaths": case "deathrows": BattleBlock(col, b, link); return true;   // ch-battle
-                case "dealtfoes": case "feed": case "fightfoes": case "fightreceived": BattleBlock(col, b, link); return true;   // 0.8 Battle (Chapters/BattleFeedUi.cs)
+                case "dealtfoes": case "feed": case PanelModel.FeedLineKind: case "fightfoes": case "fightreceived": BattleBlock(col, b, link); return true;   // 0.8 Battle (Chapters/BattleFeedUi.cs)
+                case PanelModel.FightHeadKind: case PanelModel.FightFoesKind: case PanelModel.FightPlayersKind: case PanelModel.FightListKind: FightBlock(col, b, link); return true;   // 0.9 fight pages (Chapters/FightUi.cs)
                 case "headlink": return true;   // drawn in the heading row (HeadRight)
                 default: return false;
             }
@@ -1583,7 +1612,7 @@ namespace Hearthwoven.Panel
 
         // ----- composition: what is it made of? the head, then the one bar form (BarFormUi.cs) -----
 
-        static void Composition(RectTransform col, Block b)
+        static void Composition(RectTransform col, Block b, Func<string, Action> link = null)
         {
             if (!string.IsNullOrEmpty(b.Title) || !string.IsNullOrEmpty(b.Value))
             {
@@ -1602,8 +1631,9 @@ namespace Hearthwoven.Panel
                 if (!string.IsNullOrEmpty(b.Text)) { var q = Label(quals, b.Text, 14, PanelLook.Faint, style: FontStyles.Italic); q.textWrappingMode = TextWrappingModes.NoWrap; q.rectTransform.pivot = new Vector2(0, 0.5f); }   // a caveat beside the total (the pickup gap)
                 if (Labelled(b)) Since(quals, 14, b);
             }
-            // the book's one bar form (BarFormUi.cs): the bar and its list; numbers inside the parts only on a damage-type bar
-            BarWithList(col, b.Items ?? new List<Block>(), PanelModel.NumbersOnBar(b), new BarLook { Thin = b.Tone == PanelModel.Thin, NoBar = b.Tone == "single", Length = PanelModel.BarLength(b), Pairs = PanelModel.NumbersOnBar(b) });   // rows of one kind (a bar per foe) on one scale; a damage-type list in two columns from three rows (B34)
+            // the book's one bar form (BarFormUi.cs): the bar and its list; numbers inside the parts only on a damage-type bar; a bar over a filter's
+            // row (PartLink: Cooking's Dishes by kind) chooses on its parts and legend items as a facet bar does (0.8.2)
+            BarWithList(col, b.Items ?? new List<Block>(), PanelModel.NumbersOnBar(b), new BarLook { Thin = b.Tone == PanelModel.Thin, NoBar = b.Tone == "single", Length = PanelModel.BarLength(b), Pairs = PanelModel.NumbersOnBar(b), Click = PartClick(b, link) });   // rows of one kind (a bar per foe) on one scale; a damage-type list in two columns from three rows (B34)
             if (b.Note == PanelModel.FadedKey)   // what the faded parts are, under the list
             {
                 var chip = Line(col, 0); FadedChip(chip);
@@ -1919,9 +1949,7 @@ namespace Hearthwoven.Panel
             if (hasIcon) { var m = Marker(img.rectTransform, target.Icon, 28, layout: false); m.anchorMin = m.anchorMax = m.pivot = new Vector2(0, 0.5f); m.anchoredPosition = new Vector2(14, 0); }
             Size(img, label.preferredWidth + (hasIcon ? 70 : 36), 48);
             if (click == null) return;
-            var button = img.gameObject.AddComponent<UnityEngine.UI.Button>();
-            button.targetGraphic = img; button.transition = Selectable.Transition.None;
-            button.onClick.AddListener(() => click());
+            ClickTarget(img, click);
         }
 
         // ---------- page layout (slice 3): hero, columns, switch, cards, plate; ported from vocab.css .hero2/.cols2/.sect,
@@ -1964,15 +1992,20 @@ namespace Hearthwoven.Panel
         // ----- hero: how much? the big number and its label; further numbers on the right, smaller, after a thin rule -----
 
         const float HeroSize = 67, HeroLabel = 26, HeroSecond = 43, HeroSecondLabel = 20, HeroGap = 34;   // 0.8 layout D+: the big number about 20 % smaller (84, 54; FEEDBACK 12); one hero form on every page
+        /// <summary>How far the serif's baseline sits above the bottom of its line box, per px of font size (Averia's descent, about 0.23): a
+        /// smaller text beside a bigger one is lifted by the difference in sizes times this, so both share one baseline.</summary>
+        const float Descent = 0.22f;
 
         static void Hero(RectTransform col, Block b, Func<string, Action> link = null)
         {
             // 0.8 layout D+ (Joost: "one visual grammar"): one hero form on every page, Woodcutting's; the compact one is gone
             float size = HeroSize, label = HeroLabel, second = HeroSecond, secondLabel = HeroSecondLabel, gap = HeroGap;
             // 0.7: one wrap rule (PanelModel.HeroLines, mirrored in the preview): every part is drawn on the first line and measured, then a
-            // second number or the skill that does not fit the column moves to the next line; nothing is clipped at the plate's edge
+            // second number that does not fit beside the hero's number and the skill moves to the next line; nothing is clipped at the plate's edge
+            // 0.8.2 (Joost in game, Mining: "40 pickaxe hits" sat about 12 px under "5 211 stone and ore brought in" at 4K): every number group
+            // stands on the hero number's baseline, the smaller ones lifted by HeroNumber, their labels and date notes on it too
             var rows = new List<RectTransform> { Line(col, 0, TextAnchor.LowerLeft) };
-            var parts = new List<RectTransform> { HeroNumber(rows[0], b, size, label) };
+            var parts = new List<RectTransform> { HeroNumber(rows[0], b, size, label, size) };
             var rules = new List<RectTransform>();
             foreach (var n in (b.Items ?? new List<Block>()).Where(n => n.Kind != "skill" && n.Kind != PanelModel.SparkKind))
             {
@@ -1981,18 +2014,23 @@ namespace Hearthwoven.Panel
                 Size(Img(rule, "Rule", null, PanelLook.Rule), 1, second * 0.8f);
                 Size(Node("Gap", rule), gap, 1);
                 rules.Add(rule);
-                parts.Add(HeroNumber(rows[0], n, second, secondLabel));
+                parts.Add(HeroNumber(rows[0], n, second, secondLabel, size));
             }
             // 0.7 rule K: the deed's skill at the right end of the hero's row (Joost 2026-10-09); 0.8 layout D+: the growth line over it, right of the numbers
             var skill = PanelModel.SkillOf(b) != null || PanelModel.SparkOf(b) != null ? HeroRight(rows[0], PanelModel.SparkOf(b), PanelModel.SkillOf(b), link) : default;   // (rest, skill column, spark)
             float Width(RectTransform r) { LayoutRebuilder.ForceRebuildLayoutImmediate(r); return LayoutUtility.GetPreferredWidth(r); }
-            var lines = PanelModel.HeroLines(parts.Select(Width).ToList(), 2 * gap + 1, skill.skill ? Width(skill.skill) : 0, Column);
+            // 0.8.2: the skill stays on the first line, in its compact form (name over level) when that keeps the numbers on one line
+            var whole = skill.skill ? Width(skill.skill) : 0;
+            var compact = skill.words != null ? Mathf.Max(whole - CompactSaving(skill.words), skill.spark ? Width(skill.spark) : 0) : 0;
+            var lines = PanelModel.HeroLines(parts.Select(Width).ToList(), 2 * gap + 1, whole, Column, compact, out var small);
+            if (small) SkillCompact(skill.words);
             RectTransform On(int line) { while (rows.Count <= line) rows.Add(Line(col, 0, TextAnchor.LowerLeft)); return rows[line]; }
             for (int i = 1; i < parts.Count; i++)
             {
                 if (lines[i] == 0) continue;
                 if (lines[i] > lines[i - 1]) rules[i - 1].gameObject.SetActive(false);   // a number that starts a line has no rule before it
                 rules[i - 1].SetParent(On(lines[i]), false); parts[i].SetParent(On(lines[i]), false);
+                parts[i].GetComponent<HorizontalLayoutGroup>().padding = new RectOffset();   // a line of second numbers only: none to lift onto
             }
             if (skill.skill && lines[parts.Count] > 0) { var to = On(lines[parts.Count]); skill.rest.SetParent(to, false); skill.skill.SetParent(to, false); }
             // the growth line never adds a row of height (Joost on the board): it stays only where the hero is as tall without it
@@ -2006,17 +2044,24 @@ namespace Hearthwoven.Panel
         }
 
         // the number in gold and bold, its label on the number's baseline (lifted by the bigger font's descent), then a
-        // quiet qualifier and the "since install" label when this number was counted on this PC
-        static RectTransform HeroNumber(RectTransform row, Block n, float size, float labelSize)
+        // quiet qualifier and the "since install" label when this number was counted on this PC. lineSize: the line's biggest number (the
+        // hero's): a smaller number is lifted onto its baseline (0.8.2), and the 14 px qualifier and date onto the label's
+        static RectTransform HeroNumber(RectTransform row, Block n, float size, float labelSize, float lineSize)
         {
             var group = Line(row, 14, TextAnchor.LowerLeft);
+            group.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, 0, 0, Mathf.RoundToInt(Mathf.Max(0, lineSize - size) * Descent));
             var num = RichLabel(group, "hero", Rich.Plain(n.Value), size, PanelLook.Gold, style: FontStyles.Bold); num.textWrappingMode = TextWrappingModes.NoWrap;
             Unrecorded(num, n, labelSize);   // "Not recorded": at the label's size, muted (RecordedUi.cs)
             var words = Line(group, 8, TextAnchor.LowerLeft);
-            words.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, 0, 0, Mathf.RoundToInt((size - labelSize) * 0.22f));
+            words.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, 0, 0, Mathf.RoundToInt((size - labelSize) * Descent));
             Label(words, n.Title, labelSize, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
-            if (!string.IsNullOrEmpty(n.Note)) Label(words, n.Note, 14, PanelLook.Faint).textWrappingMode = TextWrappingModes.NoWrap;
-            if (Labelled(n)) Since(words, 14, n);
+            if (!string.IsNullOrEmpty(n.Note) || Labelled(n))
+            {
+                var small = Line(words, 8, TextAnchor.LowerLeft);
+                small.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, 0, 0, Mathf.RoundToInt((labelSize - 14) * Descent));
+                if (!string.IsNullOrEmpty(n.Note)) Label(small, n.Note, 14, PanelLook.Faint).textWrappingMode = TextWrappingModes.NoWrap;
+                if (Labelled(n)) Since(small, 14, n);
+            }
             // zones-wording: a layered number says "before install" and "since install" at its parts (LayeredText), so the fix4 chip under it is gone
             if (n.Before != null) HeroBefore(group, n, size);   // 0.8 Compare: the period before beside it (Chapters/CompareUi.cs)
             return group;
@@ -2128,16 +2173,16 @@ namespace Hearthwoven.Panel
                     var ut = Line(card.rectTransform, 8); ut.Box(12, 6, w - 24, 30);
                     if (PanelLook.Icon(c.Icon) != null) { var um = Marker(ut, c.Icon, 24); um.gameObject.AddComponent<CanvasGroup>().alpha = 0.6f; }
                     var un = Label(ut, c.Title, 16, PanelLook.Muted); un.textWrappingMode = TextWrappingModes.NoWrap; un.overflowMode = TextOverflowModes.Ellipsis;
-                    var d = Label(card.transform, c.Text, 15, PanelLook.Text, align: TextAlignmentOptions.TopLeft); d.rectTransform.Box(12, 42, w - 24, cellH - 50);
+                    var d = Label(card.transform, c.Text, 15, PanelLook.Text, align: TextAlignmentOptions.TopLeft); d.rectTransform.Box(12, 42, w - 24 - (click != null ? OpensRoom : 0), cellH - 50);   // clear of the opens mark
                     d.textWrappingMode = TextWrappingModes.Normal; d.overflowMode = TextOverflowModes.Ellipsis;
-                    if (click != null) { var ub = card.gameObject.AddComponent<UnityEngine.UI.Button>(); ub.targetGraphic = card; ub.transition = Selectable.Transition.None; ub.onClick.AddListener(() => click()); }
+                    if (click != null) ClickTarget(card, click, opens: true);
                     continue;
                 }
                 var top = Line(card.rectTransform, 8); top.Box(12, 6, w - 24, 30);
                 if (PanelLook.Icon(c.Icon) != null) Marker(top, c.Icon, 24);
                 var t = Label(top, c.Title, 16, PanelLook.Gold); t.textWrappingMode = TextWrappingModes.NoWrap; t.overflowMode = TextOverflowModes.Ellipsis;
                 var num = Label(card.transform, c.Value, 38, PanelLook.Gold, style: FontStyles.Bold, align: TextAlignmentOptions.BottomLeft);
-                num.rectTransform.Box(12, 34, w - 24, 42); num.textWrappingMode = TextWrappingModes.NoWrap;
+                num.rectTransform.Box(12, 34, w - 24 - (click != null ? OpensRoom : 0), 42); num.textWrappingMode = TextWrappingModes.NoWrap;   // the number's line holds the opens mark
                 var lab = Line(card.rectTransform, 6); lab.Box(12, 78, w - 24, 20);
                 Shrinks(Label(lab, c.Text, 15, PanelLook.Text));
                 if (Labelled(c)) Keeps(Since(lab, 14, c));
@@ -2150,9 +2195,7 @@ namespace Hearthwoven.Panel
                     if (Labelled(sub)) Keeps(Since(s, 14, sub));
                 }
                 if (click == null) continue;
-                var button = card.gameObject.AddComponent<UnityEngine.UI.Button>();
-                button.targetGraphic = card; button.transition = Selectable.Transition.None;
-                button.onClick.AddListener(() => click());
+                ClickTarget(card, click, opens: true);   // a deed's card opens the page that owns its numbers
             }
         }
 
@@ -2250,11 +2293,41 @@ namespace Hearthwoven.Panel
         void Clickable(Image img, Action click)
         {
             if (click == null) return;   // an inert entry (a fellow who just joined, 0.7): no button, so a click never reaches Safe(null)
-            var button = img.gameObject.AddComponent<UnityEngine.UI.Button>();
-            button.targetGraphic = img; button.transition = Selectable.Transition.None;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };   // never the UI's selection: a kept tab or row would answer Submit or the arrows (the book has its own keys)
-            button.onClick.AddListener(() => Safe(click)());
+            ClickTarget(img, Safe(click));
         }
+
+        /// <summary>Every button in the book is made here: no transition, no navigation, and a HoverMark, so it shows when it is pointed at
+        /// (0.8.1, one rule for all; HoverUi.cs). <paramref name="opens"/>: a card or tile that opens another page ends in the opens mark (OpensMark).</summary>
+        internal static UnityEngine.UI.Button ClickTarget(Graphic target, Action click, bool opens = false)
+        {
+            var button = target.gameObject.AddComponent<UnityEngine.UI.Button>();
+            button.targetGraphic = target; button.transition = Selectable.Transition.None;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };   // never the UI's selection: a kept tab or row would answer Submit or the arrows (the book has its own keys)
+            button.onClick.AddListener(() => click());
+            target.gameObject.AddComponent<HoverMark>();
+            if (opens) OpensMark(target.rectTransform);
+            return button;
+        }
+
+        /// <summary>
+        /// 0.8.2 (Joost on Battle > Foes: "that's not obvious that I can click on it"): one rule for what opens. A row, card or tile whose click
+        /// opens something (a detail under it, or another page) ends in a chevron (PanelLook.Chevron) at its right end: muted, ChevronH tall,
+        /// centred on its height, <paramref name="right"/> px in from the edge, pointing down while what it opened is open. Made only here,
+        /// through ClickTarget's opens flag or by a row that acts on press (the foe rows). None on what is drawn as a button already (tabs, the
+        /// page list, player chips, chips, toggles, link buttons such as Blocks and parries), on what changes the page in place (filters, biome
+        /// tiles, bar parts, Show all, Together's categories), on what answers on hover (feat cards show their detail as they are pointed at,
+        /// bar rows light their part), nor between the words of a strip (the Other titles, the skills on Recent: a › there reads as a path).
+        /// The preview's opensMark.
+        /// </summary>
+        internal static void OpensMark(RectTransform target, bool open = false, float right = OpensRight)
+        {
+            var mark = Img(target, "Opens", PanelLook.Chevron, PanelLook.Muted).rectTransform;
+            mark.anchorMin = mark.anchorMax = new Vector2(1, 0.5f); mark.pivot = new Vector2(0.5f, 0.5f);
+            mark.sizeDelta = new Vector2(PanelLook.ChevronW, PanelLook.ChevronH); mark.anchoredPosition = new Vector2(-right - PanelLook.ChevronW / 2, 0);
+            if (open) mark.localEulerAngles = new Vector3(0, 0, -90);
+        }
+        /// <summary>The opens mark's inset on a card or tile (their words' own padding), and the room it keeps clear of the words before it.</summary>
+        const float OpensRight = 12, OpensRoom = PanelLook.ChevronW + 6;
 
         // ---------- small UGUI helpers ----------
 
@@ -2390,7 +2463,7 @@ namespace Hearthwoven.Panel
     /// <summary>A focus ring (PanelUi.FocusRing): whether its box holds the focus; KeyFocus decides whether it shows.</summary>
     sealed class FocusMark : MonoBehaviour { public bool Focused; /* 0.8: what it stands in for while it shows (a foe cell's icon, hidden while its factor shows) */ public GameObject Hide; }
 
-    sealed class Press : MonoBehaviour, IPointerDownHandler
+    sealed class Press : HoverMark, IPointerDownHandler   // a HoverMark: what acts shows that it is pointed at (HoverUi.cs)
     {
         public Action Act, Back;
         public void OnPointerDown(PointerEventData e)

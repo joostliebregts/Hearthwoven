@@ -130,7 +130,7 @@ namespace Hearthwoven.Panel
             var r = BtText(h, right, Column - 260, 4, 260, 26, FdText, PanelLook.Muted, TextAlignmentOptions.MidlineRight);
             var rw = Mathf.Ceil(r.preferredWidth) + 4;
             BtText(h, rest, tw + 6, 4, Mathf.Max(40, Column - tw - 6 - rw - 12), 26, FdText, PanelLook.Muted);
-            BtRect(h, "Rule", PanelLook.Rule, 0, FdHead - 2, Column, 1);
+            if (!islanded) BtRect(h, "Rule", PanelLook.Rule, 0, FdHead - 2, Column, 1);   // 0.8.1: in its own island no rule (the island's edge sets the fight apart)
         }
 
         static void BattleFeed(RectTransform col, Block b)
@@ -138,7 +138,7 @@ namespace Hearthwoven.Panel
             var fights = (b.Items ?? new List<Block>()).Where(i => i.Kind == "fight").ToList();
             if (fights.Count == 0) return;
             col = VStack(col, 0);   // the feed's own rhythm: its rows touch, the gaps are its own (the plate's 12 px stays between blocks)
-            var logCols = b.Tone == PanelModel.FeedCards || b.Tone == PanelModel.FeedTimeline ? (FdName, FdOut, 0f) : FeedColumns(col, fights.SelectMany(f => (f.Items ?? new List<Block>()).Where(x => x.Kind == "entry")).ToList());
+            var logCols = b.Tone == PanelModel.FeedCards || b.Tone == PanelModel.FeedTimeline ? (FdName, FdOut, 0f) : FeedPageColumns(col, fights);
             for (int i = 0; i < fights.Count; i++)
             {
                 if (i > 0) Spacer(col, b.Tone == PanelModel.FeedTimeline ? 6 : 22);
@@ -149,6 +149,14 @@ namespace Hearthwoven.Panel
                 else if (b.Tone == PanelModel.FeedTimeline) FeedTimeline(col, entries, i + 1 < fights.Count ? (f.Items ?? new List<Block>()).FirstOrDefault(x => x.Kind == "gap") : null);
                 else FeedLog(col, entries, logCols);
             }
+        }
+
+        // 0.8.1 (Joost: every fight its own card): between the fight islands, outside them, the quiet time to the fight below (italic), and after
+        // the last one what is left out; at the islands' inner edge, quiet
+        static void FeedQuiet(RectTransform col, Block b)
+        {
+            var box = VStack(col, 0); box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset((int)IslandPad, (int)IslandPad, 0, 0);
+            Label(box, b.Text, PanelLook.MinText, PanelLook.Faint, style: b.Tone == "gap" ? FontStyles.Italic : FontStyles.Normal);
         }
 
         // Log (prototype A): one line per foe, time, the foe, what became of it, then (0.8.1, Joost in game) the dealt damage as a damage bar
@@ -173,6 +181,20 @@ namespace Hearthwoven.Panel
         // outcome as its widest words ("defeated by you" at least, FdOut at most, then they give way), the received words as their widest
         // (FdRecvMax at most, then they wrap at a " · "; none: no column)
         const float FdNameMax = 200;
+
+        // REVIEW-081 0.8.2 pass: every fight is its own feed block (FeedBlocks), drawn in its own island, so the columns are measured over every
+        // fight of the page (PanelModel.FeedPageEntries), once per fill (Fill sets the page and forgets the last columns), not per block: a fight
+        // where nothing hurt you got no received column and a track about 160 px longer than the fight above it
+        static PanelView fillView; static (float name, float outcome, float recv)? feedLogCols;
+        static (float name, float outcome, float recv) FeedPageColumns(RectTransform col, List<Block> fights)
+        {
+            if (feedLogCols.HasValue) return feedLogCols.Value;
+            var entries = PanelModel.FeedPageEntries(PanelModel.Content(fillView));
+            if (entries.Count == 0) entries = fights.SelectMany(f => (f.Items ?? new List<Block>()).Where(x => x.Kind == "entry")).ToList();   // drawn outside a fill: its own fights
+            feedLogCols = FeedColumns(col, entries);
+            return feedLogCols.Value;
+        }
+
         static (float name, float outcome, float recv) FeedColumns(RectTransform col, List<Block> entries)
         {
             var measure = Label(col, "", 16, PanelLook.Text, style: FontStyles.Bold); measure.textWrappingMode = TextWrappingModes.NoWrap;
@@ -214,7 +236,7 @@ namespace Hearthwoven.Panel
                     var bar = Node("Dealt", r); bar.Box(xDmg, (FdRow - FdBarH) / 2, trackW, FdBarH);
                     DamageBar(bar, form, null, e.Fraction, true, 0, trackW, shares: false);
                 }
-                BtRect(r, "Rule", BtLine, 0, h - 1, Column, 1);
+                if (!islanded) BtRect(r, "Rule", BtLine, 0, h - 1, Column, 1);   // 0.8.1: in a fight's island the rows' spacing parts them, no lines
             }
         }
 
@@ -243,7 +265,7 @@ namespace Hearthwoven.Panel
                     MarkImg(card, e.Tone, pad, 39, MarkPx);
                     BtText(card, e.Note, pad + MarkPx + 8, 34, inner - MarkPx - 8, 22, FdText, PanelLook.Muted);
                     // 0.8.1 (Joost, who loves the Cards): the dealt damage as the damage bar at the card's inner width, on the feed page's one scale as the
-                    // Log's (zero at a quarter, the true-length line, the numbers inside the parts, a too narrow part's number in a tag on hover); the
+                    // Log's (zero at a quarter, the true-length line, the numbers inside the parts, each part's name and number in a tag on hover); the
                     // dealt words go, the numbers are in the bar. Received stays quiet words under it. A foe you never hit has no bar
                     var dealt = (e.Items ?? new List<Block>()).Where(p => p.Kind == PanelModel.FeedDealt).ToList();
                     float y = 62, lh = 0;

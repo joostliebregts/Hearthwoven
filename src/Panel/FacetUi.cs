@@ -137,7 +137,7 @@ namespace Hearthwoven.Panel
             if (toggle != null) { name.raycastTarget = true; name.gameObject.AddComponent<Press>().Act = toggle; }
             if (!string.IsNullOrEmpty(filter.KeyCap)) Size(Keycap(line, filter.KeyCap), KeycapWidth(filter.KeyCap, 20), 20);   // the key that opens the rows, as quiet as Q/E/W/S; a word key ("Tab") gets a wider cap
             var tokens = applied.Items ?? new List<Block>();
-            // the tokens that fit; the rest say how many more (the open rows show every chosen chip)
+            // the tokens that fit; the rest say how many more (the open rows show every chosen chip; 0.8.2: collapsed, a click on it opens them)
             var budget = Column - 52 - (string.IsNullOrEmpty(filter.KeyCap) ? 0 : KeycapWidth(filter.KeyCap, 20) + 6) - (applied.Text ?? "").Length * 7.2f - (tokens.Count > 0 ? 84 : 0) - 120 - 24;
             float spent = 0; int shown = 0;
             foreach (var tok in tokens)
@@ -146,7 +146,7 @@ namespace Hearthwoven.Panel
                 if (spent + w > budget && shown > 0) break;
                 Token(line, filter, tok, link); spent += w + 6; shown++;
             }
-            if (tokens.Count > shown) Label(line, "+" + (tokens.Count - shown) + " more", FacetText, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            if (tokens.Count > shown) MoreLink(Label(line, "+" + (tokens.Count - shown) + " more", FacetText, PanelLook.Muted), filter.Open ? null : toggle);
             if (tokens.Count == 0) Label(line, string.IsNullOrEmpty(applied.Value) ? "all" : applied.Value, FacetText, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft).textWrappingMode = TextWrappingModes.NoWrap;
             Node("Rest", line).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
             var res = Label(line, applied.Text, FacetText, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight); res.textWrappingMode = TextWrappingModes.NoWrap;
@@ -182,13 +182,18 @@ namespace Hearthwoven.Panel
 
         // a linked bar: its head in the island heading style (0.8 layout D+: its title, its total, its honest line after them, "BY CATEGORY 1 576
         // the hammer's tab"), then the book's one bar form (BarFormUi.cs): the parts in the row's colours, the chosen part outlined in gold, a
-        // click on a part chooses it; its list under it
+        // click on a part or on its legend item chooses it; its list under it
         static void FacetBar(RectTransform box, Block filter, Block bar, Func<string, Action> link)
         {
             var head = Line(box, 8); Size(head, -1, 20);
             Sect(head, bar.Title, bar.Value);
             if (!string.IsNullOrEmpty(bar.Note)) { var n = Label(head, bar.Note, FacetText, PanelLook.Faint); n.textWrappingMode = TextWrappingModes.NoWrap; }
-            BarWithList(box, bar.Items ?? new List<Block>(), false, new BarLook { Click = p => link?.Invoke(PanelModel.FacetLink(filter.Id, bar.Id, p.Id)) });   // the folded part has no click: its kinds are chosen by their chips
+            BarWithList(box, bar.Items ?? new List<Block>(), false, new BarLook { Click = PartClick(bar, link) });   // the folded part has no click: its kinds are chosen by their chips
         }
+
+        /// <summary>The click of a bar's parts and legend items (0.8.2: one rule for the whole book): the target PanelModel.PartTarget gives;
+        /// null on a bar whose parts do not filter.</summary>
+        static Func<Block, Action> PartClick(Block bar, Func<string, Action> link) =>
+            bar?.PartLink == null || link == null ? (Func<Block, Action>)null : p => PanelModel.PartTarget(bar, p) is string t ? link(t) : null;
     }
 }

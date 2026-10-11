@@ -111,9 +111,35 @@ namespace Hearthwoven.Panel
             p.FoeBook = book; p.FoesSince = book.Sum(fromDay, today); p.FoesPending = null; p.FoesFromUtc = from;
         }
 
+        /// <summary>
+        /// 0.8.2: the book's held blocks and parries per minute this session (EventLog.Guard, what Defence's short windows read) and, on an own book,
+        /// the session's tally they add up to (SessionOnly, Defence's Session): in the minutes something hit you, none, one or two blocks in turn,
+        /// and a parry every fourth such minute (fictional). Done again from scratch, so a scenario may call it after changing the log.
+        /// </summary>
+        public static void Guard(PanelInput p)
+        {
+            if (p?.Log == null) return;
+            p.Log.Guard.Clear();
+            var minutes = p.Log.Hits.Keys.Select(k => k.Split('|')).Where(k => k.Length >= 3 && k[2] == "taken").Select(k => k[0]).Distinct().OrderBy(k => k, StringComparer.Ordinal).ToList();
+            int blocks = 0, parries = 0;
+            for (int i = 0; i < minutes.Count; i++)
+            {
+                var n = i % 3;
+                if (n == 0) continue;
+                p.Log.Guard[minutes[i] + "|" + EventLog.GuardBlock] = n; blocks += n;
+                if (i % 4 == 1) { p.Log.Guard[minutes[i] + "|" + EventLog.GuardParry] = 1; parries++; }
+            }
+            if (p.IsSelf) p.SessionOnly = new SessionEvents { Blocks = blocks, Parries = parries };
+        }
+
         /// <summary>What a book's record puts in its shared copy (FoeShare), as Plugin does: this session and since recording began.</summary>
         public static FoeShare ShareOf(PanelInput own) =>
             own?.Battle == null ? null : new FoeShare { Session = own.Battle.Counts(null), Since = own.FoesSince, FromUtc = own.FoesFromUtc };
+
+        /// <summary>0.8.2: what a book's feed puts in its shared copy (FeedShare), as Plugin does: the four of the sample share, anyone else (Ylva)
+        /// is another player there.</summary>
+        public static FeedShare FeedOf(PanelInput own) =>
+            own?.Battle == null ? null : FeedShare.From(own.Battle, n => SampleWorld.Everyone.Any(e => string.Equals(e, n, StringComparison.OrdinalIgnoreCase)));
 
         static float Total(HitData.DamageTypes d) => d.m_blunt + d.m_slash + d.m_pierce + d.m_fire + d.m_frost + d.m_lightning + d.m_poison + d.m_spirit;
 

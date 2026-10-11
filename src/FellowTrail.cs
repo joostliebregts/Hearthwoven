@@ -16,6 +16,11 @@ namespace Hearthwoven
     /// Bounded: a sample keeps only the values that differ from the first one (a session touches few kinds), and older samples are thinned
     /// (the last one per minute for 35 minutes, per 5 minutes up to 65, per 15 minutes up to 3 h 20; older ones go, the first stays), so a
     /// fellow live-updating every 10 s for hours holds about 50 small samples. Pure C#: tested without the game (RecentPageTests).
+    ///
+    /// 0.8.2 (J; Joost, a friend's Battle > Foes empty in Session the evening the friend fought the Queen with the group): a copy's log and foe
+    /// counts are the sender's connection only, so a fellow who reconnected during yours took everything before it off your Session. The trail
+    /// keeps the connection each copy comes from ("session"); when a new one comes, the previous one's log and counts, as this PC last received
+    /// them, go under the new copy's (Joined), and your Session cuts them at your start as before (RejoinTests).
     /// </summary>
     public class FellowTrail
     {
@@ -23,6 +28,11 @@ namespace Hearthwoven
 
         readonly Dictionary<string, float> first = new Dictionary<string, float>();   // "family|token" -> running total, the first sample
         readonly List<Sample> later = new List<Sample>();
+        // 0.8.2 (J): the latest copy's connection (its id, log and foe counts) and the earlier connections this connection, joined
+        string session; EventLog log, earlier; FoeCounts foes, earlierFoes; bool earlierUncounted; int folds;
+        PanelInput joinedFrom, joined; int joinedAt = -1;
+        /// <summary>When this PC first received a copy of their latest connection, when they reconnected during yours; null: one connection.</summary>
+        public DateTime? RejoinedUtc { get; private set; }
         public DateTime FirstUtc { get; private set; }
         public DateTime LastUtc => later.Count > 0 ? later[later.Count - 1].Utc : FirstUtc;
         /// <summary>The first sample's copy carried since-install totals (the event families are running totals across their sessions).</summary>
@@ -31,7 +41,7 @@ namespace Hearthwoven
         public bool Moved => later.Any(s => s.Diff.Count > 0);
 
         /// <summary>A trail starting with one copy as it was received at <paramref name="utc"/>.</summary>
-        public FellowTrail(PanelInput copy, DateTime utc) : this(Flat(copy), copy?.SharedSinceInstall ?? false, utc) { }
+        public FellowTrail(PanelInput copy, DateTime utc) : this(Flat(copy), copy?.SharedSinceInstall ?? false, utc) { Note(copy, utc); }
 
         /// <summary>A trail starting with running totals as Flat gives them (the sample world builds its fellows' evenings this way).</summary>
         public FellowTrail(Dictionary<string, float> flat, bool sinceInstall, DateTime utc)
@@ -54,7 +64,49 @@ namespace Hearthwoven
         }
 
         /// <summary>A copy received at <paramref name="utc"/> (later than the previous one).</summary>
-        public void Add(PanelInput copy, DateTime utc) { if (copy != null) Add(Flat(copy), utc); }
+        public void Add(PanelInput copy, DateTime utc) { if (copy != null) { Add(Flat(copy), utc); Note(copy, utc); } }
+
+        /// <summary>The connection a copy received at <paramref name="utc"/> comes from: a new one puts the previous connection's log and foe
+        /// counts, as last received, under Joined (their foes still in a fight then got away: Fighting 0).</summary>
+        internal void Note(PanelInput copy, DateTime utc)
+        {
+            if (copy?.Log == null) return;
+            var id = copy.SessionId ?? "";
+            if (session != null && id != session)
+            {
+                earlier = EventLog.Join(earlier, log);
+                if (foes != null) { var ended = FoeCounts.Sum(foes); foreach (var c in ended.Kinds.Values) c.Fighting = 0; earlierFoes = FoeCounts.Sum(earlierFoes, ended); }
+                else if (log.Damage.Count > 0) earlierUncounted = true;   // a connection whose copy had no foe counts (before 0.8): the joined counts would miss it
+                folds++; RejoinedUtc = utc;
+            }
+            session = id; log = copy.Log; foes = copy.FoesSession;
+        }
+
+        /// <summary>
+        /// The copy as their book shows it: when they reconnected during yours, a clone (ShallowCopy, never the shared copy of FellowCopies) whose
+        /// Log has their earlier connections' put under it (EventLog.Join), whose foe counts add up the same connections (none when one of them
+        /// had none) and whose recorded span is the joined log's; the same clone until a newer copy or connection. 0.8.2: a copy that carries
+        /// their own kept minutes of earlier connections (LogBefore, KeptMinutes: after a restart of theirs, also one before you came in) gets
+        /// those under its log too, for the short windows (and Session, where it reaches back): from their "from" on their kept minutes, before
+        /// it what this PC received, never both for one minute; the recorded span and the counts stay as above. One connection without kept
+        /// minutes, or a copy that is not their latest connection's (one from this PC's cache): the copy itself.
+        /// </summary>
+        public PanelInput Joined(PanelInput copy)
+        {
+            if (copy == null || (earlier == null && copy.LogBefore == null) || (copy.SessionId ?? "") != session) return copy;
+            if (ReferenceEquals(copy, joinedFrom) && joinedAt == folds) return joined;
+            var j = copy.ShallowCopy();
+            if (earlier != null)
+            {
+                j.Log = EventLog.Join(earlier, copy.Log);
+                j.FoesSession = copy.FoesSession == null || earlierUncounted ? null : FoeCounts.Sum(earlierFoes, copy.FoesSession);
+                j.RecordedFromLog();
+            }
+            if (copy.LogBefore != null)
+                j.Log = EventLog.Join(EventLog.Join(earlier?.Between(DateTime.MinValue, copy.LogBeforeFromUtc ?? DateTime.MinValue), copy.LogBefore), copy.Log);
+            joinedFrom = copy; joinedAt = folds;
+            return joined = j;
+        }
 
         /// <summary>Running totals (as Flat gives them) received at <paramref name="utc"/>.</summary>
         public void Add(Dictionary<string, float> flat, DateTime utc)
@@ -140,11 +192,13 @@ namespace Hearthwoven
             if (trails.TryGetValue(key, out var t)) t.Add(copy, utc); else trails[key] = new FellowTrail(copy, utc);
         }
 
-        /// <summary>A copy's running totals already flattened (FellowTrail.Flat, on the live-update worker: GroupShare.TakeLive).</summary>
-        public void Add(string key, Dictionary<string, float> flat, bool sinceInstall, DateTime utc)
+        /// <summary>A copy's running totals already flattened (FellowTrail.Flat, on the live-update worker: GroupShare.TakeLive); <paramref name="copy"/>:
+        /// the copy they came from, whose connection the trail notes (0.8.2, J).</summary>
+        public void Add(string key, Dictionary<string, float> flat, bool sinceInstall, DateTime utc, PanelInput copy = null)
         {
             if (string.IsNullOrEmpty(key) || flat == null) return;
-            if (trails.TryGetValue(key, out var t)) t.Add(flat, utc); else trails[key] = new FellowTrail(flat, sinceInstall, utc);
+            if (!trails.TryGetValue(key, out var t)) trails[key] = t = new FellowTrail(flat, sinceInstall, utc); else t.Add(flat, utc);
+            t.Note(copy, utc);
         }
 
         public void KeepOnly(ICollection<string> keys) { foreach (var k in trails.Keys.Where(k => !keys.Contains(k)).ToList()) trails.Remove(k); }

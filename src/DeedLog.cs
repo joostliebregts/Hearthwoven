@@ -8,7 +8,8 @@ namespace Hearthwoven
     /// The deeds of this session per minute (0.7, Deeds > Recent): what you picked up, made, planted, felled, hit with the axe and the
     /// pickaxe, the skill practice, and from the game's own counters the pieces placed, plants and fish picked, foes defeated per kind and a
     /// few totals (kills, boss kills, fish caught, creatures tamed). Like the damage buckets of EventLog: one-minute buckets, folded into
-    /// ten-minute buckets once they are older than EventLog.FoldAfterMinutes, this session only, never saved or shared.
+    /// ten-minute buckets once they are older than EventLog.FoldAfterMinutes, this session only, never shared (0.8.2: its last minutes are kept
+    /// on this PC for the next connection's short windows, Earlier and KeptMinutes).
     ///
     /// One source of truth: a bucket is a TIME SPLIT of the session tally, never a second count. Nothing is recorded in the hooks: at each
     /// minute change (Tick, from Plugin.Update) and when the panel reads it (Flush), the growth of the session tallies since the last flush
@@ -44,6 +45,9 @@ namespace Hearthwoven
 
         /// <summary>"2026-10-09T20:14Z|family|token" -> amount booked in that minute (ten minutes once folded).</summary>
         public readonly Dictionary<string, float> Buckets = new Dictionary<string, float>();
+        /// <summary>0.8.2: your earlier connections' minutes in this world, kept across a restart or reconnect (KeptMinutes), the same keys: never booked
+        /// into, never part of this session's tally. They all end before this session, so only a window with a start reaches them (Grew).</summary>
+        public readonly Dictionary<string, float> Earlier = new Dictionary<string, float>();
         /// <summary>Whether a bucket was capped (a few small kinds sit in OtherToken).</summary>
         public bool Clipped;
 
@@ -143,7 +147,8 @@ namespace Hearthwoven
         /// <summary>
         /// What grew from <paramref name="fromUtc"/> on (null: the whole session), per family and token, only what grew (a sum above 0). A
         /// bucket counts when any part of it lies after <paramref name="fromUtc"/> (at most a minute more; ten for a folded one, which only
-        /// windows longer than EventLog.FoldAfterMinutes reach).
+        /// windows longer than EventLog.FoldAfterMinutes reach). 0.8.2: from a time on, your kept minutes of earlier connections (Earlier) count
+        /// too; the whole session never holds them.
         /// </summary>
         // a bucket key's parts, read once per key (the keys never change; bounded like Panel.LogKeys)
         sealed class KeyParts { public bool HasTime; public DateTime Time; public string Family, Token; }
@@ -166,19 +171,24 @@ namespace Hearthwoven
         public Dictionary<string, Dictionary<string, float>> Grew(DateTime? fromUtc)
         {
             var sums = new Dictionary<string, Dictionary<string, float>>();
-            foreach (var kv in Buckets)
+            Sum(Buckets, false);
+            if (fromUtc.HasValue) Sum(Earlier, true);
+            void Sum(Dictionary<string, float> buckets, bool earlier)
             {
-                var k = kv.Key;
-                var p = KeyOf(k);   // 0.8: the key's minute, family and token read once, not on every build (the panel asks every 2 s while open)
-                if (fromUtc.HasValue)
+                foreach (var kv in buckets)
                 {
-                    if (!p.HasTime) continue;
-                    if (p.Time.AddMinutes(SpanOf(k)) <= fromUtc.Value) continue;
+                    var k = kv.Key;
+                    var p = KeyOf(k);   // 0.8: the key's minute, family and token read once, not on every build (the panel asks every 2 s while open)
+                    if (fromUtc.HasValue)
+                    {
+                        if (!p.HasTime) continue;
+                        if (p.Time.AddMinutes(earlier ? EventLog.BucketMinutes : SpanOf(k)) <= fromUtc.Value) continue;   // kept minutes are never folded
+                    }
+                    if (p.Family == null) continue;
+                    var fam = p.Family; var token = p.Token;
+                    if (!sums.TryGetValue(fam, out var d)) sums[fam] = d = new Dictionary<string, float>();
+                    d.TryGetValue(token, out var o); d[token] = o + kv.Value;
                 }
-                if (p.Family == null) continue;
-                var fam = p.Family; var token = p.Token;
-                if (!sums.TryGetValue(fam, out var d)) sums[fam] = d = new Dictionary<string, float>();
-                d.TryGetValue(token, out var o); d[token] = o + kv.Value;
             }
             foreach (var d in sums.Values) foreach (var t in new List<string>(d.Keys)) if (d[t] <= 0f) d.Remove(t);
             foreach (var f in new List<string>(sums.Keys)) if (sums[f].Count == 0) sums.Remove(f);

@@ -83,6 +83,10 @@ namespace Hearthwoven.Panel
         /// <summary>The bar's rest: the folded "Other (n kinds)" or a facet's own Other. Quiet grey, always last.</summary>
         public static bool IsOtherPart(Block p) => p != null && (p.Id == FoldId || IsOtherOption(p.Id));
 
+        /// <summary>A part that is a person (their color or their shield). A bar of people never folds into "Other" (0.8.2, Joost: "I want to see
+        /// everyone"): every player keeps their own part and row, however many share.</summary>
+        public static bool IsPersonPart(Block p) => p != null && ((p.Colour ?? "").StartsWith("person:", StringComparison.Ordinal) || (p.Icon ?? "").StartsWith("person:", StringComparison.Ordinal));
+
         /// <summary>Damage-type bars (Battle: a weapon's damage by type, what hurt you by type, Defence's foes by type) carry each part's number inside it where
         /// it fits (Joost 2026-10-09); every other bar carries no numbers.</summary>
         public static bool NumbersOnBar(Block b)
@@ -126,7 +130,8 @@ namespace Hearthwoven.Panel
         /// The one bar form's rows for a bar's parts (in the model's order, largest first): parts with no share are left out; every part has
         /// its own row (B39, Joost 2026-10-10: no "Small parts" row; a tiny part keeps its own sliver in the bar, at least 6 px, BarParts), the
         /// Other part ("Other", "Other (n kinds)") last. Past BarMaxParts rows the smallest parts and the Other part fold into one
-        /// "Other (n kinds)" row (the 0.6.5 rule; the models fold first, this only catches a bar they left long, Battle's nine damage types).
+        /// "Other (n kinds)" row (the 0.6.5 rule; the models fold first, this only catches a bar they left long, Battle's nine damage types); a bar of
+        /// people never folds (0.8.2).
         /// Percent by largest remainder over every part, so the list adds up to 100.
         /// numbers: the parts carry their numbers (NumbersOnBar). The list: up to BarListColumns columns (0.8 layout D+, FEEDBACK 1; a renderer
         /// takes fewer where they do not fit), filled top to bottom; four rows read as a 2 x 2 grid (B34). pairs: kept for its callers, the rule is one.
@@ -145,7 +150,7 @@ namespace Hearthwoven.Panel
                 var row = new BarRow { Part = p, Title = p.Title, Value = p.Value, Colour = p.Colour, Fraction = (float)(p.Fraction / sum), Percent = pct[k], Selected = p.Selected, Other = IsOtherPart(p) };
                 (row.Other ? others : named).Add(row);
             }
-            if (named.Count + others.Count > BarMaxParts)
+            if (named.Count + others.Count > BarMaxParts && !named.Any(r => IsPersonPart(r.Part)))   // people never fold (IsPersonPart)
             {
                 var rest = named.Skip(BarMaxParts - 1).Concat(others).ToList();
                 named = named.Take(BarMaxParts - 1).ToList();

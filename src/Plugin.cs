@@ -21,7 +21,7 @@ namespace Hearthwoven
     [BepInPlugin(Guid, "Hearthwoven", Version)]
     public class Plugin : BaseUnityPlugin
     {
-        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.8.1", RpcName = "Hearthwoven_Profile";
+        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.8.3", RpcName = "Hearthwoven_Profile";
         static ConfigEntry<bool> sendStats, logRouted, shareWithGroup;
         static ConfigEntry<float> intervalMinutes;
         static ConfigEntry<int> compressAfterDays, intervalLayout;
@@ -29,6 +29,30 @@ namespace Hearthwoven
         internal static DamageTally Session = new DamageTally();
         internal static SessionEvents Events = new SessionEvents();
         internal static EventLog Log = new EventLog();
+        /// <summary>0.8.2: when this connection began (NewConnection). Session starts here; the minutes kept from earlier connections all end before it.</summary>
+        static DateTime ConnectedUtc = DateTime.UtcNow;
+        /// <summary>
+        /// 0.8.2 (Joost, after restarting the game to install a build: Battle > Damage in 3 h said "Nothing in the last 3 hours" though he had
+        /// fought all evening): your earlier connections' last minutes in this world (KeptMinutes), loaded with the totals on the first spawn. The
+        /// book reads the log with them under it (LogWithEarlier: only a window with a start reaches them), Deeds > Recent and the armour minutes
+        /// hold theirs, your shared copy carries them as "logBefore". null: none, or none that a short window still reaches (ForgetKept).
+        /// </summary>
+        static KeptMinutes Kept;
+        static string keptPath, keptWorld, keptName, keptShared;
+        static long keptId;
+        static EventLog joinedLog, joinedOf; static int joinedAt = -1;
+        /// <summary>Your log as the book reads it: this session's, with the kept minutes under it (EventLog.Join, again only when the log changed).</summary>
+        internal static EventLog LogWithEarlier
+        {
+            get
+            {
+                if (Kept == null) return Log;
+                if (joinedLog == null || !ReferenceEquals(joinedOf, Log) || joinedAt != Log.Changes) { joinedLog = EventLog.Join(Kept.Log, Log); joinedOf = Log; joinedAt = Log.Changes; }
+                return joinedLog;
+            }
+        }
+        /// <summary>Where Session starts in LogWithEarlier (PanelInput.LogSessionFromUtc): this connection's start while kept minutes are under it.</summary>
+        internal static DateTime? LogSessionFromUtc => Kept != null ? ConnectedUtc : (DateTime?)null;
         /// <summary>How much your armour helped this session (ArmourHooks, 0.7): its own ledger, never part of Session or Log, never shared.</summary>
         internal static ArmourTally Armour = new ArmourTally();
         internal static ArmourLog ArmourMinutes = new ArmourLog();
@@ -46,10 +70,50 @@ namespace Hearthwoven
         internal static FoeCounts FoesSince => Totals != null ? FoeCounts.Sum(Totals.Foes.BeforeSession(SessionId), Battle.Counts(null)) : Battle.Counts(null);
         internal static FoeCounts FoesPending() => Totals?.Foes.Pending(SessionId, Battle.Counts(null));
         internal static DateTime? FoesFromUtc => Totals != null && Totals.Foes.FromUtc > DateTime.MinValue ? Totals.Foes.FromUtc : (DateTime?)null;
+        /// <summary>0.9: the boss attempts and dungeon runs you took part in, kept on this PC (LocalTotals "bossFights", "dungeonRuns"); null until the totals load.</summary>
+        internal static BossLog BossLog => Totals?.Bosses;
+        internal static RunLog RunLog => Totals?.Runs;
+
+        /// <summary>0.9: every record of the group's fights this PC has: your recorder first, then each fellow's shared feed (the copies as FellowCopies
+        /// already read them), with when it arrived.</summary>
+        internal static System.Collections.Generic.List<FightSide> FightSides()
+        {
+            var sides = new System.Collections.Generic.List<FightSide> { FightSide.Of(Battle, Game.instance?.GetPlayerProfile()?.GetName() ?? "") };
+            foreach (var kv in GroupShare.Group.ToList())
+            {
+                var copy = FellowCopies.Of(kv.Key, kv.Value);
+                if (copy?.SharedFeed != null) sides.Add(FightSide.Of(copy.SharedFeed, copy.PlayerName, kv.Key, GroupShare.ReceivedAt(kv.Key)));
+            }
+            return sides;
+        }
+
+        /// <summary>
+        /// 0.9, every 10 s and before each save: the group's fights and runs joined from every record (GroupFights.Join, JoinRuns); every boss fight
+        /// you were in that is over noted in the BossLog, every run you were in in the RunLog (a later note grows them as the fellows' copies catch
+        /// up). Only once this session saw a boss fight or a run.
+        /// </summary>
+        static void NoteBossFights()
+        {
+            if (Totals == null || (Battle.BossFightCount == 0 && Battle.Runs().Count == 0)) return;
+            var sides = FightSides(); var now = DateTime.UtcNow;
+            if (Battle.BossFightCount > 0) foreach (var g in GroupFights.Join(sides, now)) Totals.Bosses.Note(g);
+            foreach (var r in GroupFights.JoinRuns(sides, now)) Totals.Runs.Note(r);
+        }
+
         internal static ArmourTally DealtArmour = new ArmourTally();
         internal static ArmourLog DealtArmourMinutes = new ArmourLog();
-        /// <summary>The foe counts in your shared copy (FoeShare): this session and since recording began, compact; the feed stays here.</summary>
+        /// <summary>The foe counts in your shared copy (FoeShare): this session and since recording began, compact; the feed goes as FeedShare (0.8.2).</summary>
         static FoeShare FoeShareNow() => new FoeShare { Session = Battle.Counts(null), Since = Totals != null ? FoesSince : null, FromUtc = FoesFromUtc };
+        /// <summary>0.8.2: the battle feed for your shared copy (FeedShare), only while you share (it is there for fellow players to see). A name in
+        /// it only for a player who shares: one of the fellows the server lists (GroupShare.Fellows, the same list your book shows); a fellow shown
+        /// from this PC's cache counts only once this connection's list came (they may have stopped sharing since). Anyone else is another player.</summary>
+        static FeedShare FeedShareNow()
+        {
+            if (!shareWithGroup.Value) return null;
+            var sharing = new System.Collections.Generic.HashSet<string>(GroupShare.Fellows.Copies.Keys.Where(k => GroupShare.ListSeen || !GroupShare.IsCached(k))
+                .Select(GroupShare.Fellows.NameOf).Where(n => !string.IsNullOrEmpty(n)), StringComparer.OrdinalIgnoreCase);
+            return FeedShare.From(Battle, sharing.Contains);
+        }
         // Since install on this PC (INTEGRITY P7): the running total per character (LocalTotals), loaded on spawn, saved
         // with every send interval and on logout. The panel shows EventsBefore + Events; the event log stays per session.
         static LocalTotals Totals;
@@ -239,6 +303,7 @@ namespace Hearthwoven
             {
                 nextLive = now + GroupShare.LiveEvery;
                 try { LiveTick(); } catch (Exception e) { liveBusy = false; LogOnce("live update not started: " + e.Message); }
+                try { NoteBossFights(); } catch (Exception e) { LogOnce("boss attempts not noted: " + e.Message); }
             }
             if (liveDone != null) LiveTake();
             // one fragment every 250 ms, never a burst
@@ -336,12 +401,16 @@ namespace Hearthwoven
         {
             var skills = player.GetSkills()?.GetSkillList()?.Select(s => new Snapshot.SkillInfo
                 { Name = s.m_info.m_skill.ToString(), Level = s.m_level, Accumulator = s.m_accumulator }) ?? Enumerable.Empty<Snapshot.SkillInfo>();
+            var history = Totals?.History; var today = DateTime.Now; var pending = history != null ? PendingDay() : null;
             return Snapshot.Build(Version, profile.GetPlayerID(), profile.GetName(), profile.m_playerStats, skills,
                                   ZNet.instance.GetWorldName(), Session, SessionId, Events, Log, shareWithGroup.Value,
                                   EventsSinceInstall, DamageSinceInstall, BiomeSinceInstall, BiomeFromUtc, FeatsLedger,
-                                  Totals?.History.DealtByDay(DateTime.Now, 30, PendingDay()),   // your damage dealt per day (HISTORY-06: under 1 KB), for fellows' Together
+                                  history?.DealtByDay(today, 30, pending),   // your damage dealt per day (HISTORY-06: under 1 KB), for fellows' Together
                                   Panel.PanelUi.KnownBiomes(player),   // the biomes you found: the group feats wait for a land until someone who shares found it
-                                  copyId, FoeShareNow());   // 0.8: the foes you fought per kind and what became of them (the feed stays here)
+                                  copyId, FoeShareNow(),   // 0.8: the foes you fought per kind and what became of them
+                                  FeedShareNow(),          // 0.8.2: the battle feed, its newest foes (names only of players who share)
+                                  history?.DayDealt(today, 30, pending),   // 0.9: the same days by weapon kind and type, for the group's By weapon and By type on Today to 30 days
+                                  keptShared);             // 0.8.2: your kept minutes of earlier connections here, beside this connection's log
         }
 
         /// <summary>
@@ -416,6 +485,7 @@ namespace Hearthwoven
                 EventsBefore = Totals?.EventsBefore(SessionId) ?? new SessionEvents();
                 DamageBefore = Totals?.DamageBefore(SessionId) ?? new DamageTally();
                 BiomeBefore = Totals?.BiomeBefore(SessionId) ?? new BiomeTally();
+                try { LoadKept(id, name); } catch (Exception e) { Kept = null; keptShared = null; LogOnce("recent minutes not loaded: " + e.Message); }   // 0.8.2: the short windows reach back across a restart
                 // the game's own counters as they stand now, once per character and kind (an older install: on the first load of
                 // the version that baselines that kind); saved at once so a crash before the first send cannot move them later.
                 // pickedUp and battle carry what Hearthwoven had counted exactly by then (the other kinds started at zero with it).
@@ -501,11 +571,55 @@ namespace Hearthwoven
                     // REVIEW-08 #12: each side ledger in its own try, so a throw in one never skips the whole local-totals save
                     try { Totals.Armour.Record(SessionId, Armour, DateTime.Now); } catch (Exception e) { LogOnce("armour ledger not recorded: " + e.Message); }
                     try { Totals.Foes.Record(SessionId, Battle.Counts(null), DateTime.Now); } catch (Exception e) { LogOnce("foes ledger not recorded: " + e.Message); }
+                    try { NoteBossFights(); } catch (Exception e) { LogOnce("boss attempts not noted: " + e.Message); }
                     Totals.Save(totalsPath, DateTime.UtcNow);
                 }
             }
             catch (Exception e) { log?.LogWarning("local totals not saved: " + e.Message); }
+            try { SaveKept(); } catch (Exception e) { LogOnce("recent minutes not saved: " + e.Message); }
             try { SaveMarks(); } catch (Exception e) { LogOnce("fellow marks not saved: " + e.Message); }
+        }
+
+        /// <summary>
+        /// 0.8.2, once per session with the totals: the minutes your earlier connections kept in this world (KeptMinutes) go under this connection's,
+        /// the log's (LogWithEarlier, and your shared copy's "logBefore"), Deeds > Recent's (DeedLog.Earlier) and the armour minutes'. Only a window
+        /// with a start reaches them; Session, the day history and the session tallies stay this connection's. Another world or character: none.
+        /// </summary>
+        static void LoadKept(long id, string name)
+        {
+            Kept = null; keptShared = null; joinedLog = null; Deeds.Earlier.Clear();
+            keptWorld = ZNet.instance != null ? FellowCache.ScopeKey(ZNet.instance.GetWorldName(), ZNet.instance.GetWorldUID()) : null;
+            keptPath = Totals != null && totalsPath != null && keptWorld != null ? KeptMinutes.PathFor(totalsPath) : null;
+            keptId = id; keptName = name;
+            if (keptPath == null) return;
+            var kept = KeptMinutes.Load(keptPath, keptWorld, id, name, DateTime.UtcNow, ConnectedUtc, out var problem);
+            if (problem != null) LogOnce(problem);
+            if (kept == null) return;
+            foreach (var kv in kept.Deeds) Deeds.Earlier[kv.Key] = kv.Value;
+            foreach (var kv in kept.Armour.Damage) { ArmourMinutes.Damage.TryGetValue(kv.Key, out var o); ArmourMinutes.Damage[kv.Key] = o + kv.Value; }   // read only for 10 min .. 3 h (ArmourModel.ArmourIn)
+            foreach (var kv in kept.Armour.Hits) { ArmourMinutes.Hits.TryGetValue(kv.Key, out var o); ArmourMinutes.Hits[kv.Key] = o + kv.Value; }
+            Kept = kept; keptShared = kept.SharedJson();   // written once: the shared copy carries it as is
+        }
+
+        /// <summary>With every local save: the minutes the next connection in this world may join (KeptMinutes.Take: this session's and the kept
+        /// ones, as far back as the 3 h window reaches), beside the totals file.</summary>
+        static void SaveKept()
+        {
+            if (keptPath == null) return;
+            var now = DateTime.UtcNow;
+            ForgetKept(now);
+            var deeds = DeedsNow();   // the running minute booked
+            var k = KeptMinutes.Take(now, LogWithEarlier, ArmourMinutes, deeds.Buckets, deeds.Earlier);
+            k.World = keptWorld; k.PlayerId = keptId.ToString(System.Globalization.CultureInfo.InvariantCulture); k.Name = keptName ?? "";
+            k.Save(keptPath, now);
+        }
+
+        /// <summary>The kept minutes once no short window reaches them (3 h and a minute after this connection began): gone from the book and from
+        /// your shared copy (the next live update drops them).</summary>
+        static void ForgetKept(DateTime nowUtc)
+        {
+            if (Kept == null || nowUtc < ConnectedUtc.AddMinutes(181)) return;
+            Kept = null; keptShared = null; joinedLog = null; Deeds.Earlier.Clear();
         }
 
         // Every session builds a new ZRoutedRpc; register on each new one exactly once (mods that registered once went
@@ -525,6 +639,7 @@ namespace Hearthwoven
             static void Postfix() => HookGuard.Run(() =>
             {
                 Session = new DamageTally(); Events = new SessionEvents(); Log = new EventLog(); SessionId = NewSessionId();
+                ConnectedUtc = DateTime.UtcNow; Kept = null; keptShared = null; keptPath = keptWorld = keptName = null; joinedLog = joinedOf = null;   // 0.8.2: the kept minutes load again on spawn (LoadKept)
                 Totals = null; totalsPath = totalsFor = null; EventsBefore = new SessionEvents(); DamageBefore = new DamageTally(); BiomeBefore = new BiomeTally();   // loaded again on spawn (P7)
                 GroupShare.Clear(); nextSend = -1f; lastFullSend = -100f; FeatsCounters.Streak = 0;
                 liveBase = liveBaseId = null; liveSeq = 0; liveBusy = false; liveDone = null;   // live updates start from this connection's first full copy

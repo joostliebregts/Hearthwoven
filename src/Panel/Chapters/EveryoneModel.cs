@@ -16,8 +16,9 @@ namespace Hearthwoven.Panel
     ///
     /// Windows: All is each fellow's last shared totals; 10 min to Session come from what reached this PC from them while you played (their
     /// trail, B33), the short ones only when their copies come live; the day windows only for Battle's damage dealt (fellows share days for
-    /// nothing else), so on every other page they are greyed with one line on the plate. A fellow whose copy cannot fill the window is named
-    /// on their row and left out of the sum, and the hero says who is in it. Pages whose numbers do not add up grey the chip with a reason
+    /// nothing else; 0.9: by weapon kind and type, so By weapon and By type work there too), so on every other page they are greyed with one
+    /// line on the plate. A fellow whose copy cannot fill the window is named on their row and left out of the sum, and the hero says who is
+    /// in it. Pages whose numbers do not add up grey the chip with a reason
     /// (EveryoneOff). The chip's state is one flag for the whole book (PanelState.Everyone), kept in PanelPrefs: it answers "whose book am I
     /// reading" like the names beside it, which also hold across pages.
     /// </summary>
@@ -30,8 +31,9 @@ namespace Hearthwoven.Panel
         public const string EveryoneAloneSub = "nobody else yet", EveryoneAloneWhy = "Nobody else shares yet. The group view fills in once fellow players share too.";
         /// <summary>The plate's line on a page whose day windows the group cannot fill (PICKS: fellows share days only for damage dealt).</summary>
         public const string GroupDaysLine = "Today, 7 days and 30 days: fellow players share days only for damage dealt.";
+        /// <summary>Foes' line for the greyed day windows (0.8.2): a fellow's day is one total, not split by foe.</summary>
+        public const string GroupFoesDaysLine = "Today, 7 days and 30 days: fellow players share days as one total, not per foe.";
         public const string GroupNotInSum = ", so not in this sum";
-        public const string GroupWeaponTypeDays = "By weapon and By type need every player's hits: fellow players share days only as totals.";
         public const string GroupAfterArmour = "after each player's armor";
 
         // ---------- where the chip works ----------
@@ -127,8 +129,10 @@ namespace Hearthwoven.Panel
             public double Value, Second;
             /// <summary>The page's own composition of this player's number; null = their page has none.</summary>
             public List<GroupPart> Parts;
-            /// <summary>Battle: the rows behind the number (By weapon, By type); null = a total only (a fellow's day).</summary>
+            /// <summary>Battle: the rows behind the number (By weapon, By type); null = a total only (a fellow's day from a copy before 0.9).</summary>
             public List<DamageRow> Rows;
+            /// <summary>0.9: the line a total-only row adds under the page (OlderLine: what fills in once they update); null = none.</summary>
+            public string Waits;
             /// <summary>All: a fellow copy without since-install totals, so their number is their last shared session (Battle; REVIEW-08 #12: Deeds,
             /// Voyages and the Hall too, which read the same copy).</summary>
             public bool LastSessionOnly;
@@ -141,6 +145,7 @@ namespace Hearthwoven.Panel
             public string One, Many, SecondOne, SecondMany;   // the hero's label (singular, plural), and the second number's
             public string ByPlayer, PartsTitle, PartsNote, None, Note;
             public bool Km, Days, DamageParts;
+            public string DaysLine = GroupDaysLine;                  // the plate's line when the day windows are greyed (Days false)
             public Func<double, double, string> Format;          // (value, the group's total) -> the number as shown; null = a count
             public Func<double, string> What;                    // the hero's label for this total; null = One/Many
             public Func<double, string> NoteOf;                  // a closing line that depends on the total (Cargo's unit); null = none
@@ -186,6 +191,14 @@ namespace Hearthwoven.Panel
                 Chapter = Chapter.Battle, Page = "defense", Heading = "Defense", Icon = "ui:chapter-battle", One = "damage received", Many = "damage received",
                 ByPlayer = "Damage received, by player", PartsTitle = "By type, together", PartsNote = GroupAfterArmour, None = "nothing received", DamageParts = true,
                 Of = (p, me, w) => BattleMeasure(p, me, w, false),
+            },
+            // 0.8.2 (Joost in game, Battle > Foes: "This should have an 'Everyone' tab"): a row per foe kind over the whole group (BattleGroupFoes);
+            // its numbers are Damage's (the same rows in the same window), the day windows greyed: a fellow's day is one total, not per foe
+            new GroupPage
+            {
+                Chapter = Chapter.Battle, Page = "foes", Heading = "Foes", Icon = "ui:chapter-battle", One = "damage dealt", Many = "damage dealt",
+                None = "no damage dealt", DamageParts = true, DaysLine = GroupFoesDaysLine,
+                Of = (p, me, w) => BattleMeasure(p, me, w, true),
             },
             Voyage("sailing", "Sailing", "vocab:list-sailing", "km sailed", "Km sailed, by player", "Sailed together: at the helm and as passenger", "not sailed yet",
                    bs => (HeroNum(bs, "km sailed"), JourneyParts(bs, "sail")), "Sailed counts one voyage once for each player aboard."),
@@ -286,8 +299,9 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>Battle's rows for one player in the window, as their own Battle page reads them (PanelModel.Battle): All the since-install tally
-        /// (a fellow's last shared session when they share no totals), a day window your day history (a fellow: their damage dealt per day, no
-        /// rows), 10 min to Session the session's log, a fellow's from the start of your session (B33).</summary>
+        /// (a fellow's last shared session when they share no totals), a day window your day history (a fellow: 0.9, the parts they share per day by
+        /// weapon kind and type, FellowDayRows; a copy before 0.9 their damage dealt per day, a total without rows), 10 min to Session the session's
+        /// log, a fellow's from the start of your session (B33).</summary>
         static GroupMeasure BattleMeasure(PanelInput p, PanelInput me, TimeWindow w, bool dealt)
         {
             var m = new GroupMeasure();
@@ -306,22 +320,31 @@ namespace Hearthwoven.Panel
                 if (!p.IsSelf)
                 {
                     if (!dealt) return new GroupMeasure { In = false, Words = "shares no days" + GroupNotInSum };
-                    if (p.DealtByDay == null) return new GroupMeasure { In = false, Words = "shares no days yet" + GroupNotInSum };
-                    m.Value = DealtInWindow(p, w, me);
-                    return m;   // a total per day, no rows: By player only
+                    rows = FellowDayRows(p, w, me);   // 0.9: their days by weapon kind and type, read as your own day rows
+                    if (rows == null)
+                    {
+                        if (p.DealtByDay == null) return new GroupMeasure { In = false, Words = "shares no days yet" + GroupNotInSum };
+                        // a copy before 0.9: one total per day, so their row has no split and By weapon and By type leave them out, said once
+                        m.Value = DealtInWindow(p, w, me);
+                        m.Waits = OlderLine(p, Name(p) + "'s part in By weapon and By type fills in");
+                        return m;
+                    }
                 }
-                var day = InWindow(p, w);
-                if (day == null) return new GroupMeasure { In = false, Words = "no days recorded yet" + GroupNotInSum };
-                rows = DamageSinceInstallRows(day);
+                else
+                {
+                    var day = InWindow(p, w);
+                    if (day == null) return new GroupMeasure { In = false, Words = "no days recorded yet" + GroupNotInSum };
+                    rows = DamageSinceInstallRows(day);
+                }
             }
             else
             {
                 if (!p.IsSelf)
                 {
                     if (w == TimeWindow.Session && SessionFrom(p).HasValue && FellowOffThisSession(p)) return new GroupMeasure { Words = RecentNotOn, Rows = new List<DamageRow>() };
-                    var cutoff = Cutoff(w, me.NowUtc);
-                    if (cutoff.HasValue && (!p.LastRecordedUtc.HasValue || p.LastRecordedUtc.Value.AddMinutes(SpanOf(p)) <= cutoff.Value))
-                        return new GroupMeasure { In = false, Words = "last shared before this window" + GroupNotInSum };
+                    // 0.8.2 (H): 10 min .. 3 h from their minute log while their copy is live (FellowLive, as their own Battle pages); a quiet live
+                    // fellow counts 0. Not live: left out with why (their log may stop minutes before now)
+                    if (w != TimeWindow.Session && !FellowLive(p, me.NowUtc)) return new GroupMeasure { In = false, Words = (p.Timed ? "not playing now" : "updates only every few minutes") + GroupNotInSum };
                 }
                 rows = Damage(p.Log, w, "", me.NowUtc, SessionFrom(p));
             }
@@ -449,7 +472,7 @@ namespace Hearthwoven.Panel
             if (p == null || p.IsSelf) return p;
             var c = p.ShallowCopy();
             c.NowUtc = me.NowUtc; c.ViewerName = me.PlayerName; c.PlayerNames = c.PlayerNames ?? me.PlayerNames; c.ToLocal = c.ToLocal ?? me.ToLocal;
-            c.DisplayName = c.DisplayName ?? me.DisplayName; c.ItemKind = c.ItemKind ?? me.ItemKind; c.GatherKind = c.GatherKind ?? me.GatherKind; c.PieceKind = c.PieceKind ?? me.PieceKind;
+            c.DisplayName = c.DisplayName ?? me.DisplayName; c.ItemKind = c.ItemKind ?? me.ItemKind; c.GatherKind = c.GatherKind ?? me.GatherKind; c.Rock = c.Rock ?? me.Rock; c.TreeOf = c.TreeOf ?? me.TreeOf; c.PieceKind = c.PieceKind ?? me.PieceKind;
             c.ItemColour = c.ItemColour ?? me.ItemColour; c.StationDish = c.StationDish ?? me.StationDish; c.CropOf = c.CropOf ?? me.CropOf; c.ItemType = c.ItemType ?? me.ItemType;
             c.MainMaterial = c.MainMaterial ?? me.MainMaterial; c.PieceTab = c.PieceTab ?? me.PieceTab; c.PieceMaterial = c.PieceMaterial ?? me.PieceMaterial;
             c.DishType = c.DishType ?? me.DishType; c.DishBoost = c.DishBoost ?? me.DishBoost; c.ItemToken = c.ItemToken ?? me.ItemToken; c.RecipeYield = c.RecipeYield ?? me.RecipeYield; c.Foe = c.Foe ?? me.Foe;
@@ -459,13 +482,12 @@ namespace Hearthwoven.Panel
 
         // ---------- the group page ----------
 
-        /// <summary>When a fellow's numbers reached this PC: "live" (their live updates come and the latest is under a minute and a half old), else
-        /// "as of 8 Oct 00:24"; your own "this PC".</summary>
+        /// <summary>When a fellow's numbers reached this PC: "live" (their live updates come and the latest is under a minute and a half old: FellowLive,
+        /// the rule that opens their 10 min .. 3 h), else "as of 8 Oct 00:24"; your own "this PC".</summary>
         static string Freshness(PanelInput p, PanelInput me)
         {
             if (p.IsSelf) return GroupThisPc;
-            var last = p.Trail?.LastUtc ?? p.ReceivedUtc;
-            if (p.Timed && !p.Cached && last.HasValue && (me.NowUtc - last.Value).TotalSeconds <= 90) return GroupLive;
+            if (FellowLive(p, me.NowUtc)) return GroupLive;
             var at = p.Cached ? p.ReceivedUtc : p.LastRecordedUtc ?? p.ReceivedUtc;
             return at.HasValue ? GroupAsOf + Local(me, at.Value).ToString("d MMM HH:mm", Inv) : "as last shared";
         }
@@ -537,17 +559,25 @@ namespace Hearthwoven.Panel
                 rows.Add(row);
             }
             // 0.8 (Joost: the group's Battle views in the damage rows' grammar): Damage's and Defence's rows by player drawn as damage rows
-            blocks.Add(new Block { Kind = GroupRowsKind, Title = g.ByPlayer, Text = GroupShareCaption, Tone = !battle ? null : page == "damage" ? DamagePlayersDealt : DamagePlayersReceived, Items = rows, Src = SrcFellows, Source = TagFellows });
+            // 0.8.2 Foes has none: each foe's Dealt bar and its Who hit it say who did what (BattleGroupFoes)
+            var foes = state.Chapter == Chapter.Battle && page == "foes";
+            if (!foes) blocks.Add(new Block { Kind = GroupRowsKind, Title = g.ByPlayer, Text = GroupShareCaption, Tone = !battle ? null : page == "damage" ? DamagePlayersDealt : DamagePlayersReceived, Items = rows, Src = SrcFellows, Source = TagFellows });
 
             // the page's own composition, for the whole group (the parts summed by kind; each kind keeps the look its page gives it)
-            // Battle: a bar by type only when every player in the sum gave their hits (a fellow's day is a total, PICKS: day windows By player only)
-            var typed = !g.DamageParts || inSum.All(k => ms[k].Rows != null);
+            // Battle: a bar by type over the players whose hits or day parts are known (0.9: a copy before 0.9 has one total per day, its line says so)
+            var typed = !g.DamageParts || inSum.Any(k => ms[k].Rows != null);
             var bar = typed ? GroupComposition(g, inSum.Select(k => ms[k]).ToList(), fmt) : null;
             var unsplit = inSum.Where(k => ms[k].Value > 0 && (ms[k].Parts == null || ms[k].Parts.Count == 0) && (ms[k].Rows != null || !g.DamageParts)).Select(k => people[k].Input.IsSelf ? "Your" : people[k].Name + "'s").ToList();
             var notes = new List<string>();
             if (bar != null && unsplit.Count > 0) notes.Add(JoinNames(unsplit) + (unsplit.Count == 1 ? " number is" : " numbers are") + " not split by kind, so the bar leaves " + (unsplit.Count == 1 ? "it" : "them") + " out.");
             if (state.Chapter == Chapter.Battle && page == "damage")
                 BattleGroupSwitch(view, state, page, blocks, bar, inSum.Select(k => (people[k].Name, rows[k].Title, ms[k])).ToList(), notes);
+            else if (foes)
+            {
+                BattleGroupFoes(input, view, state, page, w, blocks, inSum.Select(k => (people[k].Name, rows[k].Title, ms[k])).ToList());
+                // no rows by player here: who is not in the numbers, and why, in the closing lines ("Tor: last shared before this window, ...")
+                notes.InsertRange(0, Enumerable.Range(0, ms.Count).Where(k => ms[k].Words != null).Select(k => rows[k].Title + ": " + ms[k].Words + "."));
+            }
             else
             {
                 if (bar != null) blocks.Add(bar);
@@ -557,12 +587,14 @@ namespace Hearthwoven.Panel
             var lastOnly = inSum.Where(k => ms[k].LastSessionOnly).Select(k => people[k].Name).ToList();
             if (lastOnly.Count > 0) notes.Add(JoinNames(lastOnly) + (lastOnly.Count == 1 ? " shares" : " share") + " no totals: their number is their last shared session.");
             if (w == TimeWindow.Session) notes.Add(WindowFellowSession);
+            // 0.9 (Joost: Today's numbers looked unrelated to Session's): a fellow's day is their whole day, also before you came online
+            if (IsDayWindow(w) && inSum.Any(k => !people[k].Input.IsSelf)) notes.Add(DayWindowLine(w));
             if (g.Note != null) notes.Add(g.Note);
             if (g.NoteOf != null && total > 0) notes.Add(g.NoteOf(total));
             foreach (var n in notes) view.Blocks.Add(new Block { Kind = "note", Text = n });
 
             var fresh = Enumerable.Range(0, people.Count).Where(k => !people[k].Input.IsSelf).Select(k => (people[k].Name, rows[k].Note)).ToList();
-            Plate(view, g.Icon, string.Join("\n", new[] { GroupLine(fresh), greyDays ? GroupDaysLine : null }.Where(s => s != null).ToArray()));
+            Plate(view, g.Icon, string.Join("\n", new[] { GroupLine(fresh), greyDays ? g.DaysLine : null }.Where(s => s != null).ToArray()));
             // every number here is the group's: fellow players' PCs (and yours), never "this PC" alone (no "Recorded from" label)
             foreach (var b in Content(view)) Fellowed(b);
         }
@@ -620,15 +652,15 @@ namespace Hearthwoven.Panel
 
         /// <summary>Damage dealt with Everyone (PICKS: the view switch gains By player first): By player holds the hero, the rows and the group's
         /// damage by type; By weapon is the page's own view over every player's hits together; By type is the page's grid with the players across
-        /// (group-battle b: damage types down, a column per player headed by their shield, totals right and under). A day window has only By
-        /// player (fellows share damage dealt per day as a total).</summary>
+        /// (group-battle b: damage types down, a column per player headed by their shield, totals right and under). 0.9: in a day window too, from
+        /// the parts each fellow shares per day; a copy before 0.9 (one total per day) is left out of both, and its line says so (GroupMeasure.Waits).</summary>
         static void BattleGroupSwitch(PanelView view, PanelState state, string page, List<Block> byPlayer, Block bar, List<(string name, string label, GroupMeasure m)> players, List<string> notes)
         {
             if (bar != null) byPlayer.Add(bar);
-            var allRows = players.All(p => p.m.Rows != null);
-            var rows = players.Where(p => p.m.Rows != null).SelectMany(p => p.m.Rows).ToList();
+            var split = players.Where(p => p.m.Rows != null).ToList();
+            var rows = split.SelectMany(p => p.m.Rows).ToList();
             List<Block> byWeapon = null, byType = null;
-            var grid = allRows ? PlayersGrid(players) : null;
+            var grid = split.Count > 0 ? PlayersGrid(split) : null;
             if (grid != null)
             {
                 var mixes = DamageMixes(rows);
@@ -636,7 +668,7 @@ namespace Hearthwoven.Panel
                 byWeapon = new List<Block> { TopLine(topWeapon.Value, topWeapon.Title + " damage together, the most of any weapon", null) }; byWeapon.AddRange(mixes);
                 byType = new List<Block> { TopLine(topType.Value, topType.Title + " damage together, the most of any type", null), grid };
             }
-            else if (!allRows && players.Any(p => p.m.Value > 0)) notes.Add(GroupWeaponTypeDays);
+            notes.AddRange(players.Where(p => p.m.Value > 0 && p.m.Waits != null).Select(p => p.m.Waits));
             Switch(view, state, page, "group", DealtCaption, ("player", "By player", byPlayer), ("weapon", ByWeapon, byWeapon), ("type", ByType, byType));
         }
 

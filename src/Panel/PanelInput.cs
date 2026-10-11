@@ -13,6 +13,9 @@ namespace Hearthwoven.Panel
     public class PanelInput
     {
         public string PlayerName = "";
+        /// <summary>0.8.2 (I): a fellow's copy: the Hearthwoven that sent it ("mod", e.g. "0.6.5"), so a page can say what fills in once they
+        /// update (PanelModel.OlderLine); null on your own book or when the copy does not say.</summary>
+        public string ModVersion;
         public long PlayerId;                               // the game's player id (feasts name their creator by it)
         public string FellowKey;                            // a fellow's copy: who it is (FellowIds.KeyOf: platform id and profile id), never the shown name; null on your own book
         public DateTime NowUtc = DateTime.UtcNow;
@@ -52,6 +55,13 @@ namespace Hearthwoven.Panel
         public DamageTally Session;
         public SessionEvents Events;
         public EventLog Log;
+        /// <summary>0.8.2: Log reaches back before this session (yourself: your kept minutes of earlier connections, KeptMinutes, joined under
+        /// it): where this session begins, which Session counts from (PanelModel.SessionFrom). null: the log is this session's alone.</summary>
+        public DateTime? LogSessionFromUtc;
+        /// <summary>0.8.2: a fellow's copy: their earlier connections' last minutes in this world as they kept them ("logBefore", KeptMinutes),
+        /// from LogBeforeFromUtc on; FellowTrail.Joined puts them under Log. null: none (one connection, or a copy from before 0.8.2).</summary>
+        public EventLog LogBefore;
+        public DateTime? LogBeforeFromUtc;
         // damage since install (yourself: LocalTotals' earlier sessions + this one). Null = not known (an older fellow's copy):
         // Foes, Defense and Together then read Session and Log as before.
         public DamageTally DamageSinceInstall;
@@ -68,6 +78,10 @@ namespace Hearthwoven.Panel
         public DayHistory.Row Pending;
         /// <summary>A fellow's damage dealt per local day, the last 30 days (their snapshot's "dealtByDay"); null = not shared (an older Hearthwoven).</summary>
         public Dictionary<string, float> DealtByDay;
+        /// <summary>0.9: a fellow's damage dealt per local day split by weapon kind and battle type (day -> "melee|slash" -> amount, the last 30 days;
+        /// their snapshot's "dayDealt", DayHistory.DayDealt), so the group's By weapon and By type work on Today to 30 days; null = not shared (a
+        /// Hearthwoven before 0.9: their days are one total each, DealtByDay).</summary>
+        public Dictionary<string, Dictionary<string, float>> DayDealt;
         /// <summary>A day window's input (PanelModel.InWindow): the window this copy holds; null = the input as recorded.</summary>
         public PanelModel.DayView Window;
         /// <summary>Defence's armour view (0.7, ArmourTally.cs), yourself only (never shared; a fellow's copy: all null). This session's ledger, the same
@@ -82,6 +96,13 @@ namespace Hearthwoven.Panel
         /// running session's unsaved part (added to today) and when recording began. A fellow's copy: FoesSession and FoesSince as they shared them
         /// (no recorder, no feed, no book). Battle.DealtAfterArmour (dev, yourself only): your damage after the foe's armour this session. null = not known.</summary>
         public BattleRecorder Battle;
+        /// <summary>0.8.2: a fellow's battle feed as their copy shares it (FeedShare: their newest foes, names only of players who share); null on
+        /// your own book (the recorder holds yours) and for a copy from before 0.8.2.</summary>
+        public FeedShare SharedFeed;
+        /// <summary>0.9: the boss attempts you took part in, kept on this PC (BossLog); null on a fellow's copy and before the totals load.</summary>
+        public BossLog BossLog;
+        /// <summary>0.9: the fights for Battle > Last fight, Runs and bosses and their pages (Chapters/FightView.cs), filled by the fight adapter; null = none yet (Last fight draws the 0.8 page).</summary>
+        public FightBook Fights;
         public FoeBook FoeBook;
         public FoeCounts FoesSession, FoesSince, FoesPending;
         public DateTime? FoesFromUtc;
@@ -125,6 +146,8 @@ namespace Hearthwoven.Panel
         public Func<string, bool> Owned;                    // item token -> in your inventory now (read once per page build); null = not known (a fellow's copy, the tests)
         public IDictionary<string, float> Harvested;        // since this character was made: m_pickableStats, pickable item prefab ("Barley") or fish token ("$animal_fish1") -> count
         public Func<string, string> CropOf;                 // planted piece token -> the item prefab its grown plant yields ("Barley"); null = not a crop
+        public Func<string, string> TreeOf;                 // tree, log or log half prefab -> the tree it is or fell from (GameData.TreeOf); null = judged by its name
+        public Func<string, PanelModel.RockData> Rock;      // prefab a pickaxe hit -> the rock it is part of, mined or not, its main drop (GameData.Rock); null = judged by its name
         public Func<string, string> MainMaterial;           // gear token -> its main material ("Bronze"), from its recipe in the game's data (PanelModel.MainMaterial); null = not known
         public Func<string, string> ItemType;               // item token -> the game's item type ("OneHandedWeapon"); null = not known
         public Func<string, string> PieceTab;               // piece token -> the hammer tab it sits on ("Furniture"), from Piece.m_category and the piece table's own labels; null = not known (Building's filter)
@@ -142,6 +165,7 @@ namespace Hearthwoven.Panel
         {
             if (!(MiniJson.Parse(json) is Dictionary<string, object> root)) return null;
             var input = new PanelInput { IsSelf = false, PlayerName = Str(root, "name"), PlayerId = (long)Num(root, "playerId"), SessionId = Str(root, "session"), Session = new DamageTally(), Events = new SessionEvents(), Log = new EventLog() };
+            input.ModVersion = Str(root, "mod").Length > 0 ? Str(root, "mod") : null;
             input.FellowKey = FellowIds.KeyOf(json);   // the same key GroupShare keeps the copy under (the group feats count each person once by it)
             if (root.TryGetValue("stats", out var st) && st is List<object> slots && slots.Count > 0 && slots[0] is Dictionary<string, object> slot0)
             {
@@ -171,8 +195,12 @@ namespace Hearthwoven.Panel
             input.SharedSinceInstall = since != null;
             if (Obj(root, "measuredThisSession") != null) input.SessionOnly = new SessionEvents().ReadFrom(Obj(root, "measuredThisSession"));
             input.DealtByDay = Dict(Obj(root, "dealtByDay"));
+            var dayDealt = Obj(root, "dayDealt");   // 0.9: per day by weapon kind and type (an older copy has none: null); only real days, at most 40 of them
+            if (dayDealt != null) input.DayDealt = dayDealt.Where(kv => kv.Value is Dictionary<string, object> && DateTime.TryParseExact(kv.Key, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+                                                           .Take(40).ToDictionary(kv => kv.Key, kv => Dict((Dictionary<string, object>)kv.Value));
             var foes = FoeShare.ReadFrom(Obj(root, "foes"));   // 0.8: the foes they fought per kind (an older copy has none: null)
             if (foes != null) { input.FoesSession = foes.Session; input.FoesSince = foes.Since; input.FoesFromUtc = foes.FromUtc; }
+            input.SharedFeed = FeedShare.ReadFrom(Obj(root, "battleFeed"));   // 0.8.2: their battle feed (an older copy has none: null)
             // the biomes they found (0.7 on; an older copy has none: null, and the group feats' gate falls back on the evidence the copy carries)
             if (root.TryGetValue("knownBiomes", out var kb) && kb is List<object> biomes) input.KnownBiomes = biomes.OfType<string>().Where(b => b.Length > 0).Take(16).ToList();
             if (Obj(root, "feats") != null) input.Feats = FeatsLedger.ReadShared(Obj(root, "feats"));   // the feats they earned (Feats page, their book)
@@ -185,28 +213,29 @@ namespace Hearthwoven.Panel
                 input.BiomeSinceInstall = new BiomeTally().ReadFrom(biomeSince);
                 if (DateTime.TryParse(Str(biomeSince, "from"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var from)) input.BiomeFromUtc = from.ToUniversalTime();
             }
-            var log = Obj(root, "measuredLog");
-            Into(Obj(log, "damage"), input.Log.Damage); Into(Obj(log, "hits"), input.Log.Hits);
-            input.Log.Span = log != null && Num(log, "bucketMinutes") >= 1 ? (int)Num(log, "bucketMinutes") : 10;   // an older sender kept ten-minute buckets
+            input.Log.ReadFrom(Obj(root, "measuredLog"));
+            // 0.8.2: their earlier connections' last minutes in this world (KeptMinutes), apart from this connection's log: FellowTrail.Joined puts
+            // them under it for the windows, while the trail, the recorded span and the foe counts stay this connection's
+            var before = Obj(root, KeptMinutes.SharedKey);
+            if (before != null && DateTime.TryParse(Str(before, "from"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var beforeFrom))
+            { input.LogBefore = new EventLog().ReadFrom(before); input.LogBeforeFromUtc = beforeFrom.ToUniversalTime(); }
+            input.RecordedFromLog();
+            return input;
+        }
+
+        /// <summary>A fellow's FirstRecordedUtc and LastRecordedUtc: the oldest and newest moment their Log holds (its damage buckets and deaths).</summary>
+        public void RecordedFromLog()
+        {
             DateTime? last = null, first = null;
-            foreach (var k in input.Log.Damage.Keys)
+            foreach (var k in Log.Damage.Keys)
                 if (DateTime.TryParseExact(k.Split('|')[0], "yyyy-MM-dd'T'HH:mm'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var b))
                 { if (last == null || b > last) last = b; if (first == null || b < first) first = b; }
-            if (log != null && log.TryGetValue("deaths", out var ds) && ds is List<object> deaths)
-                foreach (var o in deaths.OfType<Dictionary<string, object>>())
-                {
-                    if (!DateTime.TryParse(Str(o, "t"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var t)) continue;
-                    var d = new EventLog.Death { Time = t.ToUniversalTime(), Biome = Str(o, "biome", "None"), Killer = Str(o, "killer", "unknown"), Cause = Str(o, "cause", "unknown") };
-                    Into(Obj(o, "last10s"), d.Last10s);
-                    if (o.TryGetValue("timeline", out var tl) && tl is List<object> hits)   // an older snapshot has none: the totals stay
-                        foreach (var h in hits.OfType<Dictionary<string, object>>())
-                            d.Timeline.Add(new EventLog.Hit { Ago = (float)Num(h, "ago"), Amount = (float)Num(h, "amount"), Source = Str(h, "source", "?"), Cause = Str(h, "cause", "?"), Type = Str(h, "type", "damage") });
-                    input.Log.Deaths.Add(d);
-                    if (last == null || d.Time > last) last = d.Time;
-                    if (first == null || d.Time < first) first = d.Time;
-                }
-            input.LastRecordedUtc = last; input.FirstRecordedUtc = first;
-            return input;
+            foreach (var d in Log.Deaths)
+            {
+                if (last == null || d.Time > last) last = d.Time;
+                if (first == null || d.Time < first) first = d.Time;
+            }
+            LastRecordedUtc = last; FirstRecordedUtc = first;
         }
 
         static Dictionary<string, object> Obj(Dictionary<string, object> d, string k) => MiniJson.Obj(d, k);

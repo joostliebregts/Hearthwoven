@@ -90,13 +90,21 @@ static class RecordedTests
         var fellowBook = PanelModel.Build(edda, new PanelState { Page = { [Chapter.Deeds] = "woodcutting" }, ShowNumbers = true });
         Check(fellowBook.AboutNumbers == null && !PanelModel.Content(fellowBook).Any(b => b.Kind == "aboutnumbers") && !fellowBook.Keys.Any(k => k.Contains(PanelModel.AboutNumbersTitle)),
               "About these numbers: a fellow's book has no box and no key (their copy carries no dates)");
-        // the hero row's one wrap rule (MERGE-NOTES G1/G3: "Farming lev" clipped at the plate edge on the real book's farming): what does not fit goes under, never off the plate
+        // the hero row's one wrap rule (MERGE-NOTES G1/G3: "Farming lev" clipped at the plate edge on the real book's farming): what does not fit goes under, never off the plate;
+        // 0.8.2 (Joost in game, Mining: the skill took a line of its own): the skill stays on the first line, a line is only ever added for a number
+        bool small;
         Check(PanelModel.HeroLines(new[] { 300f, 200f }, 69, 180, 840).SequenceEqual(new[] { 0, 0, 0 }) &&     // all on one line
-              PanelModel.HeroLines(new[] { 420f, 280f }, 69, 180, 840).SequenceEqual(new[] { 0, 0, 1 }) &&     // the real book's farming: the skill goes under
-              PanelModel.HeroLines(new[] { 520f, 300f }, 69, 180, 840).SequenceEqual(new[] { 0, 1, 1 }) &&     // the second number goes under, the skill beside it
-              PanelModel.HeroLines(new[] { 520f, 700f }, 69, 180, 840).SequenceEqual(new[] { 0, 1, 2 }) &&     // each its own line
+              PanelModel.HeroLines(new[] { 420f, 280f }, 69, 180, 840).SequenceEqual(new[] { 0, 1, 0 }) &&     // the real book's farming: the second number goes under, the skill stays on the first line
+              PanelModel.HeroLines(new[] { 520f, 300f }, 69, 180, 840).SequenceEqual(new[] { 0, 1, 0 }) &&
+              PanelModel.HeroLines(new[] { 520f, 700f }, 69, 180, 840).SequenceEqual(new[] { 0, 1, 0 }) &&     // the second number under, on the whole column
               PanelModel.HeroLines(new[] { 300f }, 69, 0, 840).SequenceEqual(new[] { 0 }),
-              "hero row wraps (0.7, PanelModel.HeroLines): a second number or the skill that does not fit the column goes to the next line, in order; never clipped");
+              "hero row wraps (0.7, PanelModel.HeroLines): a second number that does not fit beside the hero's number and the skill goes to the next line; the skill never takes a line of its own; never clipped");
+        Check(PanelModel.HeroLines(new[] { 470f, 220f }, 69, 180, 900, 100, out small).SequenceEqual(new[] { 0, 0, 0 }) && small &&       // Mining: the numbers fit, the whole skill not: compact, one line
+              PanelModel.HeroLines(new[] { 300f, 200f }, 69, 180, 840, 100, out small).SequenceEqual(new[] { 0, 0, 0 }) && !small &&      // room for the whole skill: whole
+              PanelModel.HeroLines(new[] { 520f, 300f }, 69, 180, 840, 100, out small).SequenceEqual(new[] { 0, 1, 0 }) && !small &&      // compact would not keep one line: whole, the number under
+              PanelModel.HeroLines(new[] { 560f, 200f }, 69, 180, 700, 100, out small).SequenceEqual(new[] { 0, 1, 0 }) && small &&       // a narrow column: compact beside the hero's number
+              PanelModel.HeroLines(new[] { 600f, 200f }, 69, 180, 700, 100, out small).SequenceEqual(new[] { 0, 1, 2 }),                // not even compact beside it: the skill under it all
+              "hero skill (0.8.2): its compact form (name over level) when that keeps the numbers on one line, or when the whole skill does not fit beside the hero's number");
         var shutPlate = PanelModel.PlateOf(shut);
         // B38: the top items in one row: the strip's right end carries the view switch and the About button, reserved first (the titles end in
         // "+N more" before it); too narrow: "Numbers" first, then the feat's note goes; never a second row

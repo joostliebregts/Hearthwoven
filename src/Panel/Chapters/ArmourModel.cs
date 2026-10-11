@@ -8,8 +8,10 @@ namespace Hearthwoven.Panel
     /// Battle > Defence's armour switch (0.7, work/hearthwoven-0.7/ARMOUR-SCOPE.md sections 3-4; review fix: a like-for-like pair): "Received from"
     /// gets a visible view switch, Received (the page as it was, the default: everything that hurt you, falls, drowning, cold, smoke and ticks
     /// too) and Your armour (the armour step alone). Your armour reads the armour ledger (ArmourTally.cs) for BOTH its numbers, before and after
-    /// armour, the same hits; never the damage tally, so it is never summed with or set against Received from. Each damage type is one bar on one scale: solid = what reached you, hollow (the type's colour as an outline) =
-    /// what your armour stopped, together = what hit your armour. Hollow is not faded: faded means "the game's count from before install".
+    /// armour, the same hits; never the damage tally, so it is never summed with or set against Received from. 0.8.1 (Joost: the damage-row
+    /// grammar): a damage row per type, then per foe, on one scale for the page; a type's part is as wide as what reached your armor, filled in its
+    /// colour = what got through, the rest an outline in its colour = what your armor stopped (PanelModel.DamageStoppedTone). The outline is not
+    /// faded: faded means "the game's count from before install".
     /// Yourself only in 0.7 (a fellow shares no armour numbers): on a fellow's book the switch is absent and the page is as before.
     /// </summary>
     public static partial class PanelModel
@@ -18,7 +20,12 @@ namespace Hearthwoven.Panel
         // VOCABULARY.md's allowed heading for damage received after your armour)
         public const string ReceivedView = "What hurt you", ArmourViewLabel = "What your armor stopped";
         public const string ArmourStopped = "stopped by your armor", ArmourByType = "Before and after your armor", ArmourByFoe = "By foe";
-        public const string ArmourKeyReached = "reached you", ArmourKeyStopped = "stopped by your armor";
+        // the key over the type rows (BattleUi.ArmourKey): a whole part, its filled piece, its outlined piece
+        public const string ArmourKeyWhole = "reached your armor", ArmourKeyThrough = "got through", ArmourKeyStopped = "stopped by your armor";
+        /// <summary>The word after a share ("82 % stopped", the view's one bar) and after a hidden stopped number on hover ("6 stopped").</summary>
+        public const string ArmourStoppedWord = "stopped";
+        /// <summary>The view's one bar (Kind "armorbar"): the page's quiet ink, as the key's swatches.</summary>
+        public const string ArmourTotalColour = "#b9a688";
         public const string ArmourPerFoe = "Per foe: choose This session or longer.";
 
         /// <summary>"About these numbers" for the Your armour view, in every window (page-specific; the About page carries the short row).</summary>
@@ -59,8 +66,10 @@ namespace Hearthwoven.Panel
         static string TypeOf(string key) => key.Substring(key.LastIndexOf('|') + 1);
         static string SourceOf(string key) => key.Substring(0, key.IndexOf('|') < 0 ? 0 : key.IndexOf('|'));
 
-        /// <summary>The Your armour view's blocks for a window (null on a fellow's book): the headline, the bar per damage type, the bar per foe
-        /// (when the window has sources); its About these numbers box says how it relates to Received (ArmourNumbers). A window without hits on your armour says so, with the recorded-from date.</summary>
+        /// <summary>The Your armour view's blocks for a window (null on a fellow's book): the type block, which opens with the view's one bar (0.8.1,
+        /// Joost: the summary as one bar, so By foe shows on the first screen; Kind "armorbar": what reached your armor, filled by what got through,
+        /// "82 % stopped" as its label) and has a damage row per damage type; then one row per foe (when the window has sources); the rows on one
+        /// scale, each line the share stopped per type; its About these numbers box says how it relates to Received (ArmourNumbers). A window without hits on your armour says so, with the recorded-from date.</summary>
         public static List<Block> ArmourView(PanelInput input, TimeWindow w)
         {
             var t = ArmourIn(input, w);
@@ -69,49 +78,35 @@ namespace Hearthwoven.Panel
             var before = ArmourTally.Total(t.Before); var after = Math.Min(before, ArmourTally.Total(t.After));
             if (before <= 0) return new List<Block> { ArmourEmpty(input, w) };
             var stopped = before - after;
-            var blocks = new List<Block>
+            var blocks = new List<Block>();
+            var all = Shown(new List<double> { after, stopped });   // got through, stopped: they add up to what reached your armor
+            var bar = new Block
             {
-                new Block { Kind = "stat", Value = N(stopped), Title = ArmourStopped, Text = "of " + N(before) + " that reached your armor · " + N(Math.Round(100 * stopped / before)) + "%", Src = SrcPc, Source = TagMeasured },
+                Kind = "armorbar", Title = ArmourStopped, Value = StoppedShare(all[1], all[0]), Text = ArmourStoppedWord, Src = SrcPc, Source = TagMeasured,
+                Items = new List<Block> { new Block { Kind = "part", Id = "all", Title = "", Colour = ArmourTotalColour, Tone = DamageStoppedTone, Value = all[0], Value2 = all[1],
+                                                      Fraction = 1, Fraction2 = (float)(after / before), Text = StoppedShare(all[1], all[0]) } },
             };
-            // per damage type, on one scale
-            var byType = BattleTypes.Select(ty => (ty, b: t.Before.Where(kv => TypeOf(kv.Key) == ty).Sum(kv => (double)kv.Value), a: t.After.Where(kv => TypeOf(kv.Key) == ty).Sum(kv => (double)kv.Value)))
-                                    .Where(x => x.b > 0).OrderByDescending(x => x.b).ToList();
-            var max = byType.Max(x => x.b);
+            // per damage type, and per foe when the window knows who hit you (the minute buckets keep no source): a foe's types in the book's order,
+            // each with what reached your armor and what got through
+            double Of(Dictionary<string, float> d, string source, string ty) => d.Where(kv => TypeOf(kv.Key) == ty && (source == null || SourceOf(kv.Key) == source)).Sum(kv => (double)kv.Value);
+            var byType = BattleTypes.Select(ty => (ty, b: Of(t.Before, null, ty), a: Of(t.After, null, ty))).Where(x => x.b > 0).OrderByDescending(x => x.b).ToList();
+            var foes = t.Before.Keys.Select(SourceOf).Where(s => s.Length > 0).Distinct()
+                .Select(s => (s, types: BattleTypes.Select(ty => (ty, before: Of(t.Before, s, ty), after: Of(t.After, s, ty))).Where(x => x.before > 0 || x.after > 0).ToList()))
+                .Select(x => (x.s, x.types, b: x.types.Sum(y => y.before))).Where(x => x.b > 0)
+                .OrderByDescending(x => x.b).ThenBy(x => x.s, StringComparer.Ordinal).Take(RowTop).ToList();
+            // one scale for the page (the damage-row grammar): the largest row of either list fills the track
+            var max = byType.Select(x => x.b).Concat(foes.Select(x => x.types.Sum(y => Math.Max(y.before, y.after)))).Max();
             blocks.Add(new Block
             {
                 Kind = "armour", Title = ArmourByType, Text = from, Tone = "key", Src = SrcPc, Source = TagMeasured,
-                Items = byType.Select(x => ArmourRow(x.ty, DamageIcon(x.ty), TypeName(x.ty), DamageColour(x.ty), x.b, Math.Min(x.b, x.a), max,
-                                                      new List<Block> { new Block { Kind = "part", Id = x.ty, Colour = DamageColour(x.ty), Fraction = 1f } })).ToList(),
+                Items = new[] { bar }.Concat(byType.Select(x => ArmourRow(x.ty, DamageIcon(x.ty), TypeName(x.ty), DamageColour(x.ty), "type", max, new List<(string, double, double)> { (x.ty, x.b, x.a) }))).ToList(),
             });
-            // per foe, when the window knows who hit you (the minute buckets keep no source)
-            var foes = t.Before.Keys.Select(SourceOf).Where(s => s.Length > 0).Distinct()
-                .Select(s => (s, b: t.Before.Where(kv => SourceOf(kv.Key) == s).Sum(kv => (double)kv.Value),
-                                 types: t.After.Where(kv => SourceOf(kv.Key) == s).GroupBy(kv => TypeOf(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => (double)kv.Value)),
-                                 typesBefore: t.Before.Where(kv => SourceOf(kv.Key) == s).GroupBy(kv => TypeOf(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => (double)kv.Value))))
-                .Where(x => x.b > 0).OrderByDescending(x => x.b).ThenBy(x => x.s, StringComparer.Ordinal).Take(RowTop).ToList();
             if (foes.Count > 0)
-            {
-                var fmax = foes.Max(x => x.b);
                 blocks.Add(new Block
                 {
                     Kind = "armour", Title = ArmourByFoe, Src = SrcPc, Source = TagMeasured,
-                    Items = foes.Select(x =>
-                    {
-                        var a = Math.Min(x.b, x.types.Values.Sum());
-                        // ISC-22: per damage type what your armour stopped of what hit it (Value of Value2), as the hero reads (REVIEW-07 #3: one
-                        // meaning for "X of Y" on the page), each list adding up to the row's numbers; a type that got through whole reads "0 of 12"
-                        var used = BattleTypes.Where(ty => Get(x.typesBefore, ty) > 0 || Get(x.types, ty) > 0).ToList();
-                        var stoppedBy = Shown(used.Select(ty => Math.Max(0, Get(x.typesBefore, ty) - Get(x.types, ty))).ToList());
-                        var before = Shown(used.Select(ty => Math.Max(Get(x.typesBefore, ty), Get(x.types, ty))).ToList());
-                        var parts = used.Select((ty, k) => new Block
-                        {
-                            Kind = "part", Id = ty, Icon = DamageIcon(ty), Title = TypeName(ty), Colour = DamageColour(ty), Value = stoppedBy[k], Value2 = before[k],
-                            Fraction = a > 0 ? (float)(Get(x.types, ty) / a) : 0,
-                        }).ToList();
-                        return ArmourRow(x.s, FoeIcon(input, x.s), Who(input, x.s), ArmourOutline, x.b, a, fmax, parts);
-                    }).ToList(),
+                    Items = foes.Select(x => ArmourRow(x.s, FoeIcon(input, x.s), Who(input, x.s), null, null, max, x.types)).ToList(),
                 });
-            }
             else if (IsShortWindow(w) && w != TimeWindow.Session) blocks.Add(new Block { Kind = "note", Text = ArmourPerFoe });
             // All: these numbers are the armour ledger's, which starts at its own date (not the install): the label says that date (rule A/C, DateFrom)
             if (w == TimeWindow.SinceInstall) foreach (var b in blocks) DateFrom(b, input.ArmourFromUtc ?? input.SessionStartUtc ?? input.NowUtc);
@@ -129,16 +124,48 @@ namespace Hearthwoven.Panel
                          "Counted from " + RecordDate(input, from) + (input.ArmourFromUtc.HasValue ? ", when this version of Hearthwoven first ran" : "") + ". A foe's hit on your armor shows up here.");
         }
 
-        /// <summary>The outline of the stopped part on a foe's row (its solid part is stacked by type): the page's quiet ink.</summary>
-        public const string ArmourOutline = "#b3aea4";
-
-        static Block ArmourRow(string id, string icon, string title, string colour, double before, double after, double max, List<Block> parts) => new Block
+        /// <summary>A damage row of the view (Kind "armourrow", the id saved state knows): its number is what reached your armor (the bar's total,
+        /// as every damage row's number), Fraction that against the page's largest row. A part per damage type (PanelModel.DamageStoppedTone) as
+        /// wide as what reached your armor, filled by what got through (Value, Fraction2 of the part), the rest what your armor stopped (Value2).
+        /// The shown amounts are rounded together (Shown), so a part's two numbers add up and the parts add up to the row. Its line is the share
+        /// stopped only ("Poison 20 %", Text; 0.8.1, Joost: on this view the share matters more than the amount, and the numbers are in the bar),
+        /// so "my armor stops blunt better than pierce" reads at a glance; unlike the other damage rows, whose % is the part's share of the row.</summary>
+        static Block ArmourRow(string id, string icon, string title, string colour, string tone, double max, List<(string ty, double before, double after)> types)
         {
-            // the number is what your armour stopped of what hit it ("124 of 295"), as the hero above ("296 stopped by your armour, of 868"):
-            // one meaning for "X of Y" on the page (REVIEW-07 #3); the bar still shows both, solid = reached you, hollow = stopped
-            Kind = "armourrow", Id = id, Icon = icon, Title = title, Colour = colour, Value = N(before - after), Value2 = N(before),
-            Fraction = max > 0 ? (float)(after / max) : 0, Fraction2 = max > 0 ? (float)(before / max) : 0, Src = SrcPc, Source = TagMeasured, Items = parts,
-        };
+            var reached = types.Select(x => Math.Max(x.before, x.after)).ToList();
+            var got = types.Select((x, k) => Math.Min(Math.Max(0, x.after), reached[k])).ToList();
+            var shown = Shown(types.SelectMany((x, k) => new[] { got[k], reached[k] - got[k] }).ToList());
+            var parts = types.Select((x, k) =>
+            {
+                string through = shown[2 * k], stopped = shown[2 * k + 1];
+                return new Block
+                {
+                    Kind = "part", Id = x.ty, Icon = DamageIcon(x.ty), Title = TypeName(x.ty), Colour = DamageColour(x.ty), Tone = DamageStoppedTone,
+                    Value = through, Value2 = stopped, Fraction = (float)reached[k], Fraction2 = reached[k] > 0 ? (float)(got[k] / reached[k]) : 0,
+                    Text = StoppedShare(stopped, through),
+                };
+            }).ToList();
+            var total = reached.Sum();
+            return new Block
+            {
+                Kind = "armourrow", Id = id, Icon = icon, Title = title, Colour = colour, Tone = tone, Value = NAtLeast(total),
+                Fraction = max > 0 ? (float)(total / max) : 0, Src = SrcPc, Source = TagMeasured, Items = parts,
+            };
+        }
+
+        /// <summary>What your armor stopped of what reached it, in whole percent ("73 %"), from the two shown amounts (stopped, got through) so it
+        /// agrees with the numbers in the bar: never 100 % while something got through, "&lt;1 %" for a little, never 0 % for a real amount.</summary>
+        static string StoppedShare(string stopped, string through)
+        {
+            double s = ShownWhole(stopped), r = s + ShownWhole(through);
+            var p = r > 0 ? Math.Round(100 * s / r) : 0;
+            if (p >= 100 && (through ?? "0") != "0") p = 99;
+            else if (p <= 0 && (stopped ?? "0") != "0") return UnderOnePercent;
+            return N(p) + " %";
+        }
+
+        // a shown amount ("1 040", "<1": nothing whole) as a number
+        static double ShownWhole(string v) => v == LessThanOne || string.IsNullOrEmpty(v) ? 0 : ParseCount(v);
 
         /// <summary>
         /// Defence's received block becomes a view switch (Battle calls this after BattleDefense): Received = the "Received from" block exactly as

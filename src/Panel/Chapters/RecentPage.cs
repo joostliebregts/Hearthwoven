@@ -14,11 +14,12 @@ namespace Hearthwoven.Panel
     /// chip turns the page into the group's (it had its own You / The group switch before): off, your own gains (or the fellow's on their book);
     /// on, the group.
     ///   You: what grew in the window, family by family in a fixed order (Brought in, Made, Built, Groundwork, Planted, Trees felled, Foes
-    ///   defeated), each a strip of picture + "+N" + name, biggest first, the top RecentTop and "+N more"; the skills practised as small
+    ///   defeated), each a strip of picture + "+N" + name, biggest first, the top RecentTop and "+N more" (0.8.2: a click on it shows every
+    ///   kind, the book's Show all for this visit, ShowAllTarget); the skills practised as small
     ///   "+" chips. A family the window cannot tell is said once in plain words (never 0). Nothing grew: one calm line.
     ///   The group (Everyone on): one row per player who shares, you first, then the others by name (the Everyone pages' order: never a
     ///   ranking of people), each with up to GroupTop gains (GroupGains: every family that grew, then the next largest), and "+N more"
-    ///   when more grew. A fellow counts only inside YOUR session (B33): what reached this PC from them while you played; a window that
+    ///   when more grew (a click: every gain, Show all). A fellow counts only inside YOUR session (B33): what reached this PC from them while you played; a window that
     ///   cannot be told for them says "Not recorded" (or "not on this session"), muted, and RecentOfFellow's Why line stands once under the
     ///   rows (the header-space rule, FEEDBACK 13b: no loose text above the numbers).
     /// A window is its own label (rule W.1): no "Recorded from" inside it (Build sets Windowed); the heading carries the window.
@@ -67,9 +68,9 @@ namespace Hearthwoven.Panel
             {
                 view.EveryoneOn = true;
                 var group = new List<PanelInput> { input }.Concat(fellows.OrderBy(p => Name(p), StringComparer.OrdinalIgnoreCase)).ToList();   // you first, then by name
-                RecentGroupBlocks(input, group, w, view);
+                RecentGroupBlocks(input, group, w, view, ShowingAll(state));
             }
-            else RecentYouBlocks(input, w, view);
+            else RecentYouBlocks(input, w, view, ShowingAll(state));
             if (input.IsSelf)   // its own labels (RecordedModel's "On this PC" does not fit a page about you and the others); the others' only when they show
             {
                 var lines = new List<Block> { new Block { Kind = "aboutline", Title = AboutYouLabel, Text = AboutYou } };
@@ -140,8 +141,9 @@ namespace Hearthwoven.Panel
             fam == "felled" ? key : fam == "foes" && key == KillsTotal ? "foes" : Who(input, key);
 
         /// <summary>The You view: the families that grew, each a section with its sum and a strip of its largest kinds.</summary>
-        static void RecentYouBlocks(PanelInput input, TimeWindow w, PanelView v)
+        static void RecentYouBlocks(PanelInput input, TimeWindow w, PanelView v, bool all = false)
         {
+            var top = all ? int.MaxValue : RecentTop;   // Show all pressed on this visit: every kind
             var r = RecentOf(input, w);
             if (!r.Shown) { v.Blocks.Add(Empty(r.Why)); return; }
             var parts = RecentParts(input, r);
@@ -162,16 +164,17 @@ namespace Hearthwoven.Panel
                 v.Blocks.Add(new Block
                 {
                     Kind = "strip", Src = src, Source = TagOfSrc(src),
-                    Items = list.Take(RecentTop).Select(kv => new Block { Kind = "item", Id = kv.Key, Icon = RecentIconOf(input, id, kv.Key), Title = RecentNameOf(input, id, kv.Key), Value = Plus(kv.Value), Src = src, Source = TagOfSrc(src) }).ToList(),
-                    Note = list.Count > RecentTop ? RecentMore(list.Count - RecentTop) : id == "foes" && list.Any(kv => kv.Key == KillsTotal) ? RecentFoesNoDays : null,
+                    Items = list.Take(top).Select(kv => new Block { Kind = "item", Id = kv.Key, Icon = RecentIconOf(input, id, kv.Key), Title = RecentNameOf(input, id, kv.Key), Value = Plus(kv.Value), Src = src, Source = TagOfSrc(src) }).ToList(),
+                    Note = list.Count > top ? RecentMore(list.Count - top) : id == "foes" && list.Any(kv => kv.Key == KillsTotal) ? RecentFoesNoDays : null,
+                    NoteLink = list.Count > top ? ShowAllTarget : null,
                 });
             }
             if (skills.Count > 0)
             {
                 v.Blocks.Add(new Block { Kind = "section", Title = "Practiced" });
                 // small "+" chips: practice has no unit a player reads (the Skills pages show the levels), so the chip says only that it grew
-                v.Blocks.Add(new Block { Kind = "strip", Items = skills.Take(RecentTop).Select(kv => new Block { Kind = "item", Id = Chapter.Skills + "/" + kv.Key, Icon = "skill:" + kv.Key, Title = SkillName(input, kv.Key), Value = "+" }).ToList(),
-                                         Note = skills.Count > RecentTop ? RecentMore(skills.Count - RecentTop) : null });
+                v.Blocks.Add(new Block { Kind = "strip", Items = skills.Take(top).Select(kv => new Block { Kind = "item", Id = Chapter.Skills + "/" + kv.Key, Icon = "skill:" + kv.Key, Title = SkillName(input, kv.Key), Value = "+" }).ToList(),
+                                         Note = skills.Count > top ? RecentMore(skills.Count - top) : null, NoteLink = skills.Count > top ? ShowAllTarget : null });
             }
             if (r.Clipped) v.Blocks.Add(new Block { Kind = "note", Text = RecentClippedLine });
             RecentNotRecorded(input, r, v);
@@ -204,7 +207,7 @@ namespace Hearthwoven.Panel
         /// "+N more" (Note) when more grew. A fellow in a window they do not share: "Not recorded" (muted, never 0) and their Why line once
         /// under the rows, never above the numbers (FEEDBACK 13b).
         /// </summary>
-        static void RecentGroupBlocks(PanelInput input, List<PanelInput> group, TimeWindow w, PanelView v)
+        static void RecentGroupBlocks(PanelInput input, List<PanelInput> group, TimeWindow w, PanelView v, bool all = false)
         {
             var rows = new List<Block>(); var why = new List<string>(); var fellowsShown = false;
             foreach (var p in group)
@@ -220,10 +223,10 @@ namespace Hearthwoven.Panel
                 {
                     if (!p.IsSelf) fellowsShown = true;
                     var src = p.IsSelf ? SrcPc : SrcFellows;
-                    var (gains, more) = GroupGains(RecentParts(p, r));
+                    var (gains, more) = GroupGains(RecentParts(p, r), all ? int.MaxValue : GroupTop);
                     foreach (var (id, key, amount) in gains)
                         row.Items.Add(new Block { Kind = "item", Id = key, Icon = RecentIconOf(p, id, key), Title = RecentNameOf(p, id, key), Value = Plus(amount), Src = src, Source = TagOfSrc(src) });
-                    if (more > 0) row.Note = RecentMore(more);
+                    if (more > 0) { row.Note = RecentMore(more); row.NoteLink = ShowAllTarget; }   // a click shows every gain (Show all, this visit)
                     if (row.Items.Count == 0) row.Items.Add(new Block { Kind = "item", Title = RecentRowNothing, Tone = "quiet" });
                 }
                 rows.Add(row);
@@ -235,13 +238,14 @@ namespace Hearthwoven.Panel
 
         /// <summary>
         /// A player's gains on The group: the largest of each family first, so every family that grew shows (Brought in, Made, ...), then the
-        /// next largest of any family, at most GroupTop; shown in the families' order, largest first inside one. more = the gains left out.
+        /// next largest of any family, at most <paramref name="top"/> (GroupTop; every one after Show all); shown in the families' order, largest
+        /// first inside one. more = the gains left out.
         /// </summary>
-        static (List<(string fam, string key, double amount)> shown, int more) GroupGains(Dictionary<string, Dictionary<string, double>> parts)
+        static (List<(string fam, string key, double amount)> shown, int more) GroupGains(Dictionary<string, Dictionary<string, double>> parts, int top)
         {
             var all = RecentFamilies.SelectMany((f, at) => parts[f.id].OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal)
                                                                       .Select((kv, rank) => (at, rank, fam: f.id, key: kv.Key, amount: kv.Value))).ToList();
-            var chosen = all.Where(x => x.rank == 0).Concat(all.Where(x => x.rank > 0).OrderByDescending(x => x.amount).ThenBy(x => x.at).ThenBy(x => x.rank)).Take(GroupTop).ToList();
+            var chosen = all.Where(x => x.rank == 0).Concat(all.Where(x => x.rank > 0).OrderByDescending(x => x.amount).ThenBy(x => x.at).ThenBy(x => x.rank)).Take(top).ToList();
             return (chosen.OrderBy(x => x.at).ThenBy(x => x.rank).Select(x => (x.fam, x.key, x.amount)).ToList(), all.Count - chosen.Count);
         }
     }

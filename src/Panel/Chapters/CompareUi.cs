@@ -18,7 +18,8 @@ namespace Hearthwoven.Panel
     public partial class PanelUi
     {
         static readonly Color BeforeInk = new Color(0.541f, 0.486f, 0.4f);              // #8a7c66: the period before, faded (PICKS B)
-        static readonly Color OutlineInk = new Color(0.914f, 0.863f, 0.769f, 0.75f);     // the period before's outline: cream at 75 %
+        // the period before's outline: a 1 px trace in the row's own colour at 55 % (0.8.1, Joost: the cream 2 px outline led over the bar now)
+        const float TraceAlpha = 0.55f;
         static readonly Color TagGround = new Color(0.035f, 0.027f, 0.02f, 0.98f), TagEdge = new Color(0.541f, 0.416f, 0.243f);
         const float CmpRow = 34, CmpHead = 22, CmpTrack = 18, CmpTagWidth = 360;
 
@@ -75,28 +76,29 @@ namespace Hearthwoven.Panel
             return line;
         }
 
-        /// <summary>The hero's number before: the change mark over the number before (faded) and what it is ("the 7 days before"), 22 px after the
-        /// number's words (PICKS B: 20 px mark, 34 px number; a second or compact number smaller).</summary>
+        /// <summary>The hero's number before as one line 22 px after the number's words, on their baseline (Joost, 0.8.1: "new" sat over "0
+        /// yesterday" like a label): "▲ 12 % from 86 yesterday", "0 yesterday · new" (PanelModel.HeroCompare), in the text colour, the mark bold;
+        /// 20 px beside the hero's own number, 16 beside a second one.</summary>
         static void HeroBefore(RectTransform group, Block n, float size)
         {
             var lead = size >= HeroSize; var second = !lead && size >= HeroSecond;   // the hero's own number, or a number beside it (0.8 layout D+: 67 and 43 px)
-            float mark = lead ? 20 : 15, num = lead ? 34 : second ? 26 : 20, words = lead || second ? 15 : 14;
-            var stack = VStack(group, 4);   // 14 px after the words (the group's spacing) and 8 more: 22 px
-            var v = stack.GetComponent<VerticalLayoutGroup>(); v.childForceExpandWidth = false; v.childAlignment = TextAnchor.LowerLeft;
-            v.padding = new RectOffset(8, 0, 0, Mathf.RoundToInt((size - num) * 0.12f));
-            ChangeMarkUi(stack, n.Change, mark, PanelLook.Text, FontStyles.Bold);
-            var line = Line(stack, 8, TextAnchor.LowerLeft);
-            Label(line, n.Before, num, BeforeInk, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
-            if (!string.IsNullOrEmpty(n.BeforeLabel)) Label(line, n.BeforeLabel, words, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            float s = lead ? 20 : second ? 16 : 14;
+            var line = CompareLineUi(group, n, s);   // 14 px after the words (the group's spacing) and 8 more: 22 px
+            line.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(8, 0, 0, Mathf.RoundToInt((size - s) * 0.22f));
         }
 
-        /// <summary>The number before as a line of its own under a hero whose words fill the row (Together): mark, number before, what it is.</summary>
-        static void HeroBeforeLine(RectTransform col, Block n)
+        /// <summary>The number before as a line of its own under a hero whose words fill the row (Together), worded as HeroBefore.</summary>
+        static void HeroBeforeLine(RectTransform col, Block n) => CompareLineUi(col, n, 20);
+
+        // the comparison's one line: the mark first for a change, after the number before for "new" and "same"
+        static RectTransform CompareLineUi(RectTransform parent, Block n, float s)
         {
-            var line = Line(col, 10, TextAnchor.LowerLeft);
-            ChangeMarkUi(line, n.Change, 20, PanelLook.Text, FontStyles.Bold);
-            Label(line, n.Before, 34, BeforeInk, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
-            if (!string.IsNullOrEmpty(n.BeforeLabel)) Label(line, n.BeforeLabel, 15, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+            var (markFirst, words) = PanelModel.HeroCompare(n);
+            var line = Line(parent, Mathf.Round(s * 0.3f), TextAnchor.LowerLeft);
+            if (markFirst) ChangeMarkUi(line, n.Change, s, PanelLook.Text, FontStyles.Bold);
+            Label(line, words, s, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
+            if (!markFirst) ChangeMarkUi(line, n.Change, s, PanelLook.Text, FontStyles.Bold);
+            return line;
         }
 
         /// <summary>A cap's comparison after its total, in the qualifier's quiet type: "▼ 30 %, 910 the 7 days before".</summary>
@@ -129,7 +131,7 @@ namespace Hearthwoven.Panel
 
         /// <summary>
         /// The bar form in compare mode (kind "comparerows"): the cap as a composition's (title, total, its change, its qualifier), a header row
-        /// (the block's own words on the left, "now" and "before" over their columns, a rule under it), then one 34 px row per part: picture and
+        /// (the block's own words on the left, the two periods named over their columns, a rule under it), then one 34 px row per part: picture and
         /// name, the track with this period solid (radius 4, inset 2 px) and the period before as an outline at its length, both on the block's
         /// one scale (Fraction, Fraction2), now 17 bold, before 15 faded, the change 15 muted. Columns 150 / track / 64 / 64 / 82, 14 apart,
         /// each wider when its words need it (a long name up to 200, "1 hour 1 min"); in a half-width column 110 / track / 54 / 54 / 72, 10 apart.
@@ -156,17 +158,19 @@ namespace Hearthwoven.Panel
             var nows = rows.Select(r => { var t = Label(box, r.Value ?? "", 17, PanelLook.Text, align: TextAlignmentOptions.MidlineRight, style: FontStyles.Bold); t.textWrappingMode = TextWrappingModes.NoWrap; return t; }).ToList();
             var befores = rows.Select(r => { var t = Label(box, r.Before ?? "", 15, BeforeInk, align: TextAlignmentOptions.MidlineRight); t.textWrappingMode = TextWrappingModes.NoWrap; return t; }).ToList();
             var marks = rows.Select(r => string.IsNullOrEmpty(r.Change) ? null : ChangeMarkUi(box, r.Change, 15, PanelLook.Muted)).ToList();
+            // the column heads name the periods ("today" and "yesterday", "these 7 days" and "the 7 before"; 0.8.1): a column is as wide as its head too
+            var hn = Label(box, b.NowHead ?? "", 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight); hn.textWrappingMode = TextWrappingModes.NoWrap;
+            var hb = Label(box, b.BeforeHead ?? "", 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight); hb.textWrappingMode = TextWrappingModes.NoWrap;
             float MarkW(RectTransform m) { if (!m) return 0; LayoutRebuilder.ForceRebuildLayoutImmediate(m); return Mathf.Ceil(LayoutUtility.GetPreferredWidth(m)); }
             var nameW = Mathf.Min(nameMax, Mathf.Max(nameMin, 30 + names.Max(t => Mathf.Ceil(t.preferredWidth))));
-            var nowW = Mathf.Max(narrow ? 54 : 64, nows.Max(t => Mathf.Ceil(t.preferredWidth)));
-            var beforeW = Mathf.Max(narrow ? 54 : 64, befores.Max(t => Mathf.Ceil(t.preferredWidth)));
+            var nowW = Mathf.Max(narrow ? 54 : 64, Mathf.Max(Mathf.Ceil(hn.preferredWidth) + 2, nows.Max(t => Mathf.Ceil(t.preferredWidth))));
+            var beforeW = Mathf.Max(narrow ? 54 : 64, Mathf.Max(Mathf.Ceil(hb.preferredWidth) + 2, befores.Max(t => Mathf.Ceil(t.preferredWidth))));
             var changeW = Mathf.Max(narrow ? 72 : 82, marks.Max(MarkW));
             var trackX = nameW + gap; var trackW = Mathf.Max(40, Column - nameW - nowW - beforeW - changeW - 4 * gap);
             float nowX = trackX + trackW + gap, beforeX = nowX + nowW + gap, changeX = beforeX + beforeW + gap;
             // the header row
             if (!string.IsNullOrEmpty(b.Text)) { var h = Label(box, b.Text, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); h.characterSpacing = 6; h.textWrappingMode = TextWrappingModes.NoWrap; h.rectTransform.Box(0, 0, trackX + trackW, CmpHead); }
-            var hn = Label(box, PanelModel.CompareNowHead, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight); hn.rectTransform.Box(nowX, 0, nowW, CmpHead);
-            var hb = Label(box, PanelModel.CompareBeforeHead, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight); hb.rectTransform.Box(beforeX, 0, beforeW, CmpHead);
+            hn.rectTransform.Box(nowX, 0, nowW, CmpHead); hb.rectTransform.Box(beforeX, 0, beforeW, CmpHead);
             Img(box, "Rule", null, PanelLook.Rule).rectTransform.Box(0, CmpHead, Column, 1);
             for (int k = 0; k < rows.Count; k++)
             {
@@ -179,9 +183,9 @@ namespace Hearthwoven.Panel
                     var solid = RoundedPart(box, "Now", colour); solid.rectTransform.Box(trackX, mid - CmpTrack / 2 + 2, Mathf.Max(4, r.Fraction * trackW), CmpTrack - 4);
                     if (PartGrain(r) is string g) Grain(solid, g, r);
                 }
-                if (r.Fraction2 > 0 && PanelLook.RoundedEdge)
+                if (r.Fraction2 > 0 && PanelLook.RoundedTrace)
                 {
-                    var o = Img(box, "Before", PanelLook.RoundedEdge, OutlineInk); o.preserveAspect = false; o.type = Image.Type.Sliced; o.pixelsPerUnitMultiplier = 1f;
+                    var o = Img(box, "Before", PanelLook.RoundedTrace, new Color(colour.r, colour.g, colour.b, TraceAlpha)); o.preserveAspect = false; o.type = Image.Type.Sliced; o.pixelsPerUnitMultiplier = 1f;
                     o.rectTransform.Box(trackX, mid - CmpTrack / 2 - 1, Mathf.Max(8, r.Fraction2 * trackW), CmpTrack + 2);
                 }
                 nows[k].rectTransform.Box(nowX, top, nowW, CmpRow);

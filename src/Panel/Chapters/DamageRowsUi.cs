@@ -15,13 +15,13 @@ namespace Hearthwoven.Panel
     /// bar a thin line at the true length from zero (gold for damage dealt, quiet for damage received: gold means dealt in this chapter),
     /// then one line of the parts with their share of the row ("Slash 33 %"; By type's weapon kinds with their icon). The outcome marks under the
     /// name (Damage > By foe, Last fight). The rows of Damage's three views (By weapon, By type, By foe), Defence's Received from and Last fight's
-    /// foes (0.8, Joost: one grammar for them all).
-    /// Pointing at a part rings it and lights its share (HoverUi.cs); a part too narrow for its number shows the number there instead of its
-    /// share. Laid out once per fill in fixed rows, nothing per frame. Mirrored by dmgRows() in preview/panel-preview.html.
+    /// foes (0.8, Joost: one grammar for them all), and Defense's What your armor stopped (0.8.1: its parts outlined, StoppedPart).
+    /// Pointing at any part rings it and lights its share, whose words swap for the part's name and number (HoverUi.cs; 0.8.2: every part, not
+    /// only one too narrow for its number). Laid out once per fill in fixed rows, nothing per frame. Mirrored by dmgRows() in preview/panel-preview.html.
     /// </summary>
     public partial class PanelUi
     {
-        const float DrWho = 200, DrWhoMax = 230, DrNum = 64, DrCol = 12, DrNameX = 30, DrName = 17, DrDigits = 13, DrInsidePad = 6, DrSwatch = 10, DrKeyIcon = 14, DrSwatchGap = 5, DrEntryGap = 14, DrLineGap = 4, DrNoteH = 18;
+        const float DrWho = 200, DrWhoMax = 230, DrNum = 64, DrCol = 12, DrNameX = 30, DrName = 17, DrDigits = 13, DrInsidePad = 6, DrSwatch = 10, DrKeyIcon = 14, DrSwatchGap = 5, DrEntryGap = 14, DrLineGap = 4, DrNoteH = 18, DrFillMin = 3;
         static readonly Color DrTrack = new Color(1f, 0.941f, 0.824f, 0.05f), DrTrueDealt = new Color(0.91f, 0.761f, 0.478f, 0.8f), DrTrueReceived = new Color(0.725f, 0.651f, 0.533f, 0.8f);
 
         /// <summary>The rows of one list: <paramref name="rows"/> carry Title, Value (the total), Value2 (the "×N" or null), Icon (or Tone "type"
@@ -63,6 +63,31 @@ namespace Hearthwoven.Panel
             if (Mathf.Ceil(t.preferredWidth) + DrInsidePad <= partW) return true;
             t.gameObject.SetActive(false); Destroy(t.gameObject);
             return false;
+        }
+
+        /// <summary>A part drawn as what reached your armor (PanelModel.DamageStoppedTone; Defense's What your armor stopped): an outline in its
+        /// colour round the whole part, filled from the left by what got through (at least DrFillMin of each where both have an amount); the
+        /// got-through number in the fill (its ink on the colour), the stopped number in the outline (the colour lifted to read on the track).
+        /// Returns which numbers did not fit: the part's entry shows them on hover ("Pierce 12 got through", "Pierce 6 stopped"; its line holds
+        /// only the share stopped). A piece without an amount draws no number.</summary>
+        static (bool through, bool stopped) StoppedPart(Transform seg, BarRow row, float w, Color c)
+        {
+            BtHollow((RectTransform)seg, c, 0, 0, w, PanelModel.DamageBar);
+            var f = Mathf.Clamp01(row.Part.Fraction2);
+            var fw = f <= 0 ? 0 : f >= 1 ? w : Mathf.Clamp(w * f, Mathf.Min(DrFillMin, w / 2), w - Mathf.Min(DrFillMin, w / 2));
+            bool Some(string v) => !string.IsNullOrEmpty(v) && v != "0";
+            bool through = false, stopped = false;
+            if (fw > 0)
+            {
+                var fill = RoundedPart(seg, "Fill", c); fill.pixelsPerUnitMultiplier = DrRadiusScale; fill.rectTransform.Box(0, 0, fw, PanelModel.DamageBar);
+                if (Some(row.Value)) through = !BarDigits(fill.transform, row.Value, fw, SegmentInk(c));
+            }
+            if (w - fw > 0 && Some(row.Part.Value2))
+            {
+                var rest = Node("Stopped", seg); rest.Box(fw, 0, w - fw, PanelModel.DamageBar);
+                stopped = !BarDigits(rest, row.Part.Value2, w - fw - BtArmLine, Legible(c));
+            }
+            return (through, stopped);
         }
 
         // the name column (REVIEW-081 #7): as wide as the list's widest picture, name and "×N" ("Greydwarf Shaman ×3"), DrWho at least and DrWhoMax at
@@ -149,9 +174,45 @@ namespace Hearthwoven.Panel
             Size(r, -1, h);
         }
 
+        /// <summary>The page's one hover tag ("Frost 37", "Edda 350"; HoverTag): made with the first bar of this drawing that needs it, hidden, out of
+        /// the page's layout, in the page's content (Fill draws it last, over every block); pointing at a part of a bar no share entry keys sets
+        /// its words and moves it over the part (BarHover.TagOver: centred on the part, or from a start, kept inside the bar's room). 0.8.2: one
+        /// for the page, never one per part (two objects a part at about 58 µs an object, the 0.8.1 bench).</summary>
+        static HoverTag pageTag; static RectTransform pageTagHome;
+        static HoverTag PageTag(RectTransform near)
+        {
+            if (pageTag != null && pageTag.Ground) return pageTag;
+            var home = pageTagHome ? pageTagHome : near;
+            var tag = RoundedPart(home, "Tip", PlateColour); tag.raycastTarget = false;
+            tag.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            tag.rectTransform.Box(0, 0, 2 * HoverTag.Pad, PanelModel.DamageBar + HoverTag.Rise);
+            var t = Label(tag.transform, "", PanelLook.MinText, BarHover.LitText, style: FontStyles.Bold, align: TextAlignmentOptions.Center);
+            t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Stretch();
+            tag.gameObject.SetActive(false);
+            return pageTag = new HoverTag { Ground = tag, Text = t };
+        }
+
+        /// <summary>A drawing of the page starts: its tag is made again with its first bar that needs one (Clear took the last).</summary>
+        static void NewPageTag(RectTransform home) { pageTag = null; pageTagHome = home; }
+
+        /// <summary>The page drawn: its tag over every block.</summary>
+        static void PageTagOnTop() { if (pageTag != null && pageTag.Ground && pageTag.Ground.transform.parent == pageTagHome) pageTag.Ground.transform.SetAsLastSibling(); }
+
+        /// <summary>A damage bar's hover ring (BarHover): one per bar, over its parts (drawn after them in <paramref name="parent"/>), clear until a
+        /// part is pointed at.</summary>
+        static void HoverRing(RectTransform parent, BarHover hover)
+        {
+            var ring = PanelLook.Vocab("focus-ring") ? VocabImg(parent, "Hover", "focus-ring", Color.clear) : Img(parent, "Hover", PanelLook.RoundedEdge, Color.clear);
+            if (ring.sprite == PanelLook.RoundedEdge) { ring.preserveAspect = false; ring.type = Image.Type.Sliced; ring.pixelsPerUnitMultiplier = 1f; }
+            ring.raycastTarget = false; hover.RingImage = ring;
+        }
+
         // the track, the bar with its parts, the true line and the share line; returns the height they take
         // mix: a player's damage by type for the line under their one-part bar (its entries key no part: no hover, no swap); null = the line keys the parts.
-        // shares false (the feed's Log, one line a hit): no share line; a part too narrow for its number shows it in a small tag over the bar on hover
+        // shares false (the feed's Log, one line a hit): no share line.
+        // 0.8.2 (Joost in game): pointing at ANY part shows its name and number (PanelModel.DamageHoverWords): its share entry's words swap to them,
+        // or, where no entry keys it (no share line, a player's line), the page's one tag says them over the bar; a number that fits stays inside
+        // the part too. No object per part for it (0.8.1's speed): the parts are the pointer targets, the entry keeps its one label
         static float DamageBar(RectTransform r, BarForm form, BarForm mix, float fraction, bool dealt, float x0, float trackW, bool shares = true)
         {
             int n = form.Rows.Count;
@@ -162,57 +223,43 @@ namespace Hearthwoven.Panel
             // the parts on the bar's own width plus one gap (the first starts at the bar's start, the last ends at its end), each at least DamagePartMin wide
             var span = barW + PanelModel.DamageGap;
             var spans = PanelModel.BarParts(form.Rows.Select(x => x.Fraction).ToArray(), null, (PanelModel.DamagePartMin + PanelModel.DamageGap) / span);
-            var swap = new bool[n]; var at = new (float x, float w)[n];
+            var mid = new float[n];   // each part's middle in the bar's x (where the page's tag centres on it)
+            var hoverWords = form.Rows.Select(PanelModel.DamageHoverWords).ToArray();   // what pointing at each part shows (every part, 0.8.2)
             for (int k = 0; k < n; k++)
             {
-                var row = form.Rows[k]; var c = Hex(row.Colour, PanelLook.Accent);
-                var seg = RoundedPart(bar, "Part", c, raycast: true); seg.pixelsPerUnitMultiplier = DrRadiusScale;
+                var row = form.Rows[k]; var c = Hex(row.Colour, PanelLook.Accent); var stopped = PanelModel.IsStoppedPart(row);
+                var seg = RoundedPart(bar, "Part", stopped ? Color.clear : c, raycast: true); seg.pixelsPerUnitMultiplier = DrRadiusScale;
                 var w = Mathf.Max(1f, (spans[k].to - spans[k].from) * span - PanelModel.DamageGap);
-                seg.rectTransform.Box(spans[k].from * span, 0, w, PanelModel.DamageBar); at[k] = (spans[k].from * span, w);
+                seg.rectTransform.Box(spans[k].from * span, 0, w, PanelModel.DamageBar); mid[k] = spans[k].from * span + w / 2;
                 hover.Parts[k] = seg.rectTransform; var hp = seg.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = k;
-                if (string.IsNullOrEmpty(row.Value)) continue;
-                if (row.Other) { swap[k] = true; continue; }   // the folded rest carries no number inside; pointing at it shows it
-                // the number inside the part where it fits at the book's floor, in the ink that reads on the colour; else in its share's place on hover
-                if (!BarDigits(seg.transform, row.Value, w, SegmentInk(c))) swap[k] = true;
+                if (stopped) { StoppedPart(seg.transform, row, w, c); continue; }
+                if (string.IsNullOrEmpty(row.Value) || row.Other) continue;   // the folded rest carries no number inside
+                BarDigits(seg.transform, row.Value, w, SegmentInk(c));   // the number inside the part where it fits at the book's floor, in the ink that reads on the colour
             }
-            // the hover ring: one per bar, over its parts, clear until a part is pointed at
-            var ring = PanelLook.Vocab("focus-ring") ? VocabImg(bar, "Hover", "focus-ring", Color.clear) : Img(bar, "Hover", PanelLook.RoundedEdge, Color.clear);
-            if (ring.sprite == PanelLook.RoundedEdge) { ring.preserveAspect = false; ring.type = Image.Type.Sliced; ring.pixelsPerUnitMultiplier = 1f; }
-            ring.raycastTarget = false; hover.RingImage = ring;
+            HoverRing(bar, hover);
 
             // the true length from zero, under the bar
             var top = PanelModel.DamageTrack + PanelModel.DamageInner;
             RoundedPart(r, "True", dealt ? DrTrueDealt : DrTrueReceived).rectTransform.Box(x0, top, Mathf.Max(2f, trackW * PanelModel.DamageTrueWidth(fraction)), PanelModel.DamageTrue);
             top += PanelModel.DamageTrue + PanelModel.DamageInner;
-            if (!shares)
-            {
-                // the tag over the bar, centred on its part (kept inside the track), shown while the part is pointed at (BarHover.SwapOn)
-                for (int k = 0; k < n; k++)
-                {
-                    if (!swap[k]) continue;
-                    var row = form.Rows[k];
-                    var tag = RoundedPart(bar, "Tip", PlateColour); tag.raycastTarget = false;
-                    var t = Label(tag.transform, row.Title + " " + row.Value, PanelLook.MinText, BarHover.LitText, style: FontStyles.Bold, align: TextAlignmentOptions.Center);
-                    t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Stretch();
-                    var tw = Mathf.Ceil(t.preferredWidth) + 12;
-                    tag.rectTransform.Box(Mathf.Clamp(at[k].x + at[k].w / 2 - tw / 2, -x0, trackW - tw), -2, tw, PanelModel.DamageBar + 4);
-                    tag.gameObject.SetActive(false); hover.SwapOn[k] = tag.gameObject;
-                }
-                return top - PanelModel.DamageInner;
-            }
+            // no entry keys the parts (no share line, or a player's line of their damage by type): the page's tag over the bar, centred on the
+            // part pointed at (kept inside the track)
+            if (!shares || mix != null) hover.TagOver(PageTag(r), bar, hoverWords, mid, -2, -x0, trackW);
+            if (!shares) return top - PanelModel.DamageInner;
 
             // one line of the parts and their share of this row (a player's: their damage by type), wrapping at the track's end
             float x = 0, y = top, lh = PanelModel.DamageShareLine;
             var line = mix ?? form;
             if (mix != null && mix.Rows.Count == 0) return PanelModel.DamageTrack + PanelModel.DamageInner + PanelModel.DamageTrue;
+            if (mix == null) { hover.OnWords = hoverWords; hover.OffWords = new string[n]; }
             for (int k = 0; k < line.Rows.Count; k++)
             {
                 var row = line.Rows[k]; var c = Hex(row.Colour, PanelLook.Accent); var keyed = mix == null;
                 var e = Node("Share", r);
-                var words = Label(e, row.Title + " " + row.Share, PanelLook.MinText, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); words.textWrappingMode = TextWrappingModes.NoWrap;
-                TextMeshProUGUI number = null;
-                if (keyed && swap[k]) { number = Label(e, row.Title + " " + row.Value, PanelLook.MinText, BarHover.LitText, align: TextAlignmentOptions.MidlineLeft); number.textWrappingMode = TextWrappingModes.NoWrap; }
-                var tw = Mathf.Max(Mathf.Ceil(words.preferredWidth), number == null ? 0 : Mathf.Ceil(number.preferredWidth)) + 2;
+                var said = PanelModel.DamageLineWords(row);
+                var words = Label(e, said, PanelLook.MinText, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); words.textWrappingMode = TextWrappingModes.NoWrap;
+                // a keyed entry's words swap for the part's name and number on hover (BarHover.OnWords): its width is kept for the longer of the two
+                var tw = Mathf.Max(Mathf.Ceil(words.preferredWidth), keyed ? Mathf.Ceil(words.GetPreferredValues(hoverWords[k]).x) : 0) + 2;
                 var pic = (row.Part?.Icon ?? "").StartsWith("vocab:weapon-", System.StringComparison.Ordinal) ? DrKeyIcon : DrSwatch;
                 var ew = pic + DrSwatchGap + tw;
                 if (x > 0 && x + ew > trackW) { x = 0; y += lh + DrLineGap; }
@@ -228,8 +275,7 @@ namespace Hearthwoven.Panel
                 if (pic > DrSwatch) BtIcon(e, row.Part.Icon, c, 0, (lh - pic) / 2, pic);
                 else { var sw = RoundedPart(e, "Swatch", c); sw.pixelsPerUnitMultiplier = 5f / 3f; sw.rectTransform.Box(0, (lh - DrSwatch) / 2, DrSwatch, DrSwatch); }
                 words.rectTransform.Box(pic + DrSwatchGap, 0, tw, lh);
-                if (number != null) { number.rectTransform.Box(pic + DrSwatchGap, 0, tw, lh); number.gameObject.SetActive(false); hover.SwapOn[k] = number.gameObject; hover.SwapOff[k] = words.gameObject; }
-                if (keyed) { hover.Bands[k] = band; hover.Names[k] = words; hover.NameColours[k] = PanelLook.Muted; var hp = e.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = k; }
+                if (keyed) { hover.Bands[k] = band; hover.Names[k] = words; hover.NameColours[k] = PanelLook.Muted; hover.OffWords[k] = said; var hp = e.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = k; }
                 x += ew + DrEntryGap;
             }
             return y + lh;

@@ -127,7 +127,7 @@ static class EveryoneTests
             {
                 Press(At(Chapter.Deeds, "overview")),
                 Press(At(Chapter.Battle, PanelModel.FeedPage)),
-                Press(At(Chapter.Battle, "foes", st => st.Player = "Edda")),
+                Press(At(Chapter.Battle, "deaths", st => st.Player = "Edda")),   // 0.8.2: Foes has the group view, the next page down from Deaths
                 Press(At(Chapter.Voyages, "maps")),
                 Press(At(Chapter.Stores, "overview")),
                 Press(At(Chapter.Skills, null, st => st.Page[Chapter.Deeds] = "woodcutting")),
@@ -136,8 +136,8 @@ static class EveryoneTests
             var want = new[]
             {
                 "on the other pages / Press to open Cooking for the whole group. -> Deeds/cooking (group)",
-                "on Damage, Defense / Press to open Damage for the whole group. -> Battle/damage (group)",
-                "on Damage, Defense / Press to open Defense for the whole group. -> Battle/defense (group)",
+                "on Damage and more / The group view is on Damage, Defense and Foes. Press to open Damage for the whole group. -> Battle/damage (group)",
+                "on Damage and more / The group view is on Damage, Defense and Foes. Press to open Foes for the whole group. -> Battle/foes (group)",
                 "on Sailing and more / The group view is on Sailing, Cargo and On foot. Press to open On foot for the whole group. -> Voyages/onfoot (group)",
                 "on Trader, Smelters / Press to open Trader for the whole group. -> Stores/trader (group)",
                 "on Deeds and more / The group view is on Deeds, Hall, Battle and Voyages. Press to open Deeds > Woodcutting for the whole group. -> Deeds/woodcutting (group)",
@@ -165,6 +165,67 @@ static class EveryoneTests
         Check(folded == null && groupBar != null && groupBar.Items.Count > 1 && Math.Abs(PartsTotal(groupBar) - together) < 0.5,
               "Everyone: Building with 13 hammer tabs (each player's bar folds some) builds, and the group's bar counts every tab: its parts add up to the " + together + " pieces built together" +
               (folded != null ? " (threw " + folded.GetType().Name + ": " + folded.Message + ")" : groupBar == null ? " (no bar)" : " (parts " + PartsTotal(groupBar) + ")"));
+
+        // 7. 0.8.2 (Joost in game, Battle > Foes, 1 h: "switch between my friends"): Foes with Everyone, a row per foe kind for the whole group. In
+        // every window each player's parts over the foe rows add up to their row on Everyone > Damage, a foe's parts to its Dealt, and the hero is
+        // Damage's; the day windows are greyed with Foes' own reason. The open foe starts with Who hit it: one scale (the top player 1, the bar's
+        // zero at a quarter of the track), each row that player's part of the foe in the group's order, its types adding up to it, then Best and
+        // Worst; a foe the game does not know opens to Who hit it alone. Your own book (Everyone off) has neither
+        {
+            double Num(string s) => s == PanelModel.LessThanOne ? 0.5 : PanelModel.ParseCount(s);
+            Block Table(PanelView v) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == "foetable");
+            var bad7 = new List<string>();
+            foreach (var w in new[] { TimeWindow.LastTenMinutes, TimeWindow.LastHour, TimeWindow.Session, TimeWindow.SinceInstall })
+            {
+                var dmgW = PanelModel.Content(PanelModel.Build(world, On(Chapter.Battle, "damage", w)));
+                var foesV = PanelModel.Build(world, On(Chapter.Battle, "foes", w));
+                var members = dmgW.First(b => b.Kind == PanelModel.GroupRowsKind).Items.Where(r => r.Kind == PanelModel.GroupMemberKind).ToList();
+                var foeRows = Table(foesV)?.Items.Where(i => i.Kind == "foe").ToList() ?? new List<Block>();
+                if (foeRows.Count == 0 || foeRows.Count >= PanelModel.FoeTop) { bad7.Add(w + ": " + foeRows.Count + " foe rows (the sample must show every foe kind for the sums to hold)"); continue; }
+                foreach (var m in members)
+                {
+                    var parts = foeRows.SelectMany(f => f.Items.Where(i => i.Kind == "part" && i.Id == m.Id)).ToList();
+                    if (Math.Abs(parts.Sum(p => Num(p.Value)) - Num(m.Value)) > 0.5 * parts.Count + 0.01) bad7.Add(w + ": " + m.Id + "'s parts " + string.Join(" + ", parts.Select(p => p.Value)) + " against Damage's " + m.Value);
+                }
+                foreach (var f in foeRows)
+                {
+                    var parts = f.Items.Where(i => i.Kind == "part").ToList();
+                    if (parts.Count == 0 || Math.Abs(parts.Sum(p => Num(p.Value)) - Num(f.Value)) > 0.5 * parts.Count + 0.01) bad7.Add(w + ": " + f.Id + " " + f.Value + " split " + string.Join(" + ", parts.Select(p => p.Value)));
+                }
+                var heroD = dmgW.FirstOrDefault(b => b.Kind == "hero")?.Value; var heroF = PanelModel.Content(foesV).FirstOrDefault(b => b.Kind == "hero")?.Value;
+                if (heroD != heroF) bad7.Add(w + ": hero " + heroF + ", Damage's " + heroD);
+            }
+            var days = PanelModel.Build(world, On(Chapter.Battle, "foes", TimeWindow.LastHour));
+            var daysGrey = PanelModel.DayWindows.All(d => Greyed(days, d)) && (days.WindowWhy ?? "").Contains(PanelModel.GroupFoesDaysLine) && days.EveryoneOn;
+            Check(bad7.Count == 0 && daysGrey, "Everyone on Foes: in 10 min, 1 h, Session and All each player's parts over the foe rows add up to their row on Everyone > Damage, each foe's parts to its Dealt, the hero is Damage's; the day windows greyed with their reason" +
+                  (bad7.Count == 0 ? "" : ": " + string.Join("; ", bad7)) + (daysGrey ? "" : " (day windows)"));
+
+            PanelState Open(string foe, bool everyone = true) { var st = On(Chapter.Battle, "foes", TimeWindow.LastHour); st.Everyone = everyone; st.View[PanelModel.FoeOpenKey] = foe; return st; }
+            var top = Table(days).Items.First(i => i.Kind == "foe");
+            var opened = Table(PanelModel.Build(world, Open(top.Id))).Items.First(i => i.Kind == "foe" && i.Selected);
+            var rk = opened.Items.First(i => i.Kind == "ranking");
+            var who = rk.Items.FirstOrDefault();
+            var whoRows = who?.Items ?? new List<Block>();
+            var split = opened.Items.Where(i => i.Kind == "part").ToList();
+            var maxWho = whoRows.Select(r => Num(r.Value)).DefaultIfEmpty(0).Max();
+            var scale = who?.Kind == PanelModel.WhoHitKind && who.Text == "in the last hour" && whoRows.Count >= 2 && whoRows.Count(r => r.Fraction == 1f) == 1 && Num(whoRows.First(r => r.Fraction == 1f).Value) == maxWho
+                        && whoRows.All(r => Math.Abs(r.Fraction - Num(r.Value) / maxWho) < 0.01 && r.Icon == "person:" + r.Id && r.Colour == "person:" + r.Id)
+                        && PanelModel.DamageBarWidth(1f) == 1f && PanelModel.DamageBarWidth(0f) == PanelModel.DamageFloor && PanelModel.DamageFloor == 0.25f;
+            var same = whoRows.Select(r => r.Id + " " + r.Value).SequenceEqual(split.Select(p => p.Id + " " + p.Value)) && whoRows.First().Title == "You"
+                       && whoRows.All(r => (r.Items ?? new List<Block>()).Where(i => i.Kind == "part").Sum(i => Num(i.Value)) == Num(r.Value));
+            var thenRanking = rk.Items.Skip(1).Select(i => i.Kind + ":" + i.Id).SequenceEqual(new[] { "rankrow:best", "rankrow:worst" });
+            var unknown = Table(days).Items.FirstOrDefault(i => i.Kind == "foe" && !i.Items.Any(c => c.Kind == "mod"));
+            var unknownOpen = unknown == null ? null : Table(PanelModel.Build(world, Open(unknown.Id))).Items.First(i => i.Id == unknown.Id);
+            var aloneWho = unknownOpen != null && unknownOpen.Tone == "opens" && unknownOpen.Selected && unknownOpen.Items.First(i => i.Kind == "ranking").Items.Select(i => i.Kind).SequenceEqual(new[] { PanelModel.WhoHitKind });
+            var own = Table(PanelModel.Build(world, Open(top.Id, everyone: false)));
+            var ownPlain = !own.Items.Any(f => f.Items.Any(i => i.Kind == "part")) && own.Items.Any(f => f.Selected) && !own.Items.First(f => f.Selected).Items.First(i => i.Kind == "ranking").Items.Any(i => i.Kind == PanelModel.WhoHitKind)
+                           && (unknown == null || own.Items.All(f => f.Id != unknown.Id || f.Tone == null));
+            Check(scale && same && thenRanking && aloneWho && ownPlain,
+                  "Everyone on Foes, the open foe (" + top.Title + "): Who hit it first, one scale (the top player 1, zero at a quarter of the track), each row that player's part of the Dealt bar in the group's order, its types adding up to it, then Best and Worst; " +
+                  (unknown?.Title ?? "no unknown foe") + " (no game data) opens to Who hit it alone; your own book unchanged" +
+                  (scale ? "" : " (scale: " + string.Join(", ", whoRows.Select(r => r.Id + " " + r.Value + " at " + r.Fraction)) + ")") + (same ? "" : " (rows against the split: " + string.Join(", ", split.Select(p => p.Id + " " + p.Value)) + ")") +
+                  (thenRanking ? "" : " (then " + string.Join(", ", rk.Items.Skip(1).Select(i => i.Kind)) + ")") + (aloneWho ? "" : " (unknown foe)") + (ownPlain ? "" : " (own book)"));
+        }
 
         // 0.8.1 review 1, follow-up: a name and "as of 8 Oct 00:27" too long for the row: the note drops "as of " before the name gives way; a short
         // name keeps the whole note; "live" and "this PC" stay. The widths stand in for the game's font (about 11 px a letter for the 18 px bold name,
@@ -205,9 +266,11 @@ static class EveryoneDebug
                                             (Chapter.Deeds, "cooking", TimeWindow.Session), (Chapter.Deeds, "farming", TimeWindow.SinceInstall), (Chapter.Deeds, "fishing", TimeWindow.SinceInstall),
                                             (Chapter.Deeds, "taming", TimeWindow.SinceInstall), (Chapter.Battle, "damage", TimeWindow.LastHour), (Chapter.Battle, "damage", TimeWindow.SevenDays),
                                             (Chapter.Battle, "defense", TimeWindow.SinceInstall), (Chapter.Voyages, "sailing", TimeWindow.SinceInstall), (Chapter.Voyages, "cargo", TimeWindow.SinceInstall),
-                                            (Chapter.Voyages, "onfoot", TimeWindow.SinceInstall), (Chapter.Stores, "trader", TimeWindow.SinceInstall), (Chapter.Stores, "smelters", TimeWindow.SinceInstall) })
+                                            (Chapter.Voyages, "onfoot", TimeWindow.SinceInstall), (Chapter.Stores, "trader", TimeWindow.SinceInstall), (Chapter.Stores, "smelters", TimeWindow.SinceInstall),
+                                            (Chapter.Battle, "foes", TimeWindow.LastHour), (Chapter.Battle, "foes", TimeWindow.SinceInstall) })
         {
             var s = new PanelState { Chapter = c, Window = w, WindowPicked = true, Everyone = true }; s.Page[c] = page;
+            if (page == "foes") s.View[PanelModel.FoeOpenKey] = "Draugr";
             var v = PanelModel.Build(world, s);
             sb.Append("=== ").Append(c).Append(" / ").Append(page).Append(" / ").Append(w).Append('\n').Append("heading: ").Append(v.Heading).Append(" | window: ").Append(v.HeadingWindow).Append(" | on ").Append(v.EveryoneOn).Append('\n')
               .Append("windows: ").Append(string.Join(" ", v.Windows.Select(x => x.Label + (x.Disabled ? "(off)" : "") + (x.Selected ? "*" : "")))).Append('\n').Append("keys: ").Append(string.Join("  ", v.Keys)).Append('\n');

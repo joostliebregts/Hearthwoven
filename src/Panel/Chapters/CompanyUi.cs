@@ -190,7 +190,7 @@ namespace Hearthwoven.Panel
 
             // the chosen category large: the group's total, one bar coloured per player, the legend under it
             var parts = (pick.Items ?? new List<Block>()).Where(p => p.Fraction > 0).ToList();
-            HeroNumber(Line(col, 0, TextAnchor.LowerLeft), new Block { Value = pick.Value, Title = pick.Text, Note = pick.Note }, HeroSize, HeroLabel);   // the shared hero's look
+            HeroNumber(Line(col, 0, TextAnchor.LowerLeft), new Block { Value = pick.Value, Title = pick.Text, Note = pick.Note }, HeroSize, HeroLabel, HeroSize);   // the shared hero's look
             if (pick.Before != null) HeroBeforeLine(col, pick);   // 0.8 Compare: the period before on a line of its own (the hero's words are long here)
             if (parts.Count < 2) { TogetherScope(col, b, pick); return; }   // alone: the number is the page (with its scope and keys); the bar and the matrix of one are noise
             // the book's one bar form (BarFormUi.cs) in the players' colours: the bar, and the list names each player with their number and share

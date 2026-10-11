@@ -15,7 +15,7 @@ namespace Hearthwoven
     /// Per character, across every world and server: the same scope as the character's own counters the numbers sit
     /// beside (skills, food, gear and trader all travel with the character). Only folded counters, one number per kind,
     /// never raw events: the file stays bounded however long someone plays. The per-hit event log (Battle's time windows)
-    /// stays per session and is not carried over.
+    /// stays per session; 0.8.2: its last minutes are kept in a file of their own beside this one (KeptMinutes), never in it.
     ///
     /// Nothing counted twice: the file holds the earlier sessions folded together ("previous") plus the latest saved
     /// session under its id ("lastSession"). Saving that session again replaces it; a new session id first folds the old
@@ -55,11 +55,15 @@ namespace Hearthwoven
     /// became of them, with its own start date and day rows (a 0.7 reader keeps it as an unknown key, Extra); salvage adds the deed family
     /// "recovered" (materials picked up from pieces that came down; dropped by a 0.7 save like the feast families) and the start group
     /// "recovered" in "starts" (StartRecovered: the first load of a version that counts them).
+    ///
+    /// Schema 6 (0.9, work/hearthwoven-0.8.5/fights/DESIGN.md): top-level "bossFights" (BossLog): the boss attempts you took part in, the newest
+    /// BossLog.MaxAttempts, each with its boss, start, length, outcome and each sharing player's part; top-level "dungeonRuns" (RunLog): the dungeon
+    /// runs you were in, the newest RunLog.MaxRuns (an older reader keeps both as unknown keys).
     /// </summary>
     public class LocalTotals
     {
         public const int Version = 1;      // breaking-format number: a reader refuses a higher one
-        public const int Schema = 5;       // additive revision of this writer (2: name, schema, unknown keys kept; 3: history; 4: armour and starts; 5: 0.8, feast families and foes)
+        public const int Schema = 6;       // additive revision of this writer (2: name, schema, unknown keys kept; 3: history; 4: armour and starts; 5: 0.8, feast families and foes; 6: 0.9, boss attempts)
         public long PlayerId;
         /// <summary>The character's name as the file was last saved for (JSON "name"); "" in a file from before 0.6.1.</summary>
         public string Name = "";
@@ -68,7 +72,7 @@ namespace Hearthwoven
         /// <summary>Top-level keys this version does not know (from a newer Hearthwoven), written back as they were read.</summary>
         public readonly Dictionary<string, object> Extra = new Dictionary<string, object>();
         static readonly HashSet<string> KnownKeys = new HashSet<string>
-            { "version", "schema", "playerId", "name", "saved", "firstRun", "biomeFrom", "totals", "baseline", "exactAtBaseline", "baselineAt", "feats", "history", "armour", "starts", "foes",
+            { "version", "schema", "playerId", "name", "saved", "firstRun", "biomeFrom", "totals", "baseline", "exactAtBaseline", "baselineAt", "feats", "history", "armour", "starts", "foes", "bossFights", "dungeonRuns",
               "historyBegan", "historySaved", "chestFed", "seenGroup" };   // 0.7's own fields at top level, where an older reader keeps them (REVIEW-07 #4)
         public int Sessions;                                     // sessions folded into Previous
         /// <summary>When Hearthwoven first counted for this character on this PC (the zones' "since you installed Hearthwoven on
@@ -148,6 +152,10 @@ namespace Hearthwoven
         public ArmourBook Armour = new ArmourBook();
         /// <summary>The foes you fought (FoeBook, 0.8). JSON: top-level "foes" (schema 5), left out while empty; an older file starts it on the next load.</summary>
         public FoeBook Foes = new FoeBook();
+        /// <summary>The boss attempts you took part in (BossLog, 0.9). JSON: top-level "bossFights" (schema 6), left out while empty.</summary>
+        public BossLog Bosses = new BossLog();
+        /// <summary>The dungeon runs you were in (RunLog, 0.9). JSON: top-level "dungeonRuns" (schema 6), left out while empty.</summary>
+        public RunLog Runs = new RunLog();
 
         /// <summary>The baseline kind of the game's battle counters (Plugin.LoadLocal), tokens = the game's stat names, the
         /// same keys as SessionEvents.Battle.</summary>
@@ -313,6 +321,8 @@ namespace Hearthwoven
             if (Feats.SeenGroup > 0) j.Num("seenGroup", Feats.SeenGroup);
             if (!Armour.IsEmpty) Armour.WriteTo(j);
             if (!Foes.IsEmpty) Foes.WriteTo(j);
+            if (!Bosses.IsEmpty) Bosses.WriteTo(j);
+            if (!Runs.IsEmpty) Runs.WriteTo(j);
             foreach (var kv in Extra) if (!KnownKeys.Contains(kv.Key)) j.Raw(kv.Key, MiniJson.Write(kv.Value));   // a newer version's data, kept as read
             return j.Close().ToString();
         }
@@ -373,6 +383,8 @@ namespace Hearthwoven
             }
             t.Armour = ArmourBook.ReadFrom(MiniJson.Obj(root, "armour"));
             t.Foes = FoeBook.ReadFrom(MiniJson.Obj(root, "foes"));
+            t.Bosses = BossLog.ReadFrom(root.TryGetValue("bossFights", out var bfs) ? bfs : null);
+            t.Runs = RunLog.ReadFrom(root.TryGetValue("dungeonRuns", out var drs) ? drs : null);
             foreach (var kv in root) if (!KnownKeys.Contains(kv.Key)) t.Extra[kv.Key] = kv.Value;
             return t;
         }

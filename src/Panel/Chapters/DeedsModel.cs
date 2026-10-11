@@ -65,6 +65,55 @@ namespace Hearthwoven.Panel
         public const float ItemTileMinWidth = 168, ItemTileGap = 8;
         public static int ItemTilesPerLine(float column) => Math.Max(1, Math.Min(6, (int)Math.Floor((column + ItemTileGap) / (ItemTileMinWidth + ItemTileGap))));
 
+        /// <summary>0.8.1 (Joost's PC, Deeds > Building: his 385 piece kinds drew 2 630 objects, 194 ms a rebuild): an item grid shows at most
+        /// ItemGridMax tiles (eight lines of four across the plate), a page at most ItemPageMax: its grids share them, the short ones whole, the
+        /// long ones the rest evenly in whole lines, each at least ItemGridLeast (Building by category's eight groups four each). The last tile of a
+        /// folded grid is a button, "Show all 365 pieces" with "+334" (the tiles it holds back): pressed, the page's grids show every tile where they
+        /// stand (PanelState.ShowAll), until the page is left or the book shut; every visit starts folded. The sample's lists stay whole.</summary>
+        public const int ItemGridMax = 32, ItemPageMax = 40, ItemGridLeast = 4;
+        /// <summary>The Show all tile's id and its link (Follow): this page's grids show every tile.</summary>
+        public const string ShowAllTarget = "items:showall";
+
+        /// <summary>The page Show all was pressed on: chapter, page, whose book, Everyone; another page, book or chip is another visit.</summary>
+        public static string ShowAllKey(PanelState s) => s == null ? null : s.Chapter + "/" + (s.PageOf(s.Chapter) ?? "") + "/" + (s.Player ?? "") + (s.Everyone ? "/everyone" : "");
+        /// <summary>This page's grids show every tile: Show all was pressed on it during this visit.</summary>
+        public static bool ShowingAll(PanelState s) => s?.ShowAll != null && s.ShowAll == ShowAllKey(s);
+
+        // what a page's tiles are, for its Show all tile ("Show all 365 pieces")
+        static string TilesNoun(PanelView view) =>
+            view.Active == Chapter.Deeds ? (view.Page == "building" ? "pieces" : view.Page == "cooking" ? "dishes" : view.Page == "crafting" ? "items" : view.Page == "farming" ? "crops" : view.Page == "fishing" ? "fish" : "kinds") : view.Active == Chapter.Stores || view.Active == Chapter.Voyages ? "items" : "kinds";
+
+        /// <summary>Folds every item grid of a built page (FoldTiles), in the order the page's sort control left it: the last step of Build,
+        /// so every chapter's grids, your own book's and a fellow's, Unity's and the preview's, hold the same tiles. Show all pressed: none.</summary>
+        static PanelView FoldItemGrids(PanelState state, PanelView view)
+        {
+            if (ShowingAll(state)) return view;
+            var noun = TilesNoun(view);
+            var drawn = Content(view).Where(b => b.Kind == "itemgrid" && b.Items != null).ToList();
+            int left = ItemPageMax, grids = drawn.Count;
+            foreach (var g in drawn.OrderBy(g => g.Items.Count))   // the shortest first: each takes what it needs up to its share of what is left
+            {
+                var cap = Math.Min(ItemGridMax, Math.Max(ItemGridLeast, left / Math.Max(1, grids--)));
+                cap -= cap % ItemGridLeast;   // whole lines of four across the plate (two in a half column): the button never stands alone on a line
+                FoldTiles(g, cap, noun);
+                left -= g.Items.Count;
+            }
+            void Rest(IEnumerable<Block> bs) { foreach (var b in bs ?? Enumerable.Empty<Block>()) { if (b == null) continue; if (b.Kind == "itemgrid") FoldTiles(b, ItemGridMax, noun); else Rest(b.Items); } }
+            Rest(view.Blocks);   // a switch's other views too
+            return view;
+        }
+
+        /// <summary>A grid of more than <paramref name="max"/> tiles keeps its first max - 1 and ends on the Show all button: "+n" (the tiles held
+        /// back) big, "Show all 365 pieces" under it, no picture.</summary>
+        static void FoldTiles(Block grid, int max, string noun)
+        {
+            var items = grid.Items;
+            if (items == null || items.Count <= max || items.Any(i => i?.Id == ShowAllTarget)) return;
+            var all = items.Count;
+            grid.Items = items.Take(max - 1).ToList();
+            grid.Items.Add(new Block { Kind = "item", Id = ShowAllTarget, Title = "Show all " + N(all) + " " + noun, Value = "+" + N(all - (max - 1)), Src = grid.Src, Source = grid.Source });
+        }
+
         /// <summary>The item grid of one count per item.</summary>
         public static Block ItemGrid(IDictionary<string, double> items, Func<string, string> label, Func<string, string> icon, string src) =>
             ItemGrid(items.Select(kv => (kv.Key, kv.Value, 0.0)), label, icon, src);
@@ -313,15 +362,19 @@ namespace Hearthwoven.Panel
             var src = windowed ? SrcPc : SrcCharacter;
             // dishes by kind (rule A.2): each kind's sum, one bar, the food's own colours from its icons; no faded shares, no key: the hero says it
             var allDishes = layers == null ? Crafted(input, "food") : layers.ToDictionary(kv => kv.Key, kv => kv.Value.faded + kv.Value.solid);
-            // the dishes as a filter bar (Type, Main boost: CookingFacets.cs), then the bar and the ledger of the dishes that pass it (0.6.5)
+            // the dishes as a filter bar (Type, Main boost, Dish: CookingFacets.cs), then the bar and the ledger of the dishes that pass it (0.6.5)
             var filter = DishFilter(input, state, allDishes, src);
             var on = filter != null && FilterOn(state, CookFilter);
             var dishes = filter == null ? allDishes : filter.Shown.ToDictionary(i => i.Key, i => i.Weight);
             if (filter != null) view.Blocks.Add(filter.Bar);
-            var bar = Composition(DishesByKind, dishes, k => Who(input, k), k => (null, null), src, tint: ItemTint(input));
+            // 0.8.2 (Joost in game: by kind did not filter while By type did): the bar is the Dish row's own, so as a facet bar it counts what the
+            // other rows leave, its parts and legend items choose a dish, the chosen ones outlined
+            var byKind = filter == null ? allDishes : filter.Except(DishFacet).ToDictionary(i => i.Key, i => i.Weight);
+            var bar = Composition(DishesByKind, byKind, k => Who(input, k), k => (null, null), src, tint: ItemTint(input));
             if (bar != null) bar.Tone = Thin;
+            if (filter != null) LinkBar(bar, state, CookFilter, DishFacet);
             Add(view, bar);
-            if (on && bar == null) view.Blocks.Add(new Block { Kind = "empty", Title = "Nothing for this choice" });
+            if (on && dishes.Count == 0) view.Blocks.Add(new Block { Kind = "empty", Title = "Nothing for this choice" });
             // without the two layers the headline is the game's own counters and the bar is its per-dish craft counts: the game books
             // them differently (a mod's food it cannot name, brews among the dishes), so they can differ. Say so under the bar
             // instead of hiding it (polish-06's honest headline, on cooking-06's bar). Against every dish, whatever the filter shows

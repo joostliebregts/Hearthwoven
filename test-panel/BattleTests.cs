@@ -122,13 +122,57 @@ static partial class Program
         var geared = rich.ShallowCopy(); geared.Gear = PanelSample.SampleGear; geared.Owned = t => PanelSample.SampleOwned.Contains(t); geared.RecipeKnown = t => PanelSample.SampleRecipes.Contains(t);
         var openRow = Of(PageAll(geared, "foes", s => s.View[PanelModel.FoeOpenKey] = "Troll"), "foetable").Items.Single(r => r.Id == "Troll");
         var rank = openRow.Items.Single(i => i.Kind == "ranking").Items;
-        string Lines(string id) => string.Join(", ", rank.Single(g => g.Id == id).Items.Select(i => i.Kind == "rankhead" ? "[" + i.Title + "]" : i.Title + " " + i.Text + " " + i.Value));
-        Check(openRow.Selected && openRow.Tone == "opens" && rank.Select(g => g.Title).SequenceEqual(new[] { "Arrows", "Bolts", "Weapons" }) &&
-              Lines("arrow") == "[Best], Carapace Arrow can craft 108, Needle Arrow made 93, Frost Arrow made 91, [Worst], Wood Arrow owned 33, Fire Arrow owned 39, Poison Arrow owned 65" &&
-              Lines("bolt").StartsWith("[All 4, best first], Carapace Bolt not known yet 108") && rank.Single(g => g.Id == "weapon").Text == "10 owned, made or craftable" &&
-              Lines("weapon").StartsWith("[Best], Draugr Fang owned 86, Iron Atgeir can craft 83, Arbalest can craft 78, [Worst], Iron Mace can craft 28") && !Lines("weapon").Contains("Black Metal Sword") &&
-              PanelModel.FoeOpenLink(openRow) == PanelModel.ViewTarget + PanelModel.FoeOpenKey + "=",
-              "B foes ranking (0.7): base damage x the foe's multipliers, a status per line (owned, made, can craft, not known yet); weapons only yours or craftable: " + Lines("arrow"));
+        Block Group(List<Block> rows, string row, string id) => rows.Single(r => r.Id == row).Items.Single(g => g.Id == id);
+        string Lines(string row, string id) => string.Join(", ", Group(rank, row, id).Items.Select(i => i.Title + " " + i.Text + " " + i.Value));
+        Check(openRow.Selected && openRow.Tone == "opens" &&
+              Lines("best", "arrow") == "Carapace Arrow can craft 108, Needle Arrow made 93, Frost Arrow made 91" && Lines("worst", "arrow") == "Wood Arrow owned 33, Fire Arrow owned 39, Poison Arrow owned 65" &&
+              Lines("best", "bolt").StartsWith("Carapace Bolt not known yet 108") && Group(rank, "best", "weapon").Text == "10 " + PanelModel.WeaponsKnown && PanelModel.WeaponsKnown == "known" &&
+              Lines("best", "weapon") == "Draugr Fang owned 86, Iron Atgeir can craft 83, Arbalest can craft 78" && Lines("worst", "weapon").StartsWith("Iron Mace can craft 28") &&
+              !(Lines("best", "weapon") + Lines("worst", "weapon")).Contains("Black Metal Sword") && PanelModel.FoeOpenLink(openRow) == PanelModel.ViewTarget + PanelModel.FoeOpenKey + "=",
+              "B foes ranking (0.7): base damage x the foe's multipliers, a status per line (owned, made, can craft, not known yet); weapons only yours or craftable: " + Lines("best", "arrow"));
+        // 0.8.2 (Joost: Best compares with Best): a Best row and a Worst row, each with Arrows, Bolts and Weapons. A group's best 3 stand in Best
+        // with its count; the worst 3 of the rest in Worst, worst first (4 bolts: 3 and 1); a group of 3 or fewer has none there and says so
+        {
+            var twoBolts = geared.ShallowCopy(); twoBolts.Gear = () => PanelSample.SampleGear().Where(g => g.Kind != "bolt" || g.Prefab == "BoltBone" || g.Prefab == "BoltIron").ToList();
+            var few = Of(PageAll(twoBolts, "foes", s => s.View[PanelModel.FoeOpenKey] = "Troll"), "foetable").Items.Single(r => r.Id == "Troll").Items.Single(i => i.Kind == "ranking").Items;
+            Check(rank.Select(r => r.Kind + ":" + r.Title).SequenceEqual(new[] { "rankrow:" + PanelModel.RankBest, "rankrow:" + PanelModel.RankWorst }) &&
+                  rank.All(r => r.Items.Select(g => g.Title).SequenceEqual(new[] { "Arrows", "Bolts", "Weapons" })) && rank[1].Tone == PanelModel.RankWorstTone && rank[1].Text == PanelModel.RankWorstFirst &&
+                  rank[1].Items.All(g => g.Text == null) && Group(rank, "best", "bolt").Items.Count == 3 && Lines("worst", "bolt") == "Bone Bolt owned 48" && Group(rank, "worst", "bolt").Note == null &&
+                  Group(few, "best", "bolt").Items.Count == 2 && Group(few, "worst", "bolt").Items.Count == 0 && Group(few, "worst", "bolt").Note == PanelModel.RankNoWorst,
+                  "B foes ranking (0.8.2): a Best row and a Worst row of Arrows, Bolts, Weapons; best 3 with the count, the worst 3 of the rest worst first (bolts: " +
+                  Lines("best", "bolt") + " | " + Lines("worst", "bolt") + "); with 2 bolts Worst says \"" + Group(few, "worst", "bolt").Note + "\"");
+        }
+        // 0.8.2 (Joost: every list is damage rows, the worst visibly worse): each line a damage row on one scale for the whole detail (the best
+        // item, here Carapace Arrow and Carapace Bolt at 108, fills the track), its parts the expected damage per type (Frost Arrow on Troll:
+        // pierce 26 x1.5 = 39, frost 52), the Worst row's parts in their colours stepped back
+        {
+            var lines = rank.SelectMany(r => r.Items).SelectMany(g => g.Items).ToList();
+            var frost = Group(rank, "best", "arrow").Items.Single(l => l.Title == "Frost Arrow"); var wood = Group(rank, "worst", "arrow").Items.Single(l => l.Title == "Wood Arrow");
+            string Parts(Block l) => string.Join(",", l.Items.Select(p => p.Id + "=" + p.Value + ":" + p.Colour));
+            Check(lines.Max(l => l.Fraction) == 1f && lines.Where(l => l.Fraction == 1f).Select(l => l.Title).SequenceEqual(new[] { "Carapace Arrow", "Carapace Bolt" }) &&
+                  Math.Abs(wood.Fraction - 33f / 108f) < 0.01f && Parts(frost) == "pierce=39:#e8dcbc,frost=52:#2f9bff" && Math.Abs(frost.Items.Sum(p => p.Fraction) - 1f) < 0.001f &&
+                  Parts(wood) == "pierce=33:" + PanelModel.WorstColour("#e8dcbc") && PanelModel.WorstColour("#e8dcbc") == "#6c6454" &&
+                  rank[1].Items.SelectMany(g => g.Items).SelectMany(l => l.Items).All(p => p.Colour == PanelModel.WorstColour(PanelModel.DamageLook[p.Id].colour)),
+                  "B foes ranking (0.8.2): damage rows on one scale for the detail (best 108 = full), parts = expected damage per type (Frost Arrow " + Parts(frost) + "), Worst stepped back (Wood Arrow " + Parts(wood) + ")");
+        }
+        // 0.8.2 (Joost on Lox: "Staff of Embers" twice under Best weapons, both 240): one name, one line. A copy without a recipe and with the same
+        // token (a creature's staff) gives way to the one with a recipe, the same prefab twice is one, and two of one name that differ keep a line
+        // each, told apart by their prefab
+        {
+            PanelModel.ArrowData W(string prefab, bool recipe, float fire) { var a = new PanelModel.ArrowData { Prefab = prefab, Token = "$item_staff_fireball", Kind = "weapon", Recipe = recipe }; a.Damage["blunt"] = 120; a.Damage["fire"] = fire; return a; }
+            var twins = geared.ShallowCopy(); var names = geared.DisplayName;
+            twins.DisplayName = p => p.StartsWith("StaffFireball", StringComparison.Ordinal) || p == "SampleStaffCopy" ? "Staff of Embers" : names?.Invoke(p);
+            var staff = W("StaffFireball", true, 120);
+            twins.Gear = () => PanelSample.SampleGear().Where(g => g.Prefab != "StaffFireball").Concat(new[] { staff, W("SampleStaffCopy", false, 120), staff }).ToList();
+            var one = PanelModel.OneLinePerItem(twins, new[] { staff, W("SampleStaffCopy", false, 120), staff }).Select(x => x.g.Prefab + "=" + x.name).ToList();
+            var apart = PanelModel.OneLinePerItem(twins, new[] { staff, W("StaffFireballHeavy", true, 150) }).Select(x => x.name).ToList();
+            IEnumerable<Block> RankLines(Block b) => (b.Items ?? new List<Block>()).SelectMany(i => i.Kind == "rankline" ? new[] { i } : RankLines(i));
+            var ranked = Of(PageAll(twins, "foes", s => s.View[PanelModel.FoeOpenKey] = "Troll"), "foetable").Items.Single(r => r.Id == "Troll").Items.Single(i => i.Kind == "ranking");
+            var staffLines = RankLines(ranked).Count(l => l.Title.StartsWith("Staff of Embers", StringComparison.Ordinal));
+            Check(one.SequenceEqual(new[] { "StaffFireball=Staff of Embers" }) && apart.SequenceEqual(new[] { "Staff of Embers (StaffFireball)", "Staff of Embers (StaffFireballHeavy)" }) && staffLines == 1,
+                  "B foes ranking (0.8.2): one name, one line: a copy without a recipe gives way, the same item twice is one, two that differ are told apart by their prefab (" +
+                  string.Join(", ", one) + " | " + string.Join(", ", apart) + " | Staff of Embers lines: " + staffLines + ")");
+        }
         // 0.8: the Foes page by keys (Chapters/FoesKeys.cs): A/D move a cursor (first press: the first foe; it wraps), Enter opens and closes the
         // cursor's foe, an open ranking follows the cursor; the key line says so; on a fellow's book the cursor only shows the factors
         {

@@ -17,7 +17,7 @@ namespace Hearthwoven.Panel
     public partial class PanelUi
     {
         // fix4: the card 52 high and 6 between rows, so four whole rows (226) fit the grid's room; the band keeps its own 8 gap
-        const float FeatH = 52, FeatHMax = 76, FeatGap = 8, FeatRowGap = 6, FeatDetailH = 184, FeatDetailLeft = 292, FeatRuleH = 20;   // B30: 184 high, rules 20 apart, so every tier, the counting and Who helped fit
+        const float FeatH = 52, FeatHMax = 76, FeatGap = 8, FeatRowGap = 6, FeatDetailH = 184, FeatDetailLeft = 292, FeatRuleH = 20;   // B30: 184 high, rules 20 apart, so every tier, the counting and Who helped fit (0.8.2: taller when a crew needs the rows)
         // titles-grid: a grid that scrolls keeps a strip of its own under the cards for the "More below" cue (it sat on a card and hid its text)
         const float FeatCueStrip = 26, FeatCueH = 22;
         static readonly Color FeatRim = new Color(PanelLook.Gold.r, PanelLook.Gold.g, PanelLook.Gold.b, 0.85f);
@@ -25,6 +25,9 @@ namespace Hearthwoven.Panel
         static readonly Color FeatWaitingInk = new Color(0.62f, 0.6f, 0.58f, 0.28f);   // the emblem of a feat Hearthwoven does not count yet: fainter still, and a dashed edge
         static readonly Color FeatWaitingRim = new Color(PanelLook.Muted.r, PanelLook.Muted.g, PanelLook.Muted.b, 0.7f);
         static RectTransform featDetail; static float featDetailWidth;
+        /// <summary>The detail area's height on this page: 184, or more when a group feat's crew needs the rows (0.8.2: everyone shows). The tallest card's
+        /// need on the page (FeatDetailNeed), so a hover never moves the grid above it.</summary>
+        static float featDetailH = FeatDetailH;
         static float featH = FeatH;   // the cards' height now: 52, taller (up to 76) when a full plate leaves the grid room (fewer rows, more air, no empty band)
         internal static bool plateFull;   // the page's plate keeps the whole room (the Feats chapter, PanelModel.PlateFull): the grid grows into it
 
@@ -42,7 +45,7 @@ namespace Hearthwoven.Panel
             float above = 0; int n = 0;
             foreach (RectTransform child in col) { if (!child.gameObject.activeSelf) continue; above += LayoutUtility.GetPreferredHeight(child); n++; }
             var gap = vlg ? vlg.spacing : 10f;
-            var room = box.rect.height - (vlg ? vlg.padding.top + vlg.padding.bottom : 0) - above - gap * n - gap - FeatDetailH - 2;
+            var room = box.rect.height - (vlg ? vlg.padding.top + vlg.padding.bottom : 0) - above - gap * n - gap - featDetailH - 2;
             return Mathf.Max(FeatH, Mathf.Floor(room));
         }   // the detail area drawn last on the page, refilled by a hover
         static readonly List<FeatHover> featCards = new List<FeatHover>();
@@ -58,6 +61,7 @@ namespace Hearthwoven.Panel
             featCards.Clear(); featDetail = null; featsArea = null; featsData = b;
             var cards = b.Items ?? new List<Block>();
             if (cards.Count == 0) return;
+            if (settled == null) featDetailH = FeatDetailPage(col, cards);   // the detail area's height first: the grid takes the room it leaves
             var per = Mathf.Clamp(Mathf.FloorToInt((Column + FeatGap) / (180 + FeatGap)), 1, 4);
             if (plateFull && cards.Count <= 9) per = Mathf.Min(per, 3);   // a full plate with few cards: three across, so the rows fill the room
             if (b.Tone == PanelModel.TitlesPageId) per = Mathf.Min(per, 3);   // the Titles page: three across, so a title's reason fits its card (B18)
@@ -218,11 +222,57 @@ namespace Hearthwoven.Panel
 
         static void FeatDetailBlock(RectTransform col, Block d)
         {
+            // the page's height (FeatsBlock worked it out over every card); a detail drawn without its grid takes its own need
+            if (featsData == null || !(featsData.Items ?? new List<Block>()).Any(c => c.Items != null && c.Items.Contains(d))) featDetailH = FeatDetailPage(col, new List<Block> { new Block { Items = new List<Block> { d } } });
             var area = Kit(col, "FeatDetail", "meter-track");
-            Size(area, -1, FeatDetailH);
+            Size(area, -1, featDetailH);
             featDetail = area.rectTransform; featDetailWidth = Column;
             FeatDetailFill(area.rectTransform, Column, d);
         }
+
+        // one hidden label measures text as the detail area draws it (size, bold or italic), so the page's detail height and the drawing agree
+        sealed class FeatMeasure : IDisposable
+        {
+            readonly TextMeshProUGUI probe;
+            public FeatMeasure(RectTransform parent)
+            {
+                probe = Label(parent, "", 14, Color.clear);
+                probe.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            }
+            public float Width(string text, float size, FontStyles style)
+            {
+                probe.fontSize = size; probe.fontStyle = style; probe.textWrappingMode = TextWrappingModes.NoWrap;
+                return Mathf.Ceil(probe.GetPreferredValues(text ?? "").x) + 2;
+            }
+            public float Height(string text, float size, FontStyles style, float width)
+            {
+                probe.fontSize = size; probe.fontStyle = style; probe.textWrappingMode = TextWrappingModes.Normal;
+                return probe.GetPreferredValues(text ?? "", width, 0).y;
+            }
+            public void Dispose() { probe.gameObject.SetActive(false); UnityEngine.Object.Destroy(probe.gameObject); }
+        }
+
+        /// <summary>The detail area's height for a page of cards: 184, or the tallest crew's need (0.8.2: every person shows, the area grows to hold them).</summary>
+        static float FeatDetailPage(RectTransform col, List<Block> cards)
+        {
+            var details = cards.Select(c => c.Items?.FirstOrDefault()).Where(d => d?.Items != null && d.Items.Any(i => i.Kind == "crew")).ToList();
+            if (details.Count == 0) return FeatDetailH;
+            using (var m = new FeatMeasure(col)) return details.Max(d => FeatDetailNeed(d, Column, m));
+        }
+
+        // what the right column holds down to the crew's last row (the order FeatDetailFill draws in), and the foot under it
+        static float FeatDetailNeed(Block d, float w, FeatMeasure m)
+        {
+            var crew = d.Items.FirstOrDefault(i => i.Kind == "crew");
+            if (crew == null) return FeatDetailH;
+            var rw = w - FeatDetailLeft - 16;
+            var top = PanelModel.FeatCrewTop(d.Items.Count(i => i.Kind == "rule"), CaveatLines(d.Items.FirstOrDefault(i => i.Kind == "caveat"), rw, m));
+            var fit = CrewLayout(crew, rw, m);
+            return Mathf.Max(FeatDetailH, top + PanelModel.CrewHeight(fit.per, PanelModel.CrewBar(crew)) + PanelModel.FeatDetailFoot);
+        }
+
+        // the caveat's lines: none, one (it leaves its second line to the crew) or two
+        static int CaveatLines(Block caveat, float rw, FeatMeasure m) => caveat == null ? 0 : m.Height(caveat.Text, 14, FontStyles.Italic, rw) <= 20 ? 1 : 2;
 
         /// <summary>Draws one feat into the detail area (again on a hover): emblem, name, tier and the warm line on the left; the rule per
         /// tier (reached ones lit), your progress, how it is counted, the caveat and the moment on the right.</summary>
@@ -232,8 +282,9 @@ namespace Hearthwoven.Panel
             if (d == null) return;
             var earned = d.Tone == PanelModel.FeatTone; var waiting = d.Tone == PanelModel.FeatWaitingTone;
             var tier = TierInk(d.Colour, FeatRim);
-            if (earned) { Edge(area, new Color(tier.r, tier.g, tier.b, 0.9f)); Img(area, "Tier", null, tier).rectTransform.Box(0, 0, 3, FeatDetailH); }
-            if (waiting) DashEdge(area, w, FeatDetailH, FeatWaitingRim);
+            var h = featDetailH;   // the page's height: a hover draws into the same area
+            if (earned) { Edge(area, new Color(tier.r, tier.g, tier.b, 0.9f)); Img(area, "Tier", null, tier).rectTransform.Box(0, 0, 3, h); }
+            if (waiting) DashEdge(area, w, h, FeatWaitingRim);
             var emblem = Marker(area, d.Icon, 56, layout: false); emblem.Box(16, 14, 56, 56);
             if (!earned) foreach (var im in emblem.GetComponentsInChildren<Image>()) im.color = waiting ? FeatWaitingInk : FeatUnsungInk;
             var name = Label(area, d.Title, 22, earned ? PanelLook.Text : PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
@@ -284,78 +335,94 @@ namespace Hearthwoven.Panel
                 var c2 = Label(area, counted.Text, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); c2.rectTransform.Box(x + w1 + 8, y, rw - w1 - 8, 18); c2.textWrappingMode = TextWrappingModes.NoWrap;
             }
             y += 20;
-            var caveat = (d.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "caveat");
-            var caveatLines = caveat == null ? 0 : 2;   // no caveat (B37: the counting is said in Counted by): no room kept for one
-            if (caveat != null)
-            {
-                var cv = Label(area, caveat.Text, 14, PanelLook.Muted, style: FontStyles.Italic); cv.rectTransform.Box(x, y, rw, 36); cv.overflowMode = TextOverflowModes.Ellipsis;
-                if (cv.GetPreferredValues(caveat.Text ?? "", rw, 0).y <= 20) caveatLines = 1;   // a one-line caveat leaves the second line to who added to it (0.7 group feats)
-            }
-            y += caveatLines == 0 ? 0 : caveatLines == 1 ? 20 : 38;
+            var caveat = (d.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "caveat");   // none (B37: the counting is said in Counted by): no room kept for one
+            if (caveat != null) { var cv = Label(area, caveat.Text, 14, PanelLook.Muted, style: FontStyles.Italic); cv.rectTransform.Box(x, y, rw, 36); cv.overflowMode = TextOverflowModes.Ellipsis; }
             var crew = (d.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "crew");   // a group feat: who helped, with their parts (B37), or who carried
-            if (crew != null && y + 22 <= FeatDetailH - 4) FeatCrew(area, crew, x, y, rw);
+            if (crew != null)
+                using (var m = new FeatMeasure(area))   // a one-line caveat leaves the second line to who added to it (0.7 group feats); the crew always shows, whole (0.8.2)
+                    FeatCrew(area, crew, x, PanelModel.FeatCrewTop((d.Items ?? new List<Block>()).Count(i => i.Kind == "rule"), CaveatLines(caveat, rw, m)), rw, m);
             var moment = (d.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "moment");
             if (moment != null)
             {
                 // short (Joost 2026-10-09): "Earned 7 Oct", and a quiet "(or earlier)" only when the day is the day it was first seen
                 var said = Rich.Plain(moment.Text) + (string.IsNullOrEmpty(moment.Note) ? Rich.Empty : " " + Rich.Plain(moment.Note).Ink(Hex(PanelLook.Muted)).Italic());
-                var m = RichLabel(area, "featdetail", said, 15, PanelLook.Text, align: TextAlignmentOptions.TopLeft); var mTop = 74 + honoursH + 5; m.rectTransform.Box(16, mTop, FeatDetailLeft - 32, FeatDetailH - 4 - mTop); m.overflowMode = TextOverflowModes.Ellipsis;   // left column, under what the feat honours
+                var m = RichLabel(area, "featdetail", said, 15, PanelLook.Text, align: TextAlignmentOptions.TopLeft); var mTop = 74 + honoursH + 5; m.rectTransform.Box(16, mTop, FeatDetailLeft - 32, h - 4 - mTop); m.overflowMode = TextOverflowModes.Ellipsis;   // left column, under what the feat honours
             }
         }
 
-        // B37 (Joost: '"added to by"? what does that mean?'): "Who cooked", then the parts as one bar in the players' colours (when the parts add up to
-        // the group's number, Tone "share"), then each person largest first: their colour, name, part and share ("Rowan 610 · 66 %"). A set's parts
-        // overlap (each different thing once): their own counts only, no bar, no per cent. Iron for the Forge's crew: shields by name, as before.
-        const float CrewBarW = 96, CrewBarH = 8, CrewSwatch = 9;
-        static void FeatCrew(RectTransform area, Block crew, float x, float y, float rw)
+        // B37 (Joost: '"added to by"? what does that mean?'): "Who cooked", then the parts as one bar in the players' colors (when the parts add up to
+        // the group's number, Tone "share"). 0.8.2 (Joost: "I want to see everyone ... not plus three more"): under the bar every person in the book's
+        // legend grammar (BarFormUi.BarList): their color, name, the number right-aligned in bold, the share; a compact table per column, filled top to
+        // bottom, as many columns as fit beside the label (PanelModel.CrewFit), as many rows as it takes. A set's parts overlap (each different thing
+        // once): their own counts only, no bar, no share. Iron for the Forge's crew: shields by name. Without a bar the first row sits on the label's line.
+        const float CrewBarH = 8, CrewSwatch = 12, CrewSwatchGap = 8, CrewShield = 20, CrewShieldGap = 4;
+
+        // a crew's cells as drawn (the mark and name, the number, the share) and the legend's columns beside its label
+        static (float label, List<(float name, float number, float share)> cells, int columns, int per) CrewLayout(Block crew, float rw, FeatMeasure m)
         {
-            var label = Label(area, crew.Title, 14, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft); var lw = Mathf.Ceil(label.preferredWidth) + 2;
-            label.rectTransform.Box(x, y, lw, 22); label.textWrappingMode = TextWrappingModes.NoWrap;
-            float cx = x + lw + 10, end = x + rw;
-            var people = crew.Items ?? new List<Block>();
             var shared = crew.Tone == "share";
-            if (shared && people.Count > 1)   // one person's bar would only say 100 %
+            var label = m.Width(crew.Title, 14, FontStyles.Normal);
+            var cells = (crew.Items ?? new List<Block>()).Select(p => (
+                name: (string.IsNullOrEmpty(p.Value) ? CrewShield + CrewShieldGap : CrewSwatch + CrewSwatchGap) + m.Width(p.Title, PanelLook.MinText, FontStyles.Normal),
+                number: string.IsNullOrEmpty(p.Value) ? 0f : m.Width(p.Value, 15, FontStyles.Bold),
+                share: shared && !string.IsNullOrEmpty(p.Note) ? m.Width(p.Note, 14, FontStyles.Normal) : 0f)).ToList();
+            var (columns, per) = PanelModel.CrewFit(cells, rw - label - PanelModel.CrewLabelGap);
+            return (label, cells, columns, per);
+        }
+
+        static void FeatCrew(RectTransform area, Block crew, float x, float y, float rw, FeatMeasure m)
+        {
+            const float row = PanelModel.CrewRowH;
+            var (lw, cells, _, per) = CrewLayout(crew, rw, m);
+            var label = Label(area, crew.Title, 14, PanelLook.Faint, align: TextAlignmentOptions.MidlineLeft);
+            label.rectTransform.Box(x, y, lw, row); label.textWrappingMode = TextWrappingModes.NoWrap;
+            float cx = x + lw + PanelModel.CrewLabelGap, end = x + rw;
+            var people = crew.Items ?? new List<Block>();
+            if (people.Count == 0) return;
+            if (PanelModel.CrewBar(crew))   // the parts as one bar across the room beside the label, the legend under it
             {
-                float bx = cx, room = CrewBarW - 2 * (people.Count - 1);
-                foreach (var p in people)
+                float bx = cx, room = end - cx - 2 * (people.Count - 1);
+                for (int k = 0; k < people.Count; k++)
                 {
-                    var pw = Mathf.Max(2f, Mathf.Round(room * p.Fraction));
-                    if (bx + pw > cx + CrewBarW) pw = Mathf.Max(0f, cx + CrewBarW - bx);
+                    var p = people[k];
+                    var pw = k == people.Count - 1 ? end - bx : Mathf.Max(2f, Mathf.Round(room * p.Fraction));   // the last part ends at the bar's end
+                    if (bx + pw > end) pw = Mathf.Max(0f, end - bx);
                     var part = Img(area, "Share", PanelLook.Rounded, PersonTint(p.Title)); part.preserveAspect = false;
                     if (part.sprite) { part.type = Image.Type.Sliced; part.pixelsPerUnitMultiplier = 2f * 6f / CrewBarH; }
-                    part.rectTransform.Box(bx, y + (22 - CrewBarH) / 2, pw, CrewBarH); bx += pw + 2;
+                    part.rectTransform.Box(bx, y + (row - CrewBarH) / 2, pw, CrewBarH); bx += pw + 2;
                 }
-                cx += CrewBarW + 14;
+                y += row;
             }
-            for (int k = 0; k < people.Count; k++)
+            // the legend: each column a compact table that hugs its content (the mark and name | the number, right-aligned | the share, right-aligned)
+            for (int from = 0; from < people.Count; from += per)
             {
-                var p = people[k];
-                var said = shared ? p.Value + " · " + p.Note : p.Value;
-                var left = people.Count - k - 1;
-                var more = left > 0 ? Label(area, PanelModel.MoreTitles(left), 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic) : null;
-                var moreW = more ? Mathf.Ceil(more.preferredWidth) + 2 : 0f;
-                if (more) { more.gameObject.SetActive(false); Destroy(more.gameObject); }
-                var name = Label(area, p.Title, 14, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft); name.textWrappingMode = TextWrappingModes.NoWrap; var nw = Mathf.Ceil(name.preferredWidth) + 2;
-                var value = string.IsNullOrEmpty(said) ? null : Label(area, said, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
-                var vw = value ? Mathf.Ceil(value.preferredWidth) + 2 : 0f;
-                var w = (shared || !string.IsNullOrEmpty(p.Value) ? CrewSwatch + 6 : 24) + nw + (value ? 6 + vw : 0);
-                if (cx + w + (left > 0 ? 14 + moreW : 0) > end && k > 0)   // no room for this one and the rest: say how many more
+                var to = Math.Min(people.Count, from + per);
+                float nameW = 0, numW = 0, shareW = 0;
+                for (int i = from; i < to; i++) { nameW = Mathf.Max(nameW, cells[i].name); numW = Mathf.Max(numW, cells[i].number); shareW = Mathf.Max(shareW, cells[i].share); }
+                for (int i = from; i < to; i++)
                 {
-                    name.gameObject.SetActive(false); Destroy(name.gameObject); if (value) { value.gameObject.SetActive(false); Destroy(value.gameObject); }
-                    var rest = Label(area, PanelModel.MoreTitles(people.Count - k), 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic);
-                    rest.textWrappingMode = TextWrappingModes.NoWrap; rest.rectTransform.Box(cx, y, Mathf.Max(0, end - cx), 22);
-                    break;
+                    var p = people[i]; var top = y + (i - from) * row; float px = cx;
+                    if (!string.IsNullOrEmpty(p.Value))   // their color, as in the bar
+                    {
+                        var sw = Img(area, "Who", PanelLook.Rounded, PersonTint(p.Title)); sw.preserveAspect = false;
+                        if (sw.sprite) { sw.type = Image.Type.Sliced; sw.pixelsPerUnitMultiplier = PanelLook.TierMarkScale; }
+                        sw.rectTransform.Box(px, top + (row - CrewSwatch) / 2, CrewSwatch, CrewSwatch); px += CrewSwatch + CrewSwatchGap;
+                    }
+                    else { Marker(area, p.Icon, CrewShield, layout: false).Box(px, top + (row - CrewShield) / 2, CrewShield, CrewShield); px += CrewShield + CrewShieldGap; }   // Carried by: their shield
+                    var name = Label(area, p.Title, PanelLook.MinText, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft); name.textWrappingMode = TextWrappingModes.NoWrap;
+                    name.rectTransform.Box(px, top, cx + nameW - px, row);
+                    if (numW > 0 && !string.IsNullOrEmpty(p.Value))
+                    {
+                        var n = Label(area, p.Value, 15, PanelLook.Text, align: TextAlignmentOptions.MidlineRight, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap;
+                        n.rectTransform.Box(cx + nameW + PanelModel.CrewCellGap, top, numW, row);
+                    }
+                    if (shareW > 0 && !string.IsNullOrEmpty(p.Note))
+                    {
+                        var s = Label(area, p.Note, 14, PanelLook.Faint, align: TextAlignmentOptions.MidlineRight); s.textWrappingMode = TextWrappingModes.NoWrap;
+                        s.rectTransform.Box(cx + nameW + (numW > 0 ? PanelModel.CrewCellGap + numW : 0) + PanelModel.CrewCellGap, top, shareW, row);
+                    }
                 }
-                if (!string.IsNullOrEmpty(p.Value))   // their colour, as in the bar
-                {
-                    var sw = Img(area, "Who", PanelLook.Rounded, PersonTint(p.Title)); sw.preserveAspect = false;
-                    if (sw.sprite) { sw.type = Image.Type.Sliced; sw.pixelsPerUnitMultiplier = PanelLook.TierMarkScale; }
-                    sw.rectTransform.Box(cx, y + (22 - CrewSwatch) / 2, CrewSwatch, CrewSwatch); cx += CrewSwatch + 6;
-                }
-                else { Marker(area, p.Icon, 20, layout: false).Box(cx, y + 1, 20, 20); cx += 24; }   // Carried by: their shield
-                name.rectTransform.Box(cx, y, nw, 22); cx += nw;
-                if (value) { cx += 6; value.textWrappingMode = TextWrappingModes.NoWrap; value.rectTransform.Box(cx, y, vw, 22); cx += vw; }
-                cx += 14;
+                cx += PanelModel.CrewColumnWidth(cells, from, to) + PanelModel.CrewColumnGap;
             }
         }
 
@@ -466,7 +533,7 @@ namespace Hearthwoven.Panel
                 var click = string.IsNullOrEmpty(target) ? null : link?.Invoke(target);
                 if (click == null) return;
                 var hit = Img(box, "Hit", null, new Color(0, 0, 0, 0), raycast: true); hit.rectTransform.Box(from, top, to - from, EarnedLine);
-                var bt = hit.gameObject.AddComponent<UnityEngine.UI.Button>(); bt.targetGraphic = hit; bt.transition = Selectable.Transition.None; bt.onClick.AddListener(() => click());
+                ClickTarget(hit, click);
             }
             if (featParts.Count > 0)
             {
@@ -520,9 +587,7 @@ namespace Hearthwoven.Panel
         {
             var click = string.IsNullOrEmpty(target) ? null : link?.Invoke(target);
             if (click == null) return;
-            var button = chip.gameObject.AddComponent<UnityEngine.UI.Button>();
-            button.targetGraphic = chip; button.transition = Selectable.Transition.None;
-            button.onClick.AddListener(() => click());
+            ClickTarget(chip, click);
         }
 
         // ---------- keys and the render step ----------
@@ -549,11 +614,12 @@ namespace Hearthwoven.Panel
         internal static List<PanelInput> FellowsNow(PanelInput self) => Instance != null ? Instance.FellowsOf(self) : new List<PanelInput>();
     }
 
-    /// <summary>A feat card: a hover or a click shows it in the detail area (the pointer needs a raycast target: the card's ground).</summary>
-    sealed class FeatHover : MonoBehaviour, IPointerEnterHandler, IPointerClickHandler
+    /// <summary>A feat card: a hover or a click shows it in the detail area (the pointer needs a raycast target: the card's ground); as a
+    /// HoverMark the card itself shows that it is pointed at too (0.8.1).</summary>
+    sealed class FeatHover : HoverMark, IPointerClickHandler
     {
         public string Id; public Block Detail; public GameObject Ring;
-        public void OnPointerEnter(PointerEventData e) => PanelUi.FeatSelect(this);
+        public override void OnPointerEnter(PointerEventData e) { base.OnPointerEnter(e); PanelUi.FeatSelect(this); }
         public void OnPointerClick(PointerEventData e) => PanelUi.FeatSelect(this);
     }
 }

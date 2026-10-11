@@ -106,6 +106,15 @@ namespace Hearthwoven.Panel
             var parts = items.Select((b, at) => (b, at, g: groups.Of(b))).GroupBy(x => x.g.id)
                              .Select(g => (id: g.Key, label: g.First().g.label, colour: g.First().g.colour, total: g.Sum(x => weight(x.b)), items: g.OrderBy(x => x.at).Select(x => x.b).ToList()))
                              .OrderByDescending(g => g.total).ThenBy(g => g.label, StringComparer.OrdinalIgnoreCase).ToList();
+            // 0.8.1 (Joost's PC: a mod-heavy hammer's tabs): past BarMaxParts groups the smallest fold into one "Other (n kinds)" group, last, as
+            // the category bar above folds them; its tiles in the list's own order
+            if (parts.Count > BarMaxParts && !ShowingAll(state))   // Show all: every group, every tile
+            {
+                var rest = parts.Skip(BarMaxParts - 1).ToList();
+                var order = new Dictionary<Block, int>(); for (int k = 0; k < items.Count; k++) order[items[k]] = k;
+                parts = parts.Take(BarMaxParts - 1).ToList();
+                parts.Add((FoldId, FoldLabel(rest.Count), BarOtherColour, rest.Sum(g => g.total), rest.SelectMany(g => g.items).OrderBy(b => order[b]).ToList()));
+            }
             for (int k = 0; k < parts.Count; k++)
             {
                 var p = parts[k];

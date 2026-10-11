@@ -208,6 +208,30 @@ static class GroupFeatsTests
                   "dot: Together answers its own dot, and opening it clears the dot from the tab and Together");
         }
 
+        // ---------- 0.8.2: everyone who added shows, never "+N more" (Joost: "of course I want to see everyone") ----------
+        {
+            Action<PlayerProfile.PlayerStats> Brewed(float n) => s => s.m_itemCraftStats["$item_meadbasehealth"] = n;
+            var me = Self(Copy("Edda", 77, Brewed(7)), Copy("Tor", 88, Brewed(5)), Copy("Finch", 99, Brewed(3)), Copy("Ylva", 101, Brewed(2)), Copy("Bryn", 102, Brewed(1)));
+            me.ItemsCrafted["$item_meadbasehealth"] = 10;
+            var crew = Cards(Together(me, "meadhall")).Single(c => c.Id == "meadhall").Items[0].Items.Single(x => x.Kind == "crew");
+            var said = string.Join(", ", crew.Items.Select(x => x.Title + " " + x.Value + " · " + x.Note));
+            Check(crew.Title == "Who brewed" && crew.Items.Select(x => x.Title).SequenceEqual(new[] { "Rowan", "Edda", "Tor", "Finch", "Ylva", "Bryn" }) &&
+                  crew.Items.All(x => !string.IsNullOrEmpty(x.Value) && x.Note.EndsWith(" %")) && crew.Items.Sum(x => int.Parse(x.Note.Replace(" %", "").Replace("<1", "0"))) == 100 && PanelModel.CrewBar(crew),
+                  "everyone (0.8.2): The Mead Hall with six brewers names all six, largest first, each with their number and share, the shares adding up to 100 %: " + said);
+            // the legend places every one of them however narrow the room: as many columns as fit (up to three), else one column of all of them
+            var cells = crew.Items.Select(x => (name: 20f + 8 * x.Title.Length, number: 20f, share: 34f)).ToList();
+            var wide = PanelModel.CrewFit(cells, 440); var half = PanelModel.CrewFit(cells, 300); var narrow = PanelModel.CrewFit(cells, 120);
+            var rnd = new Random(82); var dropped = 0;
+            for (int t = 0; t < 2000; t++)
+            {
+                var n = rnd.Next(1, 13); var cs = Enumerable.Range(0, n).Select(_ => (name: 20f + rnd.Next(0, 160), number: (float)rnd.Next(0, 60), share: (float)rnd.Next(0, 44))).ToList();
+                var (cols, per) = PanelModel.CrewFit(cs, rnd.Next(40, 700));
+                if (cols < 1 || cols > PanelModel.CrewColumnsMax || cols * per < n || (cols - 1) * per >= n) dropped++;
+            }
+            Check(wide == (3, 2) && half == (2, 3) && narrow == (1, 6) && PanelModel.CrewHeight(narrow.per, true) == 7 * PanelModel.CrewRowH && dropped == 0,
+                  "everyone (0.8.2): the crew's legend holds all six (three columns of two in 440 px, two of three in 300, one of six in 120, the area as tall as its rows); over 2 000 random crews no one is left out: " + wide + " " + half + " " + narrow + ", " + dropped + " off");
+        }
+
         return fails;
     }
 }

@@ -35,6 +35,9 @@ namespace Hearthwoven.Panel
         public Block Bar; public List<FacetItem> Shown = new List<FacetItem>();
         /// <summary>True when an item (its Values set) passes every chosen chip: what the since-install block of a filtered page follows.</summary>
         public Func<FacetItem, bool> Pass;
+        /// <summary>The items that pass every row but this one (a facet id): what a bar of that row shows (the crossfilter rule), so a page's
+        /// own bar over a row (Cooking's Dishes by kind, 0.8.2) keeps its other parts to choose while one is chosen.</summary>
+        public Func<string, List<FacetItem>> Except;
     }
 
     /// <summary>
@@ -60,8 +63,11 @@ namespace Hearthwoven.Panel
     /// "facet" (Id, Title, Note = its honest line, Tone "focus" while the keys act on it; Items = "chip": Id, Title, Value =
     /// count, Selected, Tone "zero" | "cursor"), one "applied" (Title = what shows with no filter on an inline bar, Value =
     /// "all", Text = the result line, Items = "token": Id = "facet|option", Title, Text = the row), and one "facetbar" per
-    /// row with colours (Id = facet, Title, Note, Tone "hidden" while collapsed and too tall, Items = "part": Id, Title,
+    /// row with colours (Id = facet, Title, Note, Tone "hidden" while collapsed and too tall, PartLink, Items = "part": Id, Title,
     /// Value, Fraction, Colour, Selected, Tone "zero").
+    /// One rule for the whole book (0.8.2, Joost in game on Cooking): wherever a bar part filters the page, its legend item filters the same
+    /// way. A bar whose parts filter carries PartLink (a facet bar, or a page's own bar over a row: LinkBar); PartTarget gives the target of
+    /// a part, and the bar form draws it on the part and on its legend item alike (BarFormUi.BarWithList, the preview's barForm).
     /// </summary>
     public static partial class PanelModel
     {
@@ -244,6 +250,22 @@ namespace Hearthwoven.Panel
         /// <summary>The click target of a chip, a token or a bar part.</summary>
         public static string FacetLink(string filter, string facet, string option) => FacetTarget + FacetKey(filter, facet) + "|" + option;
 
+        /// <summary>The click target of a bar's part, the same on the part and on its legend item; null when the bar's parts do not filter
+        /// (no PartLink) or for the folded "Other (n kinds)" part (its kinds are chosen by their chips).</summary>
+        public static string PartTarget(Block bar, Block part) =>
+            bar?.PartLink == null || part == null || string.IsNullOrEmpty(part.Id) || part.Id == FoldId ? null : bar.PartLink + part.Id;
+
+        /// <summary>A page's own bar over one row of its filter (Cooking's Dishes by kind, 0.8.2): its parts filter as a facet bar's do, the
+        /// chosen ones outlined (the folded part when a kind inside it is chosen).</summary>
+        public static void LinkBar(Block bar, PanelState state, string filter, string facet)
+        {
+            if (bar == null) return;
+            var chosen = Chosen(state, filter, facet);
+            bar.PartLink = FacetLink(filter, facet, "");
+            foreach (var p in bar.Items ?? new List<Block>())
+                p.Selected = p.Id == FoldId ? (p.Items ?? new List<Block>()).Any(i => chosen.Contains(i.Id)) : chosen.Contains(p.Id);
+        }
+
         /// <summary>A click on a filter target (chip, token, bar part, Clear all); false for any other target.</summary>
         public static bool FollowFacet(PanelState s, string target)
         {
@@ -280,6 +302,8 @@ namespace Hearthwoven.Panel
                     if (key.Length > 0) byLabel[key] = o;
                     keep.Add(o);
                 }
+                // a chosen option the list no longer has (a day window without it) keeps its chip, so it can always be unchosen
+                foreach (var id in Chosen(state, filter, d.Id)) if (!map.ContainsKey(id) && !keep.Any(o => o.Id == id)) keep.Add(new FacetOption { Id = id, Label = id });
                 opts[d] = keep; alias[d] = map;
             }
             string ValueOf(FacetItem it, FacetDef d) => !it.Values.TryGetValue(d.Id, out var v) ? null : v != null && alias[d].TryGetValue(v, out var to) ? to : v;
@@ -352,7 +376,7 @@ namespace Hearthwoven.Panel
                 var title = d.BarTitle ?? d.Title;
                 // the honest line stays under the row; on the bar it only stays when the bar's title does not already say it
                 var note = !string.IsNullOrEmpty(d.Sub) && title.IndexOf(d.Sub, StringComparison.OrdinalIgnoreCase) >= 0 ? null : d.Sub;
-                var fb = new Block { Kind = "facetbar", Id = d.Id, Title = title, Value = sum > 0 ? N(sum) : null, Note = note, Tone = shownHere ? null : "hidden", Items = new List<Block>() };   // 0.8 layout D+: its heading's total
+                var fb = new Block { Kind = "facetbar", Id = d.Id, Title = title, Value = sum > 0 ? N(sum) : null, Note = note, Tone = shownHere ? null : "hidden", PartLink = FacetLink(filter, d.Id, ""), Items = new List<Block>() };   // 0.8 layout D+: its heading's total
                 foreach (var (o, n) in counts)
                     fb.Items.Add(new Block { Kind = "part", Id = o.Id, Title = o.Label, Value = N(n), Colour = plan.Colours[o.Id], Fraction = sum > 0 ? (float)(n / sum) : 0, Selected = chosen.Contains(o.Id), Tone = n <= 0 ? "zero" : null });
                 // the rest: "Other" as it is, or the folded part (no click of its own: its chips are in the row above)
@@ -361,7 +385,7 @@ namespace Hearthwoven.Panel
                                              Fraction = sum > 0 ? (float)(rest / sum) : 0, Selected = plan.Rest.Any(o => chosen.Contains(o.Id)), Tone = rest <= 0 ? "zero" : null });
                 bar.Items.Add(fb);
             }
-            return new FacetResult { Bar = bar, Shown = shown, Pass = it => Passes(it, null) };
+            return new FacetResult { Bar = bar, Shown = shown, Pass = it => Passes(it, null), Except = id => items.Where(it => Passes(it, defs.FirstOrDefault(d => d.Id == id))).ToList() };
         }
 
         // ---------- the filter focus (keys) ----------

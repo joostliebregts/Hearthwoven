@@ -7,7 +7,8 @@ namespace Hearthwoven
     /// <summary>
     /// Measured since install, per session, with WHEN and WHERE: damage in 10-minute buckets per biome, enemy, cause and
     /// damage type (dealt and taken), and every death with its biome, killer and the damage of its last 30 seconds (TimelineSeconds).
-    /// Absolute per session like everything measured: a resend replaces, never adds. Pure C#, unit-tested.
+    /// Absolute per session like everything measured: a resend replaces, never adds. 0.8.2: its last minutes are kept on this PC for the next
+    /// connection in the same world (KeptMinutes), which joins them under its own log for the short windows only. Pure C#, unit-tested.
     /// </summary>
     public class EventLog
     {
@@ -26,11 +27,23 @@ namespace Hearthwoven
         public readonly Dictionary<string, float> Damage = new Dictionary<string, float>();
         // same key without the type -> number of hits
         public readonly Dictionary<string, float> Hits = new Dictionary<string, float>();
+        /// <summary>0.8.2 (Joost, on a fellow's book: "why do their blocks show in All only?"): your held blocks and parries per minute,
+        /// "2026-10-07T20:10Z|block" and "...|parry" -> count, the same rule and the same hook as SessionEvents.Blocks and Parries (a block counts
+        /// every held one, a parry is one of them), so every window can cut them: 10 min .. 3 h on your book, a fellow's Session at yours. Its own
+        /// map, so no reader of Damage or Hits ever meets it; folded with them. Two keys a minute at most.</summary>
+        public readonly Dictionary<string, float> Guard = new Dictionary<string, float>();
+        public const string GuardBlock = "block", GuardParry = "parry";
+        /// <summary>The log keeps Guard (this PC's own; a fellow's copy whose measuredLog has "guard"). False: a copy from before 0.8.2, whose
+        /// blocks are one untimed tally of the session (SessionEvents).</summary>
+        public bool GuardKept = true;
         public readonly List<Death> Deaths = new List<Death>();
         /// <summary>Damage and deaths folded per biome, kept up to date as hits and deaths come in: always what BiomeTally.FromLog(this) gives
         /// for a log filled through AddDamage and AddDeath (the full pass over every key stays as the reference, and for a log read from a snapshot).</summary>
         public readonly BiomeTally Biome = new BiomeTally();
         public int DeathsNotListed;   // beyond MaxDeaths: counted, never silently lost
+        /// <summary>0.8.2: how often the log changed (a hit, a death, a block): the book joins your kept minutes under it (Plugin.LogWithEarlier)
+        /// once per change, not on every refresh.</summary>
+        public int Changes { get; private set; }
         readonly Queue<Recent> recent = new Queue<Recent>();
 
         public class Death
@@ -56,7 +69,17 @@ namespace Hearthwoven
             var now = Bucket(utc); if (now == lastFold) return;
             lastFold = now;
             var cut = Bucket(utc.AddMinutes(-FoldAfterMinutes));
-            FoldKeys(Damage, cut); FoldKeys(Hits, cut);
+            FoldKeys(Damage, cut); FoldKeys(Hits, cut); FoldKeys(Guard, cut);
+        }
+
+        /// <summary>One held block (ClientHooks.Block, where SessionEvents.Blocks counts it); <paramref name="parry"/>: it was a parry too.</summary>
+        public void AddGuard(DateTime utc, bool parry)
+        {
+            Fold(utc); Changes++;
+            var minute = Bucket(utc);
+            Bump(minute + "|" + GuardBlock);
+            if (parry) Bump(minute + "|" + GuardParry);
+            void Bump(string k) { Guard.TryGetValue(k, out var o); Guard[k] = o + 1; }
         }
 
         internal static void FoldKeys(Dictionary<string, float> d, string cut)   // ArmourLog folds its buckets the same way
@@ -79,7 +102,7 @@ namespace Hearthwoven
         public void AddDamage(DateTime utc, string biome, bool dealt, string other, string cause, HitData.DamageTypes d)
         {
             if (!dealt && DamageTally.TotalOf(d) <= 0f) return;   // a hit fully absorbed (a ward) is no hit received, as in DamageTally (review 0.6.5: the windows still counted it)
-            Fold(utc);
+            Fold(utc); Changes++;
             var head = Bucket(utc) + "|" + (biome ?? "None") + "|" + (dealt ? "dealt" : "taken") + "|" + (other ?? "?") + "|" + (cause ?? "?");
             if (!Hits.ContainsKey(head) && Hits.Count >= MaxBuckets) head = Bucket(utc) + "|" + (biome ?? "None") + "|" + (dealt ? "dealt" : "taken") + "|other|other";
             Hits.TryGetValue(head, out var h); Hits[head] = h + 1;
@@ -112,9 +135,55 @@ namespace Hearthwoven
             }
             death.Killer = any ? last.Source : "unknown";
             death.Cause = any ? last.Cause : "unknown";
-            recent.Clear();
+            recent.Clear(); Changes++;
             if (Deaths.Count < MaxDeaths) { Deaths.Add(death); Biome.AddDeath(death.Biome); } else DeathsNotListed++;
             return death;
+        }
+
+        /// <summary>
+        /// 0.8.2 (J): a fellow's earlier connections' log put under their latest copy's (FellowTrail.Joined): every bucket summed per key, the
+        /// deaths of both in time order. A new log; the two stay as they are. Span: the wider of the two (a bucket counts when any part of it lies
+        /// in a window); GuardKept: the latest copy's (its version decides whether blocks are timed).
+        /// </summary>
+        public static EventLog Join(EventLog earlier, EventLog later)
+        {
+            if (earlier == null) return later;
+            if (later == null) return earlier;
+            var j = new EventLog { Span = Math.Max(earlier.Span, later.Span), GuardKept = later.GuardKept, DeathsNotListed = earlier.DeathsNotListed + later.DeathsNotListed };
+            foreach (var log in new[] { earlier, later })
+            {
+                Add(log.Damage, j.Damage); Add(log.Hits, j.Hits); Add(log.Guard, j.Guard);
+                j.Deaths.AddRange(log.Deaths);
+            }
+            j.Deaths.Sort((a, b) => a.Time.CompareTo(b.Time));
+            return j;
+            void Add(Dictionary<string, float> from, Dictionary<string, float> to) { foreach (var kv in from) { to.TryGetValue(kv.Key, out var o); to[kv.Key] = o + kv.Value; } }
+        }
+
+        /// <summary>
+        /// 0.8.2: the part of the log from <paramref name="fromUtc"/> to <paramref name="untilUtc"/> (KeptMinutes, FellowTrail.Joined): a new log
+        /// with the one-minute buckets that start at or after fromUtc and end at or before untilUtc, and the deaths in between. fromUtc on a whole
+        /// ten minutes never cuts a folded bucket in two. The log stays as it is.
+        /// </summary>
+        public EventLog Between(DateTime fromUtc, DateTime untilUtc)
+        {
+            var b = new EventLog { Span = Span, GuardKept = GuardKept };
+            string lo = Bucket(fromUtc), hi = untilUtc == DateTime.MaxValue ? null : Bucket(untilUtc);
+            KeysBetween(Damage, b.Damage, lo, hi); KeysBetween(Hits, b.Hits, lo, hi); KeysBetween(Guard, b.Guard, lo, hi);
+            foreach (var d in Deaths) if (d.Time >= fromUtc && d.Time < untilUtc) b.Deaths.Add(d);
+            return b;
+        }
+
+        /// <summary>The keys of <paramref name="from"/> whose minute ("2026-10-07T20:14Z|...") is at or after <paramref name="lo"/> and before
+        /// <paramref name="hi"/> (null: no end), added into <paramref name="to"/>: EventLog's, DeedLog's and ArmourLog's keys alike.</summary>
+        internal static void KeysBetween(IDictionary<string, float> from, IDictionary<string, float> to, string lo, string hi)
+        {
+            foreach (var kv in from)
+            {
+                var k = kv.Key;
+                if (k.Length < 17 || string.CompareOrdinal(k, 0, lo, 0, 17) < 0 || (hi != null && string.CompareOrdinal(k, 0, hi, 0, 17) >= 0)) continue;
+                to.TryGetValue(k, out var o); to[k] = o + kv.Value;
+            }
         }
 
         static void Each(HitData.DamageTypes d, Action<string, float> f)
@@ -124,9 +193,12 @@ namespace Hearthwoven
             A("fire", d.m_fire); A("frost", d.m_frost); A("lightning", d.m_lightning); A("poison", d.m_poison); A("spirit", d.m_spirit); A("damage", d.m_damage);
         }
 
-        public void WriteTo(Json j)
+        public void WriteTo(Json j, string key = "measuredLog") { j.Key(key).Open(); WriteFields(j); j.Close(); }
+
+        /// <summary>The log's fields inside an object the caller opened (WriteTo; KeptMinutes adds its own beside them).</summary>
+        internal void WriteFields(Json j)
         {
-            j.Key("measuredLog").Open().Num("bucketMinutes", BucketMinutes).Num("deathsNotListed", DeathsNotListed).Dict("damage", Damage).Dict("hits", Hits);
+            j.Num("bucketMinutes", BucketMinutes).Num("deathsNotListed", DeathsNotListed).Dict("damage", Damage).Dict("hits", Hits).Dict("guard", Guard);
             j.Key("deaths").OpenArr();
             foreach (var d in Deaths)
             {
@@ -136,7 +208,30 @@ namespace Hearthwoven
                 foreach (var h in d.Timeline) j.Open().Num("ago", Math.Round(h.Ago, 2)).Str("source", h.Source).Str("cause", h.Cause).Str("type", h.Type).Num("amount", h.Amount).Close();
                 j.CloseArr().Close();
             }
-            j.CloseArr().Close();
+            j.CloseArr();
+        }
+
+        /// <summary>Reads what WriteTo wrote (a fellow's "measuredLog", your kept minutes) into this log; null: nothing, as an older sender's
+        /// copy without a log (ten-minute buckets). A shared copy's deaths carry no position (0).</summary>
+        public EventLog ReadFrom(Dictionary<string, object> log)
+        {
+            MiniJson.Into(MiniJson.Obj(log, "damage"), Damage); MiniJson.Into(MiniJson.Obj(log, "hits"), Hits);
+            MiniJson.Into(MiniJson.Obj(log, "guard"), Guard); GuardKept = MiniJson.Obj(log, "guard") != null;   // 0.8.2: blocks and parries per minute (an older sender keeps none)
+            Span = log != null && MiniJson.Num(log, "bucketMinutes") >= 1 ? (int)MiniJson.Num(log, "bucketMinutes") : 10;   // an older sender kept ten-minute buckets
+            if (log != null && log.TryGetValue("deaths", out var ds) && ds is List<object> deaths)
+                foreach (var o in deaths)
+                {
+                    if (!(o is Dictionary<string, object> e) || !DateTime.TryParse(MiniJson.Str(e, "t"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var t)) continue;
+                    var d = new Death { Time = t.ToUniversalTime(), Biome = MiniJson.Str(e, "biome", "None"), Killer = MiniJson.Str(e, "killer", "unknown"), Cause = MiniJson.Str(e, "cause", "unknown"),
+                                        X = (float)MiniJson.Num(e, "x"), Z = (float)MiniJson.Num(e, "z") };
+                    MiniJson.Into(MiniJson.Obj(e, "last10s"), d.Last10s);
+                    if (e.TryGetValue("timeline", out var tl) && tl is List<object> hits)   // an older snapshot has none: the totals stay
+                        foreach (var h in hits)
+                            if (h is Dictionary<string, object> x)
+                                d.Timeline.Add(new Hit { Ago = (float)MiniJson.Num(x, "ago"), Amount = (float)MiniJson.Num(x, "amount"), Source = MiniJson.Str(x, "source", "?"), Cause = MiniJson.Str(x, "cause", "?"), Type = MiniJson.Str(x, "type", "damage") });
+                    Deaths.Add(d);
+                }
+            return this;
         }
     }
 }

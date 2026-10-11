@@ -89,6 +89,35 @@ namespace Hearthwoven.Panel
                 : new Block { Kind = "source", Id = r.Id, Icon = r.Icon, Title = r.Title, Note = r.Note, Text = r.Text, Items = new List<Block>() }).ToList();
         }
 
+        /// <summary>Defense's What your armor stopped (ArmourModel.ArmourRow, 0.8.1): a part as wide as what reached your armor, an outline in its
+        /// colour filled from the left by what got through (Fraction2 of the part); Value what got through (in the fill), Value2 what your armor
+        /// stopped (in the outline), Text its line words, the share stopped ("20 %").</summary>
+        public const string DamageStoppedTone = "stopped";
+        public static bool IsStoppedPart(BarRow r) => r?.Part?.Tone == DamageStoppedTone;
+
+        /// <summary>A damage row's line entry: the part's name and its share of the row ("Slash 64 %"); a stopped part its share stopped ("Poison 20 %").</summary>
+        public static string DamageLineWords(BarRow r) => r.Title + " " + (IsStoppedPart(r) ? r.Part.Text : r.Share);
+
+        /// <summary>
+        /// What pointing at a part of a damage bar shows, on every part (0.8.2, Joost in game: "that mouse over should always be visible on all
+        /// of them, because then it shows you what damage type that actually is"; before, only a part too narrow for its number had it): its
+        /// name and number ("Frost 120", "Edda 310"); a stopped part the numbers it holds ("Pierce 12 got through, 6 stopped"). The share line's
+        /// entry swaps to these words, or (no share line, a player's line) a tag over the bar says them.
+        /// </summary>
+        public static string DamageHoverWords(BarRow r)
+        {
+            if (r == null) return "";
+            bool Some(string v) => !string.IsNullOrEmpty(v) && v != "0";
+            if (IsStoppedPart(r)) return Some(r.Value) || Some(r.Part.Value2) ? DamageSwapWords(r, Some(r.Value), Some(r.Part.Value2)) : r.Title;
+            return string.IsNullOrEmpty(r.Value) ? r.Title : r.Title + " " + r.Value;
+        }
+
+        /// <summary>The entry's words on hover when its part was too narrow for its number ("Frost 37"); a stopped part the numbers its fill or its
+        /// outline could not hold ("Pierce 12 got through", "Pierce 6 stopped", or both).</summary>
+        public static string DamageSwapWords(BarRow r, bool throughHidden = true, bool stoppedHidden = false) =>
+            !IsStoppedPart(r) ? r.Title + " " + r.Value
+            : r.Title + " " + string.Join(", ", new[] { throughHidden ? r.Value + " " + ArmourKeyThrough : null, stoppedHidden ? r.Part.Value2 + " " + ArmourStoppedWord : null }.Where(x => x != null));
+
         /// <summary>The widest number a list of rows on one scale holds, for its number column, worked out from the first of them (By weapon's rows
         /// are blocks of their own, drawn one at a time; the renderer keeps the width for the run, REVIEW-081 #6): the largest total, at most this
         /// row's shown amount plus the half it may have been rounded down by (under 1 for "&lt;1") over its Fraction, with every digit an 8,
@@ -105,7 +134,7 @@ namespace Hearthwoven.Panel
 
         /// <summary>The damage rows' line in About these numbers (Damage's three views, Defence, Last fight): the floor, the true line, the hover.</summary>
         public const string DamageBarsAboutTitle = "The damage bars";
-        public const string DamageBarsAbout = "All rows here share one scale, but each bar starts a quarter of the way along, so even a small one shows what it is made of. The thin line under a bar is its true length. A piece too narrow for its number shows it when you point at it.";
+        public const string DamageBarsAbout = "All rows here share one scale, but each bar starts a quarter of the way along, so even a small one shows what it is made of. The thin line under a bar is its true length. Point at any piece to see what it is and its number.";
 
         /// <summary>Last fight's foes, when fellow players are in the numbers: the rows are your own damage (the hero above is the group's).</summary>
         public const string YourDamageToEach = "your damage to each";

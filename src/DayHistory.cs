@@ -340,6 +340,57 @@ namespace Hearthwoven
             return d;
         }
 
+        /// <summary>
+        /// 0.9 (Joost: "Today works like everything else"): your damage dealt per local day split by weapon kind and battle type ("melee|slash",
+        /// "bow|pierce": WeaponKind of the hit's skill), the last <paramref name="days"/> days: what the snapshot shares beside dealtByDay
+        /// ("dayDealt"), so the group's By weapon and By type work on Today, 7 days and 30 days. Whole numbers, only parts that are not zero; a
+        /// day's parts add up to that day's dealtByDay exactly (each part rounded down, the largest remainders take the rest).
+        /// </summary>
+        public Dictionary<string, Dictionary<string, float>> DayDealt(DateTime today, int days = 30, Row pending = null)
+        {
+            var cells = new Dictionary<string, Dictionary<string, double>>();
+            var from = today.Date.AddDays(1 - days);
+            foreach (var r in Rows.Where(r => r.IsDay && r.Start >= from).Concat(pending != null ? new[] { pending } : new Row[0]))
+            {
+                var k = r.IsDay ? r.Period : DayKey(today);
+                foreach (var kv in r.Damage?.Dealt ?? new Dictionary<string, float>())
+                {
+                    var last = kv.Key.LastIndexOf('|'); var mid = last > 0 ? kv.Key.LastIndexOf('|', last - 1) : -1;
+                    var type = kv.Key.Substring(last + 1);
+                    if (kv.Value <= 0 || Array.IndexOf(BattleTypes, type) < 0) continue;
+                    if (!cells.TryGetValue(k, out var day)) cells[k] = day = new Dictionary<string, double>();
+                    var cell = WeaponKind(mid >= 0 ? kv.Key.Substring(mid + 1, last - mid - 1) : "") + "|" + type;
+                    day.TryGetValue(cell, out var o); day[cell] = o + kv.Value;
+                }
+            }
+            var totals = DealtByDay(today, days, pending);
+            var d = new Dictionary<string, Dictionary<string, float>>();
+            foreach (var day in cells)
+            {
+                if (!totals.TryGetValue(day.Key, out var target) || target <= 0) continue;
+                var sum = day.Value.Values.Sum();
+                var parts = day.Value.Select(kv => (key: kv.Key, exact: kv.Value * target / sum)).Select(x => (x.key, x.exact, whole: Math.Floor(x.exact))).ToList();
+                var left = (int)Math.Round(target - parts.Sum(x => x.whole));
+                var up = new HashSet<string>(parts.OrderByDescending(x => x.exact - x.whole).ThenBy(x => x.key, StringComparer.Ordinal).Take(left).Select(x => x.key));
+                var shared = parts.Select(x => (x.key, v: x.whole + (up.Contains(x.key) ? 1 : 0))).Where(x => x.v > 0).ToDictionary(x => x.key, x => (float)x.v);
+                if (shared.Count > 0) d[day.Key] = shared;
+            }
+            return d;
+        }
+
+        /// <summary>The weapon kind of a hit from the skill the game booked it on (the book's By weapon, PanelModel.WeaponOf): bows and crossbows
+        /// "bow", the staffs' elemental and blood magic "magic", everything else (swords, axes, clubs, spears, fists, tools) "melee". A kind passes
+        /// as itself: a fellow's shared day parts carry the kind, not the skill.</summary>
+        public static string WeaponKind(string skill)
+        {
+            switch (skill)
+            {
+                case "Bows": case "Crossbows": case "bow": return "bow";
+                case "ElementalMagic": case "BloodMagic": case "magic": return "magic";
+                default: return "melee";
+            }
+        }
+
         static readonly string[] BattleTypes = { "blunt", "slash", "pierce", "fire", "frost", "lightning", "poison", "spirit" };
         /// <summary>Damage dealt in a tally, the eight battle types only (tool damage is never battle).</summary>
         public static double DealtOf(DamageTally t)

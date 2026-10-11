@@ -182,6 +182,29 @@ static partial class CoherenceTests
                 .Select(m => m.Value.TrimEnd('(')).Distinct().ToList();
             Check(patched.Count > 20 && patched.Contains(("StoreGui", "IsVisible")) && decides.Contains("Menu.IsVisible()") && throughPatch.Count == 0,
                   "on top: CanOpen and GameOnTop read the game's windows, never through a method this mod patches (" + patched.Count + " patched; through a patch: " + (throughPatch.Count == 0 ? "none" : string.Join(", ", throughPatch)) + ")");
+            // 0.8.1 (Joost: one rule): anything you can point at shows it. Every button is made by ClickTarget (which adds a HoverMark), and every
+            // press or click handler is a HoverMark, so a new card, tile or chip cannot be left without the hover line
+            var buttons = System.Text.RegularExpressions.Regex.Matches(all, @"AddComponent<(?:UnityEngine\.UI\.)?Button>").Count;
+            var unmarked = System.Text.RegularExpressions.Regex.Matches(all, @"class (\w+)\s*:\s*([^{]*)").Cast<System.Text.RegularExpressions.Match>()
+                .Where(m => (m.Groups[2].Value.Contains("IPointerDownHandler") || m.Groups[2].Value.Contains("IPointerClickHandler")) && !m.Groups[2].Value.Contains("HoverMark"))
+                .Select(m => m.Groups[1].Value).ToList();
+            Check(buttons == 1 && all.Contains("target.gameObject.AddComponent<HoverMark>();") && unmarked.Count == 0,
+                  "hover: every button comes from ClickTarget with a HoverMark (" + buttons + " made), every press or click handler is a HoverMark (not: " + (unmarked.Count == 0 ? "none" : string.Join(", ", unmarked)) + ")");
+            // 0.8.2 (Joost on Battle > Foes: "that's not obvious that I can click on it"): a row, card or tile that opens something ends in the opens
+            // mark. One helper draws it (PanelUi.OpensMark), reached through ClickTarget's opens flag or by the foe rows (they act on press); the
+            // chevron's line is PanelLook's and the preview's alike, and the preview marks as many openers as the panel does (its opensMark)
+            var battleUi = Read("src", "Panel", "Chapters", "BattleUi.cs");
+            var opensDrawn = System.Text.RegularExpressions.Regex.Matches(all, @"\bOpensMark\(").Count;   // the helper, ClickTarget and the foe rows; 0.9 the fight pages' foe rows and Runs and bosses' rows (FightUi.cs)
+            var csOpeners = System.Text.RegularExpressions.Regex.Matches(all, @"opens: true\)").Count + System.Text.RegularExpressions.Regex.Matches(all, @"\bOpensMark\(r, ").Count;
+            var htmlOpeners = System.Text.RegularExpressions.Regex.Matches(html, @"\bopensMark\(").Count;   // its uses (the definition reads "opensMark = (")
+            int Px(string text, string pattern) { var m = System.Text.RegularExpressions.Regex.Match(text, pattern); return m.Success ? int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) : -1; }
+            var csArrow = Px(battleUi, @"BtFoeArrow = (\d+),"); var htmlArrow = Px(html, @"\(arrows \? (\d+) : 0\)");
+            Check(opensDrawn == 5 && ui.Contains("if (opens) OpensMark(target.rectTransform);") && battleUi.Contains("OpensMark(r, row.Selected, BtOpensRight);") &&
+                  look.Contains("new Vector2(1.5f, 1.5f), new Vector2(6.5f, 7f), new Vector2(1.5f, 12.5f)") && look.Contains("ChevronW = 8, ChevronH = 14, ChevronStroke = 1.8f") &&
+                  html.Contains(@"viewBox=""0 0 8 14""><polyline points=""1.5,1.5 6.5,7 1.5,12.5"" fill=""none"" stroke=""currentColor"" stroke-width=""1.8""") && html.Contains(".opens-mk { position:absolute; top:50%; width:8px; height:14px;") &&
+                  csOpeners >= 4 && csOpeners == htmlOpeners && csArrow >= 166 && csArrow == htmlArrow,
+                  "opens: one mark on every row, card or tile that opens, drawn by PanelUi.OpensMark (" + opensDrawn + " uses) and the preview's opensMark alike (openers " + csOpeners + " in the panel, " + htmlOpeners +
+                  " in the preview); the Foes arrow column " + csArrow + " px in both (" + htmlArrow + ")");
             Check(lowBoxes.Count == 0 && chapterSrc.Any(s => s.Contains("static float LineBox(")), "text: no one-line label sits in a box lower than its font's line (TMP's ellipsis would drop it whole)" + (lowBoxes.Count > 0 ? ": " + string.Join(" | ", lowBoxes) : ""));
         }
         return fails;

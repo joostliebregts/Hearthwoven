@@ -82,7 +82,7 @@ namespace Hearthwoven.Panel
             {
                 // why the window chips are greyed (a fellow's copy, the group, a day window before the history): the greyed chips' hover reason
                 if (line == WaitLine(input, state.Window)) { view.WindowTip = state.Window.ToString(); return; }   // a greyed day chip was pressed: its own reason shows under it now (B17)
-                if (line == GroupDaysLine || line == DeedsWindowsLine(input) || line == RecentWindowsLine(input) || line == SharedWindowsLine(input))
+                if (line == GroupDaysLine || line == GroupFoesDaysLine || line == DeedsWindowsLine(input) || line == RecentWindowsLine(input) || line == SharedWindowsLine(input) || line == SharedWindowsLine(input, true))
                 {
                     view.WindowWhy = string.IsNullOrEmpty(view.WindowWhy) ? line : view.WindowWhy + " " + line;
                     return;
@@ -94,8 +94,9 @@ namespace Hearthwoven.Panel
                     return;
                 }
                 // whose copy and when (a fellow's book): at the strip's right end, where your own book has its About button (a fellow's copy has
-                // no box: it carries no dates, hard case 6)
-                if (!input.IsSelf) { view.StripNote = string.IsNullOrEmpty(view.StripNote) ? line : view.StripNote + " · " + line; return; }
+                // no box: it carries no dates, hard case 6). 0.8.2: a fellow's Last fight says who was in it in its About box, as yours does (a
+                // sentence or three, too long for the strip's one line)
+                if (!input.IsSelf && !(view.Active == Chapter.Battle && view.Page == LastFightPage)) { view.StripNote = string.IsNullOrEmpty(view.StripNote) ? line : view.StripNote + " · " + line; return; }
                 var label = view.Comparing && line.Contains(", against ") ? AboutComparedLabel
                           : view.Active == Chapter.Battle && view.Page == LastFightPage ? AboutFightLabel : DetailsLabel;
                 moved.Add(AboutLine(label, line));

@@ -16,7 +16,7 @@ namespace Hearthwoven.Panel
         const int RecentCols = 3;
         const float RecentNameW = 172, RecentCellH = 44, RecentCellGap = 12, RecentRowGap = 4, RecentPad = 8, RecentPicSize = 34;
 
-        static void RecentPeople(RectTransform col, Block b)
+        static void RecentPeople(RectTransform col, Block b, System.Func<string, System.Action> link = null)
         {
             float x0 = RecentNameW + 14, cellW = (Column - x0 - (RecentCols - 1) * RecentCellGap) / RecentCols;
             foreach (var p in b.Items ?? new List<Block>())
@@ -27,8 +27,8 @@ namespace Hearthwoven.Panel
                 var box = Node("Player", col); Size(box, Column, h);
                 Marker(box, p.Icon, 38, layout: false).Box(0, RecentPad + (RecentCellH - 38) / 2, 38, 38);
                 OneLine(Label(box, p.Title, 20, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft)).rectTransform.Box(52, RecentPad, RecentNameW - 52, RecentCellH);
-                if (!string.IsNullOrEmpty(p.Note))   // "+3 more": what grew beyond the grid, quiet under the name
-                    OneLine(Label(box, p.Note, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic)).rectTransform.Box(52, RecentPad + RecentCellH, RecentNameW - 52, 20);
+                if (!string.IsNullOrEmpty(p.Note))   // "+3 more": what grew beyond the grid, quiet under the name; a click shows every gain (0.8.2)
+                    MoreLink(OneLine(Label(box, p.Note, 14, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Italic)), p.NoteLink != null ? link?.Invoke(p.NoteLink) : null).rectTransform.Box(52, RecentPad + RecentCellH, RecentNameW - 52, 20);
                 for (int k = 0; k < items.Count; k++)
                 {
                     var i = items[k];

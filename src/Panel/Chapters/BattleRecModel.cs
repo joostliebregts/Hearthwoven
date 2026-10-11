@@ -67,9 +67,14 @@ namespace Hearthwoven.Panel
         public static bool FellowFoesBeforeYou(PanelInput input)
         {
             var from = SessionFrom(input);
-            if (!from.HasValue || input.FoesSession == null) return false;
+            if (input.IsSelf || !from.HasValue || input.FoesSession == null) return false;   // your own Session: your counts are this session's (0.8.2: SessionFrom holds it there too)
             return !input.FirstRecordedUtc.HasValue || input.FirstRecordedUtc.Value.AddMinutes(SpanOf(input)) <= from.Value;
         }
+
+        /// <summary>0.8.2 (I): a fellow's "×N" counts are missing in Session or All because their copy comes from before 0.8 (no "foes": OlderLine
+        /// says so); not when REVIEW-08 #2 leaves them out on purpose (FellowFoesBeforeYou), and never in a short window (counts there are yours only).</summary>
+        public static bool CountsWait(PanelInput input, TimeWindow w) =>
+            input != null && !input.IsSelf && (w == TimeWindow.Session || w == TimeWindow.SinceInstall) && FoeCountsIn(input, w) == null && !FellowFoesBeforeYou(input) && OlderThan(input, NeedsFoeCounts);
 
         /// <summary>The line where a fellow's Session leaves their counts out (FellowFoesBeforeYou).</summary>
         public static string FellowCountsAll(PanelInput input) => Name(input) + " was playing before you came in, so the counts per foe show in All.";
@@ -120,13 +125,18 @@ namespace Hearthwoven.Panel
             return Damage(input.Log, w, "", input.NowUtc, SessionFrom(input));   // a fellow's Session from yours, as the pages (B33)
         }
 
-        /// <summary>The battle feed: your fights this session, newest first, each with its foes newest first (at most BattleRecorder.MaxFeed foes
-        /// over all fights). Your own book only (a fellow's copy carries no feed): null. <paramref name="maxFights"/> above 0: only that many.</summary>
+        /// <summary>The battle feed: the fights of this session, newest first, each with its foes newest first. Your book: the recorder's (at most
+        /// BattleRecorder.MaxFeed foes over all fights); a fellow's (0.8.2): their shared feed (FeedShare, their newest foes), null for a copy from
+        /// before 0.8.2. <paramref name="maxFights"/> above 0: only that many.</summary>
         public static List<FoeFight> BattleFeed(PanelInput input, int maxFights = 0)
         {
-            if (input == null || !input.IsSelf || input.Battle == null) return null;
-            var all = input.Battle.Fights();
+            var all = input == null ? null : input.IsSelf ? input.Battle?.Fights() : input.SharedFeed?.Fights;
+            if (all == null) return null;
             return maxFights > 0 && all.Count > maxFights ? all.Take(maxFights).ToList() : all;
         }
+
+        /// <summary>The foes of the session a book's feed does not hold (REVIEW-08 #9): those your recorder no longer keeps; on a fellow's book those
+        /// their copy leaves out (FeedShare.LeftOut).</summary>
+        public static int FeedLeftOut(PanelInput input) => input == null ? 0 : input.IsSelf ? input.Battle?.FeedLeftOut ?? 0 : input.SharedFeed?.LeftOut ?? 0;
     }
 }

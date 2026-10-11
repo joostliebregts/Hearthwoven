@@ -83,8 +83,8 @@ static class BattleRecTests
         var since = FoeCounts.Sum(back.Foes.BeforeSession("S3"));
         Check(back.Foes.FromUtc == t0 && back.Foes.Days.Count == 2 && since.Get("Greydwarf").Fought == 2 && since.Get("Troll").Defeated == 1 && since.Get("Boar").Fought == 2 &&
               back.Foes.Sum(day.Date, day.Date).Get("Troll").Fought == 1 && json.Contains("\"foes\":{") && back.Extra.Count == 0 &&
-              MiniJson.Num((Dictionary<string, object>)MiniJson.Parse(json), "schema") == 5,
-              "B book: the same session saved twice adds only its growth, a new session folds the last, the day rows add up; schema 5, top-level \"foes\" (never inside \"history\"); reads back exactly");
+              MiniJson.Num((Dictionary<string, object>)MiniJson.Parse(json), "schema") >= 5,
+              "B book: the same session saved twice adds only its growth, a new session folds the last, the day rows add up; schema 5 or later (0.9: 6), top-level \"foes\" (never inside \"history\"); reads back exactly");
 
         // ---------- shared: the counts, compact; the feed stays here; the copy grows by little ----------
         var stats = new PlayerProfile.PlayerStats[1]; stats[0] = new PlayerProfile.PlayerStats();
@@ -105,11 +105,11 @@ static class BattleRecTests
         int packedWithout = Transport.Pack(without).Length, packedWith = Transport.Pack(with).Length;
         var copy = Hearthwoven.Panel.PanelInput.FromSnapshot(with);
         System.Console.WriteLine($"INFO share: {kinds.Length} foe kinds this session and since: the shared copy grows from {without.Length} to {with.Length} bytes of JSON (+{with.Length - without.Length}), " +
-                          $"{packedWithout} to {packedWith} bytes packed (+{packedWith - packedWithout}); the feed ({many.FeedCount} entries) is not in it");
+                          $"{packedWithout} to {packedWith} bytes packed (+{packedWith - packedWithout}); the feed ({many.FeedCount} entries) goes under its own key (0.8.2, FeedShareTests)");
         var foesKeys = ((Dictionary<string, object>)((Dictionary<string, object>)MiniJson.Parse(with))["foes"]).Keys.OrderBy(k => k).ToArray();
         Check(copy.FoesSession.Get("Troll").Fought == trolls && copy.FoesSession.Get("Troll").Defeated == trolls && copy.FoesSince.Get("Troll").Fought == 2 * trolls && copy.FoesFromUtc == t0 &&
               copy.Battle == null && foesKeys.SequenceEqual(new[] { "from", "session", "since" }) && packedWith - packedWithout < 1024,
-              "B share: a fellow reads your counts per kind (this session and since recording began, with the date); the feed is not shared; 30 kinds add " + (packedWith - packedWithout) + " bytes packed (under 1 KB)");
+              "B share: a fellow reads your counts per kind (this session and since recording began, with the date); \"foes\" holds counts only, never a recorder (the feed: FeedShare, 0.8.2); 30 kinds add " + (packedWith - packedWithout) + " bytes packed (under 1 KB)");
         // REVIEW-08 #8: a foe still in the fight is shared as such (a fifth number, only where there is one), so a fellow's book does not show
         // it as got away; the saved book keeps four numbers
         var running = new BattleRecorder(); running.Dealt(t0, Id(9001), "Troll", "$enemy_troll", "Swamp", D(30));

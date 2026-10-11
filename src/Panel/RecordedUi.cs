@@ -98,9 +98,11 @@ namespace Hearthwoven.Panel
         // ----- the deed's skill in the hero's row (rule K): icon, name, "level 34", a thin progress bar; a click opens the skill -----
 
         // 0.8 layout D+ (FEEDBACK part 4): the hero's right side, the growth line over the deed's skill, one column (so the numbers keep their line);
-        // returns the spacer that pushes it right and the column (Hero moves both to the line HeroLines gives it). A click on the skill opens it
-        static (RectTransform rest, RectTransform skill, RectTransform spark) HeroRight(RectTransform row, Block spark, Block s, Func<string, Action> link)
+        // returns the spacer that pushes it right, the column (Hero moves both to the line HeroLines gives it), the growth line and the skill's
+        // words (Hero folds them into the compact form when HeroLines asks, 0.8.2). A click on the skill opens it
+        static (RectTransform rest, RectTransform skill, RectTransform spark, SkillParts words) HeroRight(RectTransform row, Block spark, Block s, Func<string, Action> link)
         {
+            SkillParts words = null;
             var rest = Node("Rest", row); rest.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;   // right-aligned, the hero row's last item
             var right = VStack(row, 8); var v = right.GetComponent<VerticalLayoutGroup>(); v.childForceExpandWidth = false; v.childAlignment = TextAnchor.LowerRight; v.padding = new RectOffset(0, 0, 0, 6);
             RectTransform sparkBox = null;
@@ -120,25 +122,47 @@ namespace Hearthwoven.Panel
                 var hit = Img(right, "Skill", null, new Color(0f, 0f, 0f, 0f), raycast: click != null);
                 Layout(hit.gameObject.AddComponent<HorizontalLayoutGroup>(), 10, TextAnchor.LowerLeft);
                 Marker((RectTransform)hit.transform, s.Icon, 28);
-                SkillWords((RectTransform)hit.transform, s);
+                words = SkillWords((RectTransform)hit.transform, s);
                 if (click != null) hit.gameObject.AddComponent<Press>().Act = click;
             }
-            return (rest, right, sparkBox);
+            return (rest, right, sparkBox, words);
         }
 
+        /// <summary>The skill's words as drawn (SkillWords), so the hero can fold them into the compact form.</summary>
+        sealed class SkillParts { public RectTransform Words; public TextMeshProUGUI Name, Level; public Image Track; }
+        const float SkillBar = 120, CompactBar = 64;   // the bar to the next level: whole, and in the compact form
+
         // the skill's words: its name muted, "level 57" bold, and the thin bar to the next level (120 x 4) under them
-        static void SkillWords(RectTransform parent, Block s)
+        static SkillParts SkillWords(RectTransform parent, Block s)
         {
-            var words = VStack(parent, 4); words.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;   // the bar keeps its 120 px
+            var p = new SkillParts();
+            var words = p.Words = VStack(parent, 4); words.GetComponent<VerticalLayoutGroup>().childForceExpandWidth = false;   // the bar keeps its 120 px
             var line = Line(words, 8, TextAnchor.LowerLeft);
-            Label(line, s.Title, 15, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
-            Label(line, PanelModel.LevelWord + " " + s.Value, 15, PanelLook.Text, style: FontStyles.Bold).textWrappingMode = TextWrappingModes.NoWrap;
+            p.Name = Label(line, s.Title, 15, PanelLook.Muted); p.Name.textWrappingMode = TextWrappingModes.NoWrap;
+            p.Level = Label(line, PanelModel.LevelWord + " " + s.Value, 15, PanelLook.Text, style: FontStyles.Bold); p.Level.textWrappingMode = TextWrappingModes.NoWrap;
             if (s.Progress >= 0)
             {
-                var track = Img(words, "Progress", null, PanelLook.Track); Size(track, 120, 4);
+                var track = p.Track = Img(words, "Progress", null, PanelLook.Track); Size(track, SkillBar, 4);
                 var fill = Img(track.transform, "Fill", null, PanelLook.Gold).rectTransform;
                 fill.anchorMin = Vector2.zero; fill.anchorMax = new Vector2(Mathf.Clamp01(s.Progress), 1); fill.offsetMin = fill.offsetMax = Vector2.zero;
             }
+            return p;
+        }
+
+        /// <summary>How much narrower the skill is in its compact form (SkillCompact): its name over its level, a 64 px bar.</summary>
+        static float CompactSaving(SkillParts p)
+        {
+            if (p == null) return 0;
+            float name = Mathf.Ceil(p.Name.preferredWidth), level = Mathf.Ceil(p.Level.preferredWidth), bar = p.Track ? SkillBar : 0;
+            return Mathf.Max(0, Mathf.Max(name + 8 + level, bar) - Mathf.Max(Mathf.Max(name, level), p.Track ? CompactBar : 0));
+        }
+        /// <summary>The skill's compact form (0.8.2, PanelModel.HeroLines): "level 22" on a line under the name, the bar 64 px.</summary>
+        static void SkillCompact(SkillParts p)
+        {
+            if (p == null) return;
+            var under = Line(p.Words, 8, TextAnchor.LowerLeft); under.SetSiblingIndex(1);
+            p.Level.rectTransform.SetParent(under, false);
+            if (p.Track) Size(p.Track, CompactBar, 4);
         }
 
     }

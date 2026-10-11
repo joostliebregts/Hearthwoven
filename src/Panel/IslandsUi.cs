@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using BepInEx.Configuration;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -55,16 +56,23 @@ namespace Hearthwoven.Panel
 
         void IslandBox(RectTransform parent, Island island, float width)
         {
-            var hero = island.Parts.Any(p => p.Block.Kind == "hero");
+            var hero = island.Parts.Any(p => p.Block.Kind == "hero" || p.Block.Kind == PanelModel.FightHeadKind);   // 0.9: a fight's head is its hero
             var box = VStack(parent, IslandInner);
             box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset((int)IslandPad, (int)IslandPad, (int)(hero ? IslandHeroTop : IslandPad), (int)(hero ? IslandHeroBottom : IslandPad));
-            var ground = box.gameObject.AddComponent<Image>(); ground.sprite = PanelLook.Island; ground.color = PanelLook.IslandGround; ground.raycastTarget = false;
-            if (PanelLook.Island) { ground.type = Image.Type.Sliced; ground.pixelsPerUnitMultiplier = 1f; }
+            IslandGround(box.gameObject);
             Size(box, width, -1);
             var outer = Column; var was = islanded;
             Column = width - 2 * IslandPad; islanded = true;
             try { foreach (var p in island.Parts) DrawPart(box, p); }
             finally { Column = outer; islanded = was; }
+        }
+
+        /// <summary>An island's ground on <paramref name="on"/>: PanelLook.Island sliced, tinted PanelLook.IslandGround.</summary>
+        static Image IslandGround(GameObject on)
+        {
+            var ground = on.AddComponent<Image>(); ground.sprite = PanelLook.Island; ground.color = PanelLook.IslandGround; ground.raycastTarget = false;
+            if (PanelLook.Island) { ground.type = Image.Type.Sliced; ground.pixelsPerUnitMultiplier = 1f; }
+            return ground;
         }
 
         // one part: a switch's row, a player's island (Recent's group), the open About box (its button rides in the strip), or the block itself
@@ -91,15 +99,15 @@ namespace Hearthwoven.Panel
 
         // Recent's group, one player per island (DeedsUi.People with Tone IslandPersonTone): the shield and name, their items under it in two
         // columns, each item its picture, its number bold and its name muted, wrapping on two lines rather than cut ("St..." in 0.8's first build)
-        static void PersonIsland(RectTransform col, Block p)
+        static void PersonIsland(RectTransform col, Block p, System.Func<string, System.Action> link = null)
         {
             var head = Line(col, 10); Size(head, -1, 34);
             Marker(head, p.Icon, 34);
             OneLine(Label(head, p.Title, 20, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft));
-            if (!string.IsNullOrEmpty(p.Note))   // "+3 more": what grew past the island (RecentPage.GroupGains), quiet at the head's right end
+            if (!string.IsNullOrEmpty(p.Note))   // "+3 more": what grew past the island (RecentPage.GroupGains), quiet at the head's right end; a click shows every gain (0.8.2)
             {
                 Node("Rest", head).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-                OneLine(Label(head, p.Note, PanelLook.MinText, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight, style: FontStyles.Italic));
+                MoreLink(OneLine(Label(head, p.Note, PanelLook.MinText, PanelLook.Muted, align: TextAlignmentOptions.MidlineRight, style: FontStyles.Italic)), p.NoteLink != null ? link?.Invoke(p.NoteLink) : null);
             }
             var items = p.Items ?? new List<Block>();
             var cellW = (Column - 14) / 2;

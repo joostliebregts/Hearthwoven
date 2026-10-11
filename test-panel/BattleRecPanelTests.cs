@@ -1,6 +1,6 @@
 // The battle record as the Battle pages will read it (0.8, Chapters/BattleRecModel.cs), on the sample world: in every window a foe kind
 // whose damage shows has a count, and its count splits into defeated, got away and still fighting; the day windows and All come from the
-// foes kept on this PC; a fellow's book has their shared Session and All only, and no feed.
+// foes kept on this PC; a fellow's book has their shared Session and All only, and (0.8.2) their shared feed.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -37,13 +37,13 @@ static class BattleRecPanelTests
               feed.All(f => f.Entries.Zip(f.Entries.Skip(1), (a, b) => a.EndUtc >= b.EndUtc).All(x => x)) && words.Contains("defeated by you") && words.Any(x => x.StartsWith("defeated with ")) && words.Contains("survived"),
               "BR feed: " + feed?.Count + " fights newest first, each foe newest first, in the book's words (" + string.Join(", ", words) + ")");
 
-        // a fellow's book: their shared Session and All as they sent them, no short or day windows, no feed
+        // a fellow's book: their shared Session and All as they sent them, no short or day windows; 0.8.2: their feed as their copy shares it
         var edda = world.Fellows.First(f => f.PlayerName == "Edda");
         var eddaSession = PanelModel.FoeCountsIn(edda, TimeWindow.Session);
         Check(!edda.IsSelf && eddaSession != null && eddaSession.Total(c => c.Fought) > 0 && PanelModel.FoeCountsIn(edda, TimeWindow.SinceInstall) != null &&
-              PanelModel.FoeCountsIn(edda, TimeWindow.LastHour) == null && PanelModel.FoeCountsIn(edda, TimeWindow.SevenDays) == null && PanelModel.BattleFeed(edda) == null &&
+              PanelModel.FoeCountsIn(edda, TimeWindow.LastHour) == null && PanelModel.FoeCountsIn(edda, TimeWindow.SevenDays) == null && PanelModel.BattleFeed(edda)?.Count > 0 &&
               PanelModel.FoeKinds(edda, TimeWindow.LastHour).All(k => !k.Counted),
-              "BR a fellow's book: their Session and All counts as shared, the short and day windows without a count (no x 0), no feed");
+              "BR a fellow's book: their Session and All counts as shared, the short and day windows without a count (no x 0); their feed as shared (" + PanelModel.BattleFeed(edda)?.Count + " fights)");
         return fails;
     }
 }

@@ -151,10 +151,42 @@ static class PerfPassTests
         Check(UiParity.Compare(drawnA, new List<string>(drawnA)) == null && parity != null && parity.StartsWith("/Panel#0/Text#1: children=1 (fresh children=0)") &&
               UiParity.Compare(drawnA, drawnA.GetRange(0, 1)) != null, "ui-reuse parity: the same drawings pass; a left-over child is named with both counts (" + parity + "); a missing object fails");
 
+        // REVIEW-081 0.8.2 pass: the first hover gives a kept tab, row or chip HoverMark's line, which the fresh drawing has not made, so every
+        // mouse page turn failed the check on a correct build. The lines leave the line out (its own, its parent's child count, the places of
+        // children added after it); a left-over child of any other name, a bar's focus ring "Hover" too, still fails
+        Ui Tabs(params Ui[] tab) => new Ui("Panel", new Ui("Tabs", new Ui("Tab", tab), new Ui("Tab", new Ui("Label"))));
+        var freshTabs = ParityLines(Tabs(new Ui("Label"), new Ui("Dot")));
+        var hovered = ParityLines(Tabs(new Ui("Label"), new Ui(UiParity.HoverLine), new Ui("Dot")));   // the line made before the dot was added
+        var leftOver = UiParity.Compare(ParityLines(Tabs(new Ui("Label"), new Ui("Dot"), new Ui("Hover"))), freshTabs);
+        Check(UiParity.Compare(hovered, freshTabs) == null && UiParity.Compare(ParityLines(Tabs(new Ui("Label"), new Ui("Dot"), new Ui(UiParity.HoverLine))), freshTabs) == null &&
+              leftOver != null && leftOver.StartsWith("/Panel#0/Tabs#0/Tab#0: children=3 (fresh children=2)") && UiParity.Skipped("/Panel#0/Players#2/Chip#4/Why#1") &&
+              !UiParity.Skipped("/Panel#0/Bar#1/Hover#3"),
+              "ui-reuse parity: a kept tab with HoverMark's line, made before or after its other children, is the same as drawn fresh (" + freshTabs.Count +
+              " lines); a left-over \"Hover\" child still fails (" + leftOver + "); the reason tag is still left out");
+
         // 0.8.1 review 8: the 2 s refresh's change test (ToJson) builds no island plan (a pure function of the blocks it already holds); the dump's JSON carries it
         var wood = PanelModel.Build(world, new PanelState { Chapter = Chapter.Deeds, Page = { [Chapter.Deeds] = "woodcutting" } });
         Check(!PanelModel.ToJson(wood).Contains("\"islands\"") && PanelModel.ToJson(wood, islands: true).Contains("\"islands\":[{\"span\""),
               "change test: the refresh's page text carries no island plan; the preview dump's does");
         return fails;
+    }
+
+    // an object of a drawn page, by name, for the parity lines below
+    sealed class Ui { public readonly string Name; public readonly Ui[] Kids; public Ui(string name, params Ui[] kids) { Name = name; Kids = kids; } }
+
+    // the parity lines as PanelReuse.UiLines writes them, path (with each object's place) and child count, over a tree of names: the same
+    // UiParity.Counted and UiParity.Skipped, so what the check leaves out is checked here without Unity
+    static List<string> ParityLines(Ui top)
+    {
+        var lines = new List<string>();
+        void Walk(Ui u, string parentPath, List<string> siblings, int index)
+        {
+            var path = parentPath + "/" + u.Name + "#" + UiParity.Counted(siblings, index);
+            var names = new List<string>(); foreach (var k in u.Kids) names.Add(k.Name);
+            if (!UiParity.Skipped(path)) lines.Add(path + " children=" + UiParity.Counted(names, names.Count) + " active=1");
+            for (int i = 0; i < u.Kids.Length; i++) Walk(u.Kids[i], path, names, i);
+        }
+        Walk(top, "", new List<string> { top.Name }, 0);
+        return lines;
     }
 }

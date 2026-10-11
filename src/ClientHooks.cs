@@ -89,6 +89,7 @@ namespace Hearthwoven
                 var pos = __instance.transform.position;
                 Plugin.Log.AddDeath(DateTime.UtcNow, Biome(), pos.x, pos.z);
                 SessionEvents.Add(Plugin.Events.Battle, "Deaths");   // since install (LocalTotals), under the game's count at first run
+                BattleHooks.Died();   // 0.9: in the running fight, boss fight and dungeon run
             });
         }
 
@@ -116,6 +117,7 @@ namespace Hearthwoven
                 if (!__result || !Local(__instance) || __instance.IsStaggering()) return;   // guard broken: not a held block
                 Plugin.Events.Blocks++;
                 if (__state) Plugin.Events.Parries++;
+                Plugin.Log.AddGuard(DateTime.UtcNow, __state);   // 0.8.2: the same block with its minute (Battle > Defense's short windows)
             });
         }
 
