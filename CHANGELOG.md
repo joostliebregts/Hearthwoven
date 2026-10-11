@@ -3,6 +3,9 @@
 Every tweak that reaches a PC or the server gets its own patch version (Joost, 2026-10-08), so the version in the
 log line and in Gale always says which build runs.
 
+## 0.8.4 (2026-10-11, README only)
+- **Moving pictures on this page.** The README now shows four short animations of the book: a tour, pointing at a damage bar, the group's meals, and the battle feed. Nothing changes in the game: 0.8.4 is the same book as 0.8.3.
+
 ## 0.8.3 (2026-10-11, client release)
 This release brings 0.8.2 and 0.8.3 in one step. 0.8.2 was not released on its own. Only the book changes: a server on 0.8.1 needs no update, because it passes the new numbers on as they are. To be counted in the fights of the group, every player in the fight needs 0.8.3.
 
