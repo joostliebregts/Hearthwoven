@@ -22,7 +22,8 @@ namespace Hearthwoven
         /// <param name="kept">0.8.5: your earlier sessions' fights (KeptFights.Earlier); null: none.</param>
         public static FightBook Build(IList<FightSide> sides, BossLog bosses, RunLog runs, DateTime nowUtc, Func<string, string, string> placeName = null, IList<KeptSession> kept = null)
         {
-            placeName = placeName ?? ((kind, token) => null);
+            var gameName = placeName ?? ((kind, token) => null);
+            placeName = (kind, token) => gameName(kind, token) ?? DungeonName(kind);   // 0.8.6: the game's label first, else the place's own name
             var book = new FightBook();
             sides = sides?.Where(x => x != null).ToList() ?? new List<FightSide>();
             var groups = GroupFights.Join(sides, nowUtc); var gruns = GroupFights.JoinRuns(sides, nowUtc);
@@ -135,6 +136,29 @@ namespace Hearthwoven
         static string Minute(DateTime t) => t.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture);
         static bool Meet(DateTime a0, DateTime a1, DateTime b0, DateTime b1) => a0 <= b1 + BattleRecorder.BossGap && b0 <= a1 + BattleRecorder.BossGap;
 
+        /// <summary>
+        /// 0.8.6: the game's dungeons by the place's game name (its location prefab, BattleHooks.Watch), their English name and land. The game
+        /// gives most of them no name label (m_discoverLabel is empty for the Burial Chambers, the Frost Caves and the Infested Mines: Joost's PC
+        /// saved "Crypt2" and "Mistlands_DvergrTownEntrance2" with no token), so the pages named every such run "A dungeon". A place whose name is
+        /// not sure here has its land only ("Ashlands dungeon"); a place the game does not know ("Interior": no location at that point) neither.
+        /// </summary>
+        static readonly (string prefix, string name, string land)[] Dungeons =
+        {
+            ("SunkenCrypt", "Sunken Crypt", "Swamp"), ("Crypt", "Burial Chamber", "BlackForest"), ("MountainCave", "Frost Cave", "Mountain"),
+            ("Mistlands_DvergrTownEntrance", "Infested Mine", "Mistlands"), ("Mistlands_DvergrBossEntrance", "Infested Citadel", "Mistlands"),
+            ("Hildir_crypt", "Smouldering Tomb", "BlackForest"), ("Hildir_cave", "Howling Cavern", "Mountain"),
+            ("MorgenHole", null, "AshLands"), ("Mistlands_", null, "Mistlands"),
+        };
+        static (string prefix, string name, string land) DungeonOf(string kind)
+        {
+            if (!string.IsNullOrEmpty(kind)) foreach (var d in Dungeons) if (kind.StartsWith(d.prefix, StringComparison.OrdinalIgnoreCase)) return d;
+            return default;
+        }
+        /// <summary>A dungeon's English name from its place's game name ("Crypt2": "Burial Chamber"); null: not one named here.</summary>
+        public static string DungeonName(string kind) => DungeonOf(kind).name;
+        /// <summary>A dungeon's land from its place's game name ("Crypt2": "BlackForest", as Heightmap.Biome names it); null: not known.</summary>
+        public static string DungeonLand(string kind) => DungeonOf(kind).land;
+
         static FightOutcome Say(BossOutcome o) =>
             o == BossOutcome.Won ? FightOutcome.Won : o == BossOutcome.Reset ? FightOutcome.Reset : o == BossOutcome.GotAway ? FightOutcome.GotAway : FightOutcome.Live;
 
@@ -150,7 +174,7 @@ namespace Hearthwoven
                 Id = BossId(b.Bosses[0], b.StartUtc), Kind = FightKind.Boss, Outcome = Say(b.Outcome), Boss = b.Kind,
                 Biome = b.Foes.FirstOrDefault(f => f.IsBoss)?.Biome, StartUtc = b.StartUtc,
                 EndUtc = b.Outcome == BossOutcome.Fighting ? Max(b.EndUtc, b.LastSeenUtc) : b.EndUtc,
-                Health = HealthOf(b.Outcome, b.Health, b.Lowest), HealthMinuteAgo = b.Outcome == BossOutcome.Fighting ? b.HealthMinuteAgo : -1f,
+                Health = HealthOf(b.Outcome, b.Health, b.Lowest), HealthMinuteAgo = b.Outcome == BossOutcome.Fighting ? b.HealthMinuteAgo : -1f, SwingSeconds = b.SwingSeconds,
             };
             foreach (var r in FoeRow.Of(b.Foes)) v.Foes.Add(Foe(r));
             AddPlayers(v, g, g.Players.Where(p => p.InBoss), p => p.BossBlocks, p => p.BossParries, sharers, now, b.Foes);
@@ -186,6 +210,11 @@ namespace Hearthwoven
                     Name = p.Name, You = p.Self, Has = true, Live = p.Open && v.IsLive, AsOfUtc = p.Self ? (DateTime?)null : p.AsOfUtc,
                     NearSeconds = p.Self ? -1f : Near(p.Name), Blocks = blocks(p), Parries = parries(p), HitsReceived = p.Self ? hitsOnYou : -1,
                 };
+                foreach (var f in p.Fights)
+                {
+                    fp.SwingSeconds += f.SwingSeconds; fp.SwingDamage += f.SwingDamage;   // 0.8.6: their own fighting time (a fellow's copy shares it from this build on)
+                    if (f.Near != null) foreach (var kv in f.Near) { if (fp.Near == null) fp.Near = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase); fp.Near.TryGetValue(kv.Key, out var had); fp.Near[kv.Key] = had + kv.Value; }   // 0.8.6: who was near them, their count (a friend's book)
+                }
                 foreach (var f in p.Falls) fp.Deaths.Add(Death(f));
                 for (int i = p.Falls.Count; i < p.Deaths; i++) fp.Deaths.Add(new FightDeath { AtUtc = DateTime.MinValue });   // counted, no time: its copy dropped it
                 v.Players.Add(fp);
@@ -199,7 +228,7 @@ namespace Hearthwoven
         static FightView RunView(GroupRun r, List<(GroupBoss b, FightView v)> bossViews, DateTime now, Func<string, string, string> placeName)
         {
             var v = new FightView { Id = RunId(r.Kind, r.StartUtc), Kind = FightKind.Run, Outcome = r.Open ? FightOutcome.Live : FightOutcome.Ended, Place = placeName(r.Kind, r.Token),
-                                    Biome = r.Biome, StartUtc = r.StartUtc, EndUtc = r.EndUtc };
+                                    Biome = DungeonLand(r.Kind) ?? r.Biome, StartUtc = r.StartUtc, EndUtc = r.EndUtc };   // 0.8.6: the place's land; the foes' only once one was hit
             foreach (var row in r.Rows) v.Foes.Add(Foe(row));
             foreach (var w in r.Players.OrderByDescending(w => w.Self).ThenBy(w => w.StartUtc))
             {
@@ -221,7 +250,7 @@ namespace Hearthwoven
         {
             var lead = FeedShare.ParseId(a.Lead);
             var v = new FightView { Id = BossId(lead, a.StartUtc), Kind = FightKind.Boss, Outcome = Say(a.Outcome == BossOutcome.Fighting ? BossOutcome.GotAway : a.Outcome), Boss = a.Kind,
-                                    StartUtc = a.StartUtc, EndUtc = a.StartUtc.AddSeconds(a.Seconds), Health = HealthOf(a.Outcome, a.Health, a.Lowest) };
+                                    StartUtc = a.StartUtc, EndUtc = a.StartUtc.AddSeconds(a.Seconds), Health = HealthOf(a.Outcome, a.Health, a.Lowest), SwingSeconds = a.Swing };
             foreach (var r in a.Foes) v.Foes.Add(Foe(r));
             foreach (var p in a.Players.OrderByDescending(p => p.Self))
             {
@@ -234,7 +263,7 @@ namespace Hearthwoven
 
         static FightView SavedRun(RunRecord r, Func<string, string, string> placeName)
         {
-            var v = new FightView { Id = RunId(r.Kind, r.StartUtc), Kind = FightKind.Run, Place = placeName(r.Kind, r.Token), StartUtc = r.StartUtc, EndUtc = r.StartUtc.AddSeconds(r.Seconds) };
+            var v = new FightView { Id = RunId(r.Kind, r.StartUtc), Kind = FightKind.Run, Place = placeName(r.Kind, r.Token), Biome = DungeonLand(r.Kind), StartUtc = r.StartUtc, EndUtc = r.StartUtc.AddSeconds(r.Seconds) };   // 0.8.6: its land (none was saved)
             foreach (var row in r.Rows) v.Foes.Add(Foe(row));
             foreach (var p in r.Players.OrderByDescending(p => p.Self))
             {

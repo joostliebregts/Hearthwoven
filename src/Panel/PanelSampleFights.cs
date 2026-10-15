@@ -88,6 +88,61 @@ namespace Hearthwoven.Panel
             return book;
         }
 
+        /// <summary>
+        /// 0.8.6 (Joost's PC, 11 Oct: two saved runs listed as "A dungeon"): the runs a restart keeps (RunLog, "dungeonRuns" in the saved file), shaped
+        /// as the PC's own record was: each with the place's game name ("Mistlands_DvergrTownEntrance2", "Crypt2") and no name token (the game has
+        /// no label for these places), through the fight adapter with no game names at all. Rowan and Edda in an Infested Mine for 26 min (1 death),
+        /// then Rowan in a Burial Chamber for 8 min, and a 34 s look into another Burial Chamber with nothing fought (kept, not listed).
+        /// </summary>
+        public static PanelInput WithSavedRuns(PanelInput book)
+        {
+            var now = book.NowUtc; string At(double minAgo) => now.AddMinutes(-minAgo).ToString("o", CultureInfo.InvariantCulture);
+            string P(string name, bool me, string more) => "{\"n\":\"" + name + "\"" + (me ? ",\"me\":1" : "") + more + "}";
+            const string RowanD = "\"d\":[0,4144,4599,1983,290,0,894,611],\"r\":[163,0,349]", EddaD = "\"d\":[0,4414,4018,0,3060,0,0,588],\"r\":[254,0,739]", CryptD = "\"d\":[0,880],\"r\":[120]";
+            var json = "[" +
+                "{\"k\":\"Mistlands_DvergrTownEntrance2\",\"s\":\"" + At(150) + "\",\"t\":1577,\"dd\":1,\"n\":89,\"p\":[" + P(Edda, false, ",\"in\":1224,\"dd\":1,\"fo\":69") + "," + P(Rowan, true, ",\"in\":1213,\"fo\":65") + "]," +
+                    "\"f\":[{\"k\":\"Seeker\",\"n\":31,\"df\":30,\"p\":[" + P(Rowan, true, "," + RowanD) + "," + P(Edda, false, "," + EddaD) + "]}],\"sp\":[[16,53],[327,1347],[1436,1534]]}," +
+                "{\"k\":\"Crypt3\",\"s\":\"" + At(115) + "\",\"t\":480,\"dd\":0,\"n\":12,\"p\":[" + P(Rowan, true, ",\"in\":480,\"fo\":12") + "]," +
+                    "\"f\":[{\"k\":\"Skeleton\",\"n\":12,\"df\":12,\"p\":[" + P(Rowan, true, "," + CryptD) + "]}],\"sp\":[[20,400]]}," +
+                "{\"k\":\"Crypt2\",\"s\":\"" + At(70) + "\",\"t\":34,\"dd\":0,\"n\":0,\"p\":[" + P(Rowan, true, ",\"in\":33") + "]}]";
+            book.Fights = FightAdapter.Build(null, null, RunLog.ReadFrom(MiniJson.Parse(json)), now);
+            var names = book.DisplayName; book.DisplayName = t => t != null && Names.TryGetValue(t, out var n) ? n : names?.Invoke(t);
+            var foe = book.Foe; book.Foe = p => p != null && Trophies.TryGetValue(p, out var t) ? new PanelModel.FoeData { Trophy = t } : foe?.Invoke(p);
+            return book;
+        }
+
+        /// <summary>
+        /// 0.8.6: a fight the book's owner was not in, from a fellow's shared feed, newer than the owner's own newest (Last fight keeps the owner's;
+        /// its quiet "Newer on the server" line points at this one, id "server-fight"): Edda alone with a Seeker, 3 minutes ago. boss: Finch and Tor
+        /// on Eikthyr, live (id "server-boss").
+        /// </summary>
+        public static PanelInput WithServerFight(PanelInput book, bool boss = false)
+        {
+            var now = book.NowUtc;
+            var f = boss
+                ? new FightView { Id = "server-boss", Kind = FightKind.Boss, Outcome = FightOutcome.Live, Boss = "Eikthyr", Biome = "Meadows", StartUtc = now.AddMinutes(-4), EndUtc = now, Health = 0.7f, HealthMinuteAgo = 0.8f }
+                : new FightView { Id = "server-fight", Kind = FightKind.Group, Outcome = FightOutcome.Ended, Biome = "Meadows", StartUtc = now.AddMinutes(-3), EndUtc = now.AddMinutes(-2) };
+            var players = boss ? new[] { Finch, Tor } : new[] { Edda };
+            foreach (var n in players) { var p = Player(f, n); p.Live = boss; p.AsOfUtc = now.AddSeconds(-5); }
+            var x = Foe(f, boss ? "Eikthyr" : "Seeker", boss: boss, defeated: boss ? 0 : 1);
+            foreach (var n in players) Hit(x, n, "pierce 300", "blunt 40");
+            book.Fights.Fights.Insert(0, f);
+            return book;
+        }
+
+        /// <summary>
+        /// 0.8.6: a fellow's book on the PC of <paramref name="own"/>'s owner, as PanelUi opens it: their copy, with the others' copies and your own
+        /// book (and its fights) among their Fellows. Their Battle pages read your fights seen by them (PanelModel.FriendFights).
+        /// </summary>
+        public static PanelInput Friend(PanelInput own, string name)
+        {
+            var f = own.Fellows.First(x => string.Equals(x.PlayerName, name, StringComparison.OrdinalIgnoreCase)).ShallowCopy();
+            f.NowUtc = own.NowUtc; f.ViewerName = own.PlayerName; f.PlayerNames = own.PlayerNames; f.ViewerSessionStartUtc = own.SessionStartUtc;
+            f.DisplayName = own.DisplayName; f.Foe = own.Foe;   // the fights' foes by the game's names and trophies, as on your book
+            f.Fellows = own.Fellows.Where(x => !string.Equals(x.PlayerName, name, StringComparison.OrdinalIgnoreCase)).Concat(new[] { own }).ToList();
+            return f;
+        }
+
         // ---------- the builders ----------
 
         static Dictionary<string, double> Types(string spec)
@@ -184,7 +239,7 @@ namespace Hearthwoven.Panel
         static FightView QueenNow(DateTime now)
         {
             var f = new FightView { Id = "queen-now", Kind = FightKind.Boss, Outcome = FightOutcome.Live, ParentId = "citadel-now", Boss = "SeekerQueen", Biome = "Mistlands",
-                                    StartUtc = now.AddSeconds(-312), EndUtc = now, Health = 0.64f, HealthMinuteAgo = 0.72f };
+                                    StartUtc = now.AddSeconds(-312), EndUtc = now, Health = 0.64f, HealthMinuteAgo = 0.72f, SwingSeconds = 241 };   // 0.8.6: under attack 241 of its 312 s
             var you = Player(f, Rowan, true); you.Live = true; you.Blocks = 5; you.Parries = 1; you.Stopped = 260; you.HitsReceived = 20; you.InsideSeconds = 312;
             var edda = Player(f, Edda); edda.Live = true; edda.AsOfUtc = now.AddSeconds(-2); edda.Blocks = 2; edda.Stopped = 90; edda.InsideSeconds = 312;
             var finch = Player(f, Finch); finch.Live = true; finch.AsOfUtc = now.AddSeconds(-3); finch.Stopped = 0; finch.InsideSeconds = 250;
@@ -221,8 +276,10 @@ namespace Hearthwoven.Panel
         static FightView Camp(DateTime start, DateTime now)
         {
             var f = new FightView { Id = "camp", Kind = FightKind.Group, Outcome = FightOutcome.Ended, Biome = "BlackForest", StartUtc = start, EndUtc = start.AddMinutes(2) };
-            var you = Player(f, Rowan, true); you.Blocks = 1; you.Stopped = 20; you.HitsReceived = 9;   // one block against nine hits landing, blunt the most: the shield line
+            var you = Player(f, Rowan, true); you.SwingSeconds = 41; you.SwingDamage = 455; you.Blocks = 1; you.Stopped = 20; you.HitsReceived = 9;   // 0.8.6: your fighting time, 41 s; one block against nine hits landing, blunt the most: the shield line
             var edda = Player(f, Edda); edda.NearSeconds = 12; edda.Blocks = 1; edda.Stopped = 30;
+            edda.SwingSeconds = 32; edda.SwingDamage = 400;   // 0.8.6: her fighting time as her copy shares it (her Last fight on her book: 12 DPS)
+            edda.Near = new Dictionary<string, float> { [Rowan] = 12, [Finch] = 16, [Tor] = 30 };   // who was near her, as her record counted it (her book's "near Edda 30 s")
             var finch = Player(f, Finch); finch.NearSeconds = 20; finch.Stopped = 0;
             var tor = Player(f, Tor); tor.NearSeconds = 12; tor.Blocks = 4; tor.Parries = 2; tor.Stopped = 160;
             var g = Foe(f, "Greydwarf", 6, 6);
@@ -238,7 +295,7 @@ namespace Hearthwoven.Panel
         /// past what her copy still holds (counted, its types not known).</summary>
         static FightView BonemassReset(DateTime start)
         {
-            var f = new FightView { Id = "bonemass-1", Kind = FightKind.Boss, Outcome = FightOutcome.Reset, Boss = "Bonemass", Biome = "Swamp", StartUtc = start, EndUtc = start.AddSeconds(380), Health = 0.41f };
+            var f = new FightView { Id = "bonemass-1", Kind = FightKind.Boss, Outcome = FightOutcome.Reset, Boss = "Bonemass", Biome = "Swamp", StartUtc = start, EndUtc = start.AddSeconds(380), Health = 0.41f, SwingSeconds = 290 };
             var you = Player(f, Rowan, true); you.Blocks = 7; you.Parries = 1; you.Stopped = 350; you.HitsReceived = 18;
             var edda = Player(f, Edda); edda.Blocks = 2; edda.Stopped = 100;
             var tor = Player(f, Tor); tor.Blocks = 11; tor.Parries = 3; tor.Stopped = 550;
@@ -262,7 +319,7 @@ namespace Hearthwoven.Panel
         static FightView QueenReset(DateTime start)
         {
             var f = new FightView { Id = "queen-2", Kind = FightKind.Boss, Outcome = FightOutcome.Reset, ParentId = "citadel-2", Boss = "SeekerQueen", Biome = "Mistlands",
-                                    StartUtc = start, EndUtc = start.AddSeconds(460), Health = 0.41f };
+                                    StartUtc = start, EndUtc = start.AddSeconds(460), Health = 0.41f, SwingSeconds = 352 };
             var you = Player(f, Rowan, true); you.Blocks = 7; you.Parries = 1; you.Stopped = 350; you.HitsReceived = 16;
             var edda = Player(f, Edda); edda.Blocks = 2; edda.Stopped = 100;
             var tor = Player(f, Tor); tor.Blocks = 11; tor.Parries = 3; tor.Stopped = 550;

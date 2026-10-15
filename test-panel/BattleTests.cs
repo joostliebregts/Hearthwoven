@@ -231,7 +231,7 @@ static partial class Program
               "Deaths timeline: an older death keeps its last 10 s totals strip, labelled 10 s; the caption says neither when both kinds are listed");
         foreach (var d in old.Log.Deaths) d.Timeline.Clear();
         Check(Of(Page(old, "deaths"), "deaths").Title == "Last 10 seconds", "Deaths timeline: only older records: the caption stays Last 10 seconds");
-        var json = new Json().Open(); rich.Log.WriteTo(json); var back = PanelInput.FromSnapshot(json.Close().ToString().Replace("{\"measuredLog\"", "{\"name\":\"Rowan\",\"measuredLog\""));
+        var json = new Json().Open(); rich.Log.WriteTo(json, swing: false); var back = PanelInput.FromSnapshot(json.Close().ToString().Replace("{\"measuredLog\"", "{\"name\":\"Rowan\",\"measuredLog\""));
         Check(back != null && back.Log.Deaths.Count == 3 && back.Log.Deaths.Single(d => d.Killer == "Draugr").Timeline.Select(h => h.Ago + "|" + h.Type + "|" + h.Amount).SequenceEqual(new[] { "6|slash|74", "3|poison|52" }),
               "Deaths timeline: the sequence travels in the snapshot and is read back (a fellow's copy draws it too)");
         var ovRows = Of(Page(rich, "overview", s => s.Window = TimeWindow.Session), "deathrows");

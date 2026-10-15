@@ -16,7 +16,7 @@ namespace Hearthwoven
                                    SessionEvents eventsSinceInstall = null, DamageTally damageSinceInstall = null, BiomeTally biomeSinceInstall = null, System.DateTime? biomeFromUtc = null, FeatsLedger feats = null,
                                    IDictionary<string, float> dealtByDay = null, IEnumerable<string> knownBiomes = null, string copyId = null, FoeShare foes = null, FeedShare feed = null,
                                    IDictionary<string, Dictionary<string, float>> dayDealt = null, string logBefore = null,
-                                   IDictionary<string, Dictionary<string, Dictionary<string, float>>> dayDeeds = null)
+                                   IDictionary<string, Dictionary<string, Dictionary<string, float>>> dayDeeds = null, IDictionary<string, WeaponCells> dayWeapons = null)
         {
             // Absolute values only: a resend after a reconnect or crash replaces, never adds.
             var j = new Json().Open()
@@ -49,7 +49,7 @@ namespace Hearthwoven
             // "profile" = the game's own counters since the character was made; "measured*" = Hearthwoven since install.
             if (damage != null) damage.WriteTo(j);
             if (events != null) events.WriteTo(j);
-            if (log != null) log.WriteTo(j);
+            if (log != null) log.WriteTo(j, swing: false);   // 0.8.6: the fighting time per minute stays on your PC (the local file, KeptMinutes), never in the shared copy
             // since install on the sender's PC (LocalTotals + this session), so fellows' pages do not drop back to zero
             // when they reconnect (SOURCES.md fix 3); an older reader ignores these keys, an older sender leaves them out
             if (eventsSinceInstall != null) eventsSinceInstall.WriteTo(j, "measuredSinceInstall");
@@ -73,6 +73,15 @@ namespace Hearthwoven
             {
                 j.Key("dayDealt").Open();
                 foreach (var kv in dayDealt) if (kv.Value != null && kv.Value.Count > 0) j.Dict(kv.Key, kv.Value);
+                j.Close();
+            }
+            // 0.8.6 (DPS per named weapon): the same days by weapon and upgrade level ("SwordIron|3|Swords": seconds of fighting, damage swung in them, all
+            // its damage, the lowest and highest level of its skill), at most 12 weapons a day, so a fellow's By weapon shows them on Today, 7 days and 30 days.
+            // Written whenever the dealt ledger is loaded, also empty, so a reader can tell "no weapons" from an older Hearthwoven; an older reader ignores the key
+            if (dayWeapons != null)
+            {
+                j.Key("dayWeapons").Open();
+                foreach (var kv in dayWeapons) if (kv.Value != null && kv.Value.Count > 0) kv.Value.Write(j, kv.Key);
                 j.Close();
             }
             // 0.8.5: your Deeds per local day, the last 30 days: per family the parts each Deeds page's hero and first bar show (PanelModel.DayDeeds:

@@ -95,6 +95,8 @@ namespace Hearthwoven.Panel
                 }
             }
             rec.Tick(now);
+            // 0.8.6 (DPS): the replay has no swings (a bucket's hits are one event): each fight's fighting time at the sample's pace, nine tenths of its damage earned in it
+            foreach (var f in rec.Fights()) { var dmg = f.DealtTotal * 0.9f; if (dmg > 0) rec.SetSwing(f.Number, dmg / (30f + 4f * (f.Number % 4)), dmg); }
             p.Battle = rec;
 
             // the book on this PC: recorded from an evening two days ago, the session over its two local days, saved up to now

@@ -135,6 +135,10 @@ namespace Hearthwoven
 
         /// <summary>0.8.5: a fight of an earlier session, kept on this PC (KeptFights): that session; null: this session's, or a fellow's copy.</summary>
         public KeptSession Kept;
+        /// <summary>0.8.6 (DPS, SwingClock): your own fighting time in it, in seconds (from your first to your last hit, a gap of more than SwingClock.Gap
+        /// not counted), and the damage you swung in those seconds (the hits after the first of each stretch). Yours only: your recorder and your kept
+        /// fights carry them, never the copy shared with fellows. 0: not known (a fight from before 0.8.6, or a fellow's copy).</summary>
+        public float SwingSeconds, SwingDamage;
     }
 
     /// <summary>
@@ -330,6 +334,8 @@ namespace Hearthwoven
         readonly FoeCounts evicted = new FoeCounts();   // the creatures that left the table (MaxInstances): This session keeps them
         readonly Dictionary<int, Dictionary<string, float>> near = new Dictionary<int, Dictionary<string, float>>();   // fight -> name -> seconds near you
         readonly Dictionary<int, int> deaths = new Dictionary<int, int>();   // fight -> your deaths in it (the last MaxNearFights fights)
+        readonly Dictionary<int, float[]> swing = new Dictionary<int, float[]>();   // 0.8.6: fight -> [your fighting seconds, the damage swung in them] (at most MaxFeed fights)
+        DateTime swingLast;
         int fight, seq; bool fightOn; DateTime fightLast;
         // 0.9: boss fights (oldest first) and, for the open ones, their foes and each boss's last place and health; dungeon runs (oldest first),
         // the open or latest one and its foes. Places stay here: nothing below is ever in a FoeEncounter, the feed or the book.
@@ -379,6 +385,24 @@ namespace Hearthwoven
             var (e, inst) = Touch(utc, id, kind, token, biome, boss, at);
             AddTypes(e.Dealt, d); e.HitsDealt++;
             inst.YouHit = true; inst.LastDealt = utc;
+            SwingStep(utc, Sum(d));
+        }
+
+        /// <summary>The previews' sample (PanelSample): a replayed log has no swings of its own, so a fight's fighting time is set here.</summary>
+        internal void SetSwing(int fight, float seconds, float damage) { swing[fight] = new[] { seconds, damage }; Version++; }
+
+        // 0.8.6 (DPS): your fighting time in the running fight: the time since your previous hit on any foe when that was within SwingClock.Gap, with the
+        // damage of this hit; the first hit of a stretch adds nothing. Two floats a hit, a small entry once a fight.
+        void SwingStep(DateTime utc, float damage)
+        {
+            var step = SwingClock.Step(swingLast, utc); swingLast = utc;
+            if (!(step > 0f) || !(damage > 0f)) return;
+            if (!swing.TryGetValue(fight, out var s))
+            {
+                if (swing.Count >= MaxFeed) { var oldest = int.MaxValue; foreach (var k in swing.Keys) if (k < oldest) oldest = k; swing.Remove(oldest); }
+                swing[fight] = s = new float[2];
+            }
+            s[0] += step; s[1] += damage;   // Touch has bumped Version for this hit
         }
 
         /// <summary>A foe's hit on you, after your armour (as the Defence page's Received from). 0.9: <paramref name="boss"/> and <paramref name="at"/> as Dealt.</summary>
@@ -597,7 +621,9 @@ namespace Hearthwoven
             var list = new List<FoeFight>(); FoeFight cur = null;
             foreach (var e in feed)   // oldest first: an encounter joins the feed when its foe is first met in a fight, so fights come in order
             {
-                if (cur == null || cur.Number != e.Fight) { cur = new FoeFight { Number = e.Fight, StartUtc = e.StartUtc, EndUtc = e.EndUtc, Open = fightOn && e.Fight == fight, Near = near.TryGetValue(e.Fight, out var nr) ? nr : null, Deaths = deaths.TryGetValue(e.Fight, out var dd) ? dd : 0 }; list.Add(cur); }
+                if (cur == null || cur.Number != e.Fight) { cur = new FoeFight { Number = e.Fight, StartUtc = e.StartUtc, EndUtc = e.EndUtc, Open = fightOn && e.Fight == fight, Near = near.TryGetValue(e.Fight, out var nr) ? nr : null, Deaths = deaths.TryGetValue(e.Fight, out var dd) ? dd : 0 };
+                    if (swing.TryGetValue(e.Fight, out var sw)) { cur.SwingSeconds = sw[0]; cur.SwingDamage = sw[1]; }
+                    list.Add(cur); }
                 cur.Entries.Add(e); cur.Blocks += e.Blocks; cur.Parries += e.Parries;
                 if (e.StartUtc < cur.StartUtc) cur.StartUtc = e.StartUtc;
                 if (e.EndUtc > cur.EndUtc) cur.EndUtc = e.EndUtc;
@@ -764,6 +790,8 @@ namespace Hearthwoven
         // a sign of fighting in a boss fight: it goes on, and so does the recorder's fight it is part of
         void Busy(BossFight bf, DateTime utc)
         {
+            var step = SwingClock.Step(bf.SwingLast, utc); if (step > 0f) { bf.Swing += step; Version++; }   // 0.8.6: the boss fight's fighting time
+            if (utc > bf.SwingLast) bf.SwingLast = utc;
             if (utc > bf.EndUtc) bf.EndUtc = utc;
             if (fightOn && utc > fightLast) fightLast = utc;
         }
@@ -1084,7 +1112,7 @@ namespace Hearthwoven
         public readonly List<Fall> Falls = new List<Fall>();
 
         /// <summary>What of <paramref name="rec"/>'s feed goes in the shared copy now; <paramref name="shares"/>: whether a player shares (null: nobody,
-        /// so every name is left out). <paramref name="maxFoes"/>: the newest foes it holds (0.8.5: your kept fights hold more, KeptFights.MaxFoes).</summary>
+        /// so every name is left out). <paramref name="maxFoes"/>: the newest foes it holds (0.8.5: your kept fights hold more, KeptFights.PerSession).</summary>
         public static FeedShare From(BattleRecorder rec, Func<string, bool> shares, int maxFoes = MaxFoes)
         {
             var s = new FeedShare();
@@ -1098,7 +1126,7 @@ namespace Hearthwoven
                 full = full || n >= maxFoes || (s.Fights.Count > 0 && n + f.Foes > maxFoes);   // whole fights while they fit, then none older (no gap)
                 if (full) { s.LeftOut += f.Foes; continue; }
                 var take = Math.Min(f.Entries.Count, maxFoes - n);
-                var c = new FoeFight { Number = f.Number, Open = f.Open, Of = take < f.Foes ? f.Foes : 0, Deaths = f.Deaths };
+                var c = new FoeFight { Number = f.Number, Open = f.Open, Of = take < f.Foes ? f.Foes : 0, Deaths = f.Deaths, SwingSeconds = f.SwingSeconds, SwingDamage = f.SwingDamage };   // 0.8.6: your fighting time in it (WriteTo writes it)
                 var outside = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (f.Near != null)
                     foreach (var kv in f.Near)
@@ -1123,7 +1151,7 @@ namespace Hearthwoven
             foreach (var b in rec.BossFights().Take(MaxBosses))   // copies: what a fellow may see of each (no place)
             {
                 var c = new BossFight { Number = b.Number, Fight = b.Fight, Run = b.Run, Kind = b.Kind, Token = b.Token, StartUtc = b.StartUtc, EndUtc = b.EndUtc, LastSeenUtc = b.LastSeenUtc, OutcomeUtc = b.OutcomeUtc, Outcome = b.Outcome,
-                                        Health = b.Health, Lowest = b.Lowest, HealthMinuteAgo = b.Open ? b.HealthMinuteAgo : -1f, Deaths = b.Deaths, Foes = b.Foes };
+                                        Health = b.Health, Lowest = b.Lowest, HealthMinuteAgo = b.Open ? b.HealthMinuteAgo : -1f, Deaths = b.Deaths, Foes = b.Foes, Swing = b.Swing };
                 c.Bosses.AddRange(b.Bosses);
                 s.Bosses.Add(c);
             }
@@ -1150,8 +1178,10 @@ namespace Hearthwoven
         long Secs(DateTime t) => t.Ticks / TimeSpan.TicksPerSecond - T0.Ticks / TimeSpan.TicksPerSecond;
 
         /// <summary>Writes the copy under <paramref name="key"/>. <paramref name="hits"/> (0.8.5, your kept fights only, never the shared copy): each foe's
-        /// hits both ways too ("hd", "hr"), so a kept fight weighs your blocks against the hits that landed (FightPages.BringLine).</summary>
-        public void WriteTo(Json j, string key = "battleFeed", bool hits = false)
+        /// hits both ways too ("hd", "hr"), so a kept fight weighs your blocks against the hits that landed (FightPages.BringLine).
+        /// <paramref name="ids"/> false (0.8.6, a friend's older session on the server: FeedBlock): no foe network id "i" and no "boss" table (its ids), the one
+        /// high-entropy field the feed pages never read; ReadFrom treats the missing id as none.</summary>
+        public void WriteTo(Json j, string key = "battleFeed", bool hits = false, bool ids = true)
         {
             var inv = CultureInfo.InvariantCulture;
             j.Key(key).Open().Str("t0", Whole(T0).ToString("o", inv)).Num("left", LeftOut);
@@ -1161,12 +1191,14 @@ namespace Hearthwoven
             foreach (var f in Fights)
             {
                 var near = f.Near != null && f.Near.Count > 0;
-                if (!near && f.Outside == 0 && f.Of == 0 && f.Deaths == 0) continue;
+                var swung = f.SwingSeconds > 0f;   // 0.8.6: your own fighting time, in your kept fights and (a friend's Last fight shows their DPS on their book) in the shared copy
+                if (!near && f.Outside == 0 && f.Of == 0 && f.Deaths == 0 && !swung) continue;
                 j.Key(f.Number.ToString(inv)).Open();
                 if (near) { j.Key("near").Open(); foreach (var kv in f.Near.OrderBy(k => k.Key, StringComparer.Ordinal)) j.Num(kv.Key, kv.Value); j.Close(); }
                 if (f.Outside > 0) j.Num("out", f.Outside);
                 if (f.Of > 0) j.Num("of", f.Of);
                 if (f.Deaths > 0) j.Num("dd", f.Deaths);
+                if (swung) j.Num("sw", Math.Round(f.SwingSeconds, 1)).Num("sd", Math.Round(f.SwingDamage));
                 j.Close();
             }
             j.Close().Key("foes").Open();
@@ -1179,7 +1211,7 @@ namespace Hearthwoven
                     if (e.With.Length > 0) j.Raw("w", "[" + string.Join(",", e.With.Select(Json.Q).ToArray()) + "]");
                     if (e.Others > 0) j.Num("n", e.Others);
                     if (e.Outside > 0) j.Num("u", e.Outside);
-                    if (!e.Id.IsNone) j.Str("i", e.Id.ToString());
+                    if (ids && !e.Id.IsNone) j.Str("i", e.Id.ToString());
                     if (e.Boss > 0) j.Num("bf", e.Boss);
                     if (e.Run > 0) j.Num("rn", e.Run);
                     if (e.Blocks > 0) j.Num("bk", e.Blocks);
@@ -1189,7 +1221,7 @@ namespace Hearthwoven
                     j.Close();
                 }
             j.Close();
-            if (Bosses.Count > 0)
+            if (ids && Bosses.Count > 0)
             {
                 j.Key("boss").Open();
                 foreach (var b in Bosses)
@@ -1203,6 +1235,7 @@ namespace Hearthwoven
                     if (b.Deaths > 0) j.Num("dd", b.Deaths);
                     if (b.Foes > 0) j.Num("n", b.Foes);
                     if (b.Run > 0) j.Num("rn", b.Run);
+                    if (b.Swing > 0f) j.Num("sw", Math.Round(b.Swing, 1));   // 0.8.6: the seconds the boss was under attack (the group's pace on it)
                     j.Close();
                 }
                 j.Close();
@@ -1294,6 +1327,7 @@ namespace Hearthwoven
                     foreach (var kv in near.Take(MaxNames))
                         if (kv.Key.Length > 0 && kv.Value is double v && Json.IsFinite(v) && v > 0) (f.Near ?? (f.Near = new Dictionary<string, float>(StringComparer.Ordinal)))[kv.Key] = (float)Math.Min(v, 1e7);
                 f.Outside = Count(MiniJson.Num(fi, "out")); f.Deaths = Count(MiniJson.Num(fi, "dd"));
+                f.SwingSeconds = (float)Math.Min(1e7, Count(MiniJson.Num(fi, "sw") * 10) / 10.0); f.SwingDamage = Count(MiniJson.Num(fi, "sd"));   // 0.8.6: a kept fight of yours, and a copy from this build on
                 var of = Count(MiniJson.Num(fi, "of")); f.Of = of > f.Entries.Count ? of : 0;
                 f.Entries.Sort((a, b) => b.EndUtc != a.EndUtc ? b.EndUtc.CompareTo(a.EndUtc) : b.StartUtc.CompareTo(a.StartUtc));
             }
@@ -1304,7 +1338,7 @@ namespace Hearthwoven
                 if (!(kv.Value is Dictionary<string, object> x) || !int.TryParse(kv.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number <= 0) continue;
                 var b = new BossFight { Number = number, Kind = MiniJson.Str(x, "k", "?"), Fight = Count(MiniJson.Num(x, "f")), StartUtc = At(s.T0, MiniJson.Num(x, "s")), EndUtc = At(s.T0, MiniJson.Num(x, "e")),
                                         Outcome = (BossOutcome)Math.Min(Count(MiniJson.Num(x, "o")), (int)BossOutcome.GotAway), Health = Frac(x, "hp"), Lowest = Frac(x, "lo"), HealthMinuteAgo = Frac(x, "hm"),
-                                        Deaths = Count(MiniJson.Num(x, "dd")), Foes = Count(MiniJson.Num(x, "n")), Run = Count(MiniJson.Num(x, "rn")) };
+                                        Deaths = Count(MiniJson.Num(x, "dd")), Foes = Count(MiniJson.Num(x, "n")), Run = Count(MiniJson.Num(x, "rn")), Swing = (float)Math.Min(1e7, Count(MiniJson.Num(x, "sw") * 10) / 10.0) };
                 if (b.EndUtc < b.StartUtc) b.EndUtc = b.StartUtc;
                 b.LastSeenUtc = x.ContainsKey("ls") ? At(s.T0, MiniJson.Num(x, "ls")) : b.EndUtc;
                 if (b.LastSeenUtc < b.EndUtc) b.LastSeenUtc = b.EndUtc;

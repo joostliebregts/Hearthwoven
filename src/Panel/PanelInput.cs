@@ -82,6 +82,9 @@ namespace Hearthwoven.Panel
         /// their snapshot's "dayDealt", DayHistory.DayDealt), so the group's By weapon and By type work on Today to 30 days; null = not shared (a
         /// Hearthwoven before 0.9: their days are one total each, DealtByDay).</summary>
         public Dictionary<string, Dictionary<string, float>> DayDealt;
+        /// <summary>0.8.6 (DPS per named weapon): their weapons per local day, the last 30 days (their snapshot's "dayWeapons"), so their By weapon shows them on Today, 7 days
+        /// and 30 days; null = not shared (a Hearthwoven before 0.8.6). Never read into a ranking: only their own book shows it.</summary>
+        public Dictionary<string, WeaponCells> DayWeapons;
         /// <summary>0.8.5: a fellow's Deeds per local day, the last 30 days (day -> family -> part -> amount; their snapshot's "dayDeeds",
         /// PanelModel.DayDeeds): what their Deeds pages' heroes and first bars show, so those pages and the group's work on Today to 30 days;
         /// null = not shared (a Hearthwoven before 0.8.5).</summary>
@@ -110,6 +113,16 @@ namespace Hearthwoven.Panel
         /// session's, Last fight shows the newest when it is newer than any of this session (Fights, through the fight adapter). Null on a fellow's
         /// copy (their copy carries their feed of this session only) and before the totals load.</summary>
         public List<KeptSession> KeptSessions;
+        /// <summary>0.8.6 (a friend's older feed, FeedBlocks.cs): on a fellow's book, the sessions the server holds of theirs, newest first (the one their running
+        /// copy is excluded); null on your own book and where none is listed. BlockSessions: the ones fetched, as kept sessions of theirs (id -> session);
+        /// BlockStates: the others by id ("loading" or "failed", else not asked). BlocksStamp changes whenever any of it does (the feed's cache key).</summary>
+        public List<BlockRow> BlockRows;
+        public Dictionary<string, KeptSession> BlockSessions;
+        public Dictionary<string, string> BlockStates;
+        /// <summary>0.8.6: the seconds a session on its way has waited (id -> seconds), for the sample and the tests; null in game, where the book counts them on the line itself
+        /// (PanelUi.FetchTick), so the page stays the same while it waits.</summary>
+        public Dictionary<string, int> BlockWaited;
+        public string BlocksStamp = "";
         /// <summary>0.9: the boss attempts you took part in, kept on this PC (BossLog); null on a fellow's copy and before the totals load.</summary>
         public BossLog BossLog;
         /// <summary>0.9: the fights for Battle > Last fight, Runs and bosses and their pages (Chapters/FightView.cs), filled by the fight adapter; null = none yet (Last fight draws the 0.8 page).</summary>
@@ -123,6 +136,9 @@ namespace Hearthwoven.Panel
         public ArmourTally DealtArmourSession, DealtArmourSince, DealtArmourPending;
         public ArmourBook DealtArmourBook;
         public DateTime? DealtArmourFromUtc;
+        /// <summary>0.8.6 (DPS): when your fighting time began to be recorded (the dealt ledger's book); the ledger's Swing (All, Session, the days) counts
+        /// from then. null: not yet. Yourself only.</summary>
+        public DateTime? SwingFromUtc;
         /// <summary>Deeds > Recent and Since you were away (0.7, RecentModel.cs). Yourself: this session's deeds per minute (DeedLog, flushed when
         /// gathered) and when your previous session on this PC ended (LocalTotals' last save before this session; null = no earlier session
         /// here). A fellow's copy: its session id, when this PC received this copy, and their mark as this PC last saw it before this session
@@ -217,6 +233,9 @@ namespace Hearthwoven.Panel
             var dayDealt = Obj(root, "dayDealt");   // 0.9: per day by weapon kind and type (an older copy has none: null); only real days, at most 40 of them
             if (dayDealt != null) input.DayDealt = dayDealt.Where(kv => kv.Value is Dictionary<string, object> && DateTime.TryParseExact(kv.Key, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
                                                            .Take(40).ToDictionary(kv => kv.Key, kv => Dict((Dictionary<string, object>)kv.Value));
+            var dayWeapons = Obj(root, "dayWeapons");   // 0.8.6: their weapons per day (an older copy has none: null); only real days, at most 40 of them
+            if (dayWeapons != null) input.DayWeapons = dayWeapons.Where(kv => kv.Value is Dictionary<string, object> && DateTime.TryParseExact(kv.Key, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+                                                                 .Take(40).ToDictionary(kv => kv.Key, kv => WeaponCells.Read((Dictionary<string, object>)kv.Value, 60));
             input.DayDeeds = PanelModel.ReadDayDeeds(Obj(root, PanelModel.DayDeedsKey));   // 0.8.5: their Deeds per day (an older copy has none: null); only real days, bounded
             input.DayVoyages = PanelModel.SharesVoyageDays(Obj(root, PanelModel.DayDeedsKey));   // 0.8.5: km sailed and cargo among them
             var foes = FoeShare.ReadFrom(Obj(root, "foes"));   // 0.8: the foes they fought per kind (an older copy has none: null)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -126,7 +127,7 @@ namespace Hearthwoven.Panel
             var title = BtText(h, f.Title, 0, 4, Column * 0.6f, 26, PanelLayout.Text.Name, PanelLook.Gold, style: FontStyles.Bold);
             var tw = Mathf.Ceil(title.preferredWidth) + 2; title.rectTransform.sizeDelta = new Vector2(tw, title.rectTransform.sizeDelta.y);
             var rest = "· " + f.Text + (string.IsNullOrEmpty(f.Note) ? "" : " · " + f.Note);
-            var right = string.Join(" · ", new[] { string.IsNullOrEmpty(f.Value) ? null : PanelModel.FeedDealt + " " + f.Value, string.IsNullOrEmpty(f.Value2) ? null : PanelModel.FeedReceived + " " + f.Value2 }.Where(x => x != null).ToArray());
+            var right = string.Join(" · ", new[] { string.IsNullOrEmpty(f.Value) ? null : PanelModel.FeedDealt + " " + f.Value, string.IsNullOrEmpty(f.Value2) ? null : PanelModel.FeedReceived + " " + f.Value2, string.IsNullOrEmpty(f.Rate) ? null : f.Rate }.Where(x => x != null).ToArray());   // 0.8.6: your pace beside dealt and received
             var r = BtText(h, right, Column - 260, 4, 260, 26, FdText, PanelLook.Muted, TextAlignmentOptions.MidlineRight);
             var rw = Mathf.Ceil(r.preferredWidth) + 4;
             BtText(h, rest, tw + 6, 4, Mathf.Max(40, Column - tw - 6 - rw - 12), 26, FdText, PanelLook.Muted);
@@ -154,15 +155,99 @@ namespace Hearthwoven.Panel
         // 0.8.1 (Joost: every fight its own card): between the fight islands, outside them, the quiet time to the fight below (italic), and after
         // the last one what is left out; at the islands' inner edge, quiet. 0.8.5: over an earlier session's fights its day and span, a shade
         // stronger, with a hairline on to the right edge (the mirror's .feed-ln.session)
-        static void FeedQuiet(RectTransform col, Block b)
+        static void FeedQuiet(RectTransform col, Block b, Func<string, Action> link)
         {
             var box = VStack(col, 0); box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset((int)IslandPad, (int)IslandPad, 0, 0);
-            if (b.Tone != "session") { Label(box, b.Text, PanelLook.MinText, PanelLook.Faint, style: b.Tone == "gap" ? FontStyles.Italic : FontStyles.Normal); return; }
+            if (b.Tone == PanelModel.FeedMoreTone) { FeedMore(box, b, link); return; }
+            if (b.Tone != "session")
+            {
+                var words = Label(box, b.Text, PanelLook.MinText, PanelLook.Faint, style: b.Tone == "gap" ? FontStyles.Italic : FontStyles.Normal);
+                if (b.Tone == "loading") { fetchLine = words; fetchId = b.Value; fetchText = b.Text; fetchShown = int.MinValue; }   // 0.8.6: a friend's session on its way counts its seconds here (FetchTick)
+                return;
+            }
             var h = LineBox(PanelLook.MinText); var r = BtRow(box, h); var room = Column - 2 * IslandPad;
             var t = BtText(r, b.Text, 0, 0, room, h, PanelLook.MinText, PanelLook.Muted);
             var tw = Mathf.Min(room, Mathf.Ceil(t.preferredWidth) + 2); t.rectTransform.sizeDelta = new Vector2(tw, t.rectTransform.sizeDelta.y);
             var gap = PanelLayout.Feed.SessionGap;
             if (room - tw - gap > 0) BtRect(r, "Rule", PanelLook.Rule, tw + gap, Mathf.Round(h / 2), room - tw - gap, 1);
+        }
+
+        // ----- 0.8.6 (test build 5, Joost: "the loading took a while ... We should have something of a progress indicator there") -----
+
+        // the "Getting Edda's session of ... from the server" line on the page now, the session it waits for, its text as the model made it, the seconds it shows
+        static TextMeshProUGUI fetchLine; static string fetchId, fetchText; static int fetchShown = int.MinValue;
+
+        /// <summary>Every frame while the book is open: the seconds the friend's session has been on its way, on that line only ("... · 6 s"), set when the whole second
+        /// changes. Nothing else is drawn again; when it arrives (or fails) the page is built as before (FellowBlocks.Changed).</summary>
+        static void FetchTick()
+        {
+            if (ReferenceEquals(fetchLine, null)) return;
+            if (!fetchLine) { fetchLine = null; return; }   // its page was drawn away
+            var seconds = GroupShare.Blocks.WaitedSeconds(fetchId, Time.realtimeSinceStartup);
+            if (seconds == fetchShown) return;
+            fetchShown = seconds; fetchLine.text = PanelModel.FetchWaited(fetchText, seconds);
+        }
+
+        // ----- 0.8.5: Show older foes (Joost in game: "I would love to scroll through this feed even further. Can we paginate it?") -----
+
+        /// <summary>The page's Show older foes line (drawn last on the feed's plate), for AppendFeed to take away; null: none on the page.</summary>
+        static RectTransform feedMoreLine;
+
+        // the button (a chip, as the heading's: a press adds the next page; Enter, Space or the pad's A do the same, FeedKeys) and beside it what
+        // is shown and what is left, quiet, wrapping under itself when long (the older-foes and Session lines may follow it)
+        static void FeedMore(RectTransform box, Block b, Func<string, Action> link)
+        {
+            var row = Line(box, PanelLayout.Feed.MoreGap, TextAnchor.MiddleLeft);
+            var w = Chip(row, b.Title, null, false, link?.Invoke(b.NoteLink));
+            var words = Label(row, b.Text ?? "", PanelLook.MinText, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
+            var room = Column - 2 * IslandPad - w - PanelLayout.Feed.MoreGap;
+            Size(words, room, Mathf.Max(PanelLayout.Chip.Height, Wrapped(words, room)));
+            feedMoreLine = box;
+        }
+
+        /// <summary>
+        /// Show older foes, drawn on the page already there (PanelUi.DrawPage, after a press): the button's line goes, the new fights' islands and
+        /// lines are drawn under the last one, the plate fits again. Nothing above is made again, so a press costs one page of rows however long
+        /// the feed has grown. Only when the model says that is all that changed (PanelModel.FeedAppendAt) and the Log's columns hold for the new
+        /// rows; false: the caller draws the page whole. Counts as a drawing for Dev.SelfCheck's parity check, which draws the page fresh and
+        /// compares the two object by object.
+        /// </summary>
+        bool AppendFeed(PanelView before, string beforeJson, PanelView after)
+        {
+            if (!ReuseOn || !feedMoreLine || feedMoreLine.parent != content || lastPage != after.Active + "/" + after.Page + "/" + state.Player) return false;
+            var at = PanelModel.FeedAppendAt(before, beforeJson, after);
+            if (at < 0) return false;
+            var plate = PanelModel.PlateOf(after);
+            var plan = PanelModel.Islands(plate);
+            var feed = PanelModel.Content(after).FirstOrDefault(x => x.Kind == "feed");
+            if (feed?.Tone == PanelModel.FeedLog)   // the Log's columns are the page's: wider names or words in the new rows draw it whole
+            {
+                if (!feedLogCols.HasValue || FeedColumns(content, PanelModel.FeedPageEntries(PanelModel.Content(after))) != feedLogCols.Value) return false;
+            }
+            personColors = after.PersonColors; fillView = after; fills++; lastFillNew = false; chromeKept = true;   // the parity check's notes (PanelReuse.cs)
+            var line = feedMoreLine; feedMoreLine = null;
+            KeepTexts(line); line.SetParent(null, false); Destroy(line.gameObject);
+            plated = true; Column = PlateColumn;
+            legends.Clear(); legendsLater = true;
+            try { DrawIslands(content, plan.GetRange(at, plan.Count - at)); }
+            finally { legendsLater = false; }
+            LayLegends(legends, PlateColumn - 2 * IslandPad); legends.Clear();
+            EndPlate();
+            PageTagOnTop();
+            if (!SameKeys(baseKeys, after.Keys)) baseKeys = after.Keys.ToList();
+            KeyLineNow();
+            FitPlate(true);
+            return true;
+        }
+
+        // Enter, Space or the pad's A on the feed: Show older foes, as its button (only while it is on the page)
+        bool FeedKeys()
+        {
+            if (view == null || view.Active != Chapter.Battle || view.Page != PanelModel.FeedPage || view.ShowAbout) return false;
+            if (!(Key(KeyCode.Return) || Key(KeyCode.KeypadEnter) || Key(KeyCode.Space) || Button("JoyButtonA"))) return false;
+            var more = PanelModel.FeedMoreLine(view);
+            if (more != null) LinkTo(more.NoteLink)();
+            return true;
         }
 
         // Log (prototype A): one line per foe, time, the foe, what became of it, then (0.8.1, Joost in game) the dealt damage as a damage bar
@@ -209,7 +294,7 @@ namespace Hearthwoven.Panel
             float outcome = 0; foreach (var o in entries.Select(e => e.Note).Where(o => !string.IsNullOrEmpty(o)).Concat(new[] { FdOutLeast })) { measure.text = o; outcome = Mathf.Max(outcome, MarkPx + 8 + Mathf.Ceil(measure.preferredWidth) + 2); }
             measure.fontSize = PanelLayout.Text.Floor;
             float recv = 0; foreach (var t in entries.Select(FeedReceived).Where(t => t != null)) { measure.text = t; recv = Mathf.Max(recv, Mathf.Ceil(measure.preferredWidth) + 2); }
-            measure.gameObject.SetActive(false); Destroy(measure.gameObject);
+            measure.gameObject.SetActive(false); measure.transform.SetParent(null, false); Destroy(measure.gameObject);   // out of the page at once (0.8.5: AppendFeed measures on the page itself)
             return (Mathf.Min(name, FdNameMax), Mathf.Min(outcome, FdOut), Mathf.Min(recv, FdRecvMax));
         }
 

@@ -1,11 +1,13 @@
-[![Hearthwoven](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png)
+[![Hearthwoven Stats Book](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/hearthwoven-banner-woodcut.png)
 
-# One book for everything you did
+# Hearthwoven Stats Book
 
-Press **H** and it opens on what you did: the trees you felled, the dishes you cooked, the damage you dealt by weapon, type and foe, and what hurt you. Choose a friend's name and see their stats. Choose **Everyone** and see the whole group: the builder, the cook, the one who is always first into a fight. Everyone plays their own part, and the book shows each part.
+**One book for everything you did.** Press **H** and it opens on what you did: the trees you felled, the dishes you cooked, the damage you dealt by weapon, type and foe, and what hurt you. Choose a friend's name and see their stats. Choose **Everyone** and see the whole group: the builder, the cook, the one who is always first into a fight. Everyone plays their own part, and the book shows each part.
+
+> **New name.** Hearthwoven Stats Book is the new name of Hearthwoven. If you have the old Hearthwoven package, remove it in your mod manager and install this one. Keep only one of them enabled. Your settings and your saved book stay. The mod itself is still called Hearthwoven in the game and in the text below. ([What to do, step by step](#moving-from-hearthwoven))
 
 - **Deeds and Skills:** cooking, meals, building, crafting, woodcutting, mining, farming, fishing and taming, and where your practice went.
-- **Battle:** damage by weapon, type and foe, and how much got through the foe's armor; Defense, with what hurt you and what your armor stopped; a feed of your fights; the fight of the whole group, foe by foe; boss fights and dungeon runs.
+- **Battle:** damage by weapon, type and foe, with damage per second (DPS) for each weapon, and how much got through the foe's armor; Defense, with what hurt you and what your armor stopped; a feed of your fights, yours and your friends', up to 30 days back; the fight of the whole group, foe by foe; boss fights and dungeon runs.
 - **Company:** who cooked for whom, whose gear went to good use, each player's share in any time period, and what your friends did while you were away.
 - **Feats:** moments worth telling, earned alone or together, like steering a ship 2 km home with a heavy load of ore.
 - **Voyages:** distance sailed and on foot, who sailed with you, and the cargo you carried.
@@ -43,6 +45,14 @@ Every fight since you installed Hearthwoven, counted: the damage you dealt by we
 [![Point at a part of a damage bar to see its type and number](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/hover.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/hover.gif)
 
 *Point at any part of a damage bar to see its damage type and number. Click a feat card to see its tiers and your progress.*
+
+### Damage per second, weapon by weapon
+
+Under Melee, Bow and Magic, By weapon lists every weapon you swung, with its damage per second (DPS): your damage divided by the seconds you fought, not by the seconds on the clock. A pause of more than 4 seconds between your hits does not count. A weapon you used at more than one upgrade level is one line that opens: press it to see each upgrade level, and each skill level, with its DPS and a small arrow for how much it went up or down. The weapon lines add up to the row, with a last line, Not by weapon, for hits from before weapons were counted. A friend's weapons show on their book the same way. DPS never shows in a ranking of players: not on Everyone, and not in Compare. (Battle > Damage > By weapon)
+
+[![Battle, Damage, By weapon: the weapon lines with their DPS, and one weapon opened to its skill levels](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/weapons.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/weapons.gif)
+
+*Battle, Damage, By weapon. The weapon lines add up, together with a "Not by weapon" line, to the melee total. Open a weapon line to see its rows per skill level, each with its DPS (damage per second) and how much it went up (▲).*
 
 ### Who helped whom
 
@@ -88,11 +98,15 @@ Your deeds are grouped under titles such as Hearth Cook, Hallwright and Woodcutt
 
 ### Your fights, one by one
 
-The Feed tells your fights, newest first, also those of earlier sessions up to 7 days back: each foe "defeated by you", "defeated with Edda", "survived" or "got away", with the damage both ways. Show it as Log, Cards or Timeline, and filter it by time, biome and foe. Fellow players who share see it on your book, and you see theirs. (Battle > Feed)
+The Feed tells your fights, newest first, also those of earlier sessions up to 30 days back: each foe "defeated by you", "defeated with Edda", "survived" or "got away", with the damage both ways. Each fight says which day it was. Show it as Log, Cards or Timeline, and filter it by time, biome and foe. At the end of the Feed, **Show older foes** draws the next fights. Fellow players who share see it on your book, and you see theirs, also their earlier sessions: their PC sends each finished session to the server once, and your PC gets it from there when you press Show older foes (this needs 0.8.6 on the server). (Battle > Feed)
 
 [![The battle feed as cards and as a log, with the foe filter](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/feed.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/feed.gif)
 
 *The battle feed shows each fight as cards or as a log. Use the foe filter to show only the fights with one foe.*
+
+[![The end of the battle feed: each fight says which day it was, and Show older foes draws older fights](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/feed-older.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/feed-older.gif)
+
+*At the end of the Battle feed, each fight says which day it was ("Fight at 23:48 yesterday"). Press "Show older foes" and older fights appear.*
 
 ### Feats
 
@@ -104,17 +118,21 @@ A feat is a moment worth telling, earned by doing it: steering a ship 2 km with 
 
 ### Fights and boss fights
 
-After a fight, Last fight shows it for the whole group, also after a restart, with how long ago it was: what you dealt together and what you received together, then one row per foe. Each row has two bars: what the group dealt to that foe, one part per player, and what that foe dealt back, one part per damage type. Under the rows, each player has one line: damage dealt, damage received by type, blocks, parries and falls. One quiet line names what to bring next time, such as "Poison was 62 % of what hit you: bring Poison Resistance Mead." (Battle > Last fight)
+After a fight, Last fight shows it for the whole group, also after a restart, with how long ago it was: what you dealt together and what you received together, then one row per foe. Each row has two bars: what the group dealt to that foe, one part per player, and what that foe dealt back, one part per damage type. Under the rows, each player has one line: damage dealt, damage received by type, blocks, parries and falls. One quiet line names what to bring next time, such as "Poison was 62 % of what hit you: bring Poison Resistance Mead." Beside dealt and received, the page shows your own DPS in that fight. Last fight is the newest fight you were in: when a fight of a friend is newer, one quiet line says so, and a click opens it. On a friend's book, Last fight is the same page as yours, built from the same fights. (Battle > Last fight)
 
-During a fight with a boss, Last fight becomes **Boss fight**, with the boss's health and the foes around it, such as The Queen's Seekers. Hildir's minibosses count as boss fights too. A fall and the run back from your bed stay in the same attempt. **Runs and bosses** lists your dungeon runs and boss fights, newest first: a run goes from the moment you go into a dungeon to the moment you come out, and a boss fight in a dungeon shows under its run. Your book keeps them for each world. Every player in the fight needs Hearthwoven 0.8.3 or newer to be counted in it. (Battle > Runs and bosses)
+During a fight with a boss, Last fight becomes **Boss fight**, with the boss's health and the foes around it, such as The Queen's Seekers. It also shows the DPS of the group on the boss and, while the fight is on, how long is left at the pace of the last minute. Hildir's minibosses count as boss fights too. A fall and the run back from your bed stay in the same attempt. **Runs and bosses** lists your dungeon runs and boss fights, newest first: a run goes from the moment you go into a dungeon to the moment you come out, and a boss fight in a dungeon shows under its run. A run has the name of its dungeon, such as Burial Chamber or Infested Mine. Like the other Battle pages, it has time windows, from 10 min to All. A page that you open from another page has a Back button. Your book keeps them for each world. Every player in the fight needs Hearthwoven 0.8.3 or newer to be counted in it. (Battle > Runs and bosses)
 
-[![A boss fight, with the boss's health and what each player dealt and received](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/bossfight.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/bossfight.gif)
+[![A boss fight: the boss's health, the group's DPS and what each player dealt and received](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/bossfight-cursor.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/bossfight-cursor.gif)
 
-*A boss fight as it happens: the boss's health, the foes around it, and what each player dealt and received.*
+*A boss fight as it happens: the damage that the group dealt to the boss and received from it, and the group's pace. Open the boss row to see the two bars of each player. Runs and bosses shows the fight inside its run.*
 
 [![Last fight: what you dealt together, and each player's part](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-lastfight.png)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/battle-lastfight.png)
 
 *Last fight: what you dealt together, and each player's part.*
+
+[![Last fight keeps your fight, with a quiet line about a newer fight on the server](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/lastfight-server.gif)](https://raw.githubusercontent.com/joostliebregts/Hearthwoven/main/docs/screenshots/lastfight-server.gif)
+
+*Last fight is the newest fight that you were in. A quiet line says when a newer fight happened on the server. Click it to open that fight; the page says "You were not in this fight".*
 
 ### And more
 
@@ -161,6 +179,10 @@ Your own book works on any server. Hearthwoven is optional. Players without it c
 
 See **Tested with other mods** under Reference for the mods we use in testing.
 
+### Moving from Hearthwoven
+
+Until 0.8.5 this mod was the package Hearthwoven. If you have it, switch in your mod manager: install Hearthwoven Stats Book, then remove Hearthwoven. Do not keep both enabled. They hold the same plugin (the same ID), so you do not want it twice. Your settings and your saved book stay, because they are not part of the package: the book is in `BepInEx/Hearthwoven/`, and the settings are in `BepInEx/config/com.joostliebregts.hearthwoven.cfg`. The key to open the book is still **H**. A server owner switches the same way; the file is still `Hearthwoven.dll`. The old package gets 0.8.6 once more, with a note that points here, and is then deprecated.
+
 ### Play with friends
 
 Install Hearthwoven on the server to share books. Players who install it share their book by default.
@@ -168,7 +190,8 @@ Install Hearthwoven on the server to share books. Players who install it share t
 - **ShareWithGroup** controls sharing with other players. Turn it off to see only your own book and stop sharing it with them.
 - **SendStats** controls statistics updates to the server, even when **ShareWithGroup** is off. Turn both settings off to stop new updates and sharing.
 - Shared copies leave out death locations and your history of worlds played.
-- From 0.8, your shared copy also says how many foes of each kind you fought and defeated, which feasts you ate from and who set them out, and who made the feasts you set out. From 0.8.2 it also carries your battle feed and who was near you in a fight. From 0.8.3 it also carries the boss fights and dungeon runs you were in, and your damage per day by weapon kind and type. From 0.8.5 it also carries, for each day of the last 30 days, the top numbers of each Deeds page, your km sailed and at the helm, and your cargo per item. Nothing in it names a place. A player who does not share is never named there: they show as "another player".
+- From 0.8, your shared copy also says how many foes of each kind you fought and defeated, which feasts you ate from and who set them out, and who made the feasts you set out. From 0.8.2 it also carries your battle feed and who was near you in a fight. From 0.8.3 it also carries the boss fights and dungeon runs you were in, and your damage per day by weapon kind and type. From 0.8.5 it also carries, for each day of the last 30 days, the top numbers of each Deeds page, your km sailed and at the helm, and your cargo per item. From 0.8.6 it also carries the weapons you swung (which weapon, its upgrade level, your skill level, the damage and the seconds of fighting), for each minute and for each day of the last 30 days. Nothing in it names a place. A player who does not share is never named there: they show as "another player".
+- From 0.8.6, your PC also sends each session that has ended to the server once, so friends can open your older Feed. It holds your fights as your PC kept them: no hits and no places, and a name only for players who share. The server keeps the newest 60 sessions of each player in each world, up to 30 days back, and deletes them when you stop sharing. A friend's older Feed needs 0.8.6 on the server and on their PC.
 - Your PC keeps each fellow player's last shared copy for that world, so their pages show at once after you log in. These are plain files on your PC, kept for up to 14 days. Turning off **ShareWithGroup** deletes them.
 - A server that still runs Hearthwoven 0.6 works with this version: books are shared as before, and fellow players' numbers refresh every 2 minutes.
 - With Hearthwoven 0.8 or newer on the server, players who share send small live updates every 10 seconds, so fellow players see what you do, including the land you fight in, about every 10 seconds.
@@ -292,6 +315,8 @@ From 0.8.3, each foe in your feed also carries the game's network id for that cr
 
 From 0.8.5, your shared copy also carries, for each day of the last 30 days, the numbers at the top of each Deeds page and its first bar, such as trees felled, pieces built, dishes cooked and the meals you ate with who cooked them. It also carries your km sailed, the km of it at the helm, and your cargo per item for each day, and your damage after the foe's armor with your minutes. None of it names a place.
 
+From 0.8.6, your shared copy also carries the weapons you swung: for each minute and for each day of the last 30 days, the game's name for each weapon (such as SwordIron), its upgrade level and your skill level, the damage, and the seconds you spent fighting. It also carries the seconds of fighting in each fight and in each boss fight, for DPS. No hit has a time, a foe or a place in it. Your PC also sends each session that has ended to the server once, as a small file (about 5 KB for a busy evening): the fights as your PC kept them, with no hits and no places, and a name only for players who share. The server keeps the newest 60 sessions of each player in each world, up to 30 days back and no more than 2000 foes. Only players who share can ask for them, one at a time. When you stop sharing, the server deletes your sessions, and your friends' PCs delete their copy of them.
+
 Fireside names a feast's maker with the name the game writes on the item ("Crafted by"), also when that player does not use Hearthwoven. They get no numbers: only their name on the line. With **Everyone** on, Meals names a cook the same way: a cook who does not share shows by name, in gray, with the meals the group ate from their cooking.
 
 Last fight works out who was near you on your PC. Every 2 seconds while hits are coming in a fight, it looks at the players the game has loaded within 40 m of you. It is never saved. From 0.8.2 your shared copy carries it with your feed, naming only players who share.
@@ -335,6 +360,10 @@ With Hearthwoven 0.6.0 or newer, the server also counts what only it can see in 
 
 Cargo is measured in **item-km**: items aboard × km, on a straight line. It counts what is in the ship's or cart's own hold, only while you steer or pull it. The distance is measured in straight sections, so winding routes can be undercounted. Under the Cargo carried bar, a small sum such as 100 × 4.1 km = 410 item-km shows how your own numbers make each part. With Hearthwoven 0.6.0 or newer on the server, Voyages > Cargo also shows what you loaded into a ship or cart and what you unloaded somewhere else. Chests do not count.
 
+### Damage per second (DPS)
+
+DPS is your damage divided by the seconds you fought. Hearthwoven counts the time between your own hits: a pause of more than 4 seconds does not count, and the first hit after a pause starts the clock. A weapon, a fight or a window with less than 5 seconds of fighting shows a dash. Your skill rises while you play, so a weapon line shows the DPS at your highest skill level that has at least 5 seconds of fighting in the window, and an arrow shows the change against your lowest such level. Hearthwoven counts the fighting time from 0.8.6, so older damage has no seconds: a window that reaches back before then counts only from the day it began, and All says that day. DPS shows for you and for a fellow player's weapons, never on Everyone, in a table of players or in Compare.
+
 ### Gaps in Valheim's counters
 
 Hearthwoven adds its own counts for these cases, starting when you install it:
@@ -359,7 +388,7 @@ To keep the cost small, Hearthwoven does the following.
 - It checks the biome at most once a second. It checks ships, carts and the animals you lead every 10 seconds.
 - It keeps one running total for each kind of count. The battle log combines fights older than about 3 hours into 10-minute steps.
 - During a fight, it checks every 2 seconds which players are within 40 m of you, for Last fight. It does this only while hits are coming. It is never saved. Your shared copy carries it with your feed, naming only players who share.
-- The battle feed keeps your newest 200 foes of the session in memory. Your shared copy carries the newest 100. For Last fight and the Feed after a restart, a small file keeps your newest 200 foes of earlier sessions for each world, up to 7 days back.
+- The battle feed keeps your newest 200 foes of the session in memory. Your shared copy carries the newest 100. For Last fight and the Feed after a restart, a small file keeps your newest 2000 foes of earlier sessions for each world, up to 30 days back.
 - It keeps your last 50 boss fights and your last 50 dungeon runs with your local totals, and the last 3 hours of your battle log in a small file next to them, so the short periods still work after a restart.
 - After you spawn, it gets the book ready while the book is still closed. It builds the book the first time you open it. When you turn a page, it keeps the tabs, the page list and the player row, and reuses its text and pictures.
 - A long list of tiles shows up to 32 tiles, and a page up to 40, until you press **Show all**.

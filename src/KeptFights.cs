@@ -32,18 +32,25 @@ namespace Hearthwoven
     /// local save once this session has a fight. Each session is one block with its world (FellowCache.ScopeKey): a session of another world is
     /// never shown and stays in the file for that world (at most MaxWorlds worlds, the ones played last).
     ///
-    /// Bounded per world: your newest whole fights up to MaxFoes foes (BattleRecorder.MaxFeed, what the recorder itself keeps of one session, so
-    /// what is kept never outweighs a live session and the feed's filter reaches about as far back as within a session), none that ended more than
-    /// MaxAge ago (the 7 days of the longest recent window: a week-old fight is history, which Damage and Foes keep as day rows). A fellow's
-    /// fights are kept only beside one of yours. What your copy shares is what is kept (FeedShare.From): names only of players who share, anyone
-    /// else counted as another player; no place. Pure C# with files: tested without the game (test/KeptFightsTests.cs).
+    /// Bounded per world: your newest whole fights up to MaxFoes foes, none that ended more than MaxAge ago (0.8.6: the book's longest day window,
+    /// 30 days, so the Feed's Today, 7 days and 30 days and Last fight reach as far back as Damage and Foes; 0.8.5 kept 200 foes and 7 days). Each
+    /// session holds at most PerSession of yours, what the recorder itself keeps of one session, so every session's feed in the file stays within
+    /// what FeedShare.ReadFrom reads back (MaxRead), in 0.8.5 too. A fellow's fights are kept only beside one of yours. What your copy shares is
+    /// what is kept (FeedShare.From): names only of players who share, anyone else counted as another player; no place. Pure C# with files: tested without the game (test/KeptFightsTests.cs).
     /// </summary>
     public sealed class KeptFights
     {
+        /// <summary>Still 1 in 0.8.6: a 0.8.5 book reads the longer file (a reader of version 1 refuses a higher one and would start empty). It shows
+        /// its own bounds of it (200 foes, 7 days) and writes only those back at its next save.</summary>
         public const int Version = 1;
-        /// <summary>Your foes kept per world (whole fights, newest first). At most FeedShare.MaxRead, which is what a feed reads back.</summary>
-        public const int MaxFoes = BattleRecorder.MaxFeed, MaxWorlds = 4;
-        public static readonly TimeSpan MaxAge = TimeSpan.FromDays(7);
+        /// <summary>0.8.6: your foes kept per world (whole fights, newest first). A busy month (an evening of 150 foes, five evenings a week: about
+        /// 3 200 foes) keeps its newest 2 000, about 19 days back. The file is then about 260 KB, 420 KB with one fellow's parts beside yours and
+        /// 720 KB with three; it loads in about 40 ms once per session and one save writes it in about 6 ms (test/KeptFightsTests.cs measures them).</summary>
+        public const int MaxFoes = 2000, MaxWorlds = 4;
+        /// <summary>Your foes of one session in the file: what the recorder keeps of a session (BattleRecorder.MaxFeed), at most FeedShare.MaxRead,
+        /// which is what a feed reads back.</summary>
+        public const int PerSession = BattleRecorder.MaxFeed;
+        public static readonly TimeSpan MaxAge = TimeSpan.FromDays(30);
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
         public string PlayerId = "", Name = "";
@@ -55,14 +62,14 @@ namespace Hearthwoven
             (totalsPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? totalsPath.Substring(0, totalsPath.Length - 5) : totalsPath) + ".fights.json";
 
         /// <summary>
-        /// This session's record now: your newest MaxFoes foes of <paramref name="rec"/> as your shared feed carries them (<paramref name="shares"/>:
+        /// This session's record now: your newest PerSession foes of <paramref name="rec"/> as your shared feed carries them (<paramref name="shares"/>:
         /// whether a player shares; anyone else is another player), your falls in those fights, and each fellow's fights that join one of yours
         /// (GroupFights.Join over <paramref name="fellows"/>, their shared feeds as this PC holds them now).
         /// </summary>
         public static KeptSession Take(string world, string id, DateTime fromUtc, DateTime nowUtc, BattleRecorder rec, string me, Func<string, bool> shares, IEnumerable<FightSide> fellows)
         {
             var s = new KeptSession { World = world ?? "", Id = id ?? "", FromUtc = fromUtc, ToUtc = nowUtc };
-            var feed = FeedShare.From(rec, shares, MaxFoes);
+            var feed = FeedShare.From(rec, shares, PerSession);
             var numbers = new HashSet<int>(feed.Fights.Select(f => f.Number));
             var mine = new FightSide { Name = me ?? "", Self = true, Fights = feed.Fights, Falls = (rec?.Falls() ?? new List<Fall>()).Where(f => numbers.Contains(f.Fight)).ToList() };
             s.Sides.Add(mine);
@@ -196,17 +203,25 @@ namespace Hearthwoven
                         var side = new FightSide { Name = MiniJson.Str(o, "n"), Self = MiniJson.Num(o, "me") > 0, Key = MiniJson.Str(o, "k", null), Fights = feed.Fights, Falls = feed.Falls };
                         if (o.ContainsKey("at")) side.ReceivedUtc = Time(MiniJson.Str(o, "at"));
                         if (side.Self && s.Mine != null) continue;   // one record of yours a session
-                        foreach (var f in side.Fights)
-                        {
-                            f.Open = false; f.Kept = s;
-                            foreach (var e in f.Entries) if (e.Outcome == FoeOutcome.Fighting) { e.Outcome = FoeOutcome.GotAway; e.Away = AwayHow.YouLeft; }
-                        }
                         s.Sides.Add(side);
                     }
+                CloseFights(s);
                 if (s.Mine != null) k.Sessions.Add(s);
             }
             k.Sessions.Sort((a, b) => b.ToUtc.CompareTo(a.ToUtc));
             return k;
+        }
+
+        /// <summary>Every fight of <paramref name="s"/> ended and tied to it: none open, a foe still in the fight at the save got away when the session
+        /// ended (AwayHow.YouLeft: "survived"). FromJson and a friend's block (FeedBlock.Read) both come back this way.</summary>
+        public static void CloseFights(KeptSession s)
+        {
+            foreach (var side in s.Sides)
+                foreach (var f in side.Fights)
+                {
+                    f.Open = false; f.Kept = s;
+                    foreach (var e in f.Entries) if (e.Outcome == FoeOutcome.Fighting) { e.Outcome = FoeOutcome.GotAway; e.Away = AwayHow.YouLeft; }
+                }
         }
 
         static DateTime Time(string s) => DateTime.TryParse(s, Inv, DateTimeStyles.RoundtripKind, out var d) ? d.ToUniversalTime() : DateTime.MinValue;

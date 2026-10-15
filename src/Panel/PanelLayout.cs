@@ -102,6 +102,9 @@ namespace Hearthwoven.Panel
             public static readonly float FullPadTop = 12, FullGap = 10;
             /// <summary>The plate's inner width: what a wide island is.</summary>
             public static readonly float Column = 840;
+            /// <summary>0.8.6 the sticky head (StickyHeadUi.cs): Fade, the soft edge at a scroll area's end that has more beyond it (PanelUi.Fade); StripShade,
+            /// the shade under the pinned strip while rows lie above it.</summary>
+            public static readonly float Fade = 40, StripShade = 10;
         }
 
         /// <summary>An island: a plain rounded rectangle on the plate around one group of blocks.</summary>
@@ -215,10 +218,11 @@ namespace Hearthwoven.Panel
             public static readonly float Height = 32;
         }
 
-        /// <summary>Battle's feed: between an earlier session's line (its day and span) and the hairline after it.</summary>
+        /// <summary>Battle's feed: between an earlier session's line (its day and span) and the hairline after it; 0.8.5 between the Show older
+        /// foes button and the words beside it (what is shown, what is left).</summary>
         public static class Feed
         {
-            public static readonly float SessionGap = 10;
+            public static readonly float SessionGap = 10, MoreGap = 14;
         }
 
         /// <summary>0.8.5 a small sum (Voyages > Cargo: "[crate] 100 × [ship] 4.1 km = 410 item-km"). Under the bar: its pictures (Icon), the gap

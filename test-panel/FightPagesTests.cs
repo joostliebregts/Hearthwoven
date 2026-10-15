@@ -70,6 +70,52 @@ static class FightPagesTests
         Check(words.Distinct().Count() == 5 && words[0].Contains("64 %") && words[1].Contains("41 %") && words[2].Contains("58 %") && !words[3].Any(char.IsDigit) && words[4].Contains("4 deaths") && !everyPage.Any(t => System.Text.RegularExpressions.Regex.IsMatch(t, @"\blost\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)),
               "FP outcome words, one for each outcome with its own number (health left, reset at, got away at, the deaths): " + string.Join(" / ", words) + "; \"lost\" nowhere on the fight pages (" + everyPage.Count + " strings)");
 
+        // ---------- 0.8.6 run words (Joost, 13 Oct, on "Out, 1 death": "wat betekent out?"): a run is "Inside now" or "Left", the same word in the
+        // list, the page's pill and its time line; never a bare "Out" or "Inside" ----------
+        {
+            var citadelNow = live.Fights.ById("citadel-now");
+            var minePg = PanelModel.Build(live, At("fight:mine-1")); var nowPage = PanelModel.Build(live, At("fight:citadel-now")); var runsPage = PanelModel.Build(live, At(PanelModel.RunsPage));
+            var mineLine = Of(Find(minePg, PanelModel.FightHeadKind), "runline").SingleOrDefault(); var nowLine = Of(Find(nowPage, PanelModel.FightHeadKind), "runline").SingleOrDefault();
+            var runText = new[] { minePg, nowPage, runsPage }.SelectMany(PanelModel.AllText).ToList();
+            var bare = runText.Where(t => System.Text.RegularExpressions.Regex.IsMatch(t, @"\bOut\b|\bout \d|^Inside(?! now)\b|^in \d")).Distinct().ToList();
+            var w = new[] { PanelModel.OutcomeWords(mine), PanelModel.OutcomeWords(citadelNow), minePg.Blocks[0].Pill, nowPage.Blocks[0].Pill, mineLine?.Value, mineLine?.Value2, nowLine?.Value2 };
+            Check(w[0] == "Left, 4 deaths" && w[1].StartsWith("Inside now, ") && w[2] == "Left after 18 min" && w[3].StartsWith("Inside now · ") && (w[4] ?? "").StartsWith("went in ") && (w[5] ?? "").StartsWith("left ") && w[6] == "now" && bare.Count == 0,
+                  "FP 0.8.6 a run's words a cold player gets, the same in the list, the pill and the time line: " + string.Join(" / ", w) + (bare.Count > 0 ? "; still bare: " + string.Join(", ", bare) : ""));
+        }
+
+        // ---------- 0.8.6 (Joost's PC: "A dungeon 34 s · Out, no deaths · 0"): a look into a dungeon under a minute with nothing dealt, received or
+        // fallen is kept, not listed; one longer, or with any damage, or on now, is listed ----------
+        {
+            var book = Book(false);
+            FightView Visit(string id, double minAgo, int seconds, bool isLive = false, double dealt = 0)
+            {
+                var f = new FightView { Id = id, Kind = FightKind.Run, Outcome = isLive ? FightOutcome.Live : FightOutcome.Ended, Place = "Burial Chamber", Biome = "BlackForest", StartUtc = now.AddMinutes(-minAgo), EndUtc = now.AddMinutes(-minAgo).AddSeconds(seconds) };
+                f.Players.Add(new FightPlayer { Name = FightsSample.Rowan, You = true, Has = true, InsideSeconds = seconds });
+                if (dealt > 0) { var foe = new FightFoe { Prefab = "Skeleton", Count = 1 }; var part = new FightPart(); part.Dealt["slash"] = dealt; foe.By[FightsSample.Rowan] = part; f.Foes.Add(foe); }
+                return f;
+            }
+            book.Fights.Fights.InsertRange(0, new[] { Visit("glance", 1, 34), Visit("slow", 4, 120), Visit("quick", 6, 40, dealt: 60) });
+            var rows = PanelModel.Content(PanelModel.Build(book, At(PanelModel.RunsPage))).Where(b => b.Kind == PanelModel.FightListKind).SelectMany(b => Of(b, "fight")).Select(r => r.Id).ToList();
+            var glancePage = PanelModel.Build(book, At("fight:glance"));
+            var only = Book(false); only.Fights.Fights.Clear(); only.Fights.Fights.Add(Visit("glance", 1, 34));
+            var onlyPage = PanelModel.Build(only, At(PanelModel.RunsPage));
+            var inside = Book(false); inside.Fights.Fights.Insert(0, Visit("inside", 0.2, 10, isLive: true));
+            var insideRows = PanelModel.Content(PanelModel.Build(inside, At(PanelModel.RunsPage))).Where(b => b.Kind == PanelModel.FightListKind).SelectMany(b => Of(b, "fight")).Select(r => r.Id).ToList();
+            Check(!rows.Contains("Battle/fight:glance") && rows.Contains("Battle/fight:slow") && rows.Contains("Battle/fight:quick") && glancePage.Heading.StartsWith("Burial Chamber") &&
+                  PanelModel.AllText(onlyPage).Contains(PanelModel.NoRunsYet) && insideRows.Contains("Battle/fight:inside"),
+                  "FP 0.8.6 the 34 s look with nothing fought is not a row (its page still opens: " + glancePage.Heading + "); 2 min with nothing, or 40 s with a hit, are rows; the look alone leaves the page empty; a run on now is listed at 10 s");
+        }
+
+        // ---------- 0.8.6: runs a restart kept, shaped as on Joost's PC (the place's game name, no name token): named from the place, not "A dungeon" ----------
+        {
+            var saved = FightsSample.WithSavedRuns(PanelSample.Full(now));
+            var rows = PanelModel.Content(PanelModel.Build(saved, At(PanelModel.RunsPage))).Where(b => b.Kind == PanelModel.FightListKind).SelectMany(b => Of(b, "fight")).ToList();
+            var lands = saved.Fights.Fights.Select(f => f.Biome ?? "-").ToList();
+            Check(rows.Select(r => r.Title).SequenceEqual(new[] { "Burial Chamber", "Infested Mine" }) && rows[1].Note == "Left, 1 death" && saved.Fights.Fights.Count == 3 && lands.SequenceEqual(new[] { "BlackForest", "BlackForest", "Mistlands" }) &&
+                  FightAdapter.DungeonName("SunkenCrypt4") == "Sunken Crypt" && FightAdapter.DungeonName("MountainCave02") == "Frost Cave" && FightAdapter.DungeonName("Interior") == null && FightAdapter.DungeonLand("MorgenHole3") == "AshLands",
+                  "FP 0.8.6 saved runs with no name token are named from the place's game name: " + string.Join(", ", rows.Select(r => r.Title + " (" + r.Note + ")")) + "; lands " + string.Join(", ", lands) + "; the 34 s look kept, not listed");
+        }
+
         // ---------- Runs and bosses: the fight on now on top, then newest first, a boss fight under its run; every row opens its page ----------
         var runs = PanelModel.Build(live, At(PanelModel.RunsPage));
         var lists = PanelModel.Content(runs).Where(b => b.Kind == PanelModel.FightListKind).ToList();
@@ -92,6 +138,27 @@ static class FightPagesTests
               !earlier.Any(r => r.Id.EndsWith("citadel-now") || r.Id.EndsWith("queen-2") || r.Id.EndsWith("camp")) && opened.All(o => o.ok) && Says(runs, "3 runs", "3 boss fights"),
               "FP Runs and bosses: the Infested Citadel run on now on top (› to its page, 18:05), The Queen live under it with her lane and the 3 foes around her, then " + string.Join(", ", earlier.Select(r => r.Title)) + " newest first, the earlier Queen nested under its Citadel run; each of " +
               opened.Count + " rows opens its page with its list entry lit and Backspace returns" + (opened.Any(o => !o.ok) ? ": " + string.Join(", ", opened.Where(o => !o.ok).Select(o => o.t)) : ""));
+
+        // ---------- Runs and bosses by time (0.8.6): a run in the window when any part of it is; a live one always; a boss fight follows its run ----------
+        {
+            var t0 = now; var from = (DateTime?)t0.AddMinutes(-30);
+            FightView F(string id, FightKind k, int startAgo, int endAgo, string parent = null, bool isLive = false) =>
+                new FightView { Id = id, Kind = k, ParentId = parent, Outcome = isLive ? FightOutcome.Live : FightOutcome.Ended, StartUtc = t0.AddMinutes(-startAgo), EndUtc = t0.AddMinutes(-endAgo) };
+            var straddle = F("straddle", FightKind.Run, 50, 20);        // began before the window, ended inside
+            var before = F("before", FightKind.Run, 90, 45);            // ended before the window
+            var inner = F("inner", FightKind.Boss, 50, 45, "straddle"); // its own times lie before the window, its run's reach in
+            var strayBoss = F("stray", FightKind.Boss, 60, 40);         // no run kept: its own times
+            var outerBoss = F("outer", FightKind.Boss, 90, 60, "before");
+            var liveRun = F("live", FightKind.Run, 200, 0, isLive: true);
+            var ids = PanelModel.RunsInWindow(new[] { straddle, before, inner, strayBoss, outerBoss, liveRun }, from).Select(f => f.Id).OrderBy(x => x).ToList();
+            var tight = PanelModel.RunsInWindow(new[] { straddle, before, inner, strayBoss, outerBoss, liveRun }, t0.AddMinutes(-10)).Select(f => f.Id).OrderBy(x => x).ToList();
+            var all = PanelModel.RunsInWindow(new[] { straddle, before, inner, strayBoss, outerBoss, liveRun }, null).Count;
+            var thirty = PanelModel.Build(after, At(PanelModel.RunsPage, s => { s.Window = TimeWindow.LastThirtyMinutes; s.WindowPicked = true; }));
+            var empty = Find(thirty, "empty");
+            Check(ids.SequenceEqual(new[] { "inner", "live", "straddle" }) && tight.SequenceEqual(new[] { "live" }) && all == 6 &&
+                  thirty.Windows.Count == 9 && thirty.ShownWindow == TimeWindow.LastThirtyMinutes && empty != null && empty.Title == "Nothing in the last 30 min" && empty.Text.StartsWith("Newest run: ") && empty.Text.EndsWith(" ago."),
+                  "FP Runs and bosses by time: began before and ended inside counts, ended before does not, a live one is in, a boss fight follows its run (" + string.Join(",", ids) + "); an empty 30 min says so and names the newest (" + empty?.Title + " / " + empty?.Text + ")");
+        }
 
         // ---------- bring next time: Remedy's drinks from a third, a shield only when physical hits landed and you blocked little ----------
         Dictionary<string, double> R(params (string t, double v)[] x) => x.ToDictionary(p => p.t, p => p.v);
@@ -140,6 +207,85 @@ static class FightPagesTests
               afterEntry.Label == PanelModel.LastFightLabel && !afterEntry.Dot && Entry(live, PanelModel.RunsPage) != null &&
               Entry(plain, PanelModel.RunsPage) == null && PanelModel.Content(oldPage).Any(b => b.Kind == "fightfoes") && !PanelModel.Content(oldPage).Any(b => b.Kind == PanelModel.FightFoesKind),
               "FP Last fight's entry: \"" + liveEntry.Label + "\" with the dot during The Queen, \"" + afterEntry.Label + "\" after; a book without fights keeps the 0.8 page and has no Runs and bosses");
+        // ---------- 0.8.6: Last fight is yours; what the server holds without you is one quiet line and its own page ----------
+        {
+            var server = FightsSample.WithServerFight(FightsSample.With(PanelSample.Full(now), false));
+            var bossBook = FightsSample.WithServerFight(FightsSample.With(PanelSample.Full(now), true), boss: true);
+            string Hm(PanelInput b, DateTime t) => b.ToLocal(t).ToString("HH:mm");
+            var lastPage = PanelModel.Build(server, At(PanelModel.LastFightPage));
+            var line = PanelModel.PlateOf(lastPage)?.Items?.FirstOrDefault(b => b.Kind == "link" && b.Id != null && b.Id.StartsWith("Battle/fight:server"));
+            var want = "Newer on the server: Edda fought a Seeker at " + Hm(server, server.Fights.ById("server-fight").StartUtc) + " (you were not in it)";
+            var theirs = PanelModel.Build(server, At("fight:server-fight"));
+            var theirsText = PanelModel.AllText(theirs).ToList();
+            var lastText = PanelModel.AllText(lastPage).ToList();
+            Check(server.Fights.Last?.Id == "camp" && server.Fights.NewerOnServer?.Id == "server-fight" && PanelModel.Content(lastPage).Any(b => b.Kind == PanelModel.FightHeadKind && b.Title == "Black Forest") &&
+                  line != null && line.Title == want && line.Id == "Battle/fight:server-fight" && lastText.Count(t => t.StartsWith("Newer on the server")) == 1 &&
+                  theirs.Heading == "Fight at " + Hm(server, server.Fights.ById("server-fight").StartUtc) + ", " + server.ToLocal(server.Fights.ById("server-fight").StartUtc).ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture) && theirs.StripNote == PanelModel.NotInFight &&
+                  !theirsText.Contains(PanelModel.KeptAbout) && theirs.List.Single(l => l.Selected).Id == PanelModel.LastFightPage &&
+                  PanelModel.PlateOf(PanelModel.Build(after, At(PanelModel.LastFightPage)))?.Items?.Any(b => b.Kind == "link") != true && PanelModel.Build(after, At(PanelModel.LastFightPage)).StripNote != PanelModel.NotInFight,
+                  "FP 0.8.6 Last fight stays your own fight when a fellow's is newer: the camp, with one line \"" + (line?.Title ?? "none") + "\" linking to the fellow's own page, which says \"" + theirs.StripNote + "\" and has no earlier-session note; with nothing newer there is no line");
+            var bossPage = PanelModel.Build(bossBook, At(PanelModel.LastFightPage));
+            var bossLine = PanelModel.PlateOf(bossPage)?.Items?.FirstOrDefault(b => b.Kind == "link");
+            var bossEntry = Entry(bossBook, PanelModel.LastFightPage);
+            var bossTheirs = PanelModel.Build(bossBook, At("fight:server-boss"));
+            Check(bossBook.Fights.LiveBoss?.Id == "server-boss" && bossBook.Fights.Last?.Id == "queen-now" && bossLine != null &&
+                  bossLine.Title == "Newer on the server: Finch and Tor are fighting Eikthyr (you are not in it)" && bossTheirs.StripNote == PanelModel.NotInFight,
+                  "FP 0.8.6 a fellow's live boss fight without you: Last fight is still your Queen, the line says \"" + (bossLine?.Title ?? "none") + "\", its page \"" + bossTheirs.StripNote + "\"");
+            var noRecord = PanelSample.Full(now); noRecord.Battle = new BattleRecorder(); noRecord.KeptSessions = null;   // none of your own fights, as the fight book says
+            var onlyTheirs = FightsSample.WithServerFight(FightsSample.With(noRecord, false));
+            onlyTheirs.Fights.Fights.RemoveAll(f => f.Id != "server-fight");
+            var noneYours = PanelModel.Build(onlyTheirs, At(PanelModel.LastFightPage));
+            var fellowLive = FightsSample.WithServerFight(FightsSample.With(PanelSample.Full(now), false), boss: true);
+            fellowLive.Fights.Fights.RemoveAll(f => f.Id != "server-boss");
+            var entryNoBoss = Entry(fellowLive, PanelModel.LastFightPage);
+            Check(onlyTheirs.Fights.Last == null && PanelModel.Content(noneYours).Any(b => b.Kind == "empty") && PanelModel.PlateOf(noneYours).Items.Any(b => b.Kind == "link" && b.Title.StartsWith("Newer on the server: Edda fought a Seeker")) &&
+                  entryNoBoss.Label == PanelModel.LastFightLabel && !entryNoBoss.Dot && PanelModel.Build(fellowLive, At(PanelModel.LastFightPage)).Heading == PanelModel.LastFightLabel,
+                  "FP 0.8.6 none of your fights: Last fight falls back to the empty 0.8 page with the server line, and a fellow's live boss fight alone leaves the entry \"" + entryNoBoss.Label + "\" without the live dot");
+        }
+        // ---------- 0.8.6: a friend's Last fight is the same fight page, seen by them ----------
+        // (Joost in game, 14 Oct: the same fight at 22:31 read "all 31 foes defeated" on his book and "18 foes defeated of 18" on a friend's, the 0.8 page)
+        {
+            const string Rowan = FightsSample.Rowan, Edda = FightsSample.Edda, Tor = FightsSample.Tor;
+            PanelState AsFriend(string page) => At(page, s => s.Player = Edda);
+            Block Head(PanelView v) => Find(v, PanelModel.FightHeadKind);
+            List<string> Nums(PanelView v) => Of(Head(v), "number").Select(n => n.Value).ToList();
+            var own = FightsSample.With(PanelSample.Full(now), false);
+            var friend = FightsSample.Friend(own, Edda);
+            var theirs = PanelModel.Build(friend, AsFriend(PanelModel.LastFightPage)); var ours = PanelModel.Build(own, At(PanelModel.LastFightPage));
+            var rows = Of(Find(theirs, PanelModel.FightPlayersKind), "player");
+            var pace = Of(Head(theirs), "number").ElementAtOrDefault(2);
+            var fallback = PanelModel.Build(FightsSample.Friend(PanelSample.Full(now), Edda), AsFriend(PanelModel.LastFightPage));   // your PC joined no fights: the 0.8 page from her copy
+            Check(Head(theirs) != null && Head(theirs).Text == Head(ours).Text && rows.FirstOrDefault()?.Id == Edda && rows[0].Title == Edda && rows[0].Note == Edda + "'s PC" &&
+                  rows.Any(r => r.Id == Rowan && r.Title == Rowan + " (you)") && rows.Any(r => r.Id == Tor && r.Note == "near " + Edda + " 30 s") && pace != null && pace.Title == Edda + "'s DPS" && pace.Value + " DPS" == PanelModel.FightPace(32, 400) &&
+                  theirs.StripNote != PanelModel.NotInFight && Head(fallback) == null && PanelModel.Content(fallback).Any(b => b.Kind == "hero"),
+                  "FP 0.8.6 a friend's Last fight is the fight page with them as its owner: \"" + Head(theirs)?.Text + "\", " + rows.FirstOrDefault()?.Title + " first (" + rows.FirstOrDefault()?.Note + "), \"" +
+                  rows.FirstOrDefault(r => r.Id == Rowan)?.Title + "\", \"" + pace?.Value + " " + pace?.Title + "\"; with no fights joined on your PC their 0.8 page");
+
+            // the one truth, through the recorder and the fight adapter: Rowan hits six Greydwarfs, Edda three of them; her own copy holds those three, so her
+            // 0.8 page counted "3 foes defeated of 3" where the group fight has six: both books read the one joined fight
+            var t0 = now.AddMinutes(-5); var dr = new BattleRecorder(); var de = new BattleRecorder();
+            for (uint i = 0; i < 6; i++)
+            {
+                var id = new FoeId(42, 300 + i); var at = t0.AddSeconds(6 * i);
+                dr.Dealt(at, id, "Greydwarf", "$enemy_greydwarf", "BlackForest", new HitData.DamageTypes { m_slash = 50 });
+                if (i == 0) dr.Received(at.AddSeconds(1), id, "Greydwarf", "$enemy_greydwarf", "BlackForest", new HitData.DamageTypes { m_blunt = 20 });
+                if (i >= 3) { de.Dealt(at.AddSeconds(1), id, "Greydwarf", "$enemy_greydwarf", "BlackForest", new HitData.DamageTypes { m_pierce = 40 }); de.Killed(at.AddSeconds(2), "$enemy_greydwarf", 2); de.Destroyed(at.AddSeconds(2.5), id); }
+                if (i == 4) de.Received(at.AddSeconds(2), id, "Greydwarf", "$enemy_greydwarf", "BlackForest", new HitData.DamageTypes { m_blunt = 15 });
+                dr.Killed(at.AddSeconds(2), "$enemy_greydwarf", 2); dr.Destroyed(at.AddSeconds(2.5), id);
+            }
+            dr.Tick(now); de.Tick(now);
+            var feed = FeedShare.From(de, _ => true);
+            var viewer = PanelSample.Full(now);
+            viewer.Fights = FightAdapter.Build(new List<FightSide> { FightSide.Of(dr, viewer.PlayerName), FightSide.Of(feed, Edda, "k-" + Edda, now) }, null, null, now);
+            var hers = FightsSample.Friend(viewer, Edda); hers.SharedFeed = feed;
+            var a = PanelModel.Build(viewer, At(PanelModel.LastFightPage)); var b = PanelModel.Build(hers, AsFriend(PanelModel.LastFightPage));
+            var typesA = PanelModel.Content(a).FirstOrDefault(x => x.Kind == "composition"); var typesB = PanelModel.Content(b).FirstOrDefault(x => x.Kind == "composition");
+            Check(Head(a) != null && Head(b) != null && Head(a).Text == "all 6 foes defeated" && Head(b).Text == Head(a).Text && Nums(a).Take(2).SequenceEqual(Nums(b).Take(2)) &&
+                  typesA != null && typesB != null && Math.Abs(Of(typesA, null).Sum(x => V(x.Value)) - V(Nums(a)[0])) < 0.5 && Of(typesA, null).Select(x => x.Value).SequenceEqual(Of(typesB, null).Select(x => x.Value)) && typesA.Title == "By type, together" && typesA.Value == Nums(a)[0],
+                  "FP 0.8.6 the same fight reads the same on both books: \"" + Head(a)?.Text + "\" and \"" + Head(b)?.Text + "\", dealt and received " + string.Join(" / ", Nums(a).Take(2)) + " and " + string.Join(" / ", Nums(b).Take(2)) +
+                  ", dealt by type " + string.Join(" + ", Of(typesA, null).Select(x => x.Value)) + " on both");
+        }
+
         // ---------- the panel and the preview draw the fight pages with one set of measures ----------
         // every Ft* measure of Chapters/FightUi.cs is the preview's FT value of the same name (FtListLine1 = FT.listLine1), and the preview has
         // no measure of its own beyond the damage bar's (track, barH: PanelModel.DamageTrack and the bar with its true line)
@@ -180,7 +326,7 @@ static class FightPagesTests
             }
             var lines = new[]
             {
-                ("covers the fight, no hit on its foes", Line(null), "shares, but Edda's copy holds no hit on these foes"),
+                ("covers the fight, no hit on its foes", Line(null), PanelModel.NoHitLine),
                 ("Hearthwoven 0.8.2", Line(e => e.ModVersion = "0.8.2"), "Edda's Hearthwoven is 0.8.2: Edda's part fills in once they update."),
                 ("no feed (0.6.5)", Line(e => { e.ModVersion = "0.6.5"; e.SharedFeed = null; }), "Edda's Hearthwoven is 0.6.5: Edda's part fills in once they update."),
                 ("copy from before the fight", Line(e => e.ReceivedUtc = now.AddMinutes(-7)), "shares, but Edda's newest copy came in before this fight"),
@@ -196,6 +342,43 @@ static class FightPagesTests
             var table = PanelModel.FightPlayers(self, fight).Items.FirstOrDefault(i => i.Kind == "quiet" && i.Id == "Edda")?.Text;
             Check(wrong.Count == 0 && table == PanelModel.NoPartLine(self, fight, eddaRow) && table != PanelModel.NotSharingLine,
                   "FP 0.8.5 a player without numbers: " + lines.Length + " cases each with its own true line (" + string.Join("; ", lines.Take(3).Select(l => l.Item2)) + " ...), the players table uses it" +
+                  (wrong.Count > 0 ? "; wrong: " + string.Join("; ", wrong) : ""));
+        }
+        // ---------- 0.8.6 (Joost on a run page: "How does one get back to the previous view? There should be a 'back' button") ----------
+        // Walked as the book walks (Build, then Visited): the Back button shows exactly on a page opened from another (a row, a link) while
+        // Backspace leads back to that page, its press is Backspace's (PanelModel.Back, which the button calls) and lands there; a page reached by
+        // the list, a chapter key or Back itself has none, and the strip that holds it is there whenever it shows
+        {
+            var s = new PanelState { Chapter = Chapter.Battle }; PanelModel.ForgetHistory(s);
+            string Where() => s.Chapter + "/" + s.PageOf(s.Chapter);
+            var walk = new List<string>(); var wrong = new List<string>(); PanelView v = null;
+            void Show(string how, string backTo)   // backTo: the page the button leads to, null = no button
+            {
+                v = PanelModel.Build(live, s); PanelModel.Visited(s, v.Active, v.Page);
+                var here = Where(); walk.Add(how + " " + here + (v.Back != null ? " [Back]" : ""));
+                if ((v.Back != null) != (backTo != null)) { wrong.Add(how + " " + here + (v.Back != null ? " shows the button" : " has no button")); return; }
+                if (v.Back == null) return;
+                var to = s.History.LastOrDefault(); var strip = PanelModel.PlateOf(v)?.Items?.FirstOrDefault()?.Kind == "featband";
+                if (to == null || to.Chapter + "/" + to.Page != backTo) wrong.Add(how + " " + here + ": Backspace leads to " + (to == null ? "nowhere" : to.Chapter + "/" + to.Page) + ", not " + backTo);
+                if (!strip) wrong.Add(how + " " + here + ": the button with no strip to hold it");
+            }
+            void Press(string backTo) { var went = PanelModel.Back(s); if (!went || Where() != backTo) wrong.Add("Back from the button went to " + Where() + ", not " + backTo); }
+            string RowTo(string page) => PanelModel.Content(v).SelectMany(All).FirstOrDefault(b => b.Kind == "fight" && b.Id != null && b.Id.EndsWith(page))?.Id;
+            s.Page[Chapter.Battle] = PanelModel.RunsPage; Show("list:", null);
+            const string Runs = "Battle/" + PanelModel.RunsPage;
+            PanelModel.Follow(s, RowTo("fight:mine-1")); Show("row:", Runs);
+            s.View[PanelModel.FightLayoutKey] = PanelModel.FightStacked; Show("view:", Runs); s.View.Remove(PanelModel.FightLayoutKey);
+            Press(Runs); Show("back:", null);
+            PanelModel.Follow(s, RowTo("fight:bonemass-1")); Show("row:", Runs);
+            PanelModel.StepChapter(s, 1); Show("tab:", null);
+            PanelModel.StepChapter(s, -1); Show("tab:", null);   // the fight's page again, by a key: the list is its way back
+            s.Page[Chapter.Battle] = PanelModel.RunsPage; Show("list:", null);
+            PanelModel.Follow(s, RowTo("fight:mine-1")); Show("row:", Runs);
+            PanelModel.Follow(s, "Battle/foes"); Show("link:", "Battle/fight:mine-1");
+            Press("Battle/fight:mine-1"); Show("back:", Runs);   // back on a page that was itself opened: its button leads on back
+            Press(Runs); Show("back:", null);
+            Check(wrong.Count == 0 && walk.Count(w => w.EndsWith("[Back]")) == 6,
+                  "FP 0.8.6 the Back button shows exactly where a page was opened and Backspace leads back to it, and its press lands there: " + string.Join(", ", walk) +
                   (wrong.Count > 0 ? "; wrong: " + string.Join("; ", wrong) : ""));
         }
         return fails;

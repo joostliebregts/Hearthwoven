@@ -84,6 +84,11 @@ namespace Hearthwoven
         public bool Open => Outcome == BossOutcome.Fighting;
         public TimeSpan Length => EndUtc - StartUtc;
         public const int MaxBosses = 8;
+        /// <summary>0.8.6 (DPS, SwingClock): the seconds this PC saw the boss under attack: from the first to the last sign of fighting (a hit either
+        /// way on a boss, or a boss's health seen dropping), a gap of more than SwingClock.Gap not counted. The group's fighting time on the boss;
+        /// shared with the boss fight's record. 0: not known (from before 0.8.6).</summary>
+        public float Swing;
+        internal DateTime SwingLast;
         // this PC only: the latest recorder fight with its foes; the first boss's health every 5 s for 80 s (HealthMinuteAgo)
         internal int LastFight;
         internal readonly DateTime[] HistAt = new DateTime[16]; internal readonly float[] HistHp = new float[16]; internal int HistN;
@@ -288,6 +293,8 @@ namespace Hearthwoven
         public string Kind, Lead;
         public DateTime StartUtc;
         public float Seconds;
+        /// <summary>0.8.6 (DPS): the seconds the boss was under attack in it (BossFight.Swing); 0: not known (saved before 0.8.6).</summary>
+        public float Swing;
         public BossOutcome Outcome;
         /// <summary>The boss's health at the last sign of fighting (0..1; 0 when won), -1: not seen; the dungeon it was fought in (its kind and name
         /// token), null: outside.</summary>
@@ -367,6 +374,7 @@ namespace Hearthwoven
             var secs = (float)Math.Max(0, (b.EndUtc - a.StartUtc).TotalSeconds);
             if (b.StartUtc < a.StartUtc) { secs += (float)(a.StartUtc - b.StartUtc).TotalSeconds; a.StartUtc = b.StartUtc; changed = true; }
             if (secs > a.Seconds) { a.Seconds = secs; changed = true; }
+            if (b.SwingSeconds > a.Swing) { a.Swing = b.SwingSeconds; changed = true; }
             if (a.Outcome != BossOutcome.Won && b.Outcome != a.Outcome && !(a.Outcome == BossOutcome.Reset && b.Outcome == BossOutcome.GotAway)) { a.Outcome = b.Outcome; changed = true; }   // a win sticks; a known reset is not unknown again
             var hp = a.Outcome == BossOutcome.Won ? 0f : b.Health;
             if (hp >= 0f && (a.Health < 0f || hp != a.Health)) { a.Health = hp; changed = true; }
@@ -400,6 +408,7 @@ namespace Hearthwoven
             {
                 j.Open().Str("k", a.Kind ?? "?").Str("id", a.Lead ?? "").Str("s", a.StartUtc.ToString("o", inv)).Num("t", a.Seconds).Num("o", (int)a.Outcome);
                 if (a.World != null) j.Str("w", a.World);
+                if (a.Swing > 0f) j.Num("sw", Math.Round(a.Swing, 1));
                 if (a.Health >= 0f) j.Num("hp", Math.Round(a.Health, 3));
                 if (a.Lowest >= 0f) j.Num("lo", Math.Round(a.Lowest, 3));
                 if (!string.IsNullOrEmpty(a.Place)) j.Str("pl", a.Place);
@@ -434,7 +443,7 @@ namespace Hearthwoven
                 var a = new BossAttempt { World = MiniJson.Str(x, "w", null), Kind = MiniJson.Str(x, "k", "?"), Lead = MiniJson.Str(x, "id"), StartUtc = s.ToUniversalTime(), Seconds = Clip(MiniJson.Num(x, "t"), 1e7f),
                                           Outcome = (BossOutcome)Math.Min((int)Clip(MiniJson.Num(x, "o"), 9), (int)BossOutcome.GotAway),
                                           Health = x.ContainsKey("hp") ? Math.Min(1f, Clip(MiniJson.Num(x, "hp"), 1f)) : -1f, Lowest = x.ContainsKey("lo") ? Math.Min(1f, Clip(MiniJson.Num(x, "lo"), 1f)) : -1f,
-                                          Unnamed = (int)Clip(MiniJson.Num(x, "u"), 1000) };
+                                          Unnamed = (int)Clip(MiniJson.Num(x, "u"), 1000), Swing = Clip(MiniJson.Num(x, "sw"), 1e7f) };
                 a.Foes.AddRange(FoeRow.Read(x, "f"));
                 var pl = MiniJson.Str(x, "pl", null); if (!string.IsNullOrEmpty(pl)) a.Place = pl;
                 var pt = MiniJson.Str(x, "pt", null); if (!string.IsNullOrEmpty(pt)) a.PlaceToken = pt;

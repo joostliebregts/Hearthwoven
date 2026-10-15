@@ -110,6 +110,26 @@ static class WashTests
               " drawn per row); no drawing file writes a translucent colour out that draws otherwise (" + NotWashes.Length + " that are no wash, listed)" +
               (off.Count > 0 ? "; off: " + string.Join("; ", off) : "") + (loud.Count > 0 ? "; written out, through PanelWash instead: " + string.Join("; ", loud) : "") +
               (stale.Count > 0 ? "; listed but not found: " + string.Join("; ", stale) : ""));
+
+        // 0.8.6 the rounded sprites (PanelLook.RoundedSprite, RoundedShape): an outline's inside is clear, so the part shows the track under it as the
+        // mirror's outlined part does (box-shadow inset, no fill); a filled one's inside is whole; the rim is solid. The damage parts' outline
+        // (DamageEdge, rim 5 at radius 5) left its sliced inside at half alpha, which the game stretched over every stopped piece (Joost, 0.8.5: the
+        // stopped piece "slightly too similar in color" to the got-through fill, its number hard to read)
+        var sprites = Regex.Matches(LayoutTests.Code(File.ReadAllText(Path.Combine(panel, "PanelLook.cs"))), @"\bRoundedSprite\((true|false)(?:\s*,\s*(\d*\.?\d+)f?)?\)").Cast<Match>()
+            .Select(m => (edge: m.Groups[1].Value == "true", rim: m.Groups[2].Success ? float.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) : 2f)).Distinct().ToList();
+        int A(int x, int y, bool edge, float rim) => (int)Math.Round(255 * Math.Clamp(RoundedShape.Alpha(x, y, edge, rim), 0f, 1f));
+        var shapes = new List<string>();
+        foreach (var (edge, rim) in sprites)
+        {
+            var name = edge ? "the outline, rim " + rim : "the filled shape";
+            var inside = Enumerable.Range(RoundedShape.Border, RoundedShape.Size - 2 * RoundedShape.Border).SelectMany(x => Enumerable.Range(RoundedShape.Border, RoundedShape.Size - 2 * RoundedShape.Border).Select(y => A(x, y, edge, rim))).Distinct().ToList();
+            if (inside.Any(a => a != (edge ? 0 : 255))) shapes.Add(name + ": its sliced inside at alpha " + string.Join(", ", inside) + " of 255");
+            var mid = RoundedShape.Size / 2;
+            var rimA = Enumerable.Range(0, edge ? (int)rim : mid).SelectMany(i => new[] { A(mid, i, edge, rim), A(i, mid, edge, rim), A(mid, RoundedShape.Size - 1 - i, edge, rim), A(RoundedShape.Size - 1 - i, mid, edge, rim) }).Distinct().ToList();
+            if (rimA.Any(a => a != 255)) shapes.Add(name + ": its rim at alpha " + string.Join(", ", rimA) + " of 255");
+        }
+        Check(sprites.Count >= 4 && shapes.Count == 0, "rounded sprites: an outline's sliced inside is clear (the track shows, as the mirror's outlined part), a filled one's whole, the rim solid (" +
+              sprites.Count + " made by RoundedSprite)" + (shapes.Count > 0 ? "; off: " + string.Join("; ", shapes) : ""));
         return fails;
     }
 }

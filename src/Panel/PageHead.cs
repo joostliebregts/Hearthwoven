@@ -73,7 +73,7 @@ namespace Hearthwoven.Panel
             var band = items.FirstOrDefault(b => b.Kind == "featband");
             var about = items.FirstOrDefault(b => b.Kind == "aboutnumbers");
             if (about != null && HeadAbout(plate) != null) about = null;   // 0.8.5: While away's head line carries it: no strip for it, its box stays under the totals
-            if (band != null || about != null || TopSwitch(plate) != null || !string.IsNullOrEmpty(view.StripNote) || view.CompareNow != null || view.CompareNote != null)   // 0.8.5: Compare's legend or reason rides in it
+            if (band != null || about != null || TopSwitch(plate) != null || !string.IsNullOrEmpty(view.StripNote) || view.CompareNow != null || view.CompareNote != null || view.Back != null)   // 0.8.5: Compare's legend or reason rides in it; 0.8.6: the Back button
             {
                 if (band == null) band = new Block { Kind = "featband", Items = new List<Block>() };
                 items.Remove(band); items.Insert(0, band);

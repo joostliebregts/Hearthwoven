@@ -132,6 +132,52 @@ static class HoverCostTests
               "hover cost: the damage bars' hover makes no object per part, at most the page's one tag (2) and the armor bar's ring (1): the long feed's Log " + Before(log) + " objects before (4e72aff), " +
               After(log) + " now; all " + counted.Count + " pages " + counted.Sum(p => Before(p.bars)) + " before, " + counted.Sum(p => After(p.bars)) + " now" + (heavy.Count > 0 ? "; over it: " + string.Join(", ", heavy) : ""));
 
+        // ---------- 0.8.5: Show older foes, one page more (BattleFeedUi.AppendFeed), measured as the bench fits a drawing: objects x 58 us ----------
+        // the objects a feed's blocks make in the Log, counted the way BattleFeedUi draws them: a fight's island and its stack, its head (row and
+        // three texts), per foe its row, time, picture (box and icon), name, mark and outcome, the received words, the bar (node, track, bar, ring,
+        // true line, a part and its number per type); a quiet line two, an earlier session's four, Show older foes five (line, row, chip, label, words)
+        int Objects(IEnumerable<Block> blocks) => blocks.Sum(b => b.Kind == PanelModel.FeedLineKind ? (b.Tone == "session" ? 4 : b.Tone == PanelModel.FeedMoreTone ? 5 : 2)
+            : b.Kind != "feed" ? 0 : (b.Items ?? new List<Block>()).Where(f => f.Kind == "fight").Sum(f => 2 + 4 + (f.Items ?? new List<Block>()).Where(e => e.Kind == "entry").Sum(e =>
+            {
+                var parts = (e.Items ?? new List<Block>()).Count(x => x.Kind == PanelModel.FeedDealt);
+                return 8 + ((e.Items ?? new List<Block>()).Any(x => x.Kind == PanelModel.FeedReceived) ? 1 : 0) + (parts > 0 ? 5 + 2 * parts : 0);
+            })));
+        string Ms(double ms) => ms.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+        List<Block> FeedList(PanelView v) => PanelModel.Content(v).Where(b => b.Kind == "feed" || b.Kind == PanelModel.FeedLineKind).ToList();
+        void OnePageMore(string what, PanelInput book)
+        {
+            var st = Feed(PanelModel.FeedLog);
+            var p1 = PanelModel.Build(book, st); var j1 = PanelModel.ToJson(p1);
+            PanelModel.Follow(st, PanelModel.FeedMoreTarget); var p2 = PanelModel.Build(book, st);
+            var l1 = FeedList(p1); var l2 = FeedList(p2);
+            int first = Objects(l1) + 3, whole = Objects(l2) + 3, added = Objects(l2.Skip(l1.Count - 1)) + 1;   // + the page's tag and the columns' measure; a press measures the columns only
+            var at = PanelModel.FeedAppendAt(p1, j1, p2);
+            var sw = System.Diagnostics.Stopwatch.StartNew(); int runs = 20;
+            for (int r = 0; r < runs; r++) PanelModel.Build(book, r % 2 == 0 ? Feed(PanelModel.FeedLog) : st);
+            var buildMs = sw.Elapsed.TotalMilliseconds / runs; sw.Restart();
+            for (int r = 0; r < runs; r++) PanelModel.FeedAppendAt(p1, j1, p2);
+            var checkMs = sw.Elapsed.TotalMilliseconds / runs;
+            int Foes(List<Block> l) => l.Where(b => b.Kind == "feed").SelectMany(b => b.Items).Sum(f => f.Items.Count(e => e.Kind == "entry"));
+            System.Console.WriteLine("     feed cost, " + what + ": the first page " + Foes(l1) + " foes, " + first + " objects (about " + Ms(first * MsPerObject) + " ms); one press adds " + (Foes(l2) - Foes(l1)) + " foes: " +
+                                     (at >= 0 ? "drawn on the page, " + added + " objects (about " + Ms(added * MsPerObject) + " ms)" : "the scale grows, so drawn whole") + "; drawn whole it would be " + whole + " objects (about " +
+                                     Ms(whole * MsPerObject) + " ms); the model " + Ms(buildMs) + " ms a build, the append check " + Ms(checkMs) + " ms (.NET here)");
+        }
+        // a long evening of 20 fights of five foes, each hit alike with three types (the scale holds as older fights load), then the long feed,
+        // whose older fights hit harder than the newest ones (the scale grows: the page is drawn whole)
+        var even = PanelSample.Full(now).ShallowCopy();
+        {
+            var gr = new BattleRecorder(); var t = now.AddMinutes(-170); uint fid = 900;
+            string[] kinds = { "Boar", "Draugr", "Greydwarf", "Neck", "Skeleton" };
+            for (int f = 0; f < 20; f++)
+            {
+                foreach (var k in kinds) { gr.Dealt(t, new FoeId(9, fid++), k, "$enemy_" + k.ToLowerInvariant(), "BlackForest", new HitData.DamageTypes { m_slash = 70, m_fire = 30, m_pierce = 12 }); t = t.AddSeconds(5); }
+                t = t.AddMinutes(8); gr.Tick(t);
+            }
+            gr.Tick(now); even.Battle = gr;
+        }
+        OnePageMore("20 fights of five, hit alike", even);
+        OnePageMore("the long feed (battle-feed-100)", longFeed);
+
         // ---------- the source keeps the count true ----------
         var src = AppContext.BaseDirectory;
         while (src != null && !System.IO.File.Exists(System.IO.Path.Combine(src, "src", "Plugin.cs"))) src = System.IO.Path.GetDirectoryName(src);

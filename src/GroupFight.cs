@@ -92,6 +92,8 @@ namespace Hearthwoven
         public string Place, PlaceToken;
         /// <summary>Players in it who do not share: counted, never named in what is saved (BossLog).</summary>
         public int Unnamed;
+        /// <summary>0.8.6 (DPS): the seconds the boss was under attack, from the record that saw it longest (BossFight.Swing); 0: no record has it.</summary>
+        public float SwingSeconds;
         /// <summary>The bosses first, then the arena's foes, newest first.</summary>
         public readonly List<GroupFoe> Foes = new List<GroupFoe>();
         public TimeSpan Length => EndUtc > StartUtc ? EndUtc - StartUtc : TimeSpan.Zero;
@@ -312,7 +314,7 @@ namespace Hearthwoven
                 else if (bossFights.Any(x => x.b.Open && Fresh(x.side, now)) || (bossFights.Count == 0 && g.Open)) boss.Outcome = BossOutcome.Fighting;
                 else if (bossFights.Any(x => x.b.Outcome == BossOutcome.Reset)) boss.Outcome = BossOutcome.Reset;
                 else boss.Outcome = BossOutcome.GotAway;   // nobody can say: never "lost"
-                foreach (var (_, b) in bossFights) if (b.LastSeenUtc > boss.LastSeenUtc) boss.LastSeenUtc = b.LastSeenUtc;
+                foreach (var (_, b) in bossFights) { if (b.LastSeenUtc > boss.LastSeenUtc) boss.LastSeenUtc = b.LastSeenUtc; if (b.Swing > boss.SwingSeconds) boss.SwingSeconds = b.Swing; }
                 var leadFights = bossFights.Where(x => x.b.Bosses.Count > 0 && x.b.Bosses[0].Equals(bossIds[0])).Select(x => x.b).ToList();
                 foreach (var b in leadFights) if (b.Lowest >= 0f && (boss.Lowest < 0f || b.Lowest < boss.Lowest)) boss.Lowest = b.Lowest;
                 var newest = leadFights.Where(b => b.Health >= 0f).OrderByDescending(b => b.LastSeenUtc).FirstOrDefault();

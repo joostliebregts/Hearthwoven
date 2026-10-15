@@ -38,7 +38,7 @@ namespace Hearthwoven
         public readonly Dictionary<string, float> Deeds = new Dictionary<string, float>();
         public readonly ArmourLog Armour = new ArmourLog();
 
-        public bool Empty => Log.Damage.Count == 0 && Log.Hits.Count == 0 && Log.Guard.Count == 0 && Log.Deaths.Count == 0 && Deeds.Count == 0 && Armour.Damage.Count == 0 && Armour.Hits.Count == 0;
+        public bool Empty => Log.Damage.Count == 0 && Log.Hits.Count == 0 && Log.Guard.Count == 0 && Log.Swing.Count == 0 && Log.Weapons.Count == 0 && Log.Deaths.Count == 0 && Deeds.Count == 0 && Armour.Damage.Count == 0 && Armour.Hits.Count == 0;
 
         /// <summary>The file beside a character's totals file (LocalTotals.PathFor): "&lt;id&gt;-&lt;name&gt;.minutes.json".</summary>
         public static string PathFor(string totalsPath) =>
@@ -137,7 +137,7 @@ namespace Hearthwoven
         public string SharedJson()
         {
             var j = new Json().Open().Str("from", FromUtc.ToString("o", Inv));
-            Log.WriteFields(j);
+            Log.WriteFields(j, swing: false);   // 0.8.6: the fighting time per kind and minute stays on your PC (ToJson keeps it); the weapons per minute are shared on purpose
             return j.Close().ToString();
         }
     }

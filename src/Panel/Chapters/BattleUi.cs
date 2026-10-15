@@ -30,12 +30,13 @@ namespace Hearthwoven.Panel
             {
                 case "damagegrid": BattleGrid(col, b); break;
                 case "dmgmix": DamageRunRow(col, b); break;   // 0.8: a weapon's damage row; the page's weapons make one list (DamageRowsUi.cs)
+                case PanelModel.WeaponListKind: WeaponLines(col, b, link); break;   // 0.8.6: a kind's weapons and their upgrade levels under its row, in the same list
                 case "foetable": BattleFoeTable(col, b, link); break;
                 case "foetypes": BattleFoeTypes(col, b); break;
                 case "guard": BattleGuard(col, b, link); break;
                 case "sources": case "dealtfoes": BattleSources(col, b); break;   // dealtfoes: Damage > By foe (0.8), the same form with the "×N" and the marks
                 case "feed": BattleFeed(col, b); break;   // 0.8 (Chapters/BattleFeedUi.cs)
-                case PanelModel.FeedLineKind: FeedQuiet(col, b); break;   // 0.8.1: between the feed's fight islands (Chapters/BattleFeedUi.cs)
+                case PanelModel.FeedLineKind: FeedQuiet(col, b, link); break;   // 0.8.1: between the feed's fight islands (Chapters/BattleFeedUi.cs)
                 case "fightfoes": FightFoes(col, b); break;
                 case "fightreceived": FightReceived(col, b); break;
                 case "armour": BattleArmour(col, b); break;   // 0.7: Defence > Your armour
@@ -43,7 +44,7 @@ namespace Hearthwoven.Panel
                 case "deaths": BattleDeathList(col, b); break;
                 case "deathrows": BattleDeathRows(col, b, link); break;
             }
-            if (Labelled(b) && b.Kind != "dmgmix") Since(col, PanelLayout.Text.Floor, b);   // a page without a time window: counted on this PC since install (the weapons' list says it once, after its last row)
+            if (Labelled(b) && b.Kind != "dmgmix" && b.Kind != PanelModel.WeaponListKind) Since(col, PanelLayout.Text.Floor, b);   // a page without a time window: counted on this PC since install (the weapons' list says it once, after its last row)
         }
 
         // ----- small absolute-layout helpers: a row of fixed height in the column, its children placed by Box -----
@@ -267,28 +268,26 @@ namespace Hearthwoven.Panel
                 // the tag's words where the total's start (its 6 px padding before them), centred on the row
                 words[k] = parts[k].Title + " " + parts[k].Value; start[k] = w + BtFoeNumGap - HoverTag.Pad;
             }
-            hover.TagOver(PageTag(row), bar, words, start, (BtFoeDealtH - PanelModel.DamageBar - HoverTag.Rise) / 2, 0, BtFoeDealt + BtFoeArrow, centred: false);
+            hover.TagOver(PageTag(row), bar, words, start, 0, BtFoeDealt + BtFoeArrow, centred: false);
             hover.TagHides = total;
             HoverRing(bar, hover);
             return bar;
         }
 
-        /// <summary>0.8.5: your Dealt bar with its after (PanelModel.AfterPart on the row: Fraction2 the fill, Earlier the faded piece): the bar is its
-        /// gold outline (PanelLook.DamageEdge), filled from the left by what got through after a faded piece for hits from before it was recorded.
-        /// Pointing at it rings it and the page's tag says its numbers in the total's place (Text: "490 got through, 180 stopped"), as GroupDealtBar's.
-        /// Two images more than the plain bar at most (the fill, the faded piece); returns the bar, which the row draws last.</summary>
+        /// <summary>0.8.5: your Dealt bar with its after (PanelModel.AfterPart on the row: Fraction2 the fill): the bar is its gold outline
+        /// (PanelLook.DamageEdge), filled from the left by what got through. Pointing at it rings it and the page's tag says its numbers in the
+        /// total's place (Text: "490 got through, 180 stopped"), as GroupDealtBar's. One image more than the plain bar (the fill); returns the bar,
+        /// which the row draws last.</summary>
         static RectTransform AfterDealtBar(RectTransform row, Block foe, float x, float top, float w, GameObject total)
         {
             var bar = Node("Dealt", row); bar.Box(x, top, w, BtFoeDealtH);
             var seg = RoundedPart(bar, "Part", Color.clear, raycast: true); seg.pixelsPerUnitMultiplier = DrRadiusScale; seg.rectTransform.Box(0, 0, w, BtFoeDealtH);
             if (PanelLook.DamageEdge) { seg.sprite = PanelLook.DamageEdge; seg.type = Image.Type.Sliced; seg.color = PanelLook.Dealt; }
-            var e = Mathf.Clamp01(foe.Earlier); var ew = e <= 0 ? 0 : Mathf.Max(1, w * e);
-            var fw = Mathf.Clamp(w * Mathf.Clamp01(foe.Fraction2), foe.Fraction2 > 0 ? 1 : 0, Mathf.Max(0, w - ew));
-            if (ew > 0) { var early = RoundedPart(seg.transform, "Earlier", Faded(PanelLook.Dealt)); early.pixelsPerUnitMultiplier = DrRadiusScale; early.rectTransform.Box(0, 0, ew, BtFoeDealtH); }
-            if (fw > 0) { var fill = RoundedPart(seg.transform, "Fill", PanelLook.Dealt); fill.pixelsPerUnitMultiplier = DrRadiusScale; fill.rectTransform.Box(ew, 0, fw, BtFoeDealtH); }
+            var fw = Mathf.Clamp(w * Mathf.Clamp01(foe.Fraction2), foe.Fraction2 > 0 ? 1 : 0, w);
+            if (fw > 0) { var fill = RoundedPart(seg.transform, "Fill", PanelLook.Dealt); fill.pixelsPerUnitMultiplier = DrRadiusScale; fill.rectTransform.Box(0, 0, fw, BtFoeDealtH); }
             var hover = row.gameObject.AddComponent<BarHover>(); hover.Init(1);
             hover.Parts[0] = seg.rectTransform; var hp = seg.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = 0;
-            hover.TagOver(PageTag(row), bar, new[] { foe.Text }, new[] { w + BtFoeNumGap - HoverTag.Pad }, (BtFoeDealtH - PanelModel.DamageBar - HoverTag.Rise) / 2, 0, BtFoeDealt + BtFoeArrow, centred: false);
+            hover.TagOver(PageTag(row), bar, new[] { foe.Text }, new[] { w + BtFoeNumGap - HoverTag.Pad }, 0, BtFoeDealt + BtFoeArrow, centred: false);
             hover.TagHides = total;
             HoverRing(bar, hover);
             return bar;
@@ -578,11 +577,11 @@ namespace Hearthwoven.Panel
             var seg = RoundedPart(r, "Bar", Color.clear, raycast: true); seg.pixelsPerUnitMultiplier = DrRadiusScale;
             seg.rectTransform.Box(trackX, (PanelModel.DamageTrack - PanelModel.DamageBar) / 2, w, PanelModel.DamageBar);
             StoppedPart(seg, form.Rows[0], w, Hex(form.Rows[0].Colour, PanelLook.Muted));
-            // 0.8.2: pointing at it rings it and the page's tag over it says its numbers, as every damage bar's part (PanelModel.DamageHoverWords)
+            // 0.8.2: pointing at it rings it and the page's tag beside it says its numbers, as every damage bar's part (PanelModel.DamageHoverWords)
             var hover = r.gameObject.AddComponent<BarHover>(); hover.Init(1);
             hover.Parts[0] = seg.rectTransform; var hp = seg.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = 0;
             HoverRing(r, hover);
-            hover.TagOver(PageTag(r), r, new[] { PanelModel.DamageHoverWords(form.Rows[0]) }, new[] { trackX + w / 2 }, (PanelModel.DamageTrack - PanelModel.DamageBar) / 2 - 2, 0, trackX + w);
+            hover.TagOver(PageTag(r), seg.rectTransform, new[] { PanelModel.DamageHoverWords(form.Rows[0]) }, new[] { trackX + w / 2 }, 0, trackX + w, room: r);
         }
 
         // the key under the bar: a whole part (what reached your armor), its filled piece (got through), its outlined piece (stopped by your armor)

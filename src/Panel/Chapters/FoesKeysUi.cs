@@ -25,6 +25,18 @@ namespace Hearthwoven.Panel
             return true;
         }
 
+        // 0.8.6 (the weapon fold): on Battle > Damage > By weapon the same keys move a cursor between the weapon lines that open and open or shut one
+        // (Chapters/WeaponRows.cs); the cursor's line is brought into view as a foe's is (WeaponLines sets foeCursorRow)
+        bool WeaponKeys()
+        {
+            if (view == null || view.ShowAbout || view.Active != Chapter.Battle || view.Page != "damage") return false;
+            var d = Key(KeyCode.A) || Key(KeyCode.LeftArrow) || Button("JoyDPadLeft") ? -1 : Key(KeyCode.D) || Key(KeyCode.RightArrow) || Button("JoyDPadRight") ? 1 : 0;
+            var enter = d == 0 && (Key(KeyCode.Return) || Key(KeyCode.KeypadEnter) || Key(KeyCode.Space) || Button("JoyButtonA"));
+            if ((d == 0 && !enter) || PanelModel.VisibleWeaponLines(view).Count == 0) return false;   // no line that opens: A/D turn the chapters as everywhere
+            if (d != 0 ? PanelModel.StepWeapon(state, view, d) : PanelModel.ToggleWeaponCursor(state, view)) { foeCursorRow = null; foeFollow = true; Render(true); }
+            return true;
+        }
+
         // 0.8: Page Up and Page Down glide the page a viewport's worth (less a line, so the last line stays in view), as the wheel glides; the
         // pad's right stick scrolls it while held (as the game's own Compendium text does; the stick is free while the book blocks the camera)
         const float StickDead = 0.15f, StickSpeed = 1100f;   // px per second at full tilt

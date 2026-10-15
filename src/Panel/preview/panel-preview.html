@@ -161,14 +161,23 @@
   .kfor { display:flex; gap:10px; align-items:center; height:36px; } .kfor .kfh { font-size:var(--text-small); font-weight:700; color:var(--gold); white-space:nowrap; }
   .kfor .kfc { display:flex; align-items:center; gap:6px; padding:4px 12px 4px 8px; box-shadow:inset 0 0 0 1px var(--tier, rgba(232,194,122,.85)); font-size:var(--text-small); color:var(--text); white-space:nowrap; } .kfor .kfc b { color:var(--tier); }
   /* fix4: the page's feat and its titles in ONE flat strip (FeatsUi.FeatBandBlock): a dark ground, a gold edge at its left, no raised border */
-  .earned { display:flex; flex-wrap:wrap; align-items:center; column-gap:18px; min-height:34px; padding:0 12px 0 15px; background:rgba(0,0,0,.55); box-shadow:inset 3px 0 0 var(--gold); }   /* 0.8 layout D+: a darker band, clearly the page's head (FEEDBACK 5) */
+  .earned { display:flex; flex-wrap:wrap; align-items:center; column-gap:18px; min-height:34px; padding:0 var(--island-pad); background:rgba(255,240,210,.04); border-radius:var(--island-radius); }   /* 0.8.6 (Joost: "the same color as the other islands"): an island, its ground and padding the islands' (it was black at .55) */
+  .earned::before { content:""; position:absolute; left:0; top:calc(var(--island-radius) - 3px); bottom:calc(var(--island-radius) - 3px); width:3px; background:var(--gold); }   /* the gold edge, clear of the round corners (FeatsUi.EdgeInset) */
+  .earned .ea-back { gap:8px; } .earned .ea-back .chip { gap:6px; } .earned .ea-back svg { width:8px; height:14px; flex:none; transform:scaleX(-1); }   /* 0.8.6: the Back button and its key at the strip's left end (FeatsUi.BackCluster) */
   .earned > span { display:flex; align-items:center; gap:8px; height:34px; white-space:nowrap; }
   .earned .ea-tag { font-size:var(--text-floor); letter-spacing:.14em; text-transform:uppercase; color:var(--muted); } .earned .ea-tag.gold { color:var(--gold); }
   .earned .ea-i { display:inline-flex; align-items:center; gap:6px; margin-right:10px; } .earned .ea-i:last-of-type { margin-right:0; }
   .earned .ea-n { font-size:var(--text-small); color:var(--text); } .earned .ea-tn { font-size:var(--text-small); color:var(--text); }
   .earned .ea-m { font-size:var(--text-floor); font-style:italic; color:var(--muted); margin-left:2px; }
   .earned .ea-rule { width:1px; height:20px; padding:0; background:var(--rule); }
-  .earned { position:relative; } .earned .ea-about { position:absolute; right:12px; top:4px; height:26px; gap:8px; }
+  /* 0.8.6 the sticky head (PanelUi.PinStrip, StickyHeadUi.cs): the strip that leads the plate stays at its top while the islands scroll under
+     it. Its holder is the page's own ground (PanelWash.Page) from the plate's top edge to the strip's foot, so no row shows through it or mixes
+     with it; at rest the page is laid out as before (the holder's padding is the plate's, given back by its margins). Its top is the plate's
+     padding taken back: a sticky box keeps clear of its scroller's padding, and the holder starts at the plate's top edge. Only while the plate
+     is scrolled down (.under, pinHead): at rest every page is drawn exactly as before */
+  .pinhead { margin:calc(-1 * var(--plate-pad-top)) calc(-1 * var(--plate-pad-x)) 0; padding:var(--plate-pad-top) var(--plate-pad-x) 0; }
+  .plate.under > .pinhead { position:sticky; top:calc(-1 * var(--plate-pad-top)); z-index:3; background:rgb(10,9,7); }
+  .earned { position:relative; } .earned .ea-about { position:absolute; right:var(--island-pad); top:4px; height:26px; gap:8px; }
   .earned .ea-cap { flex:0 1 auto; min-width:0; height:34px; line-height:34px; font-size:var(--text-small); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* 0.8 layout D+: the view switch's caption in the strip (FeatsUi.StripCaption) */
   .earned .ea-note { font-size:var(--text-floor); font-style:italic; color:var(--muted); white-space:nowrap; }   /* a fellow's book: whose copy and when (PanelView.StripNote) */   /* 0.7 compact tops: the About button at the strip's end (FeatsUi.FeatBandBlock, PanelModel.StripReserve) */
 
@@ -416,9 +425,10 @@
   .bt-meter-x { position:absolute; left:3px; top:19px; width:38px; height:24px; line-height:24px; text-align:center; color:#e0826a; font-weight:700; font-size:var(--text-floor); }
   .bt-foerow.opens { cursor:pointer; border-radius:5px; } .bt-foerow.opens:hover { background:rgba(242,232,214,.035); }
   /* 0.8 (Chapters/FoesKeys.cs): the keys' cursor row wears the focus ring and shows every cell's factor, as pointing at a cell does */
-  .bt-foerow.cur { position:relative; overflow:visible; } .bt-foerow.cur::after { content:""; position:absolute; inset:calc(-1 * var(--focus-inset)); pointer-events:none; display:none; background:rgba(232,194,122,.9);
+  /* 0.8.6: By weapon's cursor line (Chapters/WeaponRows.cs) wears the same ring */
+  .bt-foerow.cur, .bf.dr.wl.cur { position:relative; overflow:visible; } .bt-foerow.cur::after, .bf.dr.wl.cur::after { content:""; position:absolute; inset:calc(-1 * var(--focus-inset)); pointer-events:none; display:none; background:rgba(232,194,122,.9);
     -webkit-mask-box-image:url(../vocab/focus-ring.png) 14 / 14px stretch; }
-  body.kbd .bt-foerow.cur::after { display:block; } body.kbd .bt-foerow.cur .bt-mc .ic { visibility:hidden; } body.kbd .bt-foerow.cur .bt-mc .fx { display:block; }
+  body.kbd .bt-foerow.cur::after, body.kbd .bf.dr.wl.cur::after { display:block; } body.kbd .bt-foerow.cur .bt-mc .ic { visibility:hidden; } body.kbd .bt-foerow.cur .bt-mc .fx { display:block; }
   .bt-open { background:rgba(242,232,214,.045); border-radius:5px; } .bt-open .bt-row { border-bottom:0; }
   /* 0.8.2 (BattleUi.BattleRanking, Joost: Best compares with Best): a caption, then a row of islands (Arrows, Bolts, Weapons), for Best and for Worst */
   .bt-rank { display:flex; flex-direction:column; gap:6px; padding:4px 12px 12px; } .bt-rrow { display:grid; gap:14px; } .bt-rank .isl { gap:0; }
@@ -462,6 +472,7 @@
   .bt-tl .mk { position:absolute; left:80.5px; top:5px; display:flex; padding:1px; border-radius:50%; background:#0f0b08; }
   .bt-tl .l1 { display:flex; align-items:center; gap:10px; height:26px; white-space:nowrap; } .bt-tl .l1 b { font-size:var(--text-body); } .bt-tl .l1 span { font-size:var(--text-small); color:var(--muted); } .bt-tl .d { font-size:var(--text-small); }
   .feed-ln { padding:0 14px; font-size:var(--text-floor); color:var(--faint); } .feed-ln.gap { font-style:italic; }   /* 0.8.1 (BattleFeedUi.FeedQuiet): the quiet time between the fight islands, what is left out after them */
+  .feed-ln.more { display:flex; align-items:center; gap:var(--feed-more-gap); color:var(--muted); } .feed-ln.more > span:last-child { flex:1; }   /* 0.8.5 (BattleFeedUi.FeedMore): the Show older foes chip, what is shown and left beside it */
   .feed-ln.session { display:flex; align-items:center; gap:var(--feed-session-gap); color:var(--muted); white-space:nowrap; } .feed-ln.session::after { content:""; flex:1; height:1px; background:var(--rule); }   /* 0.8.5: over an earlier session's fights, its day and span */
   .bt-tg { position:relative; height:30px; padding-left:104px; line-height:30px; font-size:var(--text-floor); font-style:italic; color:var(--faint); }
   .bt-ffs { display:flex; flex-wrap:wrap; gap:12px 28px; margin-top:2px; } .bt-ff .h { display:flex; align-items:center; gap:6px; height:24px; white-space:nowrap; } .bt-ff .h b { font-size:var(--text-name); margin-right:2px; }
@@ -469,8 +480,10 @@
   /* 0.8 damage rows (DamageRowsUi.cs; Joost's damage bars, density-feedback/DAMAGE-BARS.md): name column 200, number 64, 12 apart, then the track;
      bar 20 on a faint 24 px track, parts 3 apart, the true-length line 3 px (3 under the bar), the share line 3 under that, 8 px between foes */
   .dr-list { display:flex; flex-direction:column; gap:6px; }
+  .bf.dr.wl .dr-name, .bf.dr.wl .dr-num { font-size:var(--text-body); } .bf.dr.wl .nm.lv { color:var(--muted); }   /* 0.8.6 a kind's weapons (PanelUi.WeaponLines) */
+  .bf.dr.wl .wl-t { font-size:var(--text-body); color:var(--muted); } .wl-bar { display:block; background:rgba(232,194,122,.8); flex:none; }
   .bf.dr { display:grid; grid-template-columns:200px 64px minmax(0, 1fr); column-gap:12px; align-items:start; margin:0; }
-  .dr-name { display:flex; align-items:center; gap:8px; height:20px; font-size:var(--text-name); white-space:nowrap; min-width:0; } .dr-name .nm { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .dr-name, .wl-t { display:flex; align-items:center; gap:8px; height:20px; font-size:var(--text-name); white-space:nowrap; min-width:0; } .dr-name .nm, .wl-t .nm { overflow:hidden; text-overflow:ellipsis; min-width:0; }
   .dr-name > .pic { width:22px; height:22px; flex:none; display:inline-flex; align-items:center; justify-content:center; }
   .dr-who .bt-pips, .dr-who .bt-pipw { margin:6px 0 0 30px; max-width:var(--room, 170px); }
   .dr-num { height:20px; line-height:20px; display:flex; justify-content:flex-end; font-size:var(--text-name); white-space:nowrap; } .dr-num.dealt { color:var(--gold); }   /* right-aligned; wider than its column it grows to the left (PanelUi.DamageRow) */
@@ -481,7 +494,7 @@
   .dr-seg.hov { box-shadow:0 0 0 1px #f0cd86, 0 0 0 2px rgba(240,205,134,.9), 0 0 10px rgba(240,205,134,.55); z-index:2; }
   /* 0.8.1 What your armor stopped (PanelUi.StoppedPart): the part an outline in its colour (--c), filled from the left by what got through; the stopped number in the outline */
   .dr-seg.stop { box-shadow:inset 0 0 0 2px var(--c); } .dr-seg.stop.hov { box-shadow:inset 0 0 0 2px var(--c), 0 0 0 1px #f0cd86, 0 0 0 2px rgba(240,205,134,.9), 0 0 10px rgba(240,205,134,.55); }
-  .dr-got, .dr-left { position:absolute; top:0; bottom:0; display:flex; align-items:center; justify-content:center; } .dr-got { left:0; border-radius:2px; background:var(--c); }
+  .dr-got { position:absolute; top:0; bottom:0; display:flex; align-items:center; justify-content:center; } .dr-got { left:0; border-radius:2px; background:var(--c); }
   .dr-close { color:var(--text); }   /* 0.8.5 the line's closing words, "73 % got through" (PanelUi.DamageBar: the page's text ink, no key) */
   .dr-true { height:3px; margin-top:1px; border-radius:2px; background:rgba(232,194,122,.8); } .dr-true.recv { background:rgba(185,166,136,.8); }
   .dr-pcs { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:1px; font-size:var(--text-floor); line-height:18px; color:var(--muted); }
@@ -493,7 +506,7 @@
   .dr-e.hov { background:rgba(232,194,122,.15); box-shadow:5px 0 0 rgba(232,194,122,.15), -5px 0 0 rgba(232,194,122,.15); } .dr-e.hov .w { color:#f6d896; }
   .bt-fl .d.fl { display:flex; align-items:center; gap:12px; } .drl { position:relative; flex:none; margin:-1px 0; } .bt-fl .rcv { flex:none; font-size:var(--text-floor); line-height:18px; color:var(--muted); }
   .dr-tip { position:absolute; left:0; top:0; height:20px; line-height:20px; padding:0 6px; box-sizing:border-box; border-radius:2px; background:#0f0b08; color:#f6d896; font-size:var(--text-floor); font-weight:700; white-space:nowrap; display:none; z-index:3; pointer-events:none; }
-  .dr-tip.on { display:block; }   /* the page's one hover tag (PanelUi.PageTag): over a part no share entry keys (no share line, a player's line, Foes' Dealt, the armor bar) */
+  .dr-tip.on { display:block; }   /* the page's one hover tag (PanelUi.PageTag): beside the bar of a part no share entry keys (no share line, a player's line, Foes' Dealt, the armor bar) */
   .bt-card .drl { margin:6px 0 0; } .bt-card .rcv { margin-top:6px; font-size:var(--text-floor); line-height:18px; color:var(--muted); }   /* 0.8.1 the card's damage bar and its received words (PanelUi.FeedCards) */
   .bt-card .tl { height:3px; margin-top:3px; border-radius:2px; background:rgba(232,194,122,.8); }
   .dr-run + .dr-run { margin-top:0; } .dr-run:has(+ .dr-run) > .since { display:none; } .dr-run > .since { margin-top:6px; }   /* By weapon: the weapons as one list in one island (PanelUi.DamageRunRow: 6 px apart, the island's own gap) */
@@ -580,7 +593,7 @@
   .isl > .bt-band { background:none; padding:0; border-radius:0; } .isl > .bt-band.mix { margin-bottom:0; }   /* a weapon's band is the island itself (BattleUi.ItemBand bare); a list of foes keeps its bands */
   .hskill { display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex:none; padding-bottom:6px; align-self:flex-end; } .hsk { display:flex; align-items:flex-end; gap:10px; }
   .hskill.compact .skl { flex-direction:column; align-items:flex-start; gap:4px; } .hskill.compact .skb { width:64px !important; }   /* 0.8.2: the skill's compact form, name over level (RecordedUi.SkillCompact) */   /* the hero's right side: the growth line over the skill (one column, so the numbers keep their line) */
-  .earned.bare { box-shadow:none; }   /* a strip with nothing on its left (only the switch or About these numbers): no gold edge */
+  .earned.bare::before { display:none; }   /* a strip with nothing on its left (only the switch or About these numbers): no gold edge */
   .isl .section .since.under { flex-basis:100%; }
   .pp-isl { display:flex; flex-direction:column; gap:8px; } .pp-isl .pp-h { display:flex; align-items:center; gap:10px; height:34px; font-size:var(--text-lead); }   /* Recent's group: a player's island */
   .pp-isl .pp-more { margin-left:auto; font-size:var(--text-floor); color:var(--muted); }   /* "+3 more": what grew past the island (RecentPage.GroupGains) */
@@ -674,6 +687,7 @@ const heroSpark = sp => spark({ ...sp, title: "" }, false).replace('<span class=
 const heroRight = b => { const sp = sparkOf(b), sk = (b.items || []).filter(n => n.kind === "skill");
   return sp || sk.length ? `<span class="hrest" style="flex:1"></span><span class="hskill">${sp ? heroSpark(sp) : ""}${sk.map(s => `<span class="hsk">${marker(s.icon, 28)}${skillWords(s)}</span>`).join("")}</span>` : ""; };
 // the About button (RecordedUi.AboutButton); on a plate with a title strip the strip may carry it (PanelModel.StripAbout, fitEarned)
+const keycapW = (key, h) => !key || key.length <= 1 ? h : Math.ceil(h + (key.length - 1) * 9);   // PanelUi.KeycapWidth
 const aboutButton = (b, title) => `${chip(title || b.title, "", b.open)}${b.keyCap ? `<span class="kc" style="position:static;width:22px;height:22px;flex:none">${esc(b.keyCap)}</span>` : ""}`;
 let STRIP_ABOUT = null;
 // 0.8.5: While away's head line and Together's chips carry the About button at their right end (PanelModel.HeadAbout); its own row then goes
@@ -1061,7 +1075,7 @@ const stripCompare = v => v.compareNote ? `<span class="ea-cmp"><span class="ea-
   .cmenu .cm-opt.cur::after { content:""; position:absolute; inset:calc(-1 * var(--focus-inset)); pointer-events:none; display:none; background:rgba(232,194,122,.9); -webkit-mask-box-image:url(../vocab/focus-ring.png) ${C.ringSlice} / ${C.ringSlice}px stretch; }
   body.kbd .cmenu .cm-opt.cur::after { display:block; }   /* the keys' place: the focus ring (PanelUi.FocusRing), after a key press only */
   .earned > span.ea-cmp { gap:${C.tagGap}px; flex:0 1 auto; min-width:0; overflow:hidden; } .earned .ea-cmp * { white-space:nowrap; } .earned .ea-cmp > * { flex:none; }
-  .earned .ea-cmp.notag .ea-tag, .earned .ea-cmp.nowords .cmp-w { display:none; } .earned.cmpbare { box-shadow:none; }
+  .earned .ea-cmp.notag .ea-tag, .earned .ea-cmp.nowords .cmp-w { display:none; } .earned.cmpbare::before { display:none; }
   .earned .ea-cmp .cmp-k { display:inline-flex; align-items:center; gap:${C.keyGap}px; font-size:var(--text-small); color:var(--text); white-space:nowrap; } .earned .ea-cmp .cmp-k + .cmp-k { margin-left:${C.between - C.tagGap}px; }
   .earned .ea-cmp .cmp-w { color:var(--muted); }
   .earned .ea-cmp i.cmp-sol { display:block; flex:none; width:${C.swatch}px; height:${C.solidH}px; border-radius:${C.solidR}px; background:rgba(242,232,214,.92); }
@@ -1423,7 +1437,25 @@ function btGrid(b) { return dmgRows(dmgTypeRows(b), true) + btSince(b); }   // B
 // 2), one number column (PanelModel.DamageWidestNumber), one "Recorded from" line after the last (PanelUi.DamageRunRow)
 // The run's number column is measured once, at its first row, and kept for the rows that join it (REVIEW-081 #6); block() ends the run
 let DR_RUN = null;
-function btMix(b) { if (DR_RUN == null) DR_RUN = { num: drNumW([drWidest(b), b.value]), who: drWhoW([b]) }; return `<div class="dr-run">${dmgRows([b], true, DR_RUN)}${btSince(b)}</div>`; }
+function btMix(b) { if (DR_RUN == null) DR_RUN = { num: drNumW([drWidest(b), b.value]), who: drWhoW([b]) }; DR_RUN.since = btSince(b); return `<div class="dr-run">${dmgRows([b], true, DR_RUN)}${btSince(b)}</div>`; }
+// 0.8.6 PanelUi.WeaponLines: a kind's weapons under its row, in the same list: the weapon's name, its damage in the rows' number column, and where the bars start the words after
+// it ("level 3 · 42 DPS · Clubs 45"); a weapon of several upgrade levels folded to its newest ("level 3 · 149 DPS at 35 · 2 levels", the ›), open: its levels a little in;
+// the keys' cursor wears the focus ring (.cur). The run's "Recorded from" line goes after the last line
+function btWeapons(b) {
+  const items = b.items || []; if (DR_RUN == null) DR_RUN = { num: drNumW(items.map(i => i.value)), who: DR.who };
+  const OR = 4, OW = OR + 8 + 4;   // BattleUi.BtOpensRight, BtOpensW
+  const trackW = Math.max(80, COLUMN - (DR_RUN.who + DR.col + DR_RUN.num + DR.col)), grid = `grid-template-columns:${DR_RUN.who}px ${DR_RUN.num}px minmax(0, 1fr)`;
+  const rows = items.map(i => {
+    if (i.kind === "wpnskill") {   // an open skill level: its name, damage, pace and a small bar on one scale (PanelUi.WeaponLines)
+      const room = trackW - OW, w = i.fraction > 0 ? Math.max(DR.skillBarLeast, Math.min(1, i.fraction) * room) : 0;
+      return `<div class="bf dr wl" style="${grid}"><div class="dr-name" style="padding-left:${DR.nameX + 2 * DR.level}px"><span class="nm lv">${esc(i.title)}</span></div><div class="dr-num" style="color:var(--muted)">${esc(i.value || "")}</div><div class="wl-t">${w > 0 ? `<i class="wl-bar" style="width:${w.toFixed(1)}px;height:${DR.skillBar}px"></i>` : ""}</div></div>`;
+    }
+    const tail = i.note ? (i.text ? " \u00B7 " : "") + esc(i.note) : "";   // no DPS yet and no level: the skill words alone (never a dash)
+    const words = i.change ? `<span class="nm" style="flex:none">${esc(i.text)}</span>${changeMark(i.change)}<span class="nm">${tail ? tail.replace(/^ /, "") : ""}</span>` : `<span class="nm">${esc(i.text || "")}${tail}</span>`;
+    return `<div class="bf dr wl${i.opens ? " opens" : ""}${i.cursor ? " cur" : ""}" style="${grid};position:relative"><div class="dr-name" style="padding-left:${DR.nameX + (i.tone === "level" ? DR.level : 0)}px"><span class="nm${i.tone === "level" ? " lv" : ""}">${esc(i.title)}</span></div><div class="dr-num dealt">${esc(i.value || "")}</div><div class="wl-t" style="${i.opens ? `padding-right:${OW}px` : ""}">${words}</div>${i.opens ? opensMark(i.selected, OR) : ""}</div>`;
+  }).join("");
+  return `<div class="dr-run"><div class="dr-list">${rows}</div>${DR_RUN.since || ""}</div>`;
+}
 // PanelUi.BattleCell: "+" more / "–" less leads the icon (a shape as well as a fill), the stamp for none
 const btCell = (m, size = 18) => { const mk = m.tone === "weakness" ? "+" : m.tone === "resistance" ? "–" : "";
   return `<span class="bt-cell ${m.tone}${mk ? " mark" : ""}">${mk ? `<span class="mk" style="color:${m.tone === "weakness" ? "#2a1d10" : "#8a8680"}">${mk}</span>` : ""}${btIc(m.icon, m.tone === "weakness" ? "#2a1d10" : m.tone === "resistance" ? "rgba(138,134,128,.55)" : m.colour, size)}${m.tone === "immunity" ? `<span class="bt-stamp"></span>` : ""}</span>`; };
@@ -1459,19 +1491,19 @@ const BT_FOE_DEALT = 112, BT_FOE_BAR = 40, BT_FOE_DEALT_H = 10;
 const BT_FOE_NAME = 184, BT_FOE_NAME_ROOM = 184 - 34;
 // BattleUi.GroupDealtBar (Everyone): the foe's Dealt bar split in the players' colors, 1 px apart; pointing at a part rings it, and the foe's total
 // gives its place to the page's tag, whose part it is and the number (its words where the total's start: data-tag-x, kept before data-tag-max)
-// 0.8.5 BattleUi.AfterDealtBar: your Dealt bar with its after (Fraction2 the fill, Earlier the faded piece, Text its words on the tag)
+// 0.8.5 BattleUi.AfterDealtBar: your Dealt bar with its after (Fraction2 the fill, Text its words on the tag)
 function btDealtBar(r) {
   const parts = (r.items || []).filter(i => i.kind === "part"), w = Math.max(2, Math.min(1, Math.max(0, r.fraction || 0)) * BT_FOE_BAR);
   if (!parts.length && r.text) {
-    const e = Math.max(0, Math.min(1, r.earlier || 0)), ew = e > 0 ? Math.max(1, w * e) : 0, fw = Math.min(Math.max(0, w - ew), Math.max(r.fraction2 > 0 ? 1 : 0, w * Math.max(0, Math.min(1, r.fraction2 || 0))));
-    const inside = (ew > 0 ? `<span class="dr-got" style="width:${ew.toFixed(2)}px;background:${drFaded("#e8a948")}"></span>` : "") + (fw > 0 ? `<span class="dr-got" style="left:${ew.toFixed(2)}px;width:${fw.toFixed(2)}px"></span>` : "");
-    return `<span class="bf bt-gd" data-tag-x="${(w + 8 - 6).toFixed(1)}" data-tag-max="${BT_FOE_DEALT + 166}" data-tag-top="${(BT_FOE_DEALT_H - 20) / 2}" style="width:${w.toFixed(1)}px;height:${BT_FOE_DEALT_H}px"><span class="dr-seg stop" data-k="0" data-tip="${esc(r.text)}" style="left:0;width:${w.toFixed(2)}px;--c:#e8a948">${inside}</span></span>`;
+    const fw = Math.min(w, Math.max(r.fraction2 > 0 ? 1 : 0, w * Math.max(0, Math.min(1, r.fraction2 || 0))));
+    const inside = fw > 0 ? `<span class="dr-got" style="left:0;width:${fw.toFixed(2)}px"></span>` : "";
+    return `<span class="bf bt-gd" data-tag-x="${(w + 8 - 6).toFixed(1)}" data-tag-max="${BT_FOE_DEALT + 166}" style="width:${w.toFixed(1)}px;height:${BT_FOE_DEALT_H}px"><span class="dr-seg stop" data-k="0" data-tip="${esc(r.text)}" style="left:0;width:${w.toFixed(2)}px;--c:#e8a948">${inside}</span></span>`;
   }
   if (!parts.length) return `<i class="bt-bar" style="height:${BT_FOE_DEALT_H}px;width:${w.toFixed(1)}px;background:#e8a948"></i>`;
   const span = w + 1, spans = barParts(parts.map(p => p.fraction), [], Math.min(0.5, 2 / span));
   const segs = parts.map((p, k) => { const left = spans[k][0] * span, pw = Math.max(1, (spans[k][1] - spans[k][0]) * span - 1);
     return `<span class="dr-seg" data-k="${k}" data-tip="${esc(p.title + " " + p.value)}" style="left:${left.toFixed(2)}px;width:${pw.toFixed(2)}px;background:${cssColour(p.colour)}"></span>`; }).join("");
-  return `<span class="bf bt-gd" data-tag-x="${(w + 8 - 6).toFixed(1)}" data-tag-max="${BT_FOE_DEALT + 166}" data-tag-top="${(BT_FOE_DEALT_H - 20) / 2}" style="width:${w.toFixed(1)}px;height:${BT_FOE_DEALT_H}px">${segs}</span>`;
+  return `<span class="bf bt-gd" data-tag-x="${(w + 8 - 6).toFixed(1)}" data-tag-max="${BT_FOE_DEALT + 166}" style="width:${w.toFixed(1)}px;height:${BT_FOE_DEALT_H}px">${segs}</span>`;
 }
 function btFoes(b) {
   const arrows = b.items.some(r => r.items.some(i => i.kind === "arrow"));
@@ -1538,7 +1570,7 @@ function btSources(b) {   // BattleUi.BattleSources: the caption (By foe: the ma
 // name and "x N" with the marks under them, the number before the bar, the bar's zero at a quarter of the track (one scale for the list), each
 // part's number inside it where it fits at 14 px, the true length from zero under the bar (gold for dealt, quiet for received), the types'
 // shares on one line; pointing at any part shows its name and number in its share's place (0.8.2: every part, PanelModel.DamageHoverWords)
-const DR = { who: 200, whoMax: 230, num: 64, col: 12, gap: 3, min: 4, floor: 0.25 };
+const DR = { who: 200, whoMax: 230, num: 64, col: 12, gap: 3, min: 4, floor: 0.25, nameX: 30, level: 16, skillBar: 8, skillBarLeast: 3 };   // nameX: the name column's left (picture and gap), level: an upgrade level under its weapon, a little in (DrNameX, DrLevelIndent)
 const drWidth = f => DR.floor + (1 - DR.floor) * Math.min(1, Math.max(0, f || 0));   // PanelModel.DamageBarWidth
 const drTrue = f => Math.min(1, Math.max(0, f || 0));   // PanelModel.DamageTrueWidth
 // the number column: DR.num, wider when the widest of these numbers needs it (PanelUi measures with TMP)
@@ -1555,31 +1587,27 @@ function drWhoW(rows, least = DR.who) {
     if (!r.value2) return nm; cx.font = `700 ${TX.floor}px "Averia Serif Libre", Georgia, serif`; return nm + 8 + w(r.value2) + 16; })));
 }
 // PanelModel.DamageStoppedTone (What your armor stopped): the part's line says its share stopped (Text, "Poison 20 %"); on hover the numbers it holds
-// PanelModel.DamageHoverWords for a stopped part: "Pierce 12 got through, 6 stopped" (ArmourKeyThrough, ArmourStoppedWord), the numbers it has
-// 0.8.5: then its faded piece's words (Note, "300 from before 12 October")
-// and damage dealt says what you swung first (Whole: "Slash 1 670: 770 got through")
-const drStopWords = (t, got, stop, early, whole) => { const some = v => v && v !== "0", ns = [some(got) ? got + " got through" : null, some(stop) ? stop + " stopped" : null, early || null].filter(Boolean); return ns.length ? t + " " + (whole ? whole + ": " : "") + ns.join(", ") : t; };
+// PanelModel.DamageHoverWords for a stopped part: "Pierce 12 got through, 6 stopped" (ArmourKeyThrough, ArmourStoppedWord), the numbers it has: 0.8.6, the
+// stopped number is never on the bar, so hover always says it; damage dealt says what you swung first (Whole: "Slash 53: 33 got through, 20 stopped")
+// 0.8.6: a weak part (Counted: its foe took more than you swung) says "105 got through (weak to it)" (PanelModel.WeakWords)
+const drWeak = counted => counted ? " (weak to it)" : "";
+const drStopWords = (t, got, stop, whole, counted) => { const some = v => v && v !== "0", ns = [some(got) ? got + " got through" + drWeak(counted) : null, some(stop) ? stop + " stopped" : null].filter(Boolean); return ns.length ? t + " " + (whole ? whole + ": " : "") + ns.join(", ") : t; };
 // PanelModel.DamageHoverWords: what pointing at any part of a damage bar shows, its name and number ("Frost 120"); a stopped part the numbers it holds
-const drHover = x => drStopped(x) ? drStopWords(x.title, x.value, x.part.value2, x.part.note, x.part.whole) : x.value ? x.title + " " + x.value : x.title;
-// a part no share entry keys carries its hover words (data-tip): the page's one tag says them over it (PanelUi.PageTag), centred on the part and
-// kept inside its track; no element of its own
+const drHover = x => drStopped(x) ? drStopWords(x.title, x.value, x.part.value2, x.part.whole, x.part.counted) : x.value ? x.title + " " + x.value : x.title;
+// a part no share entry keys carries its hover words (data-tip): the page's one tag says them beside its bar (PanelUi.PageTag), centred on the part
+// and kept inside its track; no element of its own
 const drTip = x => ` data-tip="${esc(drHover(x))}"`;
 const drStopped = x => !!(x.part && x.part.tone === "stopped");
 // PanelModel.DamageLineWords: the part's name and its share of the row ("Slash 64 %"); a part with share words of its own (a stopped part's share
 // stopped, a fellow's share of a total on While away, "built 35 %") says those
 const drLine = x => x.title + " " + (x.part && x.part.text ? x.part.text : x.percent === 0 && x.fraction > 0 ? "<1 %" : x.percent + " %");
-// PanelUi.StoppedPart: the fill (what got through, at least 3 px of each piece that has an amount) and the outline's inside, each holding its number
-// 0.8.5: a part with an Earlier share starts with that piece faded (its colour at 55 % over the plate's dark, no number), then the fill
+// PanelUi.StoppedPart: the fill (what got through, at least 3 px of each piece that has an amount) holding its number; 0.8.6: the outline's inside
+// (what was stopped) holds none, hover says it
 function drStoppedInside(x, w) {
-  const m = Math.min(3, w / 2), e = Math.max(0, Math.min(1, x.part.earlier || 0)), ew = e <= 0 ? 0 : e >= 1 ? w : Math.max(m, Math.min(w - m, w * e));
-  const f = Math.max(0, Math.min(1, x.part.fraction2 || 0)), room = w - ew, fw = f <= 0 || room <= 0 ? 0 : Math.max(Math.min(m, room), Math.min(room - (x.part.value2 ? Math.min(m, room / 2) : 0), w * f));   // room for the outline's piece when something was stopped
-  const some = v => v && v !== "0", c = cssColour(x.colour), rest = w - ew - fw;
-  return (ew > 0 ? `<span class="dr-got dr-early" style="width:${ew.toFixed(2)}px;background:${drFaded(c)}"></span>` : "") +
-    (fw > 0 ? `<span class="dr-got" style="left:${ew.toFixed(2)}px;width:${fw.toFixed(2)}px"${some(x.value) ? ` data-num="${esc(x.value)}" data-c="${esc(c)}"` : ""}></span>` : "") +
-    (rest > 0 && some(x.part.value2) ? `<span class="dr-left" style="left:${(ew + fw).toFixed(2)}px;width:${rest.toFixed(2)}px" data-num="${esc(x.part.value2)}" data-ink="${esc(legible(c))}"></span>` : "");
+  const m = Math.min(3, w / 2), f = Math.max(0, Math.min(1, x.part.fraction2 || 0)), fw = f <= 0 ? 0 : Math.max(m, Math.min(w - (x.part.value2 ? Math.min(m, w / 2) : 0), w * f));   // room for the outline's piece when something was stopped
+  const some = v => v && v !== "0", c = cssColour(x.colour);
+  return fw > 0 ? `<span class="dr-got" style="left:0;width:${fw.toFixed(2)}px"${some(x.value) ? ` data-num="${esc(x.value)}" data-c="${esc(c)}"` : ""}></span>` : "";
 }
-// PanelUi.Faded: a colour as a faded part draws it, 55 % of it over the plate's dark (FadedVeil)
-const drFaded = c => { const h = (c || "#888888").replace("#", ""), v = i => Math.round(parseInt(h.substr(i, 2), 16) * 0.55 + [9, 7, 5][i / 2] * 0.45); return `rgb(${v(0)},${v(2)},${v(4)})`; };
 // fixed: the columns a weapons run keeps ({ num, who }, DR_RUN), else the list's own; While away's (AwayUi) also { you, right, aw }: a column
 // you px wide right of the track, right(row) its html; aw: a part pointed at lights its total (.awt) too
 function dmgRows(rows, dealt, fixed) {
@@ -1622,7 +1650,7 @@ function dmgTypeRows(g) {
   return types.map((t, k) => ({ kind: "source", id: t.id, title: t.title, icon: t.icon, colour: t.colour, tone: "type", value: t.value, fraction: max > 0 ? sums[k] / max : 0,
     text: t.text,   // 0.8.5: the line's closing words; a cell's after (AfterPart) handed to its part
     items: (t.items || []).slice(0, cols.length).map((c, j) => c.fraction > 0 ? { kind: "part", id: cols[j].id, title: cols[j].title, icon: cols[j].icon, colour: cols[j].colour, value: c.value, fraction: c.fraction / sums[k],
-      tone: c.tone, value2: c.value2, fraction2: c.fraction2, earlier: c.earlier, note: c.note, whole: c.whole } : null).filter(Boolean) }));
+      tone: c.tone, value2: c.value2, fraction2: c.fraction2, whole: c.whole, counted: c.counted } : null).filter(Boolean) }));
 }
 // PanelModel.DamagePlayerRows: a player with a number one part in their colour with their share inside, on one scale; their "mix" the line under it
 function dmgPlayerRows(g) {
@@ -1677,7 +1705,7 @@ function btFeedLine(e) {   // BattleFeedUi.FeedLine: "dealt fire 26 · blunt 18 
   const parts = [side("dealt", "dealt"), side("received", "received")].filter(Boolean);
   return rich("feed", `<span class="fdl">${parts.map(p => p.html).join(`<span style="color:var(--faint)">&nbsp; · &nbsp;</span>`)}</span>`, parts.map(p => p.markup).join(T.ink(T.plain("  ·  "), INK.faint)));
 }
-const btFightHead = f => `<div class="bt-fh"><b>${esc(f.title)}</b><span class="r1">${esc("· " + f.text + (f.note ? " · " + f.note : ""))}</span><span class="r2">${esc([f.value ? "dealt " + f.value : null, f.value2 ? "received " + f.value2 : null].filter(Boolean).join(" · "))}</span></div>`;
+const btFightHead = f => `<div class="bt-fh"><b>${esc(f.title)}</b><span class="r1">${esc("· " + f.text + (f.note ? " · " + f.note : ""))}</span><span class="r2">${esc([f.value ? "dealt " + f.value : null, f.value2 ? "received " + f.value2 : null, f.rate || null].filter(Boolean).join(" · "))}</span></div>`;   // 0.8.6: your pace beside dealt and received
 // 0.8.1 the Log (BattleFeedUi.FeedLog): time, the foe, what became of it, then the dealt damage as a damage bar on one track for the whole page (its zero
 // at a quarter, the true-length line, the numbers inside the parts, no share line; each part's name and number in a tag over the bar on
 // hover), and what you received after it as quiet words in a column as wide as the page's widest (170 at most, then it wraps)
@@ -1852,13 +1880,15 @@ function featband(b) {   // fix4: the feat and the titles, one flat strip (Feats
   const cpart = stripCompare(window.CURRENT);   // 0.8.5: Compare's legend, or a greyed chip's reason, leads (CompareUi.StripCompare); the switch's caption is in About then (PageHead.cs)
   const cap = STRIP_SWITCH && STRIP_SWITCH.title ? `${fpart || tpart ? `<span class="ea-rule"></span>` : ""}<span class="ea-cap">${esc(STRIP_SWITCH.title)}</span>` : "", note = window.CURRENT.stripNote;
   const apart = STRIP_ABOUT || STRIP_SWITCH || note ? `<span class="ea-about">${note ? `<span class="ea-note">${esc(note)}</span>` : ""}${STRIP_SWITCH ? `<span class="ea-sw">${swChips(STRIP_SWITCH)}</span>` : ""}${STRIP_ABOUT ? aboutBoth(STRIP_ABOUT) : ""}</span>` : "";
-  return `<div class="earned${apart || cpart ? " one" : ""}${fpart || tpart ? "" : " bare"}">${cpart}${cpart && (fpart || tpart) ? `<span class="ea-rule ea-crule"></span>` : ""}${fpart}${fpart && tpart ? `<span class="ea-rule"></span>` : ""}${tpart}${cap}${apart}</div>`;
+  // 0.8.6: the Back button leads at the left end (FeatsUi.BackCluster): the opens mark turned back, "Back", its key's cap (PanelView.Back)
+  const bpart = window.CURRENT.back ? `<span class="ea-back"><span class="chip"><svg viewBox="0 0 8 14"><polyline points="1.5,1.5 6.5,7 1.5,12.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>${esc(window.CURRENT.back)}</span><span class="kc" style="position:static;width:${keycapW(window.CURRENT.backKey, 22)}px;height:22px;flex:none">${esc(window.CURRENT.backKey)}</span></span>` : "";
+  return `<div class="earned${apart || cpart || bpart ? " one" : ""}${fpart || tpart ? "" : " bare"}">${bpart}${cpart}${cpart && (fpart || tpart) ? `<span class="ea-rule ea-crule"></span>` : ""}${fpart}${fpart && tpart ? `<span class="ea-rule"></span>` : ""}${tpart}${cap}${apart}</div>`;
 }
 // ---------- 0.9 fight pages (Chapters/FightUi.cs, FightPages.cs): the head, the foe rows with two bars, the players' table, Runs and bosses ----------
 // every part placed as PanelUi places it (Box): the same Ft measures, each block one box as tall as its rows, the island's 6 px only round it
 const FT = { topH: 48, ring: 44, door: 46, nameX: 58, name: 26, nameLeast: 20, land: 15, num: 43, numLabel: 17, numGap: 14, ruleGap: 24, laneTop: 8, laneH: 20, lanePad: 10, keyLineH: 20,
   who: 190, whoMax: 240, indent: 22, pic: 22, bossPic: 26, numMin: 44, colGap: 10, sep: 18, chev: 18, foeGap: 4, subIndent: 38,
-  playerRow: 24, cellNum: 52, cellBarMin: 80, cellBarMax: 110, cellStat: 62, cellStop: 56, cellDeaths: 96, deathBar: 48, cellGap: 10, nameMin: 190,
+  playerRow: 24, cellNum: 52, cellBarMin: 80, cellBarMax: 110, cellStat: 62, cellStop: 56, cellDeaths: 96, deathBar: 48, deathNum: 24, deathGap: 8, headIcon: 20, cellGap: 10, nameMin: 190,
   date: 60, listPic: 28, listWho: 236, listLine1: 24, listLine2: 20, listGap: 8, addRow: 26, keyGap: 14, swatch: 10, track: 20, barH: 24 };
 const ftCx = document.createElement("canvas").getContext("2d");
 const ftW = (t, px, bold) => { ftCx.font = `${bold ? "700 " : ""}${px}px "Averia Serif Libre", Georgia, serif`; return Math.ceil(ftCx.measureText(t || "").width * 1.04) + 2; };   // PanelUi.FtWidth: TMP's width plus 2
@@ -1893,9 +1923,9 @@ function fightHead(b) {
   const numsW = brief => nums.reduce((a, n) => a + ftW(n.value, FT.num, true) + FT.numGap + ftW(brief && n.text ? n.text : n.title, FT.numLabel), 0) + (nums.length - 1) * (FT.ruleGap * 2 + 1);
   const fit = room => { let s = FT.name; while (s - 2 >= FT.nameLeast && ftW(b.title, s, true) > room) s -= 2; return s; };
   let room = Math.max(60, W - numsW(false) - FT.nameX - 16), size = fit(room), brief = false;
-  if (ftW(b.title, size, true) > room && nums.some(n => n.text)) { brief = true; room = Math.max(60, W - numsW(true) - FT.nameX - 16); size = fit(room); }
+  if ((ftW(b.title, size, true) > room || (b.text && ftW(b.text, FT.land) > room)) && nums.some(n => n.text)) { brief = true; room = Math.max(60, W - numsW(true) - FT.nameX - 16); size = fit(room); }   // 0.8.6: the land's line too (PanelUi.FtHead)
   h += `<div class="ft-nums" style="right:0;top:0;height:${FT.topH}px">${nums.map((n, k) => (k ? `<span class="rule"></span>` : "") + heroNum(brief && n.text ? { ...n, title: n.text } : n, true)).join("")}</div>`;   // the hero's second form, on the head row's foot (not a page hero: fitHeroes leaves it)
-  h += ftText(FT.nameX, 0, room, 30, b.title, size, "var(--text)", { bold: true }) + ftText(FT.nameX, 28, room, 20, b.text, FT.land, "var(--muted)");
+  h += ftText(FT.nameX, b.text ? 0 : (FT.topH - 30) / 2, room, 30, b.title, size, "var(--text)", { bold: true }) + ftText(FT.nameX, 28, room, 20, b.text, FT.land, "var(--muted)");   // no land known: the name alone, in the row's middle
   let y = FT.topH, under = "";
   if (lane) { y += FT.laneTop; const [lh, extra] = ftLane(lane, 0, W, y, true); under += lh; y += FT.laneH + extra; }
   if (line) { y += FT.laneTop; under += ftRunLine(line, W, y); y += FT.laneH + FT.keyLineH; }
@@ -1905,16 +1935,19 @@ function fightHead(b) {
 // the rest the faint track; the note in the empty part of the track, or under it when the track has no room. [html, height added under it]
 function ftLane(l, x, w, top, note) {
   const c = cssColour(l.colour) || "#9b8f80", left = Math.max(0, Math.min(1, l.fraction || 0)) * w, was = Math.max(0, Math.min(1, l.fraction2 || 0)) * w, P = FT.lanePad;
-  let h = ftTrack(x, top, w, FT.laneH);
+  let h = ftTrack(x, top, w, FT.laneH), etaOut = !!l.note;   // 0.8.6: the time left at this pace (l.note): inside the fill after "64 % left" when it fits there, else after the note (PanelUi.FightLane)
   if (was > left + 1) h += ftHatch(x + left, top, was - left, FT.laneH, c);
   if (left > 0) { h += `<div class="ft-fill" style="left:${x}px;top:${top}px;width:${left.toFixed(1)}px;height:${FT.laneH}px;background:${c}"></div>`;
-    if (l.value && ftW(l.value, TX.floor, true) <= left - 2 * P) h += ftText(x + P, top, left - 2 * P, FT.laneH, l.value, TX.floor, drInk(c), { bold: true }); }
+    const both = l.value && l.note ? l.value + " · " + l.note : null, inner = both && ftW(both, TX.floor, true) <= left - 2 * P ? both : l.value;
+    if (inner === both) etaOut = false;
+    if (inner && ftW(inner, TX.floor, true) <= left - 2 * P) h += ftText(x + P, top, left - 2 * P, FT.laneH, inner, TX.floor, drInk(c), { bold: true }); }
   if (l.tone === "won") h += ftAt(x + P, top + (FT.laneH - 18) / 2, 18, 18, btIc("vocab:boss-mark", "#e8c27a", 18)) + ftText(x + P + 24, top, 200, FT.laneH, l.title, TX.floor, "var(--text)");
   if (!note || !l.text) return [h, 0];
-  const sw = l.tone === "live" && was > left + 1, nw = ftW(l.text, TX.floor), lead = sw ? 18 + 6 : 0;
-  if (nw + lead + P + 8 <= w - Math.max(left, was)) return [h + (sw ? ftHatch(x + w - P - nw - lead, top + (FT.laneH - 12) / 2, 18, 12, c) : "") + ftText(x + w - P - nw, top, nw, FT.laneH, l.text, TX.floor, "var(--muted)"), 0];
+  const said = etaOut ? l.text + " · " + l.note : l.text;
+  const sw = l.tone === "live" && was > left + 1, nw = ftW(said, TX.floor), lead = sw ? 18 + 6 : 0;
+  if (nw + lead + P + 8 <= w - Math.max(left, was)) return [h + (sw ? ftHatch(x + w - P - nw - lead, top + (FT.laneH - 12) / 2, 18, 12, c) : "") + ftText(x + w - P - nw, top, nw, FT.laneH, said, TX.floor, "var(--muted)"), 0];
   const t2 = top + FT.laneH;   // no room in the track: the note under the lane, from its start
-  return [h + (sw ? ftHatch(x, t2 + (FT.keyLineH - 12) / 2, 18, 12, c) : "") + ftText(x + lead, t2, w - lead, FT.keyLineH, l.text, TX.floor, "var(--muted)"), FT.keyLineH];
+  return [h + (sw ? ftHatch(x, t2 + (FT.keyLineH - 12) / 2, 18, 12, c) : "") + ftText(x + lead, t2, w - lead, FT.keyLineH, said, TX.floor, "var(--muted)"), FT.keyLineH];
 }
 // D: a run in to out (PanelUi.FightRunLine): each fight a burst in the land's colour, a boss fight a gold band with the crown, each fall the death mark;
 // under it the two ends and the key
@@ -1982,16 +2015,18 @@ function fightFoeRows(b) {
 }
 // the players' table (PanelUi.FightPlayers): a fixed width per column, the name column the rest; each column's word right-aligned over its number
 const ftCellW = (id, bar) => id === "dealt" || id === "received" ? FT.cellNum + 8 + bar : id === "deaths" ? FT.cellDeaths : id === "stopped" ? FT.cellStop : FT.cellStat;
+// 0.8.6: a column of numbers at least as wide as its head, word and icon (PanelUi.FightPlayers CellW)
+const ftColW = (c, bar) => c.id === "dealt" || c.id === "received" ? ftCellW(c.id, bar) : Math.max(ftCellW(c.id, bar), ftW(c.title, TX.floor) + (c.icon ? FT.headIcon : 0));
 function fightPlayers(b) {
   const cols = ftItems(b, "col"), bars = cols.filter(c => c.id === "dealt" || c.id === "received").length;
-  const fixedW = cols.filter(c => c.id !== "dealt" && c.id !== "received").reduce((a, c) => a + ftCellW(c.id, 0), 0) + cols.length * FT.cellGap;
+  const fixedW = cols.filter(c => c.id !== "dealt" && c.id !== "received").reduce((a, c) => a + ftColW(c, 0), 0) + cols.length * FT.cellGap;
   const bar = bars ? Math.max(FT.cellBarMin, Math.min(FT.cellBarMax, (COLUMN - FT.nameMin - fixedW - bars * (FT.cellNum + 8)) / bars)) : 0;
-  const widths = cols.map(c => ftCellW(c.id, bar)), nameW = COLUMN - widths.reduce((a, w) => a + w, 0) - cols.length * FT.cellGap;
+  const widths = cols.map(c => ftColW(c, bar)), nameW = COLUMN - widths.reduce((a, w) => a + w, 0) - cols.length * FT.cellGap;
   const xs = []; let x = nameW; for (const w of widths) { x += FT.cellGap; xs.push(x); x += w; }
   let h = ftText(0, 0, nameW, FT.keyLineH, b.title, TX.floor, "var(--muted)", { caps: true }), firstHead = COLUMN;
   cols.forEach((c, k) => { const end = xs[k] + (c.id === "dealt" || c.id === "received" ? FT.cellNum : widths[k]), tw = ftW(c.title, TX.floor);
-    h += ftText(end - tw, 0, tw, FT.keyLineH, c.title, TX.floor, "var(--muted)") + (c.icon ? ftAt(end - tw - 20, (FT.keyLineH - 16) / 2, 16, 16, btIc(c.icon, "#b9a688", 16)) : "");
-    firstHead = Math.min(firstHead, end - tw - (c.icon ? 20 : 0)); });
+    h += ftText(end - tw, 0, tw, FT.keyLineH, c.title, TX.floor, "var(--muted)", { right: true }) + (c.icon ? ftAt(end - tw - FT.headIcon, (FT.keyLineH - 16) / 2, 16, 16, btIc(c.icon, "#b9a688", 16)) : "");
+    firstHead = Math.min(firstHead, end - tw - (c.icon ? FT.headIcon : 0)); });
   // the dealt split's key on the head line when it fits before the first column's word, else on a line of its own under the rows (PanelUi.FightPlayers)
   // after the caption where it fits, else in the caption's place (the rows say they are the players), else under the rows
   const dkey = ftItems(b, "dkey")[0], keyX = ftW((b.title || "").toUpperCase(), TX.floor) + Math.ceil((b.title || "").length * 14 * 0.14) + 12;
@@ -2006,9 +2041,9 @@ function fightPlayers(b) {
     cols.forEach((c, k) => { const cx = xs[k];
       if (c.id === "dealt" || c.id === "received") { const d = c.id === "dealt";
         h += ftText(cx, bt, FT.cellNum, FT.track, d ? p.value : p.value2, TX.name, d ? "var(--gold)" : "var(--text)", { right: true }) + ftBar(ftItems(p, d ? "part" : "rpart"), d ? "part" : "rpart", d ? p.fraction : p.fraction2, d, cx + FT.cellNum + 8, bt, bar); }
-      else if (c.id === "deaths") { const d = ftItems(p, "deaths")[0], n = d ? d.value : "0";
-        h += n === "0" ? ftText(cx, bt, widths[k], FT.track, n, TX.name, "var(--faint)", { right: true })
-          : `<img class="ft-fall" src="../vocab/death.png" alt="" style="left:${cx}px;top:${bt + (FT.track - 16) / 2}px;width:16px;height:16px">` + ftText(cx + 18, bt, 22, FT.track, n, TX.name, "var(--text)", { right: true, bold: true }) + ftBar(ftItems(d, "rpart"), "rpart", 1, false, cx + widths[k] - FT.deathBar, bt, FT.deathBar); }
+      else if (c.id === "deaths") { const d = ftItems(p, "deaths")[0], n = d ? d.value : "0", end = cx + widths[k];   // 0.8.6: the number at the column's right edge in every row, the types' bar before it, the skull in the head only
+        h += ftText(end - FT.deathNum, bt, FT.deathNum, FT.track, n, TX.name, n === "0" ? "var(--faint)" : "var(--text)", { right: true, bold: n !== "0" })
+          + (n !== "0" ? ftBar(ftItems(d, "rpart"), "rpart", 1, false, end - FT.deathNum - FT.deathGap - FT.deathBar, bt, FT.deathBar) : ""); }
       else { const v = (ftItems(p, "stat").find(s => s.id === c.id) || {}).value || ""; h += ftText(cx, bt, widths[k], FT.track, v, TX.name, v === "0" ? "var(--faint)" : "var(--text)", { right: true }); } });
     y += FT.playerRow;
   }
@@ -2059,7 +2094,7 @@ function ftListRow(row, nested, y, numX, num, barX, barW) {
   return h + ftText(numX, y, num, FT.track, row.value, TX.name, "var(--gold)", { right: true }) + ftBar(ftItems(row, "part"), "part", row.fraction, true, barX, y, barW) + (lane ? ftLane(lane, barX, barW, y + L1, false)[0] : "");
 }
 function block(b) {
-  if (b.kind !== "dmgmix") DR_RUN = null;   // a weapons run ends where another block comes between (PanelUi.DamageRunRow)
+  if (b.kind !== "dmgmix" && b.kind !== "wpnlist") DR_RUN = null;   // a weapons run ends where another block comes between (PanelUi.DamageRunRow)
   switch (b.kind) {
     case "composition": return composition(b);
     case "comparerows": return compareRows(b);   // 0.8 Compare (CompareUi.CompareRows)
@@ -2102,12 +2137,14 @@ function block(b) {
     case "plate": return plateBlock(b);
     case "damagegrid": return btGrid(b);
     case "dmgmix": return btMix(b);
+    case "wpnlist": return btWeapons(b);
     case "foetable": return btFoes(b);
     case "foetypes": return btFoeTypes(b);
     case "guard": return btGuard(b);
     case "sources": case "dealtfoes": return btSources(b);   // dealtfoes: Damage > By foe (0.8)
     case "feed": return btFeed(b);   // 0.8 (BattleFeedUi.cs)
-    case "feedline": return `<div class="feed-ln${b.tone === "gap" || b.tone === "session" ? " " + b.tone : ""}">${esc(b.text)}</div>`;   // 0.8.1 (BattleFeedUi.FeedQuiet): between the fight islands, outside them
+    case "feedline": return b.tone === "more" ? `<div class="feed-ln more">${chip(b.title, "", false, false)}<span>${esc(b.text)}</span></div>`   // 0.8.5 (BattleFeedUi.FeedMore): Show older foes, what is shown and left
+      : `<div class="feed-ln${b.tone === "gap" || b.tone === "session" ? " " + b.tone : ""}">${esc(b.text)}</div>`;   // 0.8.1 (BattleFeedUi.FeedQuiet): between the fight islands, outside them
     case "fightfoes": return btFightFoes(b);
     case "fightreceived": return btFightReceived(b);
     case "fighthead": return fightHead(b);   // 0.9 fight pages (Chapters/FightUi.cs)
@@ -2196,7 +2233,7 @@ if (plate) {
   const firstSwitch = plate.items.find(b => b.kind === "switch") || null;   // PanelModel.TopSwitch
   STRIP_SWITCH = band ? firstSwitch : null; TOP_SWITCH = band ? null : firstSwitch; SWITCH_ABOUT = TOP_SWITCH ? plate.items.find(b => b.kind === "aboutnumbers") || null : null;
   pageHtml = `<div class="hrow">${plate.icon ? hdIcon(plate.icon) : ""}${bookChip()}${v.everyoneOn ? `<span class="ev-tag">Everyone</span>` : ""}<span class="ht"${v.headingWindow ? ` data-l1="${esc(headingLines(v.heading, v.headingWindow)[0])}" data-l2="${esc(headingLines(v.heading, v.headingWindow)[1])}"` : ""}>${esc(v.heading + (v.headingWindow ? ", " + v.headingWindow : ""))}</span>${since(v.headingSince)}<span class="hr">${right}</span></div>
-    <div class="platebg"></div><div class="plate${plate.tone === "full" ? " full" : ""}">${plate.text ? `<div class="plateline">${esc(plate.text)}</div>` : ""}${v.hasFilters && headSkills(plate.items).length ? `<div style="display:flex;gap:4px;margin-bottom:10px">${headSkills(plate.items).map(skillChip).join("")}</div>` : ""}${TOP_SWITCH && !band ? swRow(TOP_SWITCH, SWITCH_ABOUT) : ""}${band ? featband(plate.items.find(b => b.kind === "featband")) : ""}${islands(plate)}</div>`;
+    <div class="platebg"></div><div class="plate${plate.tone === "full" ? " full" : ""}">${plate.text ? `<div class="plateline">${esc(plate.text)}</div>` : ""}${v.hasFilters && headSkills(plate.items).length ? `<div style="display:flex;gap:4px;margin-bottom:10px">${headSkills(plate.items).map(skillChip).join("")}</div>` : ""}${TOP_SWITCH && !band ? swRow(TOP_SWITCH, SWITCH_ABOUT) : ""}${band ? (PIN(plate) ? `<div class="pinhead">${featband(plate.items.find(b => b.kind === "featband"))}</div>` : featband(plate.items.find(b => b.kind === "featband"))) : ""}${islands(plate)}</div>`;
   COLUMN = layoutPx("frame-content-w"); STRIP_ABOUT = null; HEAD_ABOUT = null; STRIP_SWITCH = null; SWITCH_ABOUT = null; TOP_SWITCH = null;
 }
 if (v.badges.length) inner +=`<div class="badges">${v.badges.map(b => `<div class="row" style="gap:8px">${marker(b.icon, 34)}<span>${esc(b.label)}</span></div>`).join("")}</div>`;
@@ -2277,6 +2314,23 @@ for (const box of document.querySelectorAll(".content > .plate, .content .blocks
   box.parentElement.appendChild(f);
 }
 }
+// 0.8.6 the sticky head (PanelUi.PinStrip): the strip is pinned when it leads the plate (nothing drawn above it: no plate line, no skill line) on any
+// plate but the Feats chapter's full one
+function PIN(plate) { return plate.tone !== "full" && !plate.text && !(v.hasFilters && headSkills(plate.items).length); }
+// scrolled down (rows under the strip): the strip's holder sticky and opaque (.under), the shade under it and the scroll area's top fade, as
+// PanelUi.Fades draws them (StripShade, then the fade at the scroll area's top edge, 12 px in from its sides); drawn again on every scroll
+function pinHead() {
+  document.querySelectorAll(".plfade.pinedge").forEach(f => f.remove());
+  for (const p of document.querySelectorAll(".content > .plate")) {
+    const h = p.querySelector(":scope > .pinhead"); p.classList.toggle("under", !!h && p.scrollTop > 1);
+    if (!h || p.scrollTop <= 1) continue;
+    const s = h.firstElementChild, k = p.getBoundingClientRect().height / p.offsetHeight || 1, y = p.offsetTop + (s.getBoundingClientRect().bottom - p.getBoundingClientRect().top) / k;
+    const edge = (left, width, height, ink) => { const f = document.createElement("div"); f.className = "plfade pinedge";
+      f.style.cssText = `position:absolute;left:${left}px;width:${width}px;top:${y}px;height:${height}px;pointer-events:none;background:linear-gradient(${ink}, transparent)`; p.parentElement.appendChild(f); };
+    edge(p.offsetLeft + 12, p.offsetWidth - 24, layoutPx("plate-fade"), "rgba(15,11,8,.9)");
+    edge(p.offsetLeft + s.offsetLeft, s.offsetWidth, layoutPx("plate-strip-shade"), "rgba(0,0,0,.45)");
+  }
+}
 function fitFeatGrids() {
   // FeatsUi.FeatsBlock on a full plate: few cards three across, the cards as tall as the room allows (52 to 76 px), the emblem centred, the notches under it
   for (const g of document.querySelectorAll(".plate.full .fgrid")) {
@@ -2322,14 +2376,15 @@ function fitEarned() { document.querySelectorAll(".earned").forEach(e => { const
     const full = a.querySelector(".ab-full"), short = a.querySelector(".ab-short"), note = f && f.querySelector(":scope > .ea-m");
     if (full) { full.style.display = "flex"; short.style.display = "none"; } if (note) note.style.display = "";
     // the feat part and room for "TITLES +2 more" beside it (60 px stands in for the "+N more"), or the tag and one title
-    const tag = t && t.querySelector(".ea-tag"), lead0 = () => f ? f.offsetWidth + (t ? 37 + tag.offsetWidth + 8 + 60 : 0) : (tag ? tag.offsetWidth : 0) + 8 + 22 + 6 + 40, inner = e.clientWidth - 12 - 15;
+    const bk = e.querySelector(".ea-back");   // 0.8.6: the Back button's width is taken first (FeatsUi.FeatBandBlock)
+    const tag = t && t.querySelector(".ea-tag"), lead0 = () => f ? f.offsetWidth + (t ? 37 + tag.offsetWidth + 8 + 60 : 0) : (tag ? tag.offsetWidth : 0) + 8 + 22 + 6 + 40, inner = e.clientWidth - 2 * ISLE.pad - (bk ? bk.offsetWidth + 18 : 0);
     const lead = () => cp ? cpW + (f || t ? 37 + lead0() : 0) : lead0();   // 0.8.5: Compare's part leads (FeatsUi.FeatBandBlock)
     const fullW = a.offsetWidth; let shortW = fullW;
     if (full) { full.style.display = "none"; short.style.display = "flex"; shortW = a.offsetWidth; full.style.display = "flex"; short.style.display = "none"; }
     const noteW = note ? note.offsetWidth + 10 : 0, [useShort, dropNote] = stripFit(lead(), fullW, shortW, noteW, inner);
     if (useShort && full) { full.style.display = "none"; short.style.display = "flex"; }
     if (dropNote && note) note.style.display = "none";
-    e.style.paddingRight = (12 + 18 + a.offsetWidth) + "px";
+    e.style.paddingRight = (ISLE.pad + 18 + a.offsetWidth) + "px";
     const row = document.querySelector(".aboutrow"); if (row && STRIP_ABOUT_DRAWN(a)) row.style.display = "none";
   }
   if (r) r.style.display = f && t && t.offsetTop > f.offsetTop + 4 ? "none" : "";
@@ -2462,8 +2517,9 @@ document.getElementById("caption").textContent = `Preview "${name}": PanelModel 
 // 0.8 hover (BarHover): pointing at a part or its row lights both; window.PANEL_HOVER names a bar and a part for a hovered-state shot
 // (the PNG cannot point: the dump says which part the pointer is on, PanelUi does the same on pointer enter).
 // 0.8.2: a lit entry's words swap for its part's name and number (data-on, BarHover.OnWords); a part no entry keys (data-tip) moves the page's
-// one tag over it (PanelUi.PageTag, HoverTag): made with the page when it has such a part, one element for the page, never one per part.
-// Centred on the part and kept inside its track, or from the bar's data-tag-x (Foes' Dealt: the total's place, kept before data-tag-max)
+// one tag beside its bar (PanelUi.PageTag, HoverTag): made with the page when it has such a part, one element for the page, never one per part.
+// Centred on the part and kept inside its track, or from the bar's data-tag-x (Foes' Dealt: the total's place, kept before data-tag-max); below the bar, or above it
+// when below would leave the plate or the island (0.8.6: the tag never covers the bar it describes)
 { const home = document.querySelector(".content > .plate") || document.querySelector(".content .blocks");
   const tip = home && document.querySelector("[data-tip]") ? home.insertAdjacentElement("afterbegin", Object.assign(document.createElement("span"), { className: "dr-tip page-tip" })) : null;
   let tipFor = null;
@@ -2471,10 +2527,14 @@ document.getElementById("caption").textContent = `Preview "${name}": PanelModel 
     if (!tip) return;
     if (!on) { if (tipFor === seg) { tip.classList.remove("on"); tipFor = null; } return; }
     tip.textContent = seg.dataset.tip; tip.classList.add("on"); tipFor = seg;
-    const H = home.getBoundingClientRect(), tw = tip.offsetWidth, bar = seg.closest("[data-tag-x]"), P = seg.getBoundingClientRect();
-    let x, top;
-    if (bar) { const B = bar.getBoundingClientRect(); x = B.left + Math.max(0, Math.min(+bar.dataset.tagMax - tw, +bar.dataset.tagX)); top = B.top + +bar.dataset.tagTop; }
-    else { const T = (seg.closest(".dr-track") || seg).getBoundingClientRect(); x = Math.max(T.left, Math.min(T.right - tw, P.left + P.width / 2 - tw / 2)); top = P.top - 2; }
+    const H = home.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight, bar = seg.closest("[data-tag-x]"), P = seg.getBoundingClientRect();
+    const B = (bar || seg.closest(".dr-track") || seg).getBoundingClientRect();   // the bar the tag describes: beside it, never over it
+    let x;
+    if (bar) x = B.left + Math.max(0, Math.min(+bar.dataset.tagMax - tw, +bar.dataset.tagX));
+    else { const T = (seg.closest(".dr-track") || seg).getBoundingClientRect(); x = Math.max(T.left, Math.min(T.right - tw, P.left + P.width / 2 - tw / 2)); }
+    // 0.8.6: under the bar (2 px off); over it only when below would leave the plate's view or the bar's island (.isl, IslandsUi)
+    const I = seg.closest(".isl"), low = Math.min(H.bottom, I ? I.getBoundingClientRect().bottom : Infinity);
+    const below = B.bottom + 2, top = below + th <= low ? below : B.top - 2 - th;
     tip.style.left = (x - H.left + home.scrollLeft).toFixed(1) + "px"; tip.style.top = (top - H.top + home.scrollTop).toFixed(1) + "px";
   };
   const light = (bf, k, on) => bf.querySelectorAll(`[data-k="${k}"]`).forEach(e => {
@@ -2494,12 +2554,16 @@ document.getElementById("caption").textContent = `Preview "${name}": PanelModel 
 { const sc = +(new URLSearchParams(location.search).get("scroll") || 0); if (sc) document.querySelectorAll(".plate").forEach(p => { p.scrollTop = sc; }); }
 // 0.8.5: window.PANEL_SCROLL names, for a shot, the section heading its plate is scrolled to (the wheel in game), so a PNG shows what lies lower down
 { const to = (window.PANEL_SCROLL || {})[name];
-  const go = () => { const p = document.querySelector(".content > .plate"), h = p && [...p.querySelectorAll(".section")].find(s => s.textContent.startsWith(to)); if (!h) return;
+  const go = () => { const p = document.querySelector(".content > .plate"); if (p && to === "end") { p.scrollTop = p.scrollHeight; return; }   // "end": the plate's end (the feed's Show older foes)
+    if (p && typeof to === "number") { p.scrollTop = to; return; }   // 0.8.6: a number: that many px down (the sticky head over the rows)
+    const h = p && [...p.querySelectorAll(".section")].find(s => s.textContent.startsWith(to)); if (!h) return;
     const box = h.closest(".isl") || h; p.scrollTop = box.getBoundingClientRect().top - p.getBoundingClientRect().top + p.scrollTop - ISLE.pad; };
-  if (to) { go(); document.fonts.ready.then(go); } }
+  if (to) { go(); document.fonts.ready.then(go); }
+  pinHead(); document.fonts.ready.then(() => requestAnimationFrame(pinHead));   // after the plates are fitted and scrolled (fitPlates clears every .plfade)
+  document.querySelectorAll(".content > .plate").forEach(p => p.addEventListener("scroll", pinHead, { passive: true })); }
 // focus-visible (PanelUi.KeyFocus): the focus ring shows after a key press and hides on mouse use. A view that holds the filter keys'
 // cursor was reached by a key, so it opens with the ring shown (?kbd=1 forces it, ?kbd=0 hides it)
-{ const q = new URLSearchParams(location.search).get("kbd"), keyed = /"(tone|note)":"cursor"/.test(JSON.stringify(v));
+{ const q = new URLSearchParams(location.search).get("kbd"), keyed = /"(tone|note)":"cursor"|"cursor":1/.test(JSON.stringify(v));
   document.body.classList.toggle("kbd", q === null ? keyed : q === "1");
   addEventListener("keydown", () => document.body.classList.add("kbd"));
   let last = null; addEventListener("mousemove", e => { if (last && Math.hypot(e.clientX - last[0], e.clientY - last[1]) > 4) document.body.classList.remove("kbd"); last = [e.clientX, e.clientY]; });

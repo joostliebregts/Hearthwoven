@@ -51,7 +51,7 @@ namespace Hearthwoven.Panel
                 for (int c = 0; c < cells.Count && c < cols.Count; c++)
                     if (cells[c].Fraction > 0)
                         parts.Add(new Block { Kind = "part", Id = cols[c].Id, Title = cols[c].Title, Icon = cols[c].Icon, Colour = cols[c].Colour, Value = cells[c].Value, Fraction = (float)(cells[c].Fraction / sums[k]),
-                                              Tone = cells[c].Tone, Value2 = cells[c].Value2, Fraction2 = cells[c].Fraction2, Earlier = cells[c].Earlier, Note = cells[c].Note, Whole = cells[c].Whole });   // 0.8.5: a cell's after (AfterPart)
+                                              Tone = cells[c].Tone, Value2 = cells[c].Value2, Fraction2 = cells[c].Fraction2, Whole = cells[c].Whole, Counted = cells[c].Counted });   // 0.8.5: a cell's after (AfterPart)
                 rows.Add(new Block { Kind = "source", Id = t.Id, Title = t.Title, Icon = t.Icon, Colour = t.Colour, Tone = "type", Value = t.Value, Fraction = max > 0 ? (float)(sums[k] / max) : 0, Src = t.Src, Source = t.Source, Items = parts,
                                      Text = t.Text });   // 0.8.5: the line's closing words ("73 % got through")
             }
@@ -115,16 +115,19 @@ namespace Hearthwoven.Panel
         {
             if (r == null) return "";
             bool Some(string v) => !string.IsNullOrEmpty(v) && v != "0";
-            if (IsStoppedPart(r)) return Some(r.Value) || Some(r.Part.Value2) || r.Part.Note != null ? DamageSwapWords(r, Some(r.Value), Some(r.Part.Value2)) : r.Title;
+            if (IsStoppedPart(r)) return Some(r.Value) || Some(r.Part.Value2) ? DamageSwapWords(r, Some(r.Value), Some(r.Part.Value2)) : r.Title;
             return string.IsNullOrEmpty(r.Value) ? r.Title : r.Title + " " + r.Value;
         }
 
-        /// <summary>The entry's words on hover when its part was too narrow for its number ("Frost 37"); a stopped part the numbers its fill or its
-        /// outline could not hold ("Pierce 12 got through", "Pierce 6 stopped", or both), then (0.8.5) its faded piece's words ("300 from before 12 October").</summary>
+        /// <summary>The entry's words on hover when its part was too narrow for its number ("Frost 37"); a stopped part the numbers it holds ("Pierce 12
+        /// got through", "Pierce 6 stopped", or both). 0.8.6: the stopped number is never on the bar, so hover always says it (DamageHoverWords).</summary>
         public static string DamageSwapWords(BarRow r, bool throughHidden = true, bool stoppedHidden = false) =>
             !IsStoppedPart(r) ? r.Title + " " + r.Value
             : r.Title + " " + (r.Part.Whole != null ? r.Part.Whole + ": " : "") +   // 0.8.5: damage dealt says what you swung first ("Slash 1 670: 770 got through")
-              string.Join(", ", new[] { throughHidden ? r.Value + " " + ArmourKeyThrough : null, stoppedHidden ? r.Part.Value2 + " " + ArmourStoppedWord : null, r.Part.Note }.Where(x => x != null));
+              string.Join(", ", new[] { throughHidden ? r.Value + " " + ArmourKeyThrough + WeakWords(r.Part) : null, stoppedHidden ? r.Part.Value2 + " " + ArmourStoppedWord : null }.Where(x => x != null));
+
+        /// <summary>0.8.6: the words after a weak part's "105 got through" (Block.Counted): " (weak to it)" (ThroughWordsOf's).</summary>
+        static string WeakWords(Block part) => part.Counted == null ? "" : " (" + WeakToIt + ")";
 
         /// <summary>The widest number a list of rows on one scale holds, for its number column, worked out from the first of them (By weapon's rows
         /// are blocks of their own, drawn one at a time; the renderer keeps the width for the run, REVIEW-081 #6): the largest total, at most this

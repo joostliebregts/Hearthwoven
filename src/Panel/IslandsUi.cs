@@ -22,6 +22,8 @@ namespace Hearthwoven.Panel
         static string stripNote;
         /// <summary>0.8.5: the page whose Compare legend (CompareNow, CompareThen) or greyed chip's reason (CompareNote) leads the strip; null: none.</summary>
         static PanelView stripCompare;
+        /// <summary>0.8.6: the Back button's press at the strip's left end (PanelView.Back: what Backspace does); null: the page has no back step.</summary>
+        static System.Action stripBack;
         /// <summary>Drawing inside an island: no air before a heading (the padding is the air), no rules between rows, no item band behind a
         /// weapon or a foe (the island is that band).</summary>
         static bool islanded;

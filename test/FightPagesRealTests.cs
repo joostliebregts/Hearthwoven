@@ -80,7 +80,7 @@ static class FightPagesRealTests
         var runPage = PanelModel.Build(restart, At(PanelModel.FightPageOf(savedRun)));
         var falls = Of(Find(runPage, PanelModel.FightPlayersKind), "player").SelectMany(p => Of(p, "deaths")).ToList();
         var line = Of(Find(runPage, PanelModel.FightHeadKind), "runline").FirstOrDefault();
-        Check(entry.Label == PanelModel.BossFightLabel && entry.Dot && live.Heading == PanelModel.BossFightLabel && (live.Blocks[0].Pill ?? "").StartsWith("Live, ") &&
+        Check(entry.Label == PanelModel.BossFightLabel && entry.Dot && live.Heading == PanelModel.BossFightLabel && (live.Blocks[0].Pill ?? "").StartsWith(PanelModel.FightingNow + " · ") &&
               resetWords == "Reset at 97 %" && falls.Sum(d => (int)V(d.Value)) == savedRun.Players.Sum(p => p.Deaths.Count) && falls.All(d => Of(d, "rpart").Count == 0) &&
               line != null && Of(line, "fall").Count == 0 && PanelModel.AllText(runPage).Contains(PanelModel.FallsAbout),
               "FR an open boss fight: \"" + entry.Label + "\" with the dot, " + live.Blocks[0].Pill + "; a reset: " + resetWords + "; after a restart the run's " + falls.Sum(d => (int)V(d.Value)) +
@@ -108,7 +108,7 @@ static class FightPagesRealTests
         var savedRows = PanelModel.Content(savedRuns).Where(b => b.Kind == PanelModel.FightListKind).SelectMany(b => Of(b, "fight")).ToList();
         var savedNested = savedRows.SelectMany(r => Of(r, "fight")).ToList();
         Check(joinOff.Count == 0 && eddaDeath?.Value == "1" && eddaTypes == "pierce, poison" && liveLane?.Value == "97 % left" &&
-              savedRows.Count == 1 && savedRows[0].Title == "Infested Citadel" && savedRows[0].Note == "Out, 1 death" && savedNested.Count == 1 && savedNested[0].Title == "The Queen" && savedNested[0].Note == "Won",
+              savedRows.Count == 1 && savedRows[0].Title == "Infested Citadel" && savedRows[0].Note == "Left, 1 death" && savedNested.Count == 1 && savedNested[0].Title == "The Queen" && savedNested[0].Note == "Won",
               "FR the pages say what the join holds: each player's dealt, received and deaths in the boss fight are GroupFights' (" + g.Players.Count(p => p.InBoss) + " players), the foe rows' parts make them; " +
               "Edda's death with its last seconds' types (" + eddaTypes + "); the open fight's lane " + liveLane?.Value + "; after a restart the saved Infested Citadel run (" + savedRows.FirstOrDefault()?.Note +
               ") holds the won Queen (" + savedNested.FirstOrDefault()?.Note + ")" + (joinOff.Count > 0 ? ": " + string.Join("; ", joinOff) : ""));

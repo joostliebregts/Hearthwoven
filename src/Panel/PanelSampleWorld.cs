@@ -138,7 +138,7 @@ namespace Hearthwoven.Panel
         /// <summary>The game's lookups, set on every book (a fellow's copy gets them from PanelUi in game, the same ones).</summary>
         static void Lookups(PanelInput p, bool self)
         {
-            p.DisplayName = t => t != null && PanelSample.Names.TryGetValue(t, out var n) ? n : PanelSample.BattleNames.TryGetValue(t ?? "", out var b) ? b : null;
+            p.DisplayName = t => t != null && PanelSample.Names.TryGetValue(t, out var n) ? n : PanelSample.BattleNames.TryGetValue(t ?? "", out var b) ? b : WeaponNames.TryGetValue(t ?? "", out var wn) ? wn : null;
             p.ItemKind = t => t != null && Kinds.TryGetValue(t, out var k) ? k : (t != null && t.StartsWith("$item_arrow") ? "other" : null);
             p.StationDish = t => t == "$item_bread" || t == "$item_cookedmeat";   // the oven and the grill hand these out; the cauldron and prep table make the rest
             p.PieceKind = PanelModel.PieceKindByName;
@@ -216,6 +216,7 @@ namespace Hearthwoven.Panel
             foreach (var kv in owns) BattleSample.Session(kv.Value, now, (kv.Key == Rowan ? new[] { Edda, Tor } : Everyone.Where(n => n != kv.Key)).ToArray(), kv.Key == Rowan ? new[] { Edda, Tor, Finch } : kv.Key == Edda ? new[] { Rowan, Ylva } : null);
             foreach (var kv in owns) BattleSample.Guard(kv.Value);   // 0.8.2: blocks and parries per minute, and the session's tally
             foreach (var kv in owns) DealtAfterLog(kv.Value);   // 0.8.5: each hit after the foe's armor in the log (shared: the copies have it)
+            foreach (var kv in owns) SwingLog(kv.Value);   // 0.8.6: each weapon's fighting time in the log (DPS)
             // the feats come from the counters (and from what the others shared), so every book is first sent without them
             Dictionary<string, PanelInput> Copies() => owns.ToDictionary(kv => kv.Key, kv => Share(kv.Value, now));
             var copies = Copies();
@@ -223,7 +224,7 @@ namespace Hearthwoven.Panel
             foreach (var kv in owns) History(kv.Value, now);   // the day history (HISTORY-06.md), worked out from the same lists as the totals
             foreach (var kv in owns) RecentSample.Session(kv.Value);   // 0.7 Deeds > Recent: this session's minute log, today's row spread over the session (PanelSampleRecent.cs)
             foreach (var kv in owns) ArmourSample(kv.Value, now);   // 0.7: the armour ledger, from what each of them received (never shared: the copies have none)
-            foreach (var kv in owns) DealtAfterSample(kv.Value, now);   // 0.8.5: the dealt ledger, from what each of them dealt (never shared)
+            foreach (var kv in owns) DealtAfterSample(kv.Value, now);   // 0.8.5: the dealt ledger, from what each of them dealt (its totals are never shared; 0.8.6: its weapons per day are, dayWeapons)
             foreach (var kv in owns) DeedsSample(kv.Value, now);   // 0.7: this session's deeds per minute (the Deeds pages' short windows), from the same day rows
             foreach (var kv in owns) Derive(kv.Value, now);
             foreach (var kv in owns) { kv.Value.Feats.MarkSeen(PanelModel.IsGroupFeat); if (kv.Key == Rowan) kv.Value.Feats.Seen = Math.Max(0, kv.Value.Feats.Seen - 2); }   // two earned tiers of Rowan's own not opened yet: the gold dots
@@ -262,10 +263,10 @@ namespace Hearthwoven.Panel
             if (!(LiveDelta.Parse(json) is Dictionary<string, object> root)) return json;
             root["mod"] = version;
             var old = version == "0.6.5"; var v083 = version == "0.8.3";
-            foreach (var k in old ? new[] { "knownBiomes", "copyId", "foes", "battleFeed", "dayDealt", PanelModel.DayDeedsKey } : v083 ? new[] { PanelModel.DayDeedsKey } : new[] { "battleFeed", "dayDealt", PanelModel.DayDeedsKey }) root.Remove(k);
+            foreach (var k in old ? new[] { "knownBiomes", "copyId", "foes", "battleFeed", "dayDealt", PanelModel.DayDeedsKey, "dayWeapons" } : v083 ? new[] { PanelModel.DayDeedsKey, "dayWeapons" } : new[] { "battleFeed", "dayDealt", PanelModel.DayDeedsKey, "dayWeapons" }) root.Remove(k);
             if (old) foreach (var m in new[] { "measuredThisSession", "measuredSinceInstall" })
                 if (root.TryGetValue(m, out var o) && o is Dictionary<string, object> d) foreach (var f in new[] { "chestFed", "setOutFeastMadeBy", "ateFromFeastAt", "recovered" }) d.Remove(f);
-            if (root.TryGetValue("measuredLog", out var l) && l is Dictionary<string, object> ld) { if (!v083) ld.Remove("guard"); ld.Remove("after"); ld.Remove("afterFrom"); }   // 0.8.5: no after either; 0.8.3 keeps its block minutes
+            if (root.TryGetValue("measuredLog", out var l) && l is Dictionary<string, object> ld) { if (!v083) ld.Remove("guard"); ld.Remove("after"); ld.Remove("afterFrom"); ld.Remove("weapons"); }   // 0.8.5: no after either; 0.8.3 keeps its block minutes
             return LiveDelta.Write(root);
         }
 
@@ -293,7 +294,8 @@ namespace Hearthwoven.Panel
                                       own.Events, own.DamageSinceInstall, own.BiomeSinceInstall, own.BiomeFromUtc, own.Feats,
                                       own.History?.DealtByDay(PanelModel.LocalToday(own), 30), own.KnownBiomes, foes: BattleSample.ShareOf(own), feed: BattleSample.FeedOf(own),
                                       dayDealt: own.History?.DayDealt(PanelModel.LocalToday(own), 30),   // their damage dealt per day (0.9: also by weapon kind and type), the lands they found, the foes they fought (0.8) and their battle feed (0.8.2), as the game sends them
-                                      dayDeeds: PanelModel.DayDeeds(own.History, PanelModel.LocalToday(own), 30, null, own));   // 0.8.5: their Deeds per day, sorted by their own game data
+                                      dayDeeds: PanelModel.DayDeeds(own.History, PanelModel.LocalToday(own), 30, null, own),   // 0.8.5: their Deeds per day, sorted by their own game data
+                                      dayWeapons: own.DealtArmourBook?.DayWeapons(PanelModel.LocalToday(own), 30, own.DealtArmourPending));   // 0.8.6: their weapons per day by upgrade level
             return json;
         }
 
@@ -620,8 +622,131 @@ namespace Hearthwoven.Panel
             if (first != null) p.Log.AfterFrom = first.Substring(0, 15) + "0" + first.Substring(16);
         }
 
+        // 0.8.6 (DPS per named weapon): the weapons the sample's skills were swung with, each at an upgrade level and over a range of the skill's level (offsets below the level
+        // now: used from level - low to level - high), taking its share of the skill's damage. A level of a weapon is a little faster than the one before (SampleLevelPace).
+        public static readonly Dictionary<string, string> WeaponNames = new Dictionary<string, string>
+        {
+            ["AxeIron"] = "Iron Axe", ["AxeBronze"] = "Bronze Axe", ["SwordIron"] = "Iron Sword", ["MaceSilver"] = "Frostner", ["Club"] = "Club", ["SpearBronze"] = "Bronze Spear",
+            ["KnifeFlint"] = "Flint Knife", ["BowFineWood"] = "Fine Wood Bow", ["BowDraugrFang"] = "Draugr Fang", ["StaffFireball"] = "Staff of Embers", ["StaffIceShards"] = "Staff of Frost",
+        };
+        static readonly Dictionary<string, (string prefab, int quality, double share, int low, int high)[]> SampleWeapons = new Dictionary<string, (string, int, double, int, int)[]>
+        {
+            ["Axes"] = new[] { ("AxeIron", 2, 0.55, 4, 0), ("AxeIron", 3, 0.25, 0, 0), ("AxeBronze", 1, 0.20, 12, 8) },
+            ["Swords"] = new[] { ("SwordIron", 1, 0.6, 3, 1), ("SwordIron", 2, 0.4, 0, 0) },
+            ["Clubs"] = new[] { ("MaceSilver", 3, 0.7, 2, 0), ("Club", 1, 0.3, 6, 4) },
+            ["Spears"] = new[] { ("SpearBronze", 2, 1.0, 5, 0) },
+            ["Knives"] = new[] { ("KnifeFlint", 1, 1.0, 0, 0) },
+            ["Bows"] = new[] { ("BowFineWood", 1, 0.45, 6, 3), ("BowDraugrFang", 2, 0.55, 2, 0) },
+            ["ElementalMagic"] = new[] { ("StaffFireball", 1, 0.5, 4, 2), ("StaffIceShards", 2, 0.5, 1, 0) },
+        };
+        static double SampleLevelPace(int quality) => 1 + 0.12 * (quality - 1);
+
+        /// <summary>A skill's damage split over its sample weapons into cells: all its damage, the swung part (every hit but the first of the minute's stretch) and the seconds at the
+        /// sample's pace, with the skill level range. false when the skill has no sample weapons.</summary>
+        static bool SampleCells(PanelInput p, string skill, double damage, int hits, Action<string, WeaponCell> put)
+        {
+            if (!SampleWeapons.TryGetValue(skill, out var set) || !(damage > 0)) return false;
+            var level = (int)Math.Floor(p.SkillLevels != null && p.SkillLevels.TryGetValue(skill, out var l) ? l : 10f);
+            var pace = SamplePace[DayHistory.WeaponKind(skill)]; hits = Math.Max(3, hits);
+            var variant = 0; double sofar = 0;   // 0.8.6 honest numbers: each part rounded on the running sum, so the parts add up to the skill's damage (no line short of its row)
+            foreach (var (prefab, quality, share, low, high) in set)
+            {
+                // one part per skill level from level - low to level - high: the later levels weigh more, a little faster each (the skill's gain); the newest of a weapon with three
+                // levels or more on an even place in its set has barely been used: under the floor (the page falls back to the level before it)
+                int lo = Math.Max(1, level - low), hi = Math.Max(lo, level - high), n = hi - lo + 1;
+                var weights = Enumerable.Range(0, n).Select(k => k + 1.0).ToArray(); if (n >= 3 && variant % 2 == 0) weights[n - 1] = 0.05;
+                var all = damage * share; var cell = new WeaponCell { Lo = lo, Hi = hi };
+                for (int k = 0; k < n; k++)
+                {
+                    var a = Math.Round(sofar + all * weights[k] / weights.Sum()) - Math.Round(sofar); sofar += all * weights[k] / weights.Sum();   // whole damage and tenths of a second, as the copy keeps them: a friend's rows equal the owner's
+                    var sw = Math.Round(a * (hits - 1) / hits);
+                    var part = new LevelPart { Level = lo + k, Swung = (float)sw, Sec = (float)Math.Round(sw / (pace * SampleLevelPace(quality) * (1 + 0.02 * k)), 1) };
+                    if (cell.PartCount == cell.Parts.Length) Array.Resize(ref cell.Parts, Math.Max(2, cell.PartCount * 2));
+                    cell.Parts[cell.PartCount++] = part; cell.All += (float)a; cell.Swung += part.Swung; cell.Sec += part.Sec;
+                }
+                put(WeaponKey.Make(prefab, quality, skill), cell); variant++;
+            }
+            return true;
+        }
+
+        // 0.8.6 (DPS): the sample's pace per weapon kind, what a hit's damage over its fighting time works out to (fictional, the order of a mid-game weapon):
+        // the log and the ledger get seconds = damage / pace, so each weapon shows its pace; the same pace at every window, a short one under the floor shows a dash
+        static readonly Dictionary<string, double> SamplePace = new Dictionary<string, double> { ["melee"] = 38, ["bow"] = 21, ["magic"] = 29 };
+
+        /// <summary>The log's fighting time per minute and weapon kind (EventLog.Swing) from its dealt damage on foes: the first hit of a stretch starts the clock, so
+        /// the damage counted is that of every hit but the first.</summary>
+        static void SwingLog(PanelInput p)
+        {
+            if (p.Log == null) return;
+            var minutes = new Dictionary<string, (double damage, int hits)>();
+            foreach (var kv in p.Log.Damage)
+            {
+                var k = kv.Key.Split('|');   // time|biome|dir|foe|cause|type
+                if (k.Length < 6 || k[2] != "dealt" || !AfterFoe(k[3]) || Array.IndexOf(PanelModel.BattleTypes, k[5]) < 0) continue;
+                var key = k[0] + "|" + DayHistory.WeaponKind(k[4]);
+                minutes.TryGetValue(key, out var m);
+                minutes[key] = (m.damage + kv.Value, m.hits);
+            }
+            foreach (var kv in p.Log.Hits)
+            {
+                var k = kv.Key.Split('|');   // time|biome|dir|foe|cause
+                if (k.Length < 5 || k[2] != "dealt" || !AfterFoe(k[3])) continue;
+                var key = k[0] + "|" + DayHistory.WeaponKind(k[4]);
+                if (minutes.TryGetValue(key, out var m)) minutes[key] = (m.damage, m.hits + (int)kv.Value);
+            }
+            // and the weapons: each minute's damage by skill over the sample weapons of that skill
+            var bySkill = new Dictionary<string, (double damage, int hits)>();
+            foreach (var kv in p.Log.Damage)
+            {
+                var k = kv.Key.Split('|');
+                if (k.Length < 6 || k[2] != "dealt" || !AfterFoe(k[3]) || Array.IndexOf(PanelModel.BattleTypes, k[5]) < 0) continue;
+                var key = k[0] + "|" + k[4]; bySkill.TryGetValue(key, out var m); bySkill[key] = (m.damage + kv.Value, m.hits);
+            }
+            foreach (var kv in p.Log.Hits)
+            {
+                var k = kv.Key.Split('|');
+                if (k.Length < 5 || k[2] != "dealt" || !AfterFoe(k[3])) continue;
+                var key = k[0] + "|" + k[4]; if (bySkill.TryGetValue(key, out var m)) bySkill[key] = (m.damage, m.hits + (int)kv.Value);
+            }
+            foreach (var kv in bySkill)
+            {
+                var at = kv.Key.IndexOf('|'); var minute = kv.Key.Substring(0, at); var skill = kv.Key.Substring(at + 1);
+                SampleCells(p, skill, kv.Value.damage, kv.Value.hits, (wk, cell) => p.Log.Weapons.Merge(minute + "|" + wk, cell));
+            }
+            p.Log.Weapons.ClipLevels(WeaponCells.PerMinuteLevels);   // a minute keeps its newest skill levels
+            foreach (var kv in minutes)
+            {
+                var kind = kv.Key.Substring(kv.Key.LastIndexOf('|') + 1);
+                var hits = Math.Max(3, kv.Value.hits);   // the sample's minute is a few hits in a row, whatever the log says
+                var damage = kv.Value.damage * (hits - 1) / hits;
+                p.Log.Swing[kv.Key + "|s"] = (float)(damage / SamplePace[kind]); p.Log.Swing[kv.Key + "|d"] = (float)damage;
+            }
+        }
+
+        /// <summary>A dealt tally's fighting time for the ledger (ArmourTally.Swing): per weapon kind the damage on foes with the seconds it takes at the sample's pace.</summary>
+        static void SwingOf(Dictionary<string, float> dealt, ArmourTally into, PanelInput p = null)
+        {
+            var skills = new Dictionary<string, double>();
+            foreach (var kv in dealt)
+            {
+                var k = kv.Key.Split('|');
+                if (p == null || k.Length < 3 || !AfterFoe(k[0]) || Array.IndexOf(PanelModel.BattleTypes, k[2]) < 0 || kv.Value <= 0) continue;
+                skills.TryGetValue(k[1], out var o); skills[k[1]] = o + kv.Value;
+            }
+            foreach (var kv in skills) SampleCells(p, kv.Key, kv.Value, 30, (wk, cell) => into.Weapons.Merge(wk, cell));
+            into.Weapons.ClipLevels(WeaponCells.PerDayLevels);   // 0.8.6: and its weapons (a day's hits are many: the first of a stretch is a small part)
+            foreach (var kv in dealt)
+            {
+                var k = kv.Key.Split('|');
+                if (k.Length < 3 || !AfterFoe(k[0]) || Array.IndexOf(PanelModel.BattleTypes, k[2]) < 0 || kv.Value <= 0) continue;
+                var kind = DayHistory.WeaponKind(k[1]); var damage = kv.Value * 0.9;
+                into.Swing.TryGetValue(kind + "|s", out var s); into.Swing.TryGetValue(kind + "|d", out var d);
+                into.Swing[kind + "|s"] = (float)(s + damage / SamplePace[kind]); into.Swing[kind + "|d"] = (float)(d + damage);
+            }
+        }
+
         /// <summary>A dealt tally ("foe|skill|type") as the dealt ledger keeps it: Before as dealt, After by the foe's factor (Incoming unused).</summary>
-        static ArmourTally DealtAfterOf(Dictionary<string, float> dealt, int hits)
+        static ArmourTally DealtAfterOf(Dictionary<string, float> dealt, int hits, PanelInput p = null)
         {
             var t = new ArmourTally { Hits = hits };
             foreach (var kv in dealt)
@@ -630,6 +755,7 @@ namespace Hearthwoven.Panel
                 if (k.Length < 3 || !AfterFoe(k[0]) || Array.IndexOf(PanelModel.BattleTypes, k[2]) < 0 || kv.Value <= 0) continue;
                 t.Before[kv.Key] = kv.Value; var a = kv.Value * AfterFactor(k[0], k[2]); if (a > 0) t.After[kv.Key] = a;
             }
+            SwingOf(dealt, t, p);   // 0.8.6: and its fighting time (DPS), per weapon kind and per named weapon
             return t;
         }
 
@@ -643,10 +769,10 @@ namespace Hearthwoven.Panel
             var today = local(now).Date; var fromDay = today.AddDays(-2);
             var from = DateTime.SpecifyKind(fromDay.AddHours(19) - (local(now) - now), DateTimeKind.Utc);
             var book = new ArmourBook { FromUtc = from, LastSession = "s1" };
-            foreach (var r in p.History.Rows.Where(r => r.IsDay && r.Start >= fromDay)) { var t = DealtAfterOf(r.Damage.Dealt, r.Damage.HitsDealt); if (!t.Empty) book.Days.Add((r.Period, t)); }
-            p.DealtArmourSession = DealtAfterOf(p.Session.Dealt, p.Session.HitsDealt);
+            foreach (var r in p.History.Rows.Where(r => r.IsDay && r.Start >= fromDay)) { var t = DealtAfterOf(r.Damage.Dealt, r.Damage.HitsDealt, p); if (!t.Empty) book.Days.Add((r.Period, t)); }
+            p.DealtArmourSession = DealtAfterOf(p.Session.Dealt, p.Session.HitsDealt, p);
             book.Last = ArmourTally.Sum(p.DealtArmourSession);
-            p.DealtArmourBook = book; p.DealtArmourFromUtc = from;
+            p.DealtArmourBook = book; p.DealtArmourFromUtc = from; p.SwingFromUtc = from;
             p.DealtArmourSince = book.Sum(fromDay, today);
         }
 

@@ -315,6 +315,30 @@ static class FightGroupTests
                   book.Fights.First(f => f.Kind == FightKind.Boss).Boss == "Fenring_Cultist_Hildir_nochest" && BattleRecorder.IsBoss(false, null, "$enemy_skeletonfire") && !BattleRecorder.IsBoss(false, "Skeleton", "$enemy_skeleton"),
                   "FG Hildir's miniboss starts a boss fight with the game's boss flag off (Geirrhafa's raid copy, by prefab; Brenna by name token); a Fenring Cultist starts none");
         }
+        // ---------- 0.8.6: Last fight is your newest fight, not the newest of whoever fought it ----------
+        // Rowan fights a Greydwarf early; Edda, whose shared feed Rowan's PC holds, fights a Seeker later, Rowan not near. The fellow's fight is the
+        // newest of the group (NewerOnServer), Rowan's own stays Last; with no fight of his own, Last is empty
+        {
+            var rowanPc = new Pc { Name = "Rowan" }; var eddaPc = new Pc { Name = "Edda" };
+            var greydwarf = new FoeId(-5001, 1); var seeker = new FoeId(-5002, 1);
+            var meadows = new Spot(100f, 30f, 100f); var elsewhere = new Spot(4000f, 30f, 4000f);
+            for (int i = 0; i < 6; i++) Hit(rowanPc, i * 2, greydwarf, "Greydwarf", "$enemy_greydwarf", new HitData.DamageTypes { m_slash = 20 }, false, meadows);
+            rowanPc.Rec.Killed(T(14), "$enemy_greydwarf", 1); rowanPc.Rec.Destroyed(T(14.5), greydwarf);
+            for (int i = 0; i < 6; i++) Hit(eddaPc, 600 + i * 2, seeker, "Seeker", "$enemy_seeker", new HitData.DamageTypes { m_pierce = 30 }, false, elsewhere);
+            rowanPc.Rec.Tick(T(700)); eddaPc.Rec.Tick(T(700));
+            var (_, eddaCopy) = Share(eddaPc);
+            var both = FightAdapter.Build(new List<FightSide> { FightSide.Of(rowanPc.Rec, "Rowan"), FightSide.Of(eddaCopy, "Edda", "k-edda", T(640)) }, null, null, T(700));
+            var theirs = both.Fights.FirstOrDefault(f => f.Kind == FightKind.Group && !f.YouWereIn);
+            Check(both.Fights.Count(f => f.Kind == FightKind.Group) == 2 && both.Fights[0] == theirs && theirs != null && theirs.Players.Select(p => p.Name).SequenceEqual(new[] { "Edda" }) &&
+                  both.Last != null && both.Last != theirs && both.Last.Players.Any(p => p.You && p.Name == "Rowan") && both.Last.Foes.Any(x => x.Prefab == "Greydwarf") &&
+                  both.NewerOnServer == theirs,
+                  "FG 0.8.6 Last fight is the newest fight you were in: Edda's newer Seeker fight (her feed, you not in it) is the group's newest, not your Last");
+            var onlyEdda = FightAdapter.Build(new List<FightSide> { FightSide.Of(new BattleRecorder(), "Rowan"), FightSide.Of(eddaCopy, "Edda", "k-edda", T(640)) }, null, null, T(700));
+            Check(onlyEdda.Fights.Count(f => f.Kind == FightKind.Group) == 1 && onlyEdda.Last == null && onlyEdda.NewerOnServer != null && onlyEdda.NewerOnServer.Players.All(p => !p.You),
+                  "FG 0.8.6 with no fight of yours, Last is empty (the page falls back to the 0.8 one) and the server's fight is only the line");
+            var yours = FightAdapter.Build(new List<FightSide> { FightSide.Of(rowanPc.Rec, "Rowan") }, null, null, T(700));
+            Check(yours.Last != null && yours.NewerOnServer == null, "FG 0.8.6 your own newest fight is Last and there is no server line when nothing is newer");
+        }
         return fails;
     }
 }

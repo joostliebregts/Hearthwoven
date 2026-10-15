@@ -72,6 +72,8 @@ namespace Hearthwoven.Panel
         /// it in game (0.8.2, shade 4 of four tried with the temporary Dev.IslandShade; 4 % showed about (58, 53, 46), too loud). Since 0.8.5 worked
         /// out with every other wash in PanelWash.cs (the same look).</summary>
         public static readonly Color IslandGround = PanelWash.IslandGround.Game;
+        /// <summary>0.8.6 the shade under the pinned strip while rows lie above it (StickyHeadUi.cs), darkest at the strip's foot.</summary>
+        public static readonly Color StripShade = new Color(0f, 0f, 0f, 0.45f);
         public const float TierMarkScale = 2.5f;
         static bool resolved;
 
@@ -496,25 +498,13 @@ namespace Hearthwoven.Panel
         // a rounded rectangle 16 x 16, radius 5 (anti-aliased), border 6 so it slices to any size; edge: only its rim (2 px, or rim)
         static Sprite RoundedSprite(bool edge, float rim = 2f)
         {
-            const int s = 16; const float r = 5f;
+            const int s = RoundedShape.Size, b = RoundedShape.Border;
             var t = new Texture2D(s, s, TextureFormat.RGBA32, false) { name = edge ? "hearthwoven-rounded-edge" : "hearthwoven-rounded", wrapMode = TextureWrapMode.Clamp };
             var px = new Color32[s * s];
-            float Inside(float x, float y, float rad, float inset)
-            {
-                // distance outside the rounded box (inset from the texture edge), negative inside
-                float cx = Mathf.Clamp(x, inset + rad, s - inset - rad), cy = Mathf.Clamp(y, inset + rad, s - inset - rad);
-                float d = Mathf.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) - rad;
-                return Mathf.Clamp01(0.5f - d);
-            }
             for (int y = 0; y < s; y++)
-                for (int x = 0; x < s; x++)
-                {
-                    float fx = x + 0.5f, fy = y + 0.5f, a = Inside(fx, fy, r, 0);
-                    if (edge) a = Mathf.Clamp01(a - Inside(fx, fy, r - rim, rim));
-                    px[y * s + x] = new Color(1, 1, 1, a);
-                }
+                for (int x = 0; x < s; x++) px[y * s + x] = new Color(1, 1, 1, RoundedShape.Alpha(x, y, edge, rim));
             t.SetPixels32(px); t.Apply(false, true);
-            return Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(6, 6, 6, 6));
+            return Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
         }
 
         // an island's ground: 24 px square, radius 10 (anti-aliased), border 11 so it slices to any size
@@ -626,6 +616,31 @@ namespace Hearthwoven.Panel
                 }
             t.SetPixels32(px); t.Apply(false, true);
             return t;
+        }
+    }
+
+    /// <summary>The rounded sprites' shape (PanelLook.RoundedSprite): a rounded rectangle Size texels square, radius Radius, nine-sliced at Border;
+    /// an edge sprite keeps only its rim, rim texels wide. Its own class so the panel tests can read each texel (test-panel/WashTests.cs).</summary>
+    public static class RoundedShape
+    {
+        public const int Size = 16, Border = 6; public const float Radius = 5f;
+
+        /// <summary>The alpha of texel (<paramref name="x"/>, <paramref name="y"/>).</summary>
+        public static float Alpha(int x, int y, bool edge, float rim)
+        {
+            float fx = x + 0.5f, fy = y + 0.5f, a = Inside(fx, fy, Radius, 0);
+            if (edge) a = Mathf.Clamp01(a - Inside(fx, fy, Radius - rim, rim));
+            return a;
+        }
+
+        // how much of the texel at (x, y) lies inside the rounded box inset from the texture edge, from its distance outside the box (negative
+        // inside). 0.8.6: inside the box's straight core the distance is to its nearest side, not 0: with no radius left (DamageEdge, rim 5 at
+        // radius 5) a 0 there made the inside half covered, and the outline's sliced middle drew its colour at half alpha
+        static float Inside(float x, float y, float rad, float inset)
+        {
+            float lo = inset + rad, hi = Size - inset - rad, cx = Mathf.Clamp(x, lo, hi), cy = Mathf.Clamp(y, lo, hi);
+            float d = cx == x && cy == y ? -Mathf.Min(Mathf.Min(x - lo, hi - x), Mathf.Min(y - lo, hi - y)) : Mathf.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+            return Mathf.Clamp01(0.5f - (d - rad));
         }
     }
 }

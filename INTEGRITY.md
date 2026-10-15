@@ -64,7 +64,7 @@ Estimates are never mixed in: retroactive numbers (world save, backups) stay in 
 |---|---|---|
 | N1 | No reference to Jotunn or ServerSync. Jotunn's version check only enumerates plugins that depend on Jotunn (`ModCompatibility.GetEnforcableMods` -> `GetDependentPlugins`, decompiled Jotunn on the test server); ServerSync only checks the mod that embeds it. | unit N1 |
 | N2 | No `BepInDependency`, no `NetworkCompatibility` attribute. | unit N2 |
-| N3 | The server never sends anything unasked: its only message to a client is the reply to that client's own group request (GroupShare), so a client without the mod receives nothing. | code review (`GroupShare.OnRequest` is the only server send) |
+| N3 | The server never sends anything unasked: its only message to a client is the reply to that client's own group request (GroupShare) or the answer to that client's own block request (FB4), so a client without the mod receives nothing. | code review (`GroupShare.OnRequest` and `OnBlockAsk` are the only server sends) |
 | N4 | A client with the mod on a server without it: its message is an unknown routed RPC, ignored without error. | runtime "unknown RPC" |
 
 ## Seeing each other (reciprocal sharing, Joost 2026-10-07)
@@ -77,9 +77,26 @@ Estimates are never mixed in: retroactive numbers (world save, backups) stay in 
 | S4 | The web page of a player who does not share shows only their own data, with a line on how to turn sharing on. | `test_kstats.py`, screenshot |
 | S6 | Fellows are keyed by who they are, not by name: the server puts the sender's platform id (`Steam_…`/`Xbox_…`, as the game gives it) in front of each shared copy and lists each sharer's key after the book; the client keys by platform id + profile id, else profile id (an older server), else the name (marked `name:`). Two players with one name both show ("Rowan (2)"); an older client reads the names and stops before the keys. A host (a world hosted from the game) keeps its own copy and builds its group locally, as a dedicated server does; singleplayer shows one line. | `FellowTests` (ID, SAME, MIX, WIRE, BOOK, SERVE, HOST), `FellowPanelTests` |
 
+## A friend's older feed (0.8.6)
+
+A fellow player's feed reaches back 30 days (work/hearthwoven-0.8.6/DESIGN-feed-blocks.md). Their own PC cuts each session that has ended into one block and sends it to the server once; the server stores it, lists it in the group list and serves it to a friend who asks, one at a time; the friend's PC keeps it beside the fellow cache. Code: `src/FeedBlocks.cs`, `GroupShare.cs`.
+
+| # | Rule | Test |
+|---|---|---|
+| FB1 | **What a block holds**: one closed session's battle feed as the player's own PC kept it (KeptFights, their own side only), in the shared copy's form: no hits, no foe network ids, no fellow's part, no position (a foe's biome only), names only of players who shared when it was saved, anyone else counted. The server stores and serves only what it read back (FeedShare read, then written), so no other key is ever stored or served. | FB content |
+| FB2 | **One block per closed session**: its id is the session id of a connection that ended (never the owner's running session), stored under the uploader's own key and the server's current world, written once; an id the server holds is never replaced, by anyone. | FB once |
+| FB3 | **Bounded on the server**: per player and world, blocks that ended within 30 days, the newest 60, the newest 2 000 foes; a block at most 48 KB packed, 128 KB unpacked, 200 foes, checked before it is read; at most 16 parts; one upload per sender per 10 s, one ask per requester per 2 s, one block answer per requester in the outbox, the outbox cap shared. Each problem logged once per sender. Restart-safe: the index is rebuilt from the files. | FB bounds, FB limits |
+| FB4 | **Who sees a block**: it is listed and served only to a requester who shares, only while its owner's shared copy is served (shares now, refreshed within 14 days), only in the world it was made in. Sharing off deletes that player's blocks of every world. | FB unshare, FB serve |
+| FB5 | **The cache on your PC** holds only blocks the server's latest list names, beside the fellow cache, and is deleted with it when you stop sharing; a friend who stops sharing leaves it at the next list. It is never sent on. | FB cache |
+| FB6 | **Honest counts**: the feed counts the foes on this PC exactly; sessions on the server not fetched yet are counted as sessions with their foes ("up to" when a filter or the window's start cuts into them); a session that does not arrive is said, with Try again, never skipped. | FBP count, FBP states |
+| FB7 | **Nothing breaks across versions**: the feature is on only when the server's list carries `hw-blocks-1`; a client uploads and asks only then; an older client stops reading the list before the tag; the shared copy is unchanged. | FB wire |
+
+What only real play proves (not claimed here): the uploads after the first 0.8.6 list, a fetch over the real network path, a restart of the server with blocks on disk, a friend switching sharing off. The server's own world key is logged once per world (`feed blocks: world key ...`), to check it in the field.
+
 What only a real client can prove: the client hooks firing in real play, and two different game installs. First
 evening on the server with Joost's go = field test.
 
+- **2026-10-12** — FB1-FB7: a fellow player's older feed as blocks, one per closed session (0.8.6): their own PC sends each ended session once, the server stores what it read back and lists it with the group list, a friend gets it one at a time as Show older foes reaches it; N3 gains the block answer. A busy evening is about 18 KB raw and 4.5 KB packed.
 - **2026-10-11** — B5: Stoker's Chest feeding counted once by the server and read once from its chest logs (Joost's evening: the chests fed the group's smelters and no PC counted it; the chest log shows 879 items fed from his PC on 10 October: StokerHooks read RemoveItem's amount in a postfix, after the game had counted it down to 0, now read in a prefix, and no postfix may read an argument its game method writes, HookGuardTests); C9 `auto-feed` only from the chest's own PC, `fromOwner` on a feeder's lines. 0.8.5.
 - **2026-10-09** — S6: fellows keyed by platform id, not name (two players with one name both show); hosted worlds share like a dedicated server; one singleplayer line (RESILIENCE-06 item 8, E1-E2).
 - **2026-10-09** — R1-R3 and B3 per world (RESILIENCE-06 server items: atomic server files with a backup, input limits, the book rebuilt per world, old logs compressed in place). Routed damage logging off by default.

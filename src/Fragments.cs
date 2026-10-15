@@ -28,6 +28,8 @@ namespace Hearthwoven
         public class Assembler
         {
             public const int MaxParts = 200, MaxOpenPerSender = 4;
+            /// <summary>0.8.6: the most parts of one message this assembler takes (a friend's block: 16); MaxParts unless set.</summary>
+            public int Limit = MaxParts;
             public const double MaxAgeSeconds = 120;
             class Open { public byte[][] Parts; public long Sender; public double First; }
             readonly Dictionary<string, Open> pending = new Dictionary<string, Open>();
@@ -37,7 +39,7 @@ namespace Hearthwoven
 
             public byte[] Add(long sender, string messageId, int index, int count, byte[] part)
             {
-                if (count <= 0 || count > MaxParts || index < 0 || index >= count || part == null || part.Length > Size) { Rejected++; return null; }
+                if (count <= 0 || count > Limit || index < 0 || index >= count || part == null || part.Length > Size) { Rejected++; return null; }
                 var now = Clock();
                 Expire(now);
                 var key = sender + "/" + messageId;

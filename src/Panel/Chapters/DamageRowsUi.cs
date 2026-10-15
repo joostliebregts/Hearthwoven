@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -68,42 +69,20 @@ namespace Hearthwoven.Panel
         /// <summary>A part drawn as a whole with what got through of it (PanelModel.DamageStoppedTone; Defense's What your armor stopped, and 0.8.5
         /// damage dealt after the foe's armor): the part itself is its outline in its colour (<paramref name="seg"/>, PanelLook.DamageEdge: one image,
         /// 0.8.5, where four edges were), filled from the left by what got through (at least DrFillMin of each where both have an amount); the
-        /// got-through number in the fill (its ink on the colour), the stopped number in the outline (the colour lifted to read on the track).
-        /// 0.8.5: a part with an Earlier share starts with that piece faded (the colour at FadedAlpha, as every faded part: from before it was
-        /// split), no number, then the fill. Returns which numbers did not fit: the part's entry shows them on hover ("Pierce 12 got through",
-        /// "Pierce 6 stopped"). A piece without an amount draws no number.</summary>
-        static (bool through, bool stopped) StoppedPart(Image seg, BarRow row, float w, Color c)
+        /// got-through number in the fill (its ink on the colour). 0.8.6 (Joost: "you want to know what comes through"): the stopped number is never on
+        /// the bar, the part's hover says it ("Slash 53: 33 got through, 20 stopped"). Returns whether the got-through number did not fit (hover has it
+        /// too).</summary>
+        static bool StoppedPart(Image seg, BarRow row, float w, Color c)
         {
             if (PanelLook.DamageEdge) { seg.sprite = PanelLook.DamageEdge; seg.type = Image.Type.Sliced; seg.pixelsPerUnitMultiplier = DrRadiusScale; seg.color = c; }
             else BtHollow(seg.rectTransform, c, 0, 0, w, PanelModel.DamageBar);
             var m = Mathf.Min(DrFillMin, w / 2);
-            var e = Mathf.Clamp01(row.Part.Earlier); var ew = e <= 0 ? 0 : e >= 1 ? w : Mathf.Clamp(w * e, m, w - m);
-            var f = Mathf.Clamp01(row.Part.Fraction2); var room = w - ew;
-            var fw = f <= 0 || room <= 0 ? 0 : Mathf.Clamp(w * f, Mathf.Min(m, room), room - (row.Part.Value2 != null ? Mathf.Min(m, room / 2) : 0));   // room for the outline's piece when something was stopped
+            var f = Mathf.Clamp01(row.Part.Fraction2);
+            var fw = f <= 0 ? 0 : Mathf.Clamp(w * f, m, w - (row.Part.Value2 != null ? Mathf.Min(m, w / 2) : 0));   // room for the outline's piece when something was stopped
             bool Some(string v) => !string.IsNullOrEmpty(v) && v != "0";
-            bool through = false, stopped = false;
-            if (ew > 0) { var early = RoundedPart(seg.transform, "Earlier", Faded(c)); early.pixelsPerUnitMultiplier = DrRadiusScale; early.rectTransform.Box(0, 0, ew, PanelModel.DamageBar); }
-            if (fw > 0)
-            {
-                var fill = RoundedPart(seg.transform, "Fill", c); fill.pixelsPerUnitMultiplier = DrRadiusScale; fill.rectTransform.Box(ew, 0, fw, PanelModel.DamageBar);
-                if (Some(row.Value)) through = !BarDigits(fill.transform, row.Value, fw, SegmentInk(c));
-            }
-            var rest = w - ew - fw;
-            if (rest > 0 && Some(row.Part.Value2)) stopped = !BarDigitsAt(seg.transform, row.Part.Value2, ew + fw, rest - BtArmLine, Legible(c));
-            return (through, stopped);
-        }
-
-        /// <summary>A colour as a faded part draws it: FadedAlpha of it over the plate's dark (PanelUi.FadedVeil's look, in one image).</summary>
-        static Color Faded(Color c) => Color.Lerp(FadedVeil, c, FadedAlpha) is var f ? new Color(f.r, f.g, f.b, 1f) : c;
-
-        /// <summary>BarDigits in a box of <paramref name="parent"/> from <paramref name="x"/>, <paramref name="w"/> wide, without a holder of its own
-        /// (0.8.5: one object less per stopped part).</summary>
-        static bool BarDigitsAt(Transform parent, string text, float x, float w, Color ink)
-        {
-            if (!BarDigits(parent, text, w, ink)) return false;
-            var t = parent.GetChild(parent.childCount - 1) as RectTransform;
-            if (t != null) t.Box(x, 0, w, PanelModel.DamageBar);
-            return true;
+            if (fw <= 0) return false;
+            var fill = RoundedPart(seg.transform, "Fill", c); fill.pixelsPerUnitMultiplier = DrRadiusScale; fill.rectTransform.Box(0, 0, fw, PanelModel.DamageBar);
+            return Some(row.Value) && !BarDigits(fill.transform, row.Value, fw, SegmentInk(c));
         }
 
         // the name column (REVIEW-081 #7): as wide as the list's widest picture, name and "×N" ("Greydwarf Shaman ×3"), DrWho at least and DrWhoMax at
@@ -153,6 +132,58 @@ namespace Hearthwoven.Panel
             else { dmgRunLabel = null; if (Labelled(b)) dmgRunLabel = Since(dmgRun, PanelLayout.Text.Floor, b); }
         }
 
+        // 0.8.6 (DPS per named weapon): a kind's weapons under its row, drawn into the same list (the run the kind's row started stays the last child): per line the
+        // weapon's name (an upgrade level under it a little in), its damage right-aligned in the rows' number column and, where the bars start, the words after the
+        // damage ("level 3 · 42 DPS ▲7 · Clubs 38–45": the mark is a picture, as Compare's). A line that opens (a weapon of several upgrade levels, folded to its
+        // newest: "level 3 · 149 DPS at 35 · 2 levels"; a line with two skill levels or more) opens in place (press, the ›, the row lit under the pointer, as a foe on
+        // Foes; the keys' cursor wears the focus ring): its level lines, or one row per skill level, its name, pace and a small bar on one scale. Text only, no object
+        // per part; mirrored by btWeapons() in preview/panel-preview.html
+        static void WeaponLines(RectTransform col, Block b, Func<string, Action> link)
+        {
+            if (!(dmgRun != null && dmgRun.parent == col && dmgRun.GetSiblingIndex() == col.childCount - 1))
+            {
+                dmgRun = VStack(col, PanelModel.DamageFoeGap); dmgRunLabel = null;
+                dmgRunNumW = NumberColumn(dmgRun, b.Items.Select(i => i.Value)); dmgRunWhoW = DrWho;
+            }
+            float trackX = dmgRunWhoW + DrCol + dmgRunNumW + DrCol, trackW = Mathf.Max(DrTrackLeast, Column - trackX), h = PanelModel.DamageTrack, size = PanelLayout.Text.Body;
+            foreach (var line in b.Items)
+            {
+                var r = Node("Weapon", dmgRun); Size(r, -1, h);
+                if (line.Kind == PanelModel.WeaponSkillKind)
+                {
+                    BtText(r, line.Title, DrNameX + 2 * DrLevelIndent, 0, Mathf.Max(DrNameLeast, dmgRunWhoW - DrNameX - 2 * DrLevelIndent), h, size, PanelLook.Muted);
+                    BtText(r, line.Value, dmgRunWhoW + DrCol, 0, dmgRunNumW, h, size, PanelLook.Muted, TextAlignmentOptions.MidlineRight);   // its pace in the number column
+                    var room = trackW - BtOpensW; var w = line.Fraction > 0f ? Mathf.Max(DrSkillBarLeast, Mathf.Clamp01(line.Fraction) * room) : 0f;
+                    if (w > 0f) Fill(r, "Level", PanelLook.Dealt).rectTransform.Box(trackX, (h - DrSkillBarH) / 2, w, DrSkillBarH);
+                    continue;
+                }
+                var level = line.Tone == PanelModel.WeaponLevelTone; var x = DrNameX + (level ? DrLevelIndent : 0f);
+                if (line.Opens && link != null)   // the whole line opens (or closes) its skill levels; pointing at it lights it
+                {
+                    var ground = RoundedPart(r, "Ground", Color.clear, raycast: true); ground.rectTransform.Stretch();
+                    if (!line.Selected) { var lit = r.gameObject.AddComponent<TintOnHover>(); lit.Ground = ground; lit.Lit = BtRowHover; }
+                    r.gameObject.AddComponent<Press>().Act = link(PanelModel.WeaponOpenLink(line));
+                    OpensMark(r, line.Selected, BtOpensRight);
+                    if (line.Cursor) { FocusRing(r, 0); foeCursorRow = r; }   // the keys' cursor (WeaponKeys): the focus ring, brought into view as a foe's
+                }
+                BtText(r, line.Title, x, 0, Mathf.Max(DrNameLeast, dmgRunWhoW - x), h, size, level ? PanelLook.Muted : PanelLook.Text);
+                if (!string.IsNullOrEmpty(line.Value)) BtText(r, line.Value, dmgRunWhoW + DrCol, 0, dmgRunNumW, h, size, PanelLook.Gold, TextAlignmentOptions.MidlineRight);
+                var room2 = trackW - (line.Opens ? BtOpensW : 0f);
+                if (string.IsNullOrEmpty(line.Text) && string.IsNullOrEmpty(line.Note)) continue;   // no DPS yet and no skill words: nothing after the damage (never a dash)
+                if (string.IsNullOrEmpty(line.Change)) BtText(r, string.IsNullOrEmpty(line.Note) ? line.Text : string.IsNullOrEmpty(line.Text) ? line.Note : line.Text + " · " + line.Note, trackX, 0, room2, h, size, PanelLook.Muted);
+                else   // the change mark between the words: a picture, then its number (CompareUi.ChangeMarkUi)
+                {
+                    var words = Line(r, DrMarkGap, TextAnchor.MiddleLeft); words.Box(trackX, 0, room2, h);
+                    Label(words, line.Text, size, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+                    ChangeMarkUi(words, line.Change, size, PanelLook.Muted);
+                    if (!string.IsNullOrEmpty(line.Note)) Label(words, "· " + line.Note, size, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+                }
+            }
+            if (dmgRunLabel && dmgRunLabel.transform.parent == dmgRun) dmgRunLabel.transform.SetAsLastSibling();   // the run's "Recorded from" line stays after its last row
+        }
+        const float DrLevelIndent = 16, DrTrackLeast = 80, DrNameLeast = 20;   // an upgrade level under its weapon a little in; the least room of the words after the damage and of a name
+        const float DrSkillBarH = 8, DrSkillBarLeast = 3, DrMarkGap = 6;   // an open skill level: its bar's height and least length; the gap round a change mark
+
         /// <summary>One damage row in <paramref name="list"/>; returns it, so a page can add a column of its own right of the track (While away's For you).</summary>
         static RectTransform DamageRow(RectTransform list, Block row, bool dealt, float whoW, float numW, float trackX, float trackW)
         {
@@ -195,14 +226,14 @@ namespace Hearthwoven.Panel
 
         /// <summary>The page's one hover tag ("Frost 37", "Edda 350"; HoverTag): made with the first bar of this drawing that needs it, hidden, out of
         /// the page's layout, in the page's content (Fill draws it last, over every block); pointing at a part of a bar no share entry keys sets
-        /// its words and moves it over the part (BarHover.TagOver: centred on the part, or from a start, kept inside the bar's room). 0.8.2: one
+        /// its words and moves it beside the bar (BarHover.TagOver: centred on the part, or from a start, kept inside the bar's room; below the bar, never over it). 0.8.2: one
         /// for the page, never one per part (two objects a part at about 58 µs an object, the 0.8.1 bench).</summary>
         static HoverTag pageTag; static RectTransform pageTagHome;
         static HoverTag PageTag(RectTransform near)
         {
             if (pageTag != null && pageTag.Ground) return pageTag;
             var home = pageTagHome ? pageTagHome : near;
-            var tag = RoundedPart(home, "Tip", PlateColour); tag.raycastTarget = false;
+            var tag = RoundedPart(home, "Tip", new Color(PlateColour.r, PlateColour.g, PlateColour.b, 1f)); tag.raycastTarget = false;   // 0.8.6: opaque, as the mirror's (at the plate's 0.95 the part's own number showed through it)
             tag.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
             tag.rectTransform.Box(0, 0, 2 * HoverTag.Pad, PanelModel.DamageBar + HoverTag.Rise);
             var t = Label(tag.transform, "", PanelLook.MinText, BarHover.LitText, style: FontStyles.Bold, align: TextAlignmentOptions.Center);
@@ -267,10 +298,10 @@ namespace Hearthwoven.Panel
                 top += PanelModel.DamageTrue + PanelModel.DamageInner;
             }
             // no entry keys the parts (no share line, or a player's line of their damage by type), or (0.8.5) a row of damage dealt with its after,
-            // whose words ("Slash 1 670: 770 got through, 900 stopped") would widen every entry of its line: the page's tag over the bar, centred on
+            // whose words ("Slash 1 670: 770 got through, 900 stopped") would widen every entry of its line: the page's tag beside the bar, centred on
             // the part pointed at (kept inside the track); the entries keep their own words and light with their part
             var tagged = !shares || mix != null || form.Rows.Any(x => x.Part?.Whole != null);
-            if (tagged) hover.TagOver(PageTag(r), bar, hoverWords, mid, -2, -x0, trackW);
+            if (tagged) hover.TagOver(PageTag(r), bar, hoverWords, mid, -x0, trackW);
             if (!shares) return top - PanelModel.DamageInner;
 
             // one line of the parts and their share of this row (a player's: their damage by type), wrapping at the track's end

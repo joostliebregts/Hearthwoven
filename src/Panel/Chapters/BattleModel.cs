@@ -156,7 +156,17 @@ namespace Hearthwoven.Panel
         static bool Has(IDictionary<string, float> d, string k) => d != null && k != null && d.TryGetValue(k, out var v) && v > 0;
 
         /// <summary>Your hits on foes, the eight damage types only, before the foe's armour.</summary>
-        public static List<DamageRow> DealtRows(IEnumerable<DamageRow> rows) => rows.Where(r => r.Dir == "dealt" && r.Amount > 0 && BattleTypes.Contains(r.Type)).ToList();
+        /// <summary>The damage you dealt in the rows. 0.8.6: when armor was not counted for all of it (AllCounted; <paramref name="counted"/> says it
+        /// where the window is wider than these rows, Everyone's) no row carries its after: every bar of the window is a plain dealt bar, never a
+        /// split of some of it.</summary>
+        public static List<DamageRow> DealtRows(IEnumerable<DamageRow> rows, bool? counted = null)
+        {
+            var d = rows.Where(r => r.Dir == "dealt" && r.Amount > 0 && BattleTypes.Contains(r.Type)).ToList();
+            if (d.Any(r => r.Measured > 0) && !(counted ?? AllCounted(d)))
+                for (int i = 0; i < d.Count; i++)
+                    if (d[i].Measured > 0) d[i] = new DamageRow { Bucket = d[i].Bucket, Biome = d[i].Biome, Dir = d[i].Dir, Other = d[i].Other, Cause = d[i].Cause, Type = d[i].Type, Amount = d[i].Amount };
+            return d;
+        }
 
         // the switch's caption, left of the chips (r4battle's top row): what every number on the page is
         static string DealtCaption => DealtLabel + ", " + DealtQualifier;
@@ -327,7 +337,7 @@ namespace Hearthwoven.Panel
 
         /// <summary>"By type": damage types down, weapon kinds across, each cell's amount and its share of the grid's largest cell (Fraction), totals
         /// right and under; each weapon kind's fixed category colour (Colour). 0.8: drawn as the damage rows (DamageTypeRows).</summary>
-        public static Block DamageGrid(IEnumerable<DamageRow> dealtRows, string earlier = NotSplitWords)
+        public static Block DamageGrid(IEnumerable<DamageRow> dealtRows)
         {
             var dealt = DealtRows(dealtRows);
             var cell = new Dictionary<string, double>(); var after = new Dictionary<string, DealtAmount>(); var byType = new Dictionary<string, DealtAmount>();   // 0.8.5: each cell's after (AfterPart), each type's
@@ -352,9 +362,9 @@ namespace Hearthwoven.Panel
                 items.Add(new Block
                 {
                     Kind = "dmgtype", Id = t, Title = TypeName(t), Icon = DamageIcon(t), Colour = DamageColour(t), Value = NAtLeast(total), Src = SrcPc, Source = TagMeasured,
-                    Text = byType.TryGetValue(t, out var ta) ? ThroughLine(ta) : null,
+                    Text = byType.TryGetValue(t, out var ta) ? ThroughLine(ta, TypeName(t)) : null,
                     Items = weapons.Select(w => { var v = Get(cell, t + "|" + w); var c = new Block { Kind = "cell", Id = w, Value = v > 0 ? NAtLeast(v) : "", Fraction = (float)(v / max), Colour = DamageColour(t) };
-                                                  return v > 0 && after.TryGetValue(t + "|" + w, out var a) ? AfterPart(c, a, earlier) : c; }).ToList(),
+                                                  return v > 0 && after.TryGetValue(t + "|" + w, out var a) ? AfterPart(c, a) : c; }).ToList(),
                 });
             }
             return new Block { Kind = "damagegrid", Title = AllTypes, Value = NAtLeast(cell.Values.Sum()), Src = SrcPc, Source = TagMeasured, Items = items };
@@ -362,7 +372,7 @@ namespace Hearthwoven.Panel
 
         /// <summary>"By weapon": one proportional bar per weapon kind, split into the damage types it dealt. 0.8.5: each part by the after rule where
         /// its hits have their after (AfterPart), the row's line ending with its share that got through (Text, ThroughLine).</summary>
-        public static List<Block> DamageMixes(IEnumerable<DamageRow> dealtRows, string earlier = NotSplitWords)
+        public static List<Block> DamageMixes(IEnumerable<DamageRow> dealtRows)
         {
             var dealt = DealtRows(dealtRows);
             var mixes = new List<Block>();
@@ -381,43 +391,60 @@ namespace Hearthwoven.Panel
                     Items = BattleTypes.Where(t => Get(amount, w + "|" + t) > 0).Select(t => AfterPart(new Block
                     {
                         Kind = "part", Id = t, Icon = DamageIcon(t), Title = TypeName(t), Value = NAtLeast(Get(amount, w + "|" + t)), Fraction = (float)(Get(amount, w + "|" + t) / total), Colour = DamageColour(t),
-                    }, after[w + "|" + t], earlier)).ToList(),
+                    }, after[w + "|" + t])).ToList(),
                 });
             }
             return mixes;
         }
 
+        /// <summary>Each weapon kind's damage in the rows, as its By weapon row adds it up (DamageMixes): what its weapon lines add up to (WeaponLists).</summary>
+        static Dictionary<string, double> KindTotals(IEnumerable<DamageRow> rows)
+        {
+            var d = new Dictionary<string, double>();
+            foreach (var r in DealtRows(rows)) Bump(d, WeaponOf(r.Cause), r.Amount);
+            return d;
+        }
+
         static void BattleDamage(PanelInput input, PanelView view, PanelState state, string page, List<DamageRow> rows, TimeWindow w)
         {
-            view.Heading = "Damage dealt"; view.HeadingSource = null;
+            view.Heading = DamageHeading; view.HeadingSource = null;
             var fellowDay = !input.IsSelf && IsDayWindow(w);   // 0.9: a fellow's day window, from the parts their copy shares per day (FellowInWindow)
             // the Biome row (the same pattern as the Overview's tiles and Deaths): the hits of the window narrow to the chosen biomes; since install the
             // rows carry no biome, so the same line stands where the row would, saying why
             var since = w == TimeWindow.SinceInstall || IsDayWindow(w);   // the totals and the day rows carry no biome on a hit
             var biomeRf = since ? null : DamageBiomeFilter(input, state, rows);
             if (biomeRf != null && biomeRf.Bar != null) rows = biomeRf.Rows;
-            var earlier = EarlierWords(input, w); var split = AnySplit(rows);   // 0.8.5: the after of your hits (Chapters/AfterArmourModel.cs)
-            var grid = DamageGrid(rows, earlier);
+            var split = AnySplit(rows); var countedLine = CountedLine(input, w, rows);   // 0.8.5: the after of your hits (Chapters/AfterArmourModel.cs); 0.8.6: or, where some is from before armor was counted, the one line that says where the split is known
+            var grid = DamageGrid(rows);
             if (grid != null || (biomeRf != null && biomeRf.Narrowed)) Add(view, since ? (BiomeRow(input).Options.Count >= 2 ? BiomeLine(IsDayWindow(w) ? DamageDayBiomeNote : DamageAllBiomeNote) : null) : biomeRf.Bar);   // the bar stays on an empty choice: it is how you unchoose
             if (grid == null) view.Blocks.Add(biomeRf != null && biomeRf.Narrowed ? Empty(NothingForChoice, "Clear the biome choice to see all your damage in this window.") : w == TimeWindow.SinceInstall ? AllEmpty(input) : WindowEmpty(input, w));   // vf-fix1's empty state
             else
             {
-                var mixes = DamageMixes(rows, earlier);   // 0.8 damage rows: a weapon's skills are in the page's Weapon skills strip, as on By type and By foe
+                var mixes = DamageMixes(rows);   // 0.8 damage rows: a weapon's skills are in the page's Weapon skills strip, as on By type and By foe
+                var paced = !(state != null && state.Compare) && WeaponPaces(input, w, mixes, biomeRf != null && biomeRf.Narrowed);   // 0.8.6: each weapon's DPS beside its total (your own book; a compare draws rows of its own)
                 // the one answer first: the type and the weapon that did the most
                 var topType = grid.Items.Skip(1).OrderByDescending(t => ParseCount(t.Value)).First(); var topWeapon = mixes.OrderByDescending(m => ParseCount(m.Value)).First();
                 var byType = new List<Block> { TopLine(topType.Value, topType.Title + " damage, the most of any type", null), grid };
-                var byWeapon = new List<Block> { TopLine(topWeapon.Value, topWeapon.Title + " damage, the most of any weapon", null) }; byWeapon.AddRange(mixes);
+                var byWeapon = new List<Block> { TopLine(topWeapon.Value, topWeapon.Title + " damage, the most of any weapon", null) };
+                // 0.8.6: a window with damage from before armor was counted has plain bars; one line under the top line, on all three views, says where the split is known
+                if (countedLine != null) { byType.Insert(1, CountedNote(countedLine)); byWeapon.Add(CountedNote(countedLine)); }
+                // 0.8.6 (DPS per named weapon): under each kind its weapons, a weapon of several upgrade levels folded to its newest, with the DPS and the skill level then (WeaponRows.cs); a biome choice and a compare have none
+                var lists = state != null && state.Compare || biomeRf != null && biomeRf.Narrowed ? null : WeaponLists(input, WeaponCellsIn(input, w), mixes.Select(m => m.Id), WeaponOpenIn(state, w), KindTotals(rows));
+                foreach (var m in mixes) { byWeapon.Add(m); if (lists != null && lists.TryGetValue(m.Id, out var list)) byWeapon.Add(list); }
+                if (lists == null && !input.IsSelf && !(state != null && state.Compare) && !(biomeRf != null && biomeRf.Narrowed) && WeaponsNotShared(input, w) is string theirNote) byWeapon.Add(new Block { Kind = "note", Text = theirNote });
                 // 0.8 (Joost's A + C): By foe, a damage row per foe kind with its "×N" and the marks of what became of them (Chapters/BattleFeedModel.cs).
                 // A biome choice narrows the damage, but the counts are not kept per biome: then no counts, one line says why
                 var narrowed = biomeRf != null && biomeRf.Narrowed;
                 var foes = fellowDay ? null : DealtFoes(input, rows, w, counted: !narrowed);   // 0.9: a fellow's shared day is not split by foe
                 var byFoe = foes == null ? null : new List<Block> { TopLine(foes.Items.First(i => i.Kind == "source").Value, "dealt to " + foes.Items.First(i => i.Kind == "source").Title + ", the most of any foe", null), foes };
+                if (byFoe != null && countedLine != null) byFoe.Insert(1, CountedNote(countedLine));
                 if (byFoe != null && narrowed) byFoe.Add(new Block { Kind = "note", Text = ByFoeNoBiome });
                 else if (byFoe != null && w == TimeWindow.Session && FellowFoesBeforeYou(input)) byFoe.Add(new Block { Kind = "note", Text = FellowCountsAll(input) });   // REVIEW-08 #2
                 else if (byFoe != null && CountsWait(input, w)) byFoe.Add(new Block { Kind = "note", Text = OlderLine(input, "the ×N counts fill in") });   // 0.8.2 (I): a copy from before 0.8
                 if (byFoe != null && state != null && state.View.TryGetValue(state.Chapter + "/" + page + "/view", out var shownView) && shownView == "foe") AboutLines(view, (ByFoeAboutTitle, ByFoeAbout));
                 if (!(state != null && state.Compare && IsDayWindow(w))) AboutLines(view, (DamageBarsAboutTitle, DamageBarsAbout));   // 0.8: all three views are damage rows (their floor and true line); comparing draws compare rows instead
                 if (split) AboutLines(view, (AfterAboutTitle, AfterAbout(input, w)));   // 0.8.5: what before and after are, said once (with the caption)
+                if (paced || lists != null) AboutLines(view, (DpsAboutTitle, Voice(input, DpsAbout(input, w))));   // 0.8.6: what DPS is, said once
                 // Joost 2026-10-09: By weapon is the default (first), By type the second view; 0.8: By foe the third
                 Switch(view, state, page, "view", split ? DealtAfterCaption : DealtCaption, ("weapon", ByWeapon, byWeapon), ("type", ByType, byType), ("foe", ByFoe, byFoe));
             }
@@ -634,7 +661,7 @@ namespace Hearthwoven.Panel
         /// Colour "person:" + name, Value, Fraction = their share of the foe), and every foe opens: the open one's detail starts with who hit it
         /// (WhoHit, <paramref name="when"/> its window's words), then the ranking when the game knows the foe. The arrows and the ranking stay
         /// yours: they are about your weapons.</summary>
-        public static Block FoeTable(PanelInput input, IEnumerable<DamageRow> dealtRows, string open = null, List<FoeHitter> group = null, string when = null, string earlier = NotSplitWords)
+        public static Block FoeTable(PanelInput input, IEnumerable<DamageRow> dealtRows, string open = null, List<FoeHitter> group = null, string when = null)
         {
             // 0.8.5: a row per foe by the game's name (FoeGroup): the ranged Draugr's damage is the Draugr's; with its after (AfterPart)
             var byFoe = DealtRows(dealtRows).GroupBy(r => FoeGroup(input, r.Other)).Select(g => { var a = DealtOf(g); return (key: g.Key, v: a.Before, a, kinds: g.Select(r => r.Other)); })
@@ -661,16 +688,15 @@ namespace Hearthwoven.Panel
                     var differs = foe != null ? KinDiffers(input, key, kinds) : null;   // 0.8.5: the kinds of one name take damage differently: the main kind's, said so
                     if (differs != null) detail.Note = detail.Note == null ? differs : detail.Note + " " + differs;
                     if (group != null) detail.Items.Insert(0, WhoHit(input, group, key, when));
-                    else if (a.Split) detail.Items.Insert(0, YourHits(input, dealtRows, key, when, earlier));   // 0.8.5: your hits on it, before and after its armor
+                    else if (a.Split) detail.Items.Insert(0, YourHits(input, dealtRows, key, when));   // 0.8.5: your hits on it, before and after its armor
                     cells.Add(detail);
                 }
                 if (group != null) cells.AddRange(DealtSplit(input, group, key, v));
                 var row = new Block { Kind = "foe", Id = key, Icon = TrophyOf(input, key), Title = Who(input, key), Value = NAtLeast(v), Fraction = (float)(v / max), Src = SrcPc, Source = TagMeasured, Items = cells,
                                       Tone = opens ? "opens" : null, Selected = chosen };
-                // 0.8.5: your own Dealt bar by the after rule (AfterPart: filled what got through, the outline what was stopped, a faded piece first
-                // for hits from before it was recorded); its numbers on the page's tag in the total's place (Text). With Everyone the bar is the
-                // players' parts, as before
-                if (group == null && a.Split) { var part = AfterPart(new Block { Value = NAtLeast(v) }, a, earlier); row.Fraction2 = part.Fraction2; row.Earlier = part.Earlier; row.Text = DealtTagWords(part); }
+                // 0.8.5: your own Dealt bar by the after rule (AfterPart: filled what got through, the outline what was stopped); its numbers on the
+                // page's tag in the total's place (Text). With Everyone the bar is the players' parts, as before
+                if (group == null && a.Split) { var part = AfterPart(new Block { Value = NAtLeast(v) }, a); row.Fraction2 = part.Fraction2; row.Text = DealtTagWords(part); }
                 rows.Add(row);
             }
             return new Block { Kind = "foetable", Src = SrcPc, Source = TagMeasured, Items = rows };
@@ -708,13 +734,13 @@ namespace Hearthwoven.Panel
         /// damage row ("You", its parts by type by the after rule, AfterPart, and its line's closing words, "91 % got through"): Damage > By foe's row
         /// for this foe, where Foes' Dealt bar is too small to say it.</summary>
         public const string YourHitsKind = "yourhits", YourHitsTitle = "Your hits on it";
-        static Block YourHits(PanelInput input, IEnumerable<DamageRow> dealtRows, string foe, string when, string earlier)
+        static Block YourHits(PanelInput input, IEnumerable<DamageRow> dealtRows, string foe, string when)
         {
             var mine = DealtRows(dealtRows).Where(r => FoeGroup(input, r.Other) == foe).ToList();   // its name's every kind (FoeGroup), as its row
             var types = new Dictionary<string, double>(); var after = new Dictionary<string, DealtAmount>();
             foreach (var r in mine) { Bump(types, r.Type, r.Amount); BumpDealt(after, r.Type, r); }
             var total = types.Values.Sum();
-            var parts = Parts(types, total); foreach (var p in parts) if (after.TryGetValue(p.Id, out var a)) AfterPart(p, a, earlier);
+            var parts = Parts(types, total); foreach (var p in parts) if (after.TryGetValue(p.Id, out var a)) AfterPart(p, a);
             var me = input.PlayerName ?? "";
             return new Block
             {
@@ -820,7 +846,7 @@ namespace Hearthwoven.Panel
         /// </summary>
         static void BattleFoes(PanelInput input, PanelInput src, PanelView view, PanelState state, string page, TimeWindow w)
         {
-            view.Heading = "Foes"; view.HeadingSource = null;
+            view.Heading = FoesHeading; view.HeadingSource = null;
             var at = view.Blocks.Count;
             List<DamageRow> rows;
             if (w == TimeWindow.SinceInstall)
@@ -850,7 +876,7 @@ namespace Hearthwoven.Panel
                 if (numbers.Count > 0) { var hero = Hero(numbers.ToArray()); if (hero != null) view.Blocks.Add(hero); }
                 rows = day ? DamageSinceInstallRows(src) : Damage(input.Log, w, "", input.NowUtc, SessionFrom(input));
             }
-            var table = FoeTable(input, rows, state != null && state.View.TryGetValue(FoeOpenKey, out var open) ? open : null, when: WhoHitWhen(w), earlier: EarlierWords(input, w));
+            var table = FoeTable(input, rows, state != null && state.View.TryGetValue(FoeOpenKey, out var open) ? open : null, when: WhoHitWhen(w));
             if (table == null) view.Blocks.Add(w == TimeWindow.SinceInstall ? AllEmpty(input) : WindowEmpty(input, w));
             else
             {
@@ -858,7 +884,8 @@ namespace Hearthwoven.Panel
                 var split = AnySplit(rows);   // 0.8.5: the Dealt bars with their after; the caption and About say what before and after are
                 if (split) AboutLines(view, (AfterAboutTitle, AfterAbout(input, w)));
                 var types = FoeTypes(input, rows);
-                Switch(view, state, page, "view", split ? DealtAfterCaption : DealtCaption, ("foe", ByFoe, new List<Block> { table }), ("type", ByDamageType, types == null ? null : new List<Block> { types }));
+                var countedLine = CountedLine(input, w, rows);   // 0.8.6: plain Dealt bars, and the one line where the split is known (under the By foe view's table's top)
+                Switch(view, state, page, "view", split ? DealtAfterCaption : DealtCaption, ("foe", ByFoe, countedLine == null ? new List<Block> { table } : new List<Block> { CountedNote(countedLine), table }), ("type", ByDamageType, types == null ? null : new List<Block> { types }));
             }
             if (src.Window != null && src.Window.Clipped) view.Blocks.Add(new Block { Kind = "note", Text = ClippedLine });
             Plate(view, "ui:chapter-battle", PlateText(input, w == TimeWindow.SinceInstall && input.DamageSinceInstall != null, windowed: true, w: w));
@@ -957,7 +984,7 @@ namespace Hearthwoven.Panel
             var ev = GuardOf(input, src, w);
             var received = w == TimeWindow.SinceInstall ? DamageSinceInstallRows(input) : day ? DamageSinceInstallRows(src) : Damage(input.Log, w, "", input.NowUtc, SessionFrom(input));
             // All: no heading mark, so the heading gets no "Recorded from" line (rule W.2: its page mixes counts the game keeps, hits received and base defences)
-            view.Heading = "Defense"; view.HeadingSource = w != TimeWindow.SinceInstall && ((ev?.Blocks ?? 0) > 0 || received.Count > 0) ? TagMeasured : null;
+            view.Heading = DefenseHeading; view.HeadingSource = w != TimeWindow.SinceInstall && ((ev?.Blocks ?? 0) > 0 || received.Count > 0) ? TagMeasured : null;
             if ((ev?.Blocks ?? 0) > 0) view.Blocks.Add(Guard(input, ev));
             // a fellow's Session from an older copy keeps no minutes of their blocks: said once, as the empty state's one line when the window holds
             // nothing else (B19: never stacked under it)

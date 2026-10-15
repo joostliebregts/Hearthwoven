@@ -21,7 +21,7 @@ namespace Hearthwoven
     [BepInPlugin(Guid, "Hearthwoven", Version)]
     public class Plugin : BaseUnityPlugin
     {
-        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.8.5", RpcName = "Hearthwoven_Profile";
+        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.8.6", RpcName = "Hearthwoven_Profile";
         static ConfigEntry<bool> sendStats, logRouted, shareWithGroup;
         static ConfigEntry<float> intervalMinutes;
         static ConfigEntry<int> compressAfterDays, intervalLayout;
@@ -112,6 +112,12 @@ namespace Hearthwoven
         internal static ArmourBook DealtArmourBook => Totals?.DealtAfter;
         internal static ArmourTally DealtArmourPending() => Totals?.DealtAfter.Pending(SessionId, DealtArmour);
         internal static DateTime? DealtArmourFromUtc => Totals != null && Totals.DealtAfter.FromUtc > DateTime.MinValue ? Totals.DealtAfter.FromUtc : (DateTime?)null;
+        /// <summary>0.8.6 (DPS, SwingClock): your fighting time per weapon kind. The clock holds the last hit of each kind (new with a connection); the
+        /// seconds and the damage swung go to the log (the short windows), the dealt ledger (Session, the days, All) and, per fight, the recorder.</summary>
+        internal static SwingClock Swing = new SwingClock();
+        /// <summary>The first fighting time of a version that records it sets the "from" date of the pace on All (once).</summary>
+        internal static void SwingBegan(DateTime utc) { if (Totals != null && Totals.DealtAfter.SwingFromUtc == DateTime.MinValue) Totals.DealtAfter.SwingFromUtc = utc; }
+        internal static DateTime? SwingFromUtc => Totals != null && Totals.DealtAfter.SwingFromUtc > DateTime.MinValue ? Totals.DealtAfter.SwingFromUtc : (DateTime?)null;
         /// <summary>The foe counts in your shared copy (FoeShare): this session and since recording began, compact; the feed goes as FeedShare (0.8.2).</summary>
         static FoeShare FoeShareNow() => new FoeShare { Session = Battle.Counts(null), Since = Totals != null ? FoesSince : null, FromUtc = FoesFromUtc };
         /// <summary>0.8.2: the battle feed for your shared copy (FeedShare), only while you share (it is there for fellow players to see). A name in
@@ -320,6 +326,10 @@ namespace Hearthwoven
             if (nextSend > 0f) BattleHooks.Tick(now);   // the battle record: fights end, kills settle, once a second (one comparison per frame)
             if (DevCheck.On) { DevCheck.Tick(); DevCheck.PerfTick(); DevCheck.SyncTick(); }   // Dev.SelfCheck: the filter-key watch, the frame cost (one line a minute)
             if (Outbox.Count > 0 && now >= nextFragment && ZRoutedRpc.instance != null && !Panel.SampleMode.On) { ZRoutedRpc.instance.InvokeRoutedRPC(RpcName, Outbox.Dequeue()); nextFragment = now + 0.25f; }
+            // 0.8.6: your closed sessions go to the server as blocks (a friend's older feed), after your own snapshot
+            if (nextSend > 0f && GroupShare.BlocksOn)
+                try { GroupShare.UploadTick(now, Outbox.Count > 0, sendStats.Value, () => keptFights?.Earlier(keptWorld, SessionId, DateTime.UtcNow) ?? new System.Collections.Generic.List<KeptSession>(), SessionId); }
+                catch (Exception e) { LogOnce("feed blocks not sent: " + e.Message); }
         }
 
         void OnDestroy() { routedWriter?.Flush(); routedWriter?.Dispose(); routedWriter = null; }
@@ -426,7 +436,8 @@ namespace Hearthwoven
                                   FeedShareNow(),          // 0.8.2: the battle feed, its newest foes (names only of players who share)
                                   history?.DayDealt(today, 30, pending),   // 0.9: the same days by weapon kind and type, for the group's By weapon and By type on Today to 30 days
                                   keptShared,              // 0.8.2: your kept minutes of earlier connections here, beside this connection's log
-                                  Panel.PanelModel.DayDeeds(history, today, 30, pending, DeedKinds));   // 0.8.5: your Deeds per day, for fellows' Deeds pages on Today to 30 days
+                                  Panel.PanelModel.DayDeeds(history, today, 30, pending, DeedKinds),   // 0.8.5: your Deeds per day, for fellows' Deeds pages on Today to 30 days
+                                  Totals?.DealtAfter.DayWeapons(today, 30, DealtArmourPending()));   // 0.8.6: your weapons per day by upgrade level, for fellows' By weapon on Today to 30 days
         }
 
         /// <summary>
@@ -712,7 +723,7 @@ namespace Hearthwoven
                 GroupShare.Clear(); nextSend = -1f; lastFullSend = -100f; FeatsCounters.Streak = 0;
                 liveBase = liveBaseId = null; liveSeq = 0; liveBusy = false; liveDone = null;   // live updates start from this connection's first full copy
                 Armour = new ArmourTally(); ArmourMinutes = new ArmourLog();   // the armour ledger starts over with the session too
-                Battle = new BattleRecorder(); DealtArmour = new ArmourTally();   // the battle record and the dealt ledger too (0.8, 0.8.5)
+                Battle = new BattleRecorder(); DealtArmour = new ArmourTally(); Swing = new SwingClock();   // the battle record and the dealt ledger too (0.8, 0.8.5), and the fighting clock (0.8.6)
                 Deeds = new DeedLog(); PreviousSessionEndUtc = null; Marks = null; marksPath = null;   // Deeds > Recent: per session; set again on spawn (RecentOnSpawn)
             });
         }

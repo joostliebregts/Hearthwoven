@@ -549,6 +549,8 @@ namespace Hearthwoven.Panel
         {
             Self = PanelSample.Full(now);
             Fellows = Self.Fellows.ToList().AsReadOnly();
+            var edda = Fellows.FirstOrDefault(f => f.PlayerName == SampleWorld.Edda);
+            if (edda != null) SampleSessions.Give(edda, now);   // 0.8.6: Edda's earlier sessions on the server (her feed's All)
         }
 
         /// <summary>The fellows' names, for the player chips (Edda, Tor, Finch).</summary>

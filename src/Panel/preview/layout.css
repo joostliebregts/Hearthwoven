@@ -79,6 +79,8 @@
   --plate-full-pad-top: 12px;
   --plate-full-gap: 10px;
   --plate-column: 840px;
+  --plate-fade: 40px;
+  --plate-strip-shade: 10px;
   /* Island */
   --island-pad: 14px;
   --island-inner: 6px;
@@ -160,6 +162,7 @@
   --link-height: 32px;
   /* Feed */
   --feed-session-gap: 10px;
+  --feed-more-gap: 14px;
   /* Sum */
   --sum-icon: 24px;
   --sum-gap: 10px;

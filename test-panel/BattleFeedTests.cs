@@ -19,7 +19,7 @@ static class BattleFeedTests
         IEnumerable<Block> All(Block b) => new[] { b }.Concat((b?.Items ?? new List<Block>()).SelectMany(All));
         // the page's fights: one feed block per fight, each its own island (0.8.1, FeedBlocks); the feed's lines between and after them
         List<Block> Fights(PanelView v) => PanelModel.Content(v).Where(b => b.Kind == "feed").SelectMany(b => b.Items ?? new List<Block>()).ToList();
-        string FeedNote(PanelView v) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == PanelModel.FeedLineKind && b.Tone == "note")?.Text ?? "";
+        string FeedNote(PanelView v) => PanelModel.Content(v).FirstOrDefault(b => b.Kind == PanelModel.FeedLineKind && (b.Tone == "note" || b.Tone == PanelModel.FeedMoreTone))?.Text ?? "";
 
         // ---------- the "×N" only where the window has a count ----------
         var session = Find(PanelModel.Build(world, Damage(TimeWindow.Session)), "dealtfoes");
@@ -78,6 +78,49 @@ static class BattleFeedTests
                   "BF REVIEW-08 #9: past " + BattleRecorder.MaxFeed + " foes the cut first fight is left out and the note says the older foes are no longer kept: " + ringNote);
         }
 
+        // ---------- 0.8.5: Show older foes (Joost in game, 3 h, at the feed's end "3 earlier fights in this window (74 foes) not shown: the book
+        // shows the newest 40 foes": "I'm not sure that these are forty. Can we paginate it?") ----------
+        // fights of 12, 30, 50, 7, 1 and 6 foes, oldest first. The first page draws the newest fights whole while they fit in 40: 14 foes, not
+        // 40 (the 50 does not fit), and now says so. Each press adds the next fights whole until 40 more are drawn (a fight is never cut in half),
+        // the pages before stay as they were, so only the new page is drawn (FeedAppendAt) unless the scale grows; the counts add up to the
+        // window's foes and fights; a new window starts at the first page again
+        {
+            var gr = new BattleRecorder(); var t = now.AddMinutes(-40); uint fid = 500;
+            foreach (var (size, slash) in new[] { (12, 40f), (30, 40f), (50, 20f), (7, 30f), (1, 30f), (6, 30f) })
+            {
+                for (int i = 0; i < size; i++) { gr.Dealt(t, new FoeId(9, fid++), "Greydwarf", "$enemy_greydwarf", "BlackForest", new HitData.DamageTypes { m_slash = slash }); t = t.AddSeconds(1); }
+                t = t.AddMinutes(3); gr.Tick(t);
+            }
+            gr.Tick(now);
+            var book = world.ShallowCopy(); book.Battle = gr;
+            var fs = new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.FeedPage } };
+            IEnumerable<Block> Entries(PanelView v) => Fights(v).SelectMany(f => f.Items ?? new List<Block>()).Where(e => e.Kind == "entry");
+            Block More(PanelView v) => PanelModel.FeedMoreLine(v);
+            // the note's numbers: "Shown: 4 fights, 64 of 106 foes this session. Not shown: 2 earlier fights (42 foes)."
+            (int fights, int foes, int total, int leftFights, int leftFoes) Said(PanelView v)
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(FeedNote(v), @"^Shown: (?:all )?(\d+) fights?, (?:(\d+) of )?(\d+) foes?[^.]*\.(?: Not shown: (\d+) earlier fights? \((\d+) foes?\)\.)?$");
+                int G(int k) => m.Groups[k].Success ? int.Parse(m.Groups[k].Value) : 0;
+                return m.Success ? (G(1), G(2) > 0 ? G(2) : G(3), G(3), G(4), G(5)) : (-1, -1, -1, -1, -1);
+            }
+            var p1 = PanelModel.Build(book, fs); var j1 = PanelModel.ToJson(p1);
+            PanelModel.Follow(fs, More(p1)?.NoteLink); var p2 = PanelModel.Build(book, fs); var j2 = PanelModel.ToJson(p2);
+            PanelModel.Follow(fs, More(p2)?.NoteLink); var p3 = PanelModel.Build(book, fs);
+            var pages = new[] { p1, p2, p3 }.Select(v => (n: Entries(v).Count(), sizes: Fights(v).Select(f => f.Count).ToList(), said: Said(v), button: More(v)?.Title)).ToList();
+            var addsUp = pages.All(x => x.said.foes == x.n && x.said.fights == x.sizes.Count && x.said.foes + x.said.leftFoes == 106 && x.said.fights + x.said.leftFights == 6 && x.said.total == 106);
+            var first14 = Entries(p1).Select(e => e.Text + e.Value).SequenceEqual(Entries(p2).Take(14).Select(e => e.Text + e.Value));
+            var appendAt = PanelModel.FeedAppendAt(p1, j1, p2); var grown = PanelModel.FeedAppendAt(p2, j2, p3);
+            var keyLine = p1.Keys.Contains(PanelModel.FeedMoreKeyLine) && !p3.Keys.Contains(PanelModel.FeedMoreKeyLine);
+            fs.Window = TimeWindow.LastHour; fs.WindowPicked = true; var hour = PanelModel.Build(book, fs);
+            Check(pages[0].n == 14 && pages[0].sizes.SequenceEqual(new[] { 6, 1, 7 }) && pages[0].button == "Show 50 older foes" &&
+                  pages[1].n == 64 && pages[1].sizes.SequenceEqual(new[] { 6, 1, 7, 50 }) && pages[1].button == "Show 42 older foes" &&
+                  pages[2].n == 106 && pages[2].sizes.Count == 6 && pages[2].button == null && FeedNote(p3) == "Shown: all 6 fights, 106 foes this session." &&
+                  addsUp && first14 && appendAt >= 0 && grown == -1 && keyLine && fs.FeedMore == 0 && Entries(hour).Count() == 14 && More(hour) != null,
+                  "BF 0.8.5 Show older foes: fights of 12, 30, 50, 7, 1, 6 foes; the first page " + pages[0].n + " foes (" + FeedNote(p1) + "), a press adds whole fights: " + pages[1].n +
+                  " (" + FeedNote(p2) + "), then " + pages[2].n + " (" + FeedNote(p3) + "); shown and not shown add up to the window's 106 foes and 6 fights; the second page is drawn on the first (island " + appendAt +
+                  " on), the third whole (its older foes hit harder: the scale grows); a new window starts at the first page");
+        }
+
         // ---------- 0.8.1: the feed's window and filter (Joost: "Battle feed, why can't I filter this?") ----------
         // his evening: a Gjall early on, then 48 Roots. The page draws the newest 40 foes, so the Gjall has dropped off; the recorder still keeps
         // it (200 foes), and the cap counts after the filter, so choosing Gjall finds that fight again
@@ -91,7 +134,7 @@ static class BattleFeedTests
             IEnumerable<Block> Entries(PanelView v) => Fights(v).SelectMany(f => f.Items ?? new List<Block>()).Where(e => e.Kind == "entry");
             var plain = Feed(); var gjall = Feed(s => s.Facets[PanelModel.FeedFilter + "|foe"] = new List<string> { "Gjall" });
             var plainNote = FeedNote(plain); var bar = Find(gjall, "filterbar"); var fight = Fights(gjall).FirstOrDefault();
-            Check(Entries(plain).Count() == PanelModel.FeedTop && Entries(plain).All(e => e.Id == "Root") && plainNote.StartsWith("8 more foes in this fight and 1 earlier fight this session (1 foe) not shown") && Fights(plain)[0].Text.EndsWith("40 of 48 foes") &&
+            Check(Entries(plain).Count() == PanelModel.FeedTop && Entries(plain).All(e => e.Id == "Root") && plainNote == "Shown: 1 fight, 40 of 49 foes this session. Not shown: 8 more foes in this fight and 1 earlier fight (1 foe)." && Fights(plain)[0].Text.EndsWith("40 of 48 foes") &&
                   Entries(gjall).Select(e => e.Id).SequenceEqual(new[] { "Gjall" }) && bar != null && bar.Text == "1 of 49 foes" && fight?.Text == "under a minute · 1 foe" &&
                   bar.Items.First(r => r.Kind == "facet" && r.Id == "foe").Items.Select(c => c.Id).SequenceEqual(new[] { "Root", "Gjall" }),
                   "BF 0.8.1 filter: the cap of " + PanelModel.FeedTop + " counts after the filter: 48 Roots hide the Gjall, Foe = Gjall finds its fight (" + bar?.Text + "); the Foe row most foes first; unfiltered note: " + plainNote);
@@ -201,7 +244,7 @@ static class BattleFeedTests
             var views = PanelModel.FeedViews.Select(fv => PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.FeedPage }, View = { [PanelModel.FeedViewKey] = fv.id } })).ToList();
             var plans = views.Select(Plan).ToList(); var n = feedFights.Count;
             var want = "w:filterbar " + string.Join(" ", Enumerable.Range(0, n).Select(k => "w:feed" + (k + 1 < n ? " p:gap" : "")));
-            Check(plans.All(x => x == want) && views.All(v => Fights(v).Count == n) && Plan(plain) == "w:filterbar w:feed p:note" && Entries(plain).Count() == PanelModel.FeedTop,
+            Check(plans.All(x => x == want) && views.All(v => Fights(v).Count == n) && Plan(plain) == "w:filterbar w:feed p:" + PanelModel.FeedMoreTone && Entries(plain).Count() == PanelModel.FeedTop,
                   "BF 0.8.1 islands: each of the " + n + " fights its own island in Log, Cards and Timeline, the filter bar its own above them, the quiet time between them outside; 48 Roots: " + Plan(plain) + " (" + PanelModel.FeedTop + " foes)");
             // REVIEW-081 0.8.2 pass: with a feed block per fight, the Log measured its columns per fight island, so a fight where nothing hurt you
             // (no received column) got a track about 160 px longer than the fight beside it. The columns come from the page's fights, once
@@ -269,6 +312,30 @@ static class BattleFeedTests
                       "BF REVIEW-08 #6: a fellow who reconnected after the fight (log from after its end) shows without numbers on Last fight (" + rejoined?.Kind + "), not as 0 %");
             }
             finally { eddaBook.FirstRecordedUtc = keepFirst; }
+        }
+        // 0.8.6 (Joost: far down the feed "Fight at 20:46" lost its day): the head says the day in your time, midnight included; today stays as it was
+        {
+            var today = new DateTime(2026, 10, 12, 0, 1, 0);   // a Monday
+            string Day(DateTime when) => PanelModel.FightDayOf(when, today);
+            Check(Day(new DateTime(2026, 10, 12, 20, 46, 0)) == "" && Day(new DateTime(2026, 10, 12, 0, 0, 0)) == "" &&
+                  Day(new DateTime(2026, 10, 11, 23, 59, 0)) == " yesterday" && Day(new DateTime(2026, 10, 11, 20, 46, 0)) == " yesterday" &&
+                  Day(new DateTime(2026, 10, 10, 20, 46, 0)) == " on Saturday" && Day(new DateTime(2026, 10, 6, 20, 46, 0)) == " on Tuesday" &&
+                  Day(new DateTime(2026, 10, 5, 20, 46, 0)) == " on 5 Oct" && Day(new DateTime(2026, 9, 28, 20, 46, 0)) == " on 28 Sep",
+                  "BF 0.8.6: a fight's day in its head: today unchanged, yesterday, the weekday 2 to 6 days back (Saturday, Tuesday), then the date (5 Oct from 7 days back), across midnight");
+            // the sample's feed a day on: its fights of the day before say " yesterday" after the clock, older ones their weekday or date
+            var later = PanelSample.Full(now); later.NowUtc = now.AddDays(1);
+            var titles = Fights(PanelModel.Build(later, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.Session, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } })).Select(f => f.Title).ToList();
+            Check(titles.Count > 0 && titles.All(t => t.StartsWith("Fight at ") && t.Length > "Fight at 00:00".Length) && titles.Any(t => t.EndsWith(" yesterday")) && titles.Any(t => t.Contains(" on ")),
+                  "BF 0.8.6: the feed's fight heads a day on say the day: " + string.Join(", ", titles.Take(4)) + " ...");
+        }
+        // 0.8.6 (Joost's feed read "No fight in the today"): the empty title names its window in words, Today and a short window alike
+        {
+            var threeDaysOn = PanelSample.Full(now); threeDaysOn.NowUtc = now.AddDays(3);
+            PanelState Quiet(TimeWindow w) => new PanelState { Chapter = Chapter.Battle, Window = w, WindowPicked = true, Page = { [Chapter.Battle] = PanelModel.FeedPage } };
+            var todayTitle = Find(PanelModel.Build(threeDaysOn, Quiet(TimeWindow.Today)), "empty")?.Title;
+            var tenTitle = Find(PanelModel.Build(threeDaysOn, Quiet(TimeWindow.LastTenMinutes)), "empty")?.Title;
+            Check(todayTitle == "No fight today" && tenTitle == "No fight in the last 10 min",
+                  "BF 0.8.6: an empty feed says \"" + todayTitle + "\" for Today and \"" + tenTitle + "\" for 10 min (never \"in the today\")");
         }
         return fails;
     }

@@ -10,7 +10,7 @@ namespace Hearthwoven.Panel
     /// lights its row in the list under the bar; pointing at a row lights its part. Nothing moves: the ring (one per bar, drawn over its
     /// parts), the row's band and the row's words are built with the bar (PanelUi.BarWithList) and only change colour here; the ring takes the
     /// hovered part's anchors. A damage bar's part (0.8.2, every part) also shows its name and number: its share entry's own words are swapped
-    /// for them (OnWords, set back on leaving), or, with no entry keying it, the page's one tag (HoverTag) is moved over it with them. No object
+    /// for them (OnWords, set back on leaving), or, with no entry keying it, the page's one tag (HoverTag) is moved beside it with them, never over it. No object
     /// is made, nothing is rebuilt and no string is built per hover: the words are made with the bar, only set here.
     /// Mirrored by the .hov rules in preview/panel-preview.html.
     /// </summary>
@@ -31,10 +31,11 @@ namespace Hearthwoven.Panel
         /// "Frost 11 %"), and back on leaving (OffWords: what it said); its width was kept for the longer of the two, so nothing moves.</summary>
         internal string[] OnWords, OffWords;
         /// <summary>A bar whose parts no entry keys (no share line, a player's line, Foes' Dealt, the armor bar): the page's one tag
-        /// (PanelUi.PageTag) says TagWords[k] over the part, at TagAt[k] in TagBar's x (its centre, or its start when not TagCentred), TagTop
-        /// from TagBar's top, kept between TagMin and TagMax; TagHides (Foes' total, whose place the tag takes) hides while it shows.</summary>
-        internal HoverTag Tag; internal RectTransform TagBar; internal string[] TagWords; internal float[] TagAt;
-        internal float TagTop, TagMin, TagMax; internal bool TagCentred = true; internal GameObject TagHides;
+        /// (PanelUi.PageTag) says TagWords[k] beside the bar TagBar (below it, or above when below leaves the scroll view or the bar's island; never
+        /// over it), at TagAt[k] in TagRoom's x (its centre, or its start when not TagCentred), kept between TagMin and TagMax; TagHides (Foes' total,
+        /// whose place the tag takes) hides while it shows.</summary>
+        internal HoverTag Tag; internal RectTransform TagBar, TagRoom; internal string[] TagWords; internal float[] TagAt;
+        internal float TagMin, TagMax; internal bool TagCentred = true; internal GameObject TagHides;
         int lit = -1;
 
         internal void Init(int n)
@@ -43,10 +44,11 @@ namespace Hearthwoven.Panel
             Names = new TextMeshProUGUI[n]; Numbers = new TextMeshProUGUI[n]; Shares = new TextMeshProUGUI[n]; NameColours = new Color[n];
         }
 
-        /// <summary>The page's one tag shows <paramref name="words"/> over this bar's parts (PanelUi.PageTag); <paramref name="at"/> per part.</summary>
-        internal void TagOver(HoverTag tag, RectTransform bar, string[] words, float[] at, float top, float min, float max, bool centred = true)
+        /// <summary>The page's one tag shows <paramref name="words"/> beside this bar's parts (PanelUi.PageTag); <paramref name="at"/> per part.
+        /// <paramref name="room"/> (default: the bar) is the rect whose left edge the tag's x counts from, when the bar is only part of its row (the armor bar).</summary>
+        internal void TagOver(HoverTag tag, RectTransform bar, string[] words, float[] at, float min, float max, bool centred = true, RectTransform room = null)
         {
-            Tag = tag; TagBar = bar; TagWords = words; TagAt = at; TagTop = top; TagMin = min; TagMax = max; TagCentred = centred;
+            Tag = tag; TagBar = bar; TagRoom = room ?? bar; TagWords = words; TagAt = at; TagMin = min; TagMax = max; TagCentred = centred;
         }
 
         internal void Light(int k, bool on)
@@ -86,19 +88,20 @@ namespace Hearthwoven.Panel
 
     /// <summary>
     /// 0.8.2: the page's one hover tag (PanelUi.PageTag): a part of a bar that no share entry keys says its name and number in it ("Frost 37",
-    /// "Edda 310"). Made once with the page, hidden, drawn over the page's blocks; pointing at a part sets its words and moves it over the part
-    /// (in the bar's place, kept inside the bar's room), leaving hides it. One for the page instead of one per part: 4e72aff's tag per part and
+    /// "Edda 310"). Made once with the page, hidden, drawn over the page's blocks; pointing at a part sets its words and moves it beside the bar it is
+    /// on (below, or above; kept inside the bar's room), leaving hides it. One for the page instead of one per part: 4e72aff's tag per part and
     /// second entry label cost about 3.5 ms a drawing on the sample feed and 11 ms on a long one at the 0.8.1 bench's 58 µs an object (Joost felt
     /// 0.8.1's speed in game; test-panel/HoverCostTests.cs counts it).
     /// </summary>
     sealed class HoverTag
     {
-        /// <summary>The words' room either side, and the tag's height over a part (the part's height and 2 px above and below it).</summary>
-        internal const float Pad = 6, Rise = 4;
+        /// <summary>The words' room either side, the tag's height (the part's height and 2 px above and below it), and its gap from the bar's edge
+        /// when it sits beside the bar: below, or above when below would leave the scroll view or the bar's island.</summary>
+        internal const float Pad = 6, Rise = 4, Apart = 2;
         internal Image Ground; internal TextMeshProUGUI Text;
         BarHover owner; int ownerPart = -1;
 
-        /// <summary>Shows the bar's part <paramref name="k"/>'s words over it; false when the tag is gone (its page cleared).</summary>
+        /// <summary>Shows the bar's part <paramref name="k"/>'s words beside its bar; false when the tag is gone (its page cleared).</summary>
         internal bool Show(BarHover bar, int k)
         {
             if (!Ground || !Text || bar.TagWords == null || k < 0 || k >= bar.TagWords.Length || !bar.TagBar) return false;
@@ -107,11 +110,30 @@ namespace Hearthwoven.Panel
             Text.text = bar.TagWords[k] ?? "";
             var tw = Mathf.Ceil(Text.preferredWidth) + 2 * Pad;
             var at = bar.TagAt[k]; var x = Mathf.Clamp(bar.TagCentred ? at - tw / 2 : at, bar.TagMin, bar.TagMax - tw);
-            // its place in the bar's room (x from the bar's left, TagTop down from its top), carried into the page's content where the tag lives
-            var room = bar.TagBar.rect; var g = Ground.rectTransform;
-            var p = g.parent.InverseTransformPoint(bar.TagBar.TransformPoint(new Vector3(room.xMin + x, room.yMax - bar.TagTop, 0)));
-            g.localPosition = new Vector3(p.x, p.y, 0); g.sizeDelta = new Vector2(tw, PanelModel.DamageBar + Rise);
+            // x in the room (from its left), y beside the bar's own rect; both carried into the page's content where the tag lives
+            var g = Ground.rectTransform; var home = g.parent; var room = bar.TagRoom.rect; var part = bar.TagBar; var pr = part.rect;
+            var px = home.InverseTransformPoint(bar.TagRoom.TransformPoint(new Vector3(room.xMin + x, 0, 0))).x;
+            var top = home.InverseTransformPoint(part.TransformPoint(new Vector3(0, pr.yMax, 0))).y;
+            var bottom = home.InverseTransformPoint(part.TransformPoint(new Vector3(0, pr.yMin, 0))).y;
+            var h = PanelModel.DamageBar + Rise; var below = bottom - Apart;
+            var py = below - h < LowestLine(home, part) ? top + Apart + h : below;   // under the bar when it fits, else over it: the tag never covers its bar
+            g.localPosition = new Vector3(px, py, 0); g.sizeDelta = new Vector2(tw, h);
             return true;
+        }
+
+        /// <summary>The lowest line (in the page's content) the tag may reach: the scroll view's bottom, or the bar's island's bottom (IslandsUi: an
+        /// island's ground is PanelLook.Island) when that is lower.</summary>
+        static float LowestLine(Transform home, RectTransform part)
+        {
+            var scroll = home.GetComponentInParent<ScrollRect>(); var view = scroll && scroll.viewport ? scroll.viewport : null;
+            var low = view ? home.InverseTransformPoint(view.TransformPoint(new Vector3(0, view.rect.yMin, 0))).y : float.NegativeInfinity;
+            for (var t = part.transform; t && t != home; t = t.parent)
+            {
+                if (!t.TryGetComponent(out Image im) || !im.sprite || im.sprite != PanelLook.Island) continue;
+                var island = (RectTransform)t;
+                return Mathf.Max(low, home.InverseTransformPoint(island.TransformPoint(new Vector3(0, island.rect.yMin, 0))).y);
+            }
+            return low;
         }
 
         /// <summary>Hides the tag if it is still this bar's part's (the pointer may have reached the next part first).</summary>

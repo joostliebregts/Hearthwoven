@@ -27,8 +27,13 @@ namespace Hearthwoven
                             StateRpc = "Hearthwoven_ShareState", ListRpc = "Hearthwoven_GroupList",
                             // 0.7 live updates (SYNC-DESIGN.md item 4): new names, so an older peer never receives one (an unknown routed RPC is dropped unread)
                             LiveRpc = "Hearthwoven_Live", LiveRequestRpc = "Hearthwoven_LiveRequest", LiveDeltaRpc = "Hearthwoven_LiveDelta";
+        /// <summary>0.8.6 (a friend's older feed, FeedBlocks.cs): new names, so an older peer drops them unread. Up: your closed session as a block, to the server;
+        /// Ask: one block by id; the answer (BlockRpc) goes only to the asker.</summary>
+        public const string BlockUpRpc = "Hearthwoven_FeedBlockUp", BlockAskRpc = "Hearthwoven_FeedBlockAsk", BlockRpc = "Hearthwoven_FeedBlock";
         /// <summary>After the keys in the list (0.7): this server keeps live updates. A 0.6.0 reader stops after the book, a 0.6.5 one at this unknown tag.</summary>
         public const string LiveTag = "hw-live-1";
+        /// <summary>0.8.6, after the live tag: this server keeps friends' older sessions as blocks (FeedBlocks.cs) and lists them here. A 0.8.5 reader stops at it.</summary>
+        public const string BlocksTag = "hw-blocks-1";
         /// <summary>How often a 0.7 client sends its live update while playing and asks for the fellows' while the book is open (seconds).</summary>
         public const float LiveEvery = 10f;
         public const int MaxQueue = 600, MaxAgeDays = 14;
@@ -77,7 +82,7 @@ namespace Hearthwoven
         static float nextRequest;
         static readonly Fragments.Assembler assembler = new Fragments.Assembler();
         class Pending { public long Target; public ZPackage Pkg; public string Rpc; public Action Sent; }
-        static readonly Queue<Pending> outbox = new Queue<Pending>();
+        static readonly AnswerQueue<Pending> outbox = new AnswerQueue<Pending>();   // 0.8.6: a block asked for takes turns with the copies queued before it (FeedBlocks.cs)
         static readonly Dictionary<long, float> lastServed = new Dictionary<long, float>();
         static readonly GroupServe serve = new GroupServe();
         static float nextFragment;
@@ -93,6 +98,9 @@ namespace Hearthwoven
             r.Register<ZPackage>(LiveRpc, OnLive);
             r.Register<ZPackage>(LiveRequestRpc, OnLiveRequest);
             r.Register<ZPackage>(LiveDeltaRpc, OnLiveDelta);
+            r.Register<ZPackage>(BlockUpRpc, OnBlockUp);
+            r.Register<ZPackage>(BlockAskRpc, OnBlockAsk);
+            r.Register<ZPackage>(BlockRpc, OnBlock);
         }
 
         static string Dir => Path.Combine(Paths.BepInExRootPath, "Hearthwoven", "players");
@@ -130,6 +138,7 @@ namespace Hearthwoven
             var file = Path.Combine(Dir, playerKey + ".share.json");
             if (File.Exists(file)) File.Delete(file);
             if (File.Exists(file + AtomicFile.BackupSuffix)) File.Delete(file + AtomicFile.BackupSuffix);   // its backup copy goes too (S3)
+            try { ServerBlocks().Forget(playerKey); } catch (Exception e) { Debug.LogWarning("[Hearthwoven] feed blocks not deleted: " + e.Message); }   // 0.8.6 (FB4): their blocks of every world go with the copy
         }
 
         /// <summary>Client: tell the server whether you share, on every spawn and when the setting changes. Separate from
@@ -160,8 +169,9 @@ namespace Hearthwoven
             try
             {
                 if (ZNet.instance == null || ZNet.instance.IsServer()) return;
-                var keep = ReadList(pkg, out var books, out var keys, out var live);
+                var keep = ReadList(pkg, out var books, out var keys, out var live, out var blocks);
                 ListSeen = true; ServerLive = live;
+                TakeBlockIndex(blocks);
                 Fellows.KeepOnly(keys, keep);
                 LiveIn.KeepOnly((ICollection<string>)keys ?? Group.Keys);   // the list's own keys: a fellow just listed keeps an update that waits for its copy   // by key from a server with the identity fix, else by name (an older server)
                 Trails.KeepOnly(Group.Keys); FellowCopies.KeepOnly(Group.Keys);
@@ -182,18 +192,23 @@ namespace Hearthwoven
         public static HashSet<string> ReadList(ZPackage pkg, out string books, out List<string> keys) => ReadList(pkg, out books, out keys, out _);
 
         /// <summary>The list with its tagged parts; <paramref name="live"/>: the server keeps live updates (LiveTag, 0.7).</summary>
-        public static HashSet<string> ReadList(ZPackage pkg, out string books, out List<string> keys, out bool live)
+        public static HashSet<string> ReadList(ZPackage pkg, out string books, out List<string> keys, out bool live) => ReadList(pkg, out books, out keys, out live, out _);
+
+        /// <summary>The list with its tagged parts; <paramref name="blocks"/> (0.8.6, BlocksTag): the block index JSON (BlockIndex.Read), null from a
+        /// server without it.</summary>
+        public static HashSet<string> ReadList(ZPackage pkg, out string books, out List<string> keys, out bool live, out string blocks)
         {
             int n = pkg.ReadInt();
             var names = new HashSet<string>();
             for (int i = 0; i < n; i++) names.Add(pkg.ReadString());
-            books = null; keys = null; live = false;
+            books = null; keys = null; live = false; blocks = null;
             while (pkg.GetPos() < pkg.Size())
             {
                 var tag = pkg.ReadString();
                 if (tag == BooksTag) books = Transport.Unpack(pkg.ReadByteArray());
                 else if (tag == KeysTag) { int k = pkg.ReadInt(); keys = new List<string>(); for (int i = 0; i < k; i++) keys.Add(pkg.ReadString()); }
                 else if (tag == LiveTag) live = pkg.ReadInt() >= LiveDelta.Version;
+                else if (tag == BlocksTag) { try { blocks = Transport.Unpack(pkg.ReadByteArray()); } catch (Exception) { blocks = null; } }
                 else break;
             }
             return names;
@@ -201,12 +216,13 @@ namespace Hearthwoven
 
         /// <summary>Server: the list for one answer (ReadList reads it). <paramref name="keys"/>: each name's fellow key, after the book;
         /// <paramref name="live"/>: the live tag last (0.7), so every older reader has stopped before it.</summary>
-        public static ZPackage WriteList(IList<string> names, string booksJson, IList<string> keys = null, bool live = false)
+        public static ZPackage WriteList(IList<string> names, string booksJson, IList<string> keys = null, bool live = false, string blocksJson = null)
         {
             var list = new ZPackage(); list.Write(names.Count); foreach (var nm in names) list.Write(nm);
             if (booksJson != null) { list.Write(BooksTag); list.Write(Transport.Pack(booksJson)); }
             if (keys != null) { list.Write(KeysTag); list.Write(keys.Count); foreach (var k in keys) list.Write(k ?? ""); }
             if (live) { list.Write(LiveTag); list.Write(LiveDelta.Version); }
+            if (live && blocksJson != null) { list.Write(BlocksTag); list.Write(Transport.Pack(blocksJson)); }   // 0.8.6: after the live tag, so every older reader has stopped before it
             return list;
         }
 
@@ -342,14 +358,14 @@ namespace Hearthwoven
         // KeepOnly of a later list): one queue, drained by one thread-pool worker at a time; never after ForgetCache
         static readonly System.Collections.Generic.Queue<(Action<string> job, string dir, int gen)> cacheJobs = new System.Collections.Generic.Queue<(Action<string>, string, int)>();
         static bool cacheDraining;
-        static void QueueCache(Action<string> job)
+        static bool QueueCache(Action<string> job)
         {
-            var dir = cacheDir; if (dir == null || !Sharing()) return;
+            var dir = cacheDir; if (dir == null || !Sharing()) return false;
             lock (cacheJobs)
             {
                 int gen; lock (cacheGate) gen = cacheGeneration;
                 cacheJobs.Enqueue((job, dir, gen));
-                if (cacheDraining) return;
+                if (cacheDraining) return true;
                 cacheDraining = true;
             }
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
@@ -362,10 +378,11 @@ namespace Hearthwoven
                     catch (Exception e) { Debug.LogWarning("[Hearthwoven] fellow cache not written: " + e.Message); }
                 }
             });
+            return true;
         }
 
         /// <summary>Client: forget what was received (on logout, or when sharing is switched off).</summary>
-        public static void Clear() { liveGeneration++; FellowCopies.Clear(); Cached.Clear(); Trails.Clear(); cacheDir = null; ReceivedUtc.Clear(); Fellows.Clear(); Books.Clear(); BooksByKey.Clear(); OwnBook = null; World = null; nextRequest = 0f; ListSeen = false; Joins.Clear(); ServerLive = false; LiveIn.Clear(); nextLiveRequest = 0f; }
+        public static void Clear() { liveGeneration++; FellowCopies.Clear(); Cached.Clear(); Trails.Clear(); cacheDir = null; ReceivedUtc.Clear(); Fellows.Clear(); Books.Clear(); BooksByKey.Clear(); OwnBook = null; World = null; nextRequest = 0f; ListSeen = false; Joins.Clear(); ServerLive = false; LiveIn.Clear(); nextLiveRequest = 0f; ClearBlocks(); }
 
         /// <summary>Client, every couple of seconds while playing: the game's player list into Joins (the other spawned players by name;
         /// whether it shows you spawned yet).</summary>
@@ -404,7 +421,7 @@ namespace Hearthwoven
                 if (!PeerIdentity.Id(peer).HasValue) return;   // not known yet: no own share file can match
                 var own = Path.Combine(Dir, PeerIdentity.Key(peer) + ".share.json");
                 if (!File.Exists(own)) return;   // you see others only while you share yourself
-                foreach (var q in outbox) if (q.Target == sender) return;   // still sending your previous answer
+                foreach (var q in outbox.Rest) if (q.Target == sender && q.Rpc == null) return;   // still sending your previous answer (the plain group reply)
                 if (outbox.Count > MaxQueue) return;                         // busy: ask again later (client retries every 30 s)
                 var sources = new List<GroupServe.Source>();
                 foreach (var file in Directory.GetFiles(Dir, "*.share.json"))
@@ -422,24 +439,26 @@ namespace Hearthwoven
                                         text => Transport.Field(text, "playerId") + "-" + DateTime.UtcNow.Ticks, FellowIds.KeyOf);
                 // 0.6: the server's book for you and each sharer, after the names (an older client stops reading there), then each
                 // name's fellow key (two players with one name both show; an older client stops before it)
-                var list = WriteList(answer.Names, ServerBookHooks.Shared(PeerIdentity.Key(peer), answer.Keys, answer.Names, answer.Fellows), answer.Fellows, live: true);
+                var list = WriteList(answer.Names, ServerBookHooks.Shared(PeerIdentity.Key(peer), answer.Keys, answer.Names, answer.Fellows), answer.Fellows, live: true,
+                                     blocksJson: BuildBlockIndex(PeerIdentity.Key(peer), answer.Keys, answer.Fellows, DateTime.UtcNow));   // 0.8.6: this server keeps friends' older sessions
                 ZRoutedRpc.instance.InvokeRoutedRPC(sender, ListRpc, list);
                 foreach (var copy in answer.Send)
                     for (int i = 0; i < copy.Parts.Count; i++)
                     {
                         var p = new ZPackage(); p.Write(copy.MsgId); p.Write(i); p.Write(copy.Parts.Count); p.Write(copy.Parts[i]);
-                        outbox.Enqueue(new Pending { Target = sender, Pkg = p });
+                        outbox.Add(new Pending { Target = sender, Pkg = p });
                     }
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] group serve: " + e.Message); }
         }
 
-        /// <summary>Server: one fragment every 100 ms, never a burst.</summary>
+        /// <summary>Server: one fragment every 100 ms, never a burst (0.8.6: a block's parts take turns with the rest, AnswerQueue).</summary>
         internal static void Tick(float now)
         {
             if (!liveDone.IsEmpty) DrainLive();   // 0.8: the live updates applied on the worker (client)
+            Blocks.Drain(now);                    // 0.8.6: a friend's block read from the cache, or an ask that timed out
             if (outbox.Count == 0 || now < nextFragment || ZRoutedRpc.instance == null) return;
-            var next = outbox.Dequeue();
+            if (!outbox.TryNext(out var next)) return;
             if (ZNet.instance?.GetPeer(next.Target) != null) { ZRoutedRpc.instance.InvokeRoutedRPC(next.Target, next.Rpc ?? ReplyRpc, next.Pkg); next.Sent?.Invoke(); }
             nextFragment = now + 0.1f;
         }
@@ -490,8 +509,9 @@ namespace Hearthwoven
         }
 
         /// <summary>Host: the answer a client would get, applied here: every copy received, the rest forgotten, the book read.
-        /// <paramref name="books"/> (file keys, names, fellow keys) gives the book's JSON. Null sources: you do not share, so nobody.</summary>
-        public static void HostAnswer(IList<KeyValuePair<string, string>> sources, Func<IList<string>, IList<string>, IList<string>, string> books)
+        /// <paramref name="books"/> (file keys, names, fellow keys) gives the book's JSON, <paramref name="blocks"/> (file keys, fellow keys) the blocks index (0.8.6).
+        /// Null sources: you do not share, so nobody.</summary>
+        public static void HostAnswer(IList<KeyValuePair<string, string>> sources, Func<IList<string>, IList<string>, IList<string>, string> books, Func<IList<string>, IList<string>, string> blocks = null)
         {
             var fileKeys = new List<string>(); var names = new List<string>(); var keys = new List<string>();
             foreach (var s in sources ?? new List<KeyValuePair<string, string>>())
@@ -502,6 +522,7 @@ namespace Hearthwoven
             }
             Fellows.KeepOnly(keys, names); Trails.KeepOnly(Group.Keys); FellowCopies.KeepOnly(Group.Keys);
             ReadBooks(books?.Invoke(fileKeys, names, keys));
+            TakeBlockIndex(sources != null ? blocks?.Invoke(fileKeys, keys) : null);   // you host: this PC keeps the blocks (0.8.6)
         }
 
         static void RequestLocal()
@@ -510,7 +531,7 @@ namespace Hearthwoven
             if (profile == null) return;
             var ownKey = PeerIdentity.KeyOf(profile.GetPlayerID(), "", 0);
             var sources = HostSources(Dir, ownKey, DateTime.UtcNow);
-            HostAnswer(sources, (fileKeys, names, keys) => ServerBookHooks.Shared(ownKey, fileKeys, names, keys));
+            HostAnswer(sources, (fileKeys, names, keys) => ServerBookHooks.Shared(ownKey, fileKeys, names, keys), (fileKeys, keys) => BuildBlockIndex(ownKey, fileKeys, keys, DateTime.UtcNow));
             LastReply = Time.realtimeSinceStartup; ListSeen = sources != null; ServerLive = true;   // you host: this PC keeps the live updates
         }
 
@@ -688,17 +709,243 @@ namespace Hearthwoven
                 var ownKey = PeerIdentity.Key(peer);
                 if (!File.Exists(Path.Combine(Dir, ownKey + ".share.json"))) return;   // you see others only while you share yourself
                 if (!Live.MayAsk(sender, Time.realtimeSinceStartup)) return;
-                foreach (var q in outbox) if (q.Target == sender) return;   // still sending your previous answer
+                foreach (var q in outbox.Rest) if (q.Target == sender) return;   // still sending your previous answer (a block part is not one: it goes in its own turn)
                 if (outbox.Count > MaxQueue) return;
                 Live.Prune(Connected);
                 foreach (var e in Live.For(sender, ownKey))
                 {
                     var p = new ZPackage(); p.Write(e.Fellow ?? ""); p.Write(e.Base); p.Write(e.Seq); p.Write(e.Packed);
                     var entry = e;
-                    outbox.Enqueue(new Pending { Target = sender, Pkg = p, Rpc = LiveDeltaRpc, Sent = () => Live.Served(sender, entry) });   // marked when it went out
+                    outbox.Add(new Pending { Target = sender, Pkg = p, Rpc = LiveDeltaRpc, Sent = () => Live.Served(sender, entry) });   // marked when it went out
                 }
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] live serve: " + e.Message); }
+        }
+        // ---------- 0.8.6: a friend's older feed as blocks (FeedBlocks.cs, work/hearthwoven-0.8.6/DESIGN-feed-blocks.md) ----------
+
+        static BlockStore blockFiles; static string blockFilesFor; static bool blocksSwept;
+        static readonly BlockGate blockGate = new BlockGate();
+        static readonly Fragments.Assembler blockUp = new Fragments.Assembler { Limit = Uploads.MaxParts };
+        static readonly ServerIntake.OnceEach blockWarned = new ServerIntake.OnceEach();
+
+        /// <summary>Client: this server (or this PC, hosting) keeps friends' older sessions: its list carried the blocks tag. Uploads and asks start only then (FB7).</summary>
+        public static bool BlocksOn;
+        /// <summary>Client: the ids of your own sessions the server holds already (the list's "mine"): what you need not upload.</summary>
+        public static HashSet<string> BlockMine = new HashSet<string>();
+        static readonly HashSet<string> blocksTried = new HashSet<string>();
+        static readonly Queue<ZPackage> blockOutbox = new Queue<ZPackage>();
+        static float nextBlockUp, nextBlockFragment;
+
+        /// <summary>Server (and the host): the blocks of the server's own world, taken from its own name and id, never from a client. Logs the world key and the
+        /// blocks held once per world (the field check of the key); ages out old worlds' blocks once per start.</summary>
+        internal static BlockStore ServerBlocks()
+        {
+            var net = ZNet.instance;
+            var key = net != null ? FellowCache.ScopeKey(net.GetWorldName(), net.GetWorldUID()) : "_";
+            if (blockFiles != null && blockFilesFor == key) return blockFiles;
+            blockFiles = new BlockStore(Dir, key); blockFilesFor = key;
+            if (net == null) return blockFiles;
+            try
+            {
+                if (!blocksSwept) { blocksSwept = true; var gone = BlockStore.SweepAll(Dir, DateTime.UtcNow); if (gone > 0) Debug.Log($"[Hearthwoven] feed blocks: {gone} files older than 30 days removed"); }
+                Debug.Log($"[Hearthwoven] feed blocks: world key {key}, {blockFiles.Count} blocks held");
+            }
+            catch (Exception e) { Debug.LogWarning("[Hearthwoven] feed blocks: " + e.Message); }
+            return blockFiles;
+        }
+
+        /// <summary>Server: the index for one requester (BlockIndex): its own held ids and each listed sharer's blocks, by fellow key. Null when it cannot be built.</summary>
+        static string BuildBlockIndex(string ownKey, IList<string> fileKeys, IList<string> fellowKeys, DateTime now)
+        {
+            try
+            {
+                var store = ServerBlocks();
+                var of = new List<KeyValuePair<string, List<BlockRow>>>();
+                for (int i = 0; i < fileKeys.Count && i < fellowKeys.Count; i++)
+                {
+                    if (string.IsNullOrEmpty(fellowKeys[i])) continue;
+                    var rows = store.Listed(fileKeys[i], now);
+                    if (rows.Count > 0) of.Add(new KeyValuePair<string, List<BlockRow>>(fellowKeys[i], rows));
+                }
+                return BlockIndex.Write(store.Rows(ownKey, now).Select(r => r.Id), of);
+            }
+            catch (Exception e) { Debug.LogWarning("[Hearthwoven] feed block index: " + e.Message); return null; }
+        }
+
+        /// <summary>Client: the list's index (null: this server keeps none, so nothing is uploaded or asked).</summary>
+        static void TakeBlockIndex(string json)
+        {
+            var ix = json == null ? null : BlockIndex.Read(json);
+            BlocksOn = ix != null; BlockMine = ix?.Mine ?? new HashSet<string>();
+            Blocks.TakeRows(ix?.Of);
+            if (ix != null) { var of = ix.Of; QueueCache(dir => BlockCache.KeepOnly(dir, of)); }   // FB5: the cache holds only what the list names
+        }
+
+        static void ClearBlocks() { BlocksOn = false; BlockMine = new HashSet<string>(); blocksTried.Clear(); blockOutbox.Clear(); nextBlockUp = nextBlockFragment = 0f; Blocks.Clear(); }
+
+        /// <summary>Client: the friends' sessions (rows from the list, blocks in memory and in the cache); the feed asks it for what it wants to show.</summary>
+        public static readonly FellowBlocks Blocks = new FellowBlocks { Ask = AskBlock, ReadCache = ReadBlockCache };
+        static readonly Fragments.Assembler blockIn = new Fragments.Assembler { Limit = Uploads.MaxParts };
+
+        /// <summary>The feed wants block <paramref name="id"/> (Ready, or on its way).</summary>
+        public static FellowBlocks.State WantBlock(string id) => Blocks.Want(id, Time.realtimeSinceStartup);
+        /// <summary>Try again after a failure.</summary>
+        public static FellowBlocks.State RetryBlock(string id) => Blocks.Retry(id, Time.realtimeSinceStartup);
+
+        // the cache read on the cache queue; false = no cache here (a hosted world reads its own store), so the ask goes out at once
+        static bool ReadBlockCache(string fellow, string id) => !IsHost() && QueueCache(dir => Blocks.Cached(id, BlockCache.Load(dir, fellow, id)));
+
+        static void AskBlock(string id)
+        {
+            try
+            {
+                if (Panel.SampleMode.Quiet("block ask")) return;   // Dev.SampleData: nothing leaves this PC
+                if (ZNet.instance == null || ZRoutedRpc.instance == null || !Sharing()) { Blocks.Fail(id); return; }
+                if (IsHost())   // you host the world: the block is in this PC's own store
+                {
+                    var profile = Game.instance?.GetPlayerProfile();
+                    var line = profile == null ? null : ServerBlocks().Serve(PeerIdentity.KeyOf(profile.GetPlayerID(), "", 0), id, DateTime.UtcNow);
+                    if (line == null) Blocks.Gone(id); else Blocks.Arrived(id, line);
+                    return;
+                }
+                if (ZNet.instance.IsServer() || !BlocksOn) { Blocks.Fail(id); return; }
+                var p = new ZPackage(); p.Write(FeedBlock.Version); p.Write(id);
+                ZRoutedRpc.instance.InvokeRoutedRPC(BlockAskRpc, p);
+                blockAsked = id; blockAskedAt = Time.realtimeSinceStartup;   // the round trip in the log (one line on the ask, one on the answer)
+                Debug.Log($"[Hearthwoven] feed block {id}: asked the server, {(blockAskedAt - Blocks.WantedAt(id)) * 1000:0} ms after the feed wanted it");
+            }
+            catch (Exception e) { Debug.LogWarning("[Hearthwoven] block ask: " + e.Message); Blocks.Fail(id); }
+        }
+
+        static string blockAsked; static float blockAskedAt;
+        static string AskedMs(string id) => id == blockAsked ? ((Time.realtimeSinceStartup - blockAskedAt) * 1000).ToString("0") : "?";
+
+        /// <summary>Client: the server's answer to our ask (only to the asker): a part of the packed block, or "gone" (status 1). Ignored unless it is the block asked for.</summary>
+        static void OnBlock(long sender, ZPackage pkg)
+        {
+            try
+            {
+                if (ZNet.instance == null || ZNet.instance.IsServer() || !Sharing()) return;
+                var id = pkg.ReadString(); var status = pkg.ReadInt(); var msgId = pkg.ReadString(); int index = pkg.ReadInt(), count = pkg.ReadInt(); var part = pkg.ReadByteArray();
+                if (!Blocks.Expecting(id)) return;   // not asked for (or timed out): nothing is kept
+                if (status != 0) { Debug.Log($"[Hearthwoven] feed block {id}: the server does not hold it, {AskedMs(id)} ms after the ask"); Blocks.Gone(id); return; }
+                var whole = blockIn.Add(sender, msgId, index, count, part);
+                if (whole == null) return;
+                Debug.Log($"[Hearthwoven] feed block {id}: arrived, {whole.Length} bytes packed in {count} {(count == 1 ? "part" : "parts")}, {AskedMs(id)} ms after the ask");
+                var text = ServerIntake.Gunzip(whole, BlockStore.MaxBlockJson, out _);
+                var fellow = Blocks.FellowOf(id);
+                var block = text == null ? null : Blocks.Arrived(id, text);
+                if (block == null) { Blocks.Fail(id); return; }
+                QueueCache(dir => BlockCache.Save(dir, fellow, block));   // kept on this PC for next time (FB5); never on a hosted world
+            }
+            catch (Exception e) { Debug.LogWarning("[Hearthwoven] block answer: " + e.Message); }
+        }
+
+        /// <summary>Server: one part of a block a player uploads. Every check before the next costs anything: you share, the part is in range (16 parts), one finished
+        /// upload per sender per 10 s, then the size, the shape and the read (BlockStore.PutPacked). Each problem is logged once per sender.</summary>
+        static void OnBlockUp(long sender, ZPackage pkg)
+        {
+            try
+            {
+                if (ZNet.instance == null || !ZNet.instance.IsServer()) return;
+                if (pkg.ReadInt() != FeedBlock.Version) return;   // a later version's block: not ours to read
+                var msgId = pkg.ReadString(); int index = pkg.ReadInt(), count = pkg.ReadInt(); var part = pkg.ReadByteArray();
+                var peer = ZNet.instance.GetPeer(sender);
+                if (peer == null || !PeerIdentity.Id(peer).HasValue) return;
+                var ownKey = PeerIdentity.Key(peer);
+                var ownFile = Path.Combine(Dir, ownKey + ".share.json");
+                if (!File.Exists(ownFile)) return;   // you keep blocks here only while you share
+                blockGate.Prune(Connected); blockWarned.Prune(Connected);
+                var rejected = blockUp.Rejected;
+                var whole = blockUp.Add(sender, msgId, index, count, part);
+                if (blockUp.Rejected != rejected && blockWarned.First(sender, "block-parts")) Debug.LogWarning($"[Hearthwoven] a block part from peer {sender} refused: more than {Uploads.MaxParts} parts or a part over {Fragments.Size} bytes (logged once per connection)");
+                if (whole == null) return;
+                if (!blockGate.MayUpload(sender, Time.realtimeSinceStartup))
+                {
+                    if (blockWarned.First(sender, "block-rate")) Debug.LogWarning($"[Hearthwoven] blocks from peer {sender} arrive more often than one per {BlockGate.UpGap:0} s; the extra ones are ignored (logged once per connection)");
+                    return;
+                }
+                var refused = ServerBlocks().PutPacked(ownKey, whole, DateTime.UtcNow, Transport.SessionOf(ReadShare(ownFile) ?? ""));
+                if (refused != null && blockWarned.First(sender, "block-" + string.Join(" ", refused.Split(' ').Take(2)))) Debug.LogWarning($"[Hearthwoven] a block from peer {sender} not kept: {refused} (logged once per connection and reason)");
+            }
+            catch (Exception e) { Debug.LogWarning("[Hearthwoven] block intake: " + e.Message); }
+        }
+
+        /// <summary>Server: one block by id, to the asker only. Only a requester who shares, at most one ask per 2 s and no block answer of its own still in the
+        /// outbox. Found: the packed block in parts, one per 100 ms, taking turns with the copies and live updates already queued (AnswerQueue), so it does not wait behind all
+        /// of them; gone (not held, its owner's copy not served, or your own): one message.</summary>
+        static void OnBlockAsk(long sender, ZPackage pkg)
+        {
+            try
+            {
+                if (ZNet.instance == null || !ZNet.instance.IsServer()) return;
+                if (pkg.ReadInt() != FeedBlock.Version) return;
+                var id = pkg.ReadString();
+                var peer = ZNet.instance.GetPeer(sender);
+                if (peer == null || !PeerIdentity.Id(peer).HasValue) return;
+                var ownKey = PeerIdentity.Key(peer);
+                if (!File.Exists(Path.Combine(Dir, ownKey + ".share.json"))) return;   // you see others only while you share yourself
+                blockGate.Prune(Connected);
+                if (!blockGate.MayAsk(sender, Time.realtimeSinceStartup)) return;
+                foreach (var q in outbox.Blocks) if (q.Target == sender) return;   // still sending your previous block
+                if (outbox.Count > MaxQueue) return;
+                var line = ServerBlocks().Serve(ownKey, id, DateTime.UtcNow);
+                if (line == null)
+                {
+                    var gone = new ZPackage(); gone.Write(id ?? ""); gone.Write(1); gone.Write(""); gone.Write(0); gone.Write(0); gone.Write(new byte[0]);
+                    outbox.AddBlock(new Pending { Target = sender, Pkg = gone, Rpc = BlockRpc });
+                    return;
+                }
+                var parts = Fragments.Split(Transport.Pack(line)); var msgId = id + "-" + DateTime.UtcNow.Ticks;
+                for (int i = 0; i < parts.Count; i++)
+                {
+                    var p = new ZPackage(); p.Write(id); p.Write(0); p.Write(msgId); p.Write(i); p.Write(parts.Count); p.Write(parts[i]);
+                    outbox.AddBlock(new Pending { Target = sender, Pkg = p, Rpc = BlockRpc });
+                }
+            }
+            catch (Exception e) { Debug.LogWarning("[Hearthwoven] block serve: " + e.Message); }
+        }
+
+        /// <summary>
+        /// Client, every frame while playing: sends your closed sessions to the server as blocks, one every UpEvery seconds and its parts one per 100 ms, only
+        /// while the server announced blocks (the list's tag), you share and send, and your own snapshot is not still going out (it goes first). A hosted
+        /// world puts the block in its own store, no message. Each session once per connection (a refused or skipped one is not tried again until the next).
+        /// </summary>
+        internal static void UploadTick(float now, bool snapshotBusy, bool sendStats, Func<List<KeptSession>> earlier, string currentSession)
+        {
+            if (!BlocksOn || !sendStats || !Sharing() || Panel.SampleMode.On || ZNet.instance == null || ZRoutedRpc.instance == null) return;
+            var host = IsHost();
+            if (ZNet.instance.IsServer() && !host) return;
+            if (blockOutbox.Count > 0)
+            {
+                if (!snapshotBusy && now >= nextBlockFragment)
+                {
+                    ZRoutedRpc.instance.InvokeRoutedRPC(BlockUpRpc, blockOutbox.Dequeue()); nextBlockFragment = now + 0.1f;
+                    if (blockOutbox.Count == 0) nextBlockUp = now + (float)Uploads.UpEvery;   // the gap runs from the last part (the server's BlockGate.UpGap)
+                }
+                return;
+            }
+            if (snapshotBusy || now < nextBlockUp) return;
+            var plan = Uploads.Plan(earlier(), BlockMine, blocksTried, DateTime.UtcNow);
+            if (plan.Count == 0) { nextBlockUp = now + 5f; return; }
+            var s = plan[0]; blocksTried.Add(s.Id);
+            if (host)
+            {
+                nextBlockUp = now + (float)Uploads.UpEvery;   // no message to the server: the usual pace only
+                var profile = Game.instance?.GetPlayerProfile();
+                var json = FeedBlock.Write(s); var block = json == null ? null : FeedBlock.Read(json);
+                var why = profile == null ? "no profile" : ServerBlocks().Put(PeerIdentity.KeyOf(profile.GetPlayerID(), "", 0), block, DateTime.UtcNow, currentSession);
+                if (why != null) Debug.Log($"[Hearthwoven] feed block {s.Id} not kept on this PC: {why}");
+                return;
+            }
+            var packed = Uploads.Pack(s, out var problem);
+            if (packed == null) { nextBlockUp = now + (float)Uploads.UpEvery; Debug.LogWarning($"[Hearthwoven] feed block {s.Id} not sent: {problem} (logged once per connection)"); return; }
+            var frags = Fragments.Split(packed); var msgId = s.Id + "-" + DateTime.UtcNow.Ticks;
+            for (int i = 0; i < frags.Count; i++)
+            {
+                var p = new ZPackage(); p.Write(FeedBlock.Version); p.Write(msgId); p.Write(i); p.Write(frags.Count); p.Write(frags[i]);
+                blockOutbox.Enqueue(p);
+            }
         }
     }
 }

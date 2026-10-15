@@ -8,9 +8,11 @@ namespace Hearthwoven.Panel
     /// 0.8.5, Battle > Damage (By weapon, By type, By foe) and Foes: what your hits did after the foe's resistances and armor, in the bars that
     /// show what you swung (AfterArmour.cs works it out at each hit). One rule, the one Defense's What your armor stopped reads by: a bar is what
     /// you swung, as before; in each part the filled piece is what got through, the outlined piece what the foe's armor and resistances stopped
-    /// (DamageStoppedTone). A foe weak to a type takes more than you swung: that part is all filled and its number is what got through. Hits from
-    /// before the after was recorded (a window reaching back past the ledger's start, an older Hearthwoven's minutes) are the part's faded piece,
-    /// first, with no number: they were never split. The row's line ends with its share that got through ("73 % got through").
+    /// (DamageStoppedTone). A foe weak to a type takes more than you swung: that part is all filled and its number is what got through. Only the
+    /// filled piece carries its number on the bar; the stopped number is on hover. 0.8.6: the split shows only when armor was counted for ALL the
+    /// damage of the window (AllCounted); a window with hits from before armor was counted (a window reaching back past the ledger's start, an older
+    /// Hearthwoven's minutes) draws plain dealt bars and one line says where the split is known (CountedLine). The row's line ends with its share
+    /// that got through ("73 % got through").
     /// Where the after comes from per window: 10 min .. Session the log's After (shared with fellows, so their short windows have it too), All and
     /// the day windows the dealt ledger (DealtLedgerIn, your own book only).
     /// </summary>
@@ -19,20 +21,14 @@ namespace Hearthwoven.Panel
         public const string ThroughWords = "got through";
         /// <summary>The strip caption of Damage and Foes when the window's hits carry their after (DealtQualifier without it).</summary>
         public const string DealtAfterCaption = "before and after the foe's armor";   // the heading says damage dealt; a fellow's freshness needs the room
-        /// <summary>The faded piece's words on hover where no date is said (rule W.1: every window but All; a fellow's book; an older Hearthwoven's minutes).</summary>
-        public const string NotSplitWords = "from before this was counted";
-
         /// <summary>The About these numbers line of Damage and Foes (once, with the strip caption: the two places that say what before and after are).</summary>
         public const string AfterAboutTitle = "After the foe's armor";   // never "Before ..." nor "From ...": those titles are a box's dated lines (rule W.1)
-        /// <summary>Its words; the date the after is counted from on All only (rule W.1: a shorter window dates nothing).</summary>
-        public static string AfterAbout(PanelInput input, TimeWindow w)
-        {
-            var from = w == TimeWindow.SinceInstall && input != null && input.IsSelf ? input.DealtArmourFromUtc : null;
-            return "Each bar is the damage you swung, before the armor of the foe. The filled piece got through its armor and resistances. The outlined piece is what they stopped. " +
-                   "A foe that is weak to a type takes more than you swung: that piece is all filled, and its number is higher. " +
-                   (from.HasValue ? "Counted from " + RecordDate(input, from.Value) + ": a faded piece is damage from before then. " : "A faded piece is damage from before this was counted. ") +
-                   "Hearthwoven works it out on your PC at each hit, with the numbers of the game for that foe. A sneak attack or a hit on a staggered foe does more damage; neither number counts that.";
-        }
+        /// <summary>Its words (0.8.6: shown only where the bars are split, so every piece of damage in the window was counted).</summary>
+        public static string AfterAbout(PanelInput input, TimeWindow w) =>
+            "Each bar is the damage you swung, before the armor of the foe. The filled piece got through its armor and resistances, and carries its number. " +
+            "The outlined piece is what they stopped: point at a part to see that number. " +
+            "A foe that is weak to a type takes more than you swung: that piece is all filled, and its number is higher. " +
+            "Hearthwoven works it out on your PC at each hit, with the numbers of the game for that foe. A sneak attack or a hit on a staggered foe does more damage; neither number counts that.";
 
         /// <summary>
         /// The dealt ledger in a window, your own book only (null on a fellow's and for 10 min .. 3 h, whose rows come from the log with its After):
@@ -56,7 +52,7 @@ namespace Hearthwoven.Panel
             public bool Split => Measured > 0;
             /// <summary>What was stopped of the measured part (none for a weakness).</summary>
             public double Stopped => Math.Max(0, Measured - After);
-            /// <summary>The part from before the after was recorded: not split.</summary>
+            /// <summary>The part from before armor was counted: never split (0.8.6: a window with any draws plain bars, AllCounted).</summary>
             public double Earlier => Math.Max(0, Before - Measured);
             public static DealtAmount operator +(DealtAmount a, DealtAmount b) => new DealtAmount { Before = a.Before + b.Before, Measured = a.Measured + b.Measured, After = a.After + b.After };
         }
@@ -76,20 +72,19 @@ namespace Hearthwoven.Panel
         static void BumpDealt(Dictionary<string, DealtAmount> d, string key, DamageRow r) { d.TryGetValue(key, out var o); d[key] = o + DealtOf(r); }
 
         /// <summary>
-        /// A damage part (its Value what you swung, its Fraction its share of the row) drawn by the after rule when some of it is measured: Tone
-        /// DamageStoppedTone, Whole its Value as it was (what you swung, said first on hover), Value what got through (in the fill), Value2 what was
-        /// stopped (in the outline; the two shown so they add up), Fraction2 the fill's share of the part, Earlier the faded piece's share before
-        /// it (Note its words on hover, "300 from before 12 October"). The line keeps the part's share of the row (Text null). Nothing measured:
-        /// the part as it was.
+        /// A damage part (its Value what you swung, its Fraction its share of the row) drawn by the after rule when it is measured (DealtRows hands
+        /// a window with any uncounted hit no measure, so a part is split only where armor was counted for all of it): Tone DamageStoppedTone, Whole its
+        /// Value as it was (what you swung, said first on hover), Value what got through (in the fill), Value2 what was stopped (in the outline, said
+        /// on hover only; the two shown so they add up), Fraction2 the fill's share of the part. The line keeps the part's share of the row (Text
+        /// null). Nothing measured: the part as it was.
         /// </summary>
-        public static Block AfterPart(Block part, DealtAmount a, string earlierWords)
+        public static Block AfterPart(Block part, DealtAmount a)
         {
             if (part == null || !a.Split || !(a.Before > 0)) return part;
             var (through, stopped) = ShownTwo(a.After, a.Stopped);
             part.Tone = DamageStoppedTone; part.Whole = part.Value ?? NAtLeast(a.Before); part.Value = through; part.Value2 = a.Stopped > 0 ? stopped : null; part.Text = null;
-            part.Earlier = (float)(a.Earlier / a.Before);
             part.Fraction2 = (float)(Math.Min(a.After, a.Measured) / a.Before);
-            part.Note = a.Earlier > 0 ? NAtLeast(a.Earlier) + " " + earlierWords : null;
+            part.Counted = a.After >= a.Measured + 0.5 ? NAtLeast(a.Measured) : null;   // 0.8.6: weak to it (ThroughWordsOf)
             return part;
         }
 
@@ -109,26 +104,76 @@ namespace Hearthwoven.Panel
             return (S(fa, a), S(fb, b));
         }
 
-        /// <summary>A part's numbers in words, for a tag ("490 got through, 180 stopped, 300 from before 12 October"; Foes' Dealt bar).</summary>
+        /// <summary>A part's numbers in words, for a tag ("490 got through, 180 stopped"; Foes' Dealt bar). A weak part's "105 got through (weak to it)"
+        /// (ThroughWordsOf).</summary>
         public static string DealtTagWords(Block part) =>
-            part == null ? null : string.Join(", ", new[] { part.Value + " " + ThroughWords, part.Value2 != null ? part.Value2 + " " + ArmourStoppedWord : null, part.Note }.Where(x => x != null));
+            part == null ? null : string.Join(", ", new[] { ThroughWordsOf(part), part.Value2 != null ? part.Value2 + " " + ArmourStoppedWord : null }.Where(x => x != null));
 
-        /// <summary>The row's closing words on its line: its share that got through ("73 % got through"; a weakness "112 % got through"), from the
-        /// shown amounts so it agrees with the numbers in the bar: never 100 % while something was stopped, "&lt;1 %" for a little. null: nothing measured.</summary>
-        public static string ThroughLine(DealtAmount a)
+        /// <summary>0.8.6: what got through of a part in words: "770 got through"; a part whose foe was weak to it (Counted) "105 got through (weak to it)".</summary>
+        public static string ThroughWordsOf(Block part) =>
+            part.Value + " " + ThroughWords + WeakWords(part);
+
+        /// <summary>The row's closing words on its line: its share that got through ("73 % got through"), from the shown amounts so it agrees with the
+        /// numbers in the bar: never 100 % while something was stopped, "&lt;1 %" for a little. A share above 100 % is by design (a foe
+        /// weak to a type takes more than you swung) and says why where it shows: "112 % got through (weak foes)", on a type's row "(weak to Fire)".
+        /// null: nothing measured.</summary>
+        public static string ThroughLine(DealtAmount a, string type = null)
         {
             if (!a.Split) return null;
             var p = Math.Round(100 * a.After / a.Measured);
             if (p >= 100 && a.Stopped >= 0.5) p = 99;
             var share = p <= 0 && a.After > 0 ? UnderOnePercent : N(p) + " %";
-            return share + " " + ThroughWords;
+            return share + " " + ThroughWords + (p > 100 ? " (" + (type != null ? "weak to " + type : WeakFoes) + ")" : "");
+        }
+        public const string WeakFoes = "weak foes", WeakToIt = "weak to it";
+
+        /// <summary>0.8.6: whether armor was counted for ALL the damage you dealt in the rows (the window): then the bars are split into what got
+        /// through and what was stopped. Hits from before armor was counted (a total of 0.5 or more) make every bar of the window a plain dealt bar.</summary>
+        public static bool AllCounted(IEnumerable<DamageRow> rows)
+        {
+            double early = 0;
+            foreach (var r in rows ?? Enumerable.Empty<DamageRow>())
+                if (r.Dir == "dealt" && r.Amount > 0 && BattleTypes.Contains(r.Type)) early += Math.Max(0, r.Amount - Math.Min(r.Amount, r.Measured));
+            return early < 0.5;
         }
 
-        /// <summary>The faded piece's words for a window: on All "from before 12 October" (the dealt ledger's start), else NotSplitWords.</summary>
-        public static string EarlierWords(PanelInput input, TimeWindow w) =>
-            w == TimeWindow.SinceInstall && input != null && input.IsSelf && input.DealtArmourFromUtc != null ? "from before " + RecordDate(input, input.DealtArmourFromUtc.Value) : NotSplitWords;
+        /// <summary>0.8.6: the one line of a window with damage from before armor was counted, where its bars are plain: where the split is known.
+        /// Your own book with a date: "Armor counted from 9 October: choose 7 days or shorter to see what got through." (the longest window chip, open
+        /// on this page, that starts after the date: a day window from its first day, else Session); otherwise it only says it was not counted for all.
+        /// null: nothing to say (all counted, or no damage).</summary>
+        public static string CountedLine(PanelInput input, TimeWindow w, IEnumerable<DamageRow> rows, Func<TimeWindow, bool> open = null)
+        {
+            if (AllCounted(rows)) return null;
+            var from = input != null && input.IsSelf ? input.DealtArmourFromUtc : null;
+            if (from.HasValue)
+            {
+                var day = Local(input, from.Value).Date;
+                foreach (var c in new[] { TimeWindow.ThirtyDays, TimeWindow.SevenDays, TimeWindow.Today, TimeWindow.Session })
+                {
+                    if (Array.IndexOf(AllWindows, c) >= Array.IndexOf(AllWindows, w)) continue;   // a chip shorter than the one shown
+                    if (open != null && !open(c) || open == null && !WindowOpen(input, c)) continue;
+                    if (IsDayWindow(c) && DayFrom(input, c) <= day) continue;   // the day the record began is part counted
+                    return "Armor counted from " + RecordDate(input, from.Value) + ": choose " + WindowShort(c) + " or shorter to see what got through.";
+                }
+            }
+            return NotAllCountedLine;
+        }
+        /// <summary>The line as a note under the page's top line (the bars it explains follow).</summary>
+        static Block CountedNote(string line) => new Block { Kind = "note", Text = line };
+        public const string NotAllCountedLine = "Armor was not counted for all of this, so the bars are not split into what got through and what was stopped.";
 
-        /// <summary>Whether any dealt row of the window has its after: the page then says before and after (DealtAfterCaption) and explains it once.</summary>
-        public static bool AnySplit(IEnumerable<DamageRow> rows) => (rows ?? Enumerable.Empty<DamageRow>()).Any(r => r.Dir == "dealt" && r.Measured > 0);
+        /// <summary>Whether the bars of the window are split: some damage has its after and all of it was counted (AllCounted). The page then says
+        /// before and after (DealtAfterCaption) and explains it once.</summary>
+        public static bool AnySplit(IEnumerable<DamageRow> rows)
+        {
+            var any = false; double early = 0;
+            foreach (var r in rows ?? Enumerable.Empty<DamageRow>())
+            {
+                if (r.Dir != "dealt" || !(r.Amount > 0) || !BattleTypes.Contains(r.Type)) continue;
+                if (r.Measured > 0) any = true;
+                early += Math.Max(0, r.Amount - Math.Min(r.Amount, r.Measured));
+            }
+            return any && early < 0.5;
+        }
     }
 }

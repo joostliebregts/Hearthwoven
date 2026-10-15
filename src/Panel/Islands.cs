@@ -128,11 +128,18 @@ namespace Hearthwoven.Panel
                         case "dmgmix":   // 0.8 damage rows: By weapon's weapons are one list in one island, as By foe's foes and By type's types
                             {
                                 var last = islands.LastOrDefault();
+                                if (head.Count == 0 && last != null && last.Span == IslandWide && last.Parts.Count > 0 && (last.Parts[last.Parts.Count - 1].Block.Kind == "dmgmix" || last.Parts[last.Parts.Count - 1].Block.Kind == WeaponListKind)) last.Parts.Add(part);
+                                else Put(IslandWide, part);
+                                continue;
+                            }
+                        case WeaponListKind:   // 0.8.6: a kind's weapons stand under its row, in the same island and list
+                            {
+                                var last = islands.LastOrDefault();
                                 if (head.Count == 0 && last != null && last.Span == IslandWide && last.Parts.Count > 0 && last.Parts[last.Parts.Count - 1].Block.Kind == "dmgmix") last.Parts.Add(part);
                                 else Put(IslandWide, part);
                                 continue;
                             }
-                        case "composition": Put(b.Tone != OneRowTone && HalfLegend(b.Items) ? IslandHalf : IslandWide, part); continue;   // one damage row: as wide as its island
+                        case "composition": Put(b.Tone != OneRowTone && b.Tone != FightTypesTone && HalfLegend(b.Items) ? IslandHalf : IslandWide, part); continue;   // one damage row: as wide as its island
                         case "ranking": Put((b.Items?.Count ?? 0) <= IslandHalfRows ? IslandHalf : IslandWide, part); continue;
                         default: Put(IslandWide, part); continue;
                     }

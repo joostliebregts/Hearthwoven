@@ -928,6 +928,8 @@ fails += HistoryTests.Run();   // the day history (HISTORY-06.md): recording, li
 fails += ServerResilienceTests.Run();   // RESILIENCE-06 server items: atomic files, input limits, the book per world, old logs compressed (test/ServerResilienceTests.cs)
 fails += ArmourTests.Run();   // 0.7: the armour ledger, its book on this PC (schema 4) and the short windows' buckets (test/ArmourTests.cs)
 fails += AfterArmourTests.Run();   // 0.8.5: damage dealt after the foe's armor: per hit, in the log (shared, joined), in the file (schema 7) (test/AfterArmourTests.cs)
+fails += SwingTests.Run();   // 0.8.6: damage per second: seconds of fighting with a gap, the log, the ledger and the kept fight (test/SwingTests.cs)
+fails += WeaponTests.Run();   // 0.8.6: DPS per named weapon: the weapon, its upgrade level and your skill level per hit, the cap, saved and shared, the cost per hit and the bytes added (test/WeaponTests.cs)
 fails += BattleRecTests.Run();   // 0.8: the battle record (one foe per creature, outcomes, fights, bounds, the book, what is shared; test/BattleRecTests.cs)
 fails += LiveSyncTests.Run();   // 0.7 live updates: a 10 s update's size, base + latest update = the next full copy, what the server keeps (test/LiveSyncTests.cs)
 fails += DayTypesTests.Run();   // 0.9: damage dealt per day by weapon kind and type in the shared copy: parts add up, bytes, the live update through the 0.8.1 server's checks (test/DayTypesTests.cs)
@@ -939,6 +941,7 @@ fails += DeedLogTests.Run();   // 0.7 Deeds > Recent: deeds per minute as a time
 fails += ResilienceTests.Run();   // 0.8: renamed characters, worlds made again under one name, two accounts with one id, the .bak as the last good copy, newer keys kept (test/ResilienceTests.cs)
 fails += HookGuardTests.Run();   // RESILIENCE-06 item 6: one guard for every Harmony hook, checked on the IL of each (test/HookGuardTests.cs)
 fails += KeptMinutesTests.Run();   // 0.8.2: your minutes kept across a restart: the file, world and character, the 3 h bound, the shared copy, its size and live updates (test/KeptMinutesTests.cs)
+fails += FeedBlockTests.Run();   // 0.8.6: a friend's older feed as blocks: what a block holds, the server's store and bounds, the list tag, the upload plan, the cache (test/FeedBlockTests.cs)
 fails += KeptFightsTests.Run();   // 0.8.5: your fights kept across a restart: Last fight with its "ago", world and character, the bounds, a busy week's file and load time (test/KeptFightsTests.cs)
 
 System.Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");

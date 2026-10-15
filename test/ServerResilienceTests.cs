@@ -25,7 +25,7 @@ static class ServerResilienceTests
             // ---------- real snapshots (the profile inside each stored envelope) ----------
             var snaps = new List<string>();
             if (Directory.Exists(Path.Combine(real, "players")))
-                foreach (var f in Directory.GetFiles(Path.Combine(real, "players"), "*.json", SearchOption.AllDirectories).Where(f => !f.EndsWith(".share.json")))
+                foreach (var f in Directory.GetFiles(Path.Combine(real, "players"), "*.json", SearchOption.AllDirectories).Where(f => !f.EndsWith(".share.json") && !f.Contains(Path.DirectorySeparatorChar + "feed" + Path.DirectorySeparatorChar)))   // feed/ holds closed feed blocks (0.8.6: a header line, then the block), not snapshots
                     using (var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(f)))
                         if (doc.RootElement.TryGetProperty("profile", out var prof)) snaps.Add(prof.GetRawText());
             string sample = snaps.OrderByDescending(s => s.Length).FirstOrDefault()

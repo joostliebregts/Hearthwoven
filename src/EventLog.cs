@@ -39,6 +39,17 @@ namespace Hearthwoven
         /// (WriteFields: what the foe's armor took off, only where it took or added something), read back into After for every measured key, so a
         /// measured key always has its entry; one without (its after could not be worked out) is read as not measured.</summary>
         public readonly Dictionary<string, float> After = new Dictionary<string, float>();
+        /// <summary>0.8.6 (DPS, SwingClock): your fighting time per minute and weapon kind: "2026-10-07T20:14Z|melee|s" -> seconds of fighting, "...|melee|d" ->
+        /// the damage swung in them (the hits after the first of each stretch). Its own map, so no reader of Damage or Hits ever meets it; folded, joined
+        /// and cut with them. Three weapon kinds, two keys each: at most six keys a minute. An older log has none: its windows show no pace.</summary>
+        public readonly Dictionary<string, float> Swing = new Dictionary<string, float>();
+        /// <summary>0.8.6 (DPS per named weapon): per minute, weapon and upgrade level ("2026-10-07T20:14Z|SwordIron|3|Swords"): its seconds of fighting, the damage swung
+        /// in them, all its damage and the lowest and highest level of its skill you had. Unlike <see cref="Swing"/> it is shared on purpose (Snapshot), so a
+        /// fellow's By weapon shows their weapons in the short windows; at most WeaponCells.PerMinute named weapons a minute. Folded, joined and cut with the rest.</summary>
+        public readonly WeaponCells Weapons = new WeaponCells(true);
+        /// <summary>The log keeps Weapons (this PC's own; a fellow's copy whose measuredLog has "weapons"). False: a Hearthwoven before 0.8.6, whose weapons are not known (never read as none).</summary>
+        public bool WeaponsKept = true;
+        long swingMinute = -1; readonly string[] swingKeys = new string[SwingClock.Kinds.Length * 2];   // this minute's keys, made once a minute, not per hit
         /// <summary>0.8.5: the bucket from which every hit of yours on a foe has its After (the first such hit's ten minutes, as a folded bucket would
         /// say it); "" = none (a log of a Hearthwoven before 0.8.5). A dealt key is measured when its bucket is at or after it (Measured).</summary>
         public string AfterFrom = "";
@@ -79,7 +90,7 @@ namespace Hearthwoven
             var now = Bucket(utc); if (now == lastFold) return;
             lastFold = now;
             var cut = Bucket(utc.AddMinutes(-FoldAfterMinutes));
-            FoldKeys(Damage, cut); FoldKeys(Hits, cut); FoldKeys(Guard, cut); FoldKeys(After, cut);
+            FoldKeys(Damage, cut); FoldKeys(Hits, cut); FoldKeys(Guard, cut); FoldKeys(After, cut); FoldKeys(Swing, cut); Weapons.Fold(cut);
         }
 
         /// <summary>0.8.5: a bucket ("2026-10-07T20:14Z", or a key that starts with one) whose hits on foes have their After: at or after AfterFrom.</summary>
@@ -93,6 +104,29 @@ namespace Hearthwoven
 
         /// <summary>The ten minutes a bucket folds into ("2026-10-07T20:14Z" -> "2026-10-07T20:10Z").</summary>
         static string TenOf(string bucket) => bucket.Length >= 17 ? bucket.Substring(0, 15) + "0" + bucket.Substring(16) : bucket;
+
+        /// <summary>0.8.6: a hit of yours on a foe that earned <paramref name="seconds"/> of fighting with <paramref name="kind"/> (SwingClock.Kinds index) and
+        /// <paramref name="damage"/> swung in them (SwingClock.Hit gives the seconds; 0 for the first hit of a stretch, which adds nothing). Called with the
+        /// hit's AddDamage, which has folded the log and counted the change already. No allocation except once a minute (the minute's keys).</summary>
+        public void AddSwing(DateTime utc, int kind, float seconds, float damage)
+        {
+            if (!(seconds > 0f) || !(damage > 0f) || !Json.IsFinite(seconds) || !Json.IsFinite(damage)) return;
+            var tick = utc.Ticks / TimeSpan.TicksPerMinute;
+            if (tick != swingMinute)
+            {
+                swingMinute = tick;
+                var minute = Bucket(utc);
+                for (int k = 0; k < SwingClock.Kinds.Length; k++) { swingKeys[2 * k] = minute + "|" + SwingClock.SecondsKeys[k]; swingKeys[2 * k + 1] = minute + "|" + SwingClock.DamageKeys[k]; }
+            }
+            Bump(swingKeys[2 * kind], seconds); Bump(swingKeys[2 * kind + 1], damage);
+            void Bump(string k, float v) { Swing.TryGetValue(k, out var o); Swing[k] = o + v; }
+        }
+
+        /// <summary>0.8.6: a hit of yours with a weapon (<paramref name="prefab"/> at <paramref name="quality"/>, hit on the skill <paramref name="skill"/> at <paramref name="level"/>):
+        /// its damage, and when it ended a stretch's seconds those and the damage swung in them. Called with the hit's AddDamage (which folded the log). No allocation
+        /// except a weapon's first hit in a minute.</summary>
+        public void AddWeapon(DateTime utc, string prefab, int quality, string skill, int level, float seconds, float swung, float all) =>
+            Weapons.Hit(utc, prefab, quality, skill, level, seconds, swung, all, WeaponCells.PerMinute);
 
         /// <summary>One held block (ClientHooks.Block, where SessionEvents.Blocks counts it); <paramref name="parry"/>: it was a parry too.</summary>
         public void AddGuard(DateTime utc, bool parry)
@@ -194,10 +228,10 @@ namespace Hearthwoven
             if (later == null) return earlier;
             // 0.8.5: After from the earlier part's start when it has one, else from the later's (the earlier's minutes, older, stay unmeasured)
             var j = new EventLog { Span = Math.Max(earlier.Span, later.Span), GuardKept = later.GuardKept, DeathsNotListed = earlier.DeathsNotListed + later.DeathsNotListed,
-                                   AfterFrom = earlier.AfterFrom.Length > 0 ? earlier.AfterFrom : later.AfterFrom };
+                                   AfterFrom = earlier.AfterFrom.Length > 0 ? earlier.AfterFrom : later.AfterFrom, WeaponsKept = later.WeaponsKept };
             foreach (var log in new[] { earlier, later })
             {
-                Add(log.Damage, j.Damage); Add(log.Hits, j.Hits); Add(log.Guard, j.Guard); Add(log.After, j.After);
+                Add(log.Damage, j.Damage); Add(log.Hits, j.Hits); Add(log.Guard, j.Guard); Add(log.After, j.After); Add(log.Swing, j.Swing); j.Weapons.Merge(log.Weapons);
                 j.Deaths.AddRange(log.Deaths);
             }
             j.Deaths.Sort((a, b) => a.Time.CompareTo(b.Time));
@@ -212,9 +246,10 @@ namespace Hearthwoven
         /// </summary>
         public EventLog Between(DateTime fromUtc, DateTime untilUtc)
         {
-            var b = new EventLog { Span = Span, GuardKept = GuardKept, AfterFrom = AfterFrom };
+            var b = new EventLog { Span = Span, GuardKept = GuardKept, AfterFrom = AfterFrom, WeaponsKept = WeaponsKept };
             string lo = Bucket(fromUtc), hi = untilUtc == DateTime.MaxValue ? null : Bucket(untilUtc);
-            KeysBetween(Damage, b.Damage, lo, hi); KeysBetween(Hits, b.Hits, lo, hi); KeysBetween(Guard, b.Guard, lo, hi); KeysBetween(After, b.After, lo, hi);
+            KeysBetween(Damage, b.Damage, lo, hi); KeysBetween(Hits, b.Hits, lo, hi); KeysBetween(Guard, b.Guard, lo, hi); KeysBetween(After, b.After, lo, hi); KeysBetween(Swing, b.Swing, lo, hi);
+            foreach (var kv in Weapons.Between(lo, hi).Map) b.Weapons.Map[kv.Key] = kv.Value;
             foreach (var d in Deaths) if (d.Time >= fromUtc && d.Time < untilUtc) b.Deaths.Add(d);
             return b;
         }
@@ -256,12 +291,15 @@ namespace Hearthwoven
             }
         }
 
-        public void WriteTo(Json j, string key = "measuredLog") { j.Key(key).Open(); WriteFields(j); j.Close(); }
+        /// <param name="swing">0.8.6: the fighting time per minute and weapon kind. Your PC keeps it (the local file, KeptMinutes); the shared copy leaves it out.</param>
+        public void WriteTo(Json j, string key = "measuredLog", bool swing = true) { j.Key(key).Open(); WriteFields(j, swing); j.Close(); }
 
         /// <summary>The log's fields inside an object the caller opened (WriteTo; KeptMinutes adds its own beside them).</summary>
-        internal void WriteFields(Json j)
+        internal void WriteFields(Json j, bool swing = true)
         {
             j.Num("bucketMinutes", BucketMinutes).Num("deathsNotListed", DeathsNotListed).Dict("damage", Damage).Dict("hits", Hits).Dict("guard", Guard);
+            if (swing && Swing.Count > 0) j.Dict("swing", Swing);   // 0.8.6: an older Hearthwoven ignores the key
+            if (WeaponsKept) Weapons.WriteTimed(j, "weapons");   // 0.8.6: shared on purpose; written also empty, so a reader can tell "no weapons" from an older Hearthwoven
             if (AfterFrom.Length > 0) j.Str("afterFrom", AfterFrom).Dict("stopped", Stopped());   // 0.8.5: the after as what was stopped, nothing where nothing was
             j.Key("deaths").OpenArr();
             foreach (var d in Deaths)
@@ -280,6 +318,9 @@ namespace Hearthwoven
         public EventLog ReadFrom(Dictionary<string, object> log)
         {
             MiniJson.Into(MiniJson.Obj(log, "damage"), Damage); MiniJson.Into(MiniJson.Obj(log, "hits"), Hits);
+            var wk = MiniJson.Obj(log, "weapons"); WeaponsKept = wk != null;   // 0.8.6: the weapons per minute (an older sender keeps none: not "no weapons")
+            if (wk != null) foreach (var kv in WeaponCells.ReadTimed(wk).Map) Weapons.Map[kv.Key] = kv.Value;
+            MiniJson.Into(MiniJson.Obj(log, "swing"), Swing);   // 0.8.6: your fighting time per minute and weapon kind (an older sender keeps none)
             MiniJson.Into(MiniJson.Obj(log, "guard"), Guard); GuardKept = MiniJson.Obj(log, "guard") != null;   // 0.8.2: blocks and parries per minute (an older sender keeps none)
             AfterFrom = MiniJson.Str(log, "afterFrom"); if (AfterFrom.Length < 17) AfterFrom = "";   // 0.8.5: your hits after the foe's armor (an older sender keeps none)
             if (AfterFrom.Length > 0)

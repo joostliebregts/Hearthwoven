@@ -24,7 +24,9 @@ namespace Hearthwoven.Panel
         // the foe rows: the name column (picture, name, ×N), each column's number, its bar; the boss first, the foes around it indented
         const float FtWho = 190, FtWhoMax = 240, FtIndent = 22, FtPic = 22, FtBossPic = 26, FtNumMin = 44, FtColGap = 10, FtSep = 18, FtChev = 18, FtFoeGap = 4, FtSubIndent = 38;
         // the players' table: a fixed width per column, the name column takes the rest
-        const float FtPlayerRow = 24, FtCellNum = 52, FtCellBarMin = 80, FtCellBarMax = 110, FtCellStat = 62, FtCellStop = 56, FtCellDeaths = 96, FtDeathBar = 48, FtCellGap = 10, FtNameMin = 190;
+        // 0.8.6 (Joost: "check the deaths"): every column's numbers end at one right edge, its word's; Deaths' number too, its types' bar before it
+        // (FtDeathNum, FtDeathGap) and the skull only in the column's head
+        const float FtPlayerRow = 24, FtCellNum = 52, FtCellBarMin = 80, FtCellBarMax = 110, FtCellStat = 62, FtCellStop = 56, FtCellDeaths = 96, FtDeathBar = 48, FtDeathNum = 24, FtDeathGap = 8, FtHeadIcon = 20, FtCellGap = 10, FtNameMin = 190;
         // Runs and bosses: the day, the picture and name over how it ended, the number, the bar
         const float FtDate = 60, FtListPic = 28, FtListWho = 236, FtListLine1 = 24, FtListLine2 = 20, FtListGap = 8, FtAddRow = 26;
         const float FtKeyGap = 14, FtSwatch = 10, FtBarH = PanelModel.DamageTrack + PanelModel.DamageInner + PanelModel.DamageTrue;
@@ -34,7 +36,7 @@ namespace Hearthwoven.Panel
         {
             switch (b.Kind)
             {
-                case PanelModel.FightHeadKind: FightHead(col, b); break;
+                case PanelModel.FightHeadKind: FtHead(col, b); break;   // 0.8.6: the fight's own head (0.8.5 called the feed's FightHead here: "A dungeon ·" and nothing else)
                 case PanelModel.FightFoesKind: FightFoeRows(col, b, link); break;
                 case PanelModel.FightPlayersKind: FightPlayers(col, b); break;
                 case PanelModel.FightListKind: FightList(col, b, link); break;
@@ -105,11 +107,16 @@ namespace Hearthwoven.Panel
             // the name over its land, given the room the numbers leave: a long name steps down (26 to 20); still too long, the numbers say their
             // words short, and only then is the name cut
             var room = Mathf.Max(60f, Place(false) - FtNameX - 16);
-            var title = BtText(r, b.Title, FtNameX, 0, room, 30, FtName, PanelLook.Text, style: FontStyles.Bold);
+            var title = BtText(r, b.Title, FtNameX, string.IsNullOrEmpty(b.Text) ? (FtTopH - 30) / 2 : 0, room, 30, FtName, PanelLook.Text, style: FontStyles.Bold);   // no land known: the name alone, in the row's middle
             void Fit() { title.fontSize = FtName; for (var size = FtName - 2; size >= FtNameLeast && FtWidth(title) > room; size -= 2) title.fontSize = size; }
             Fit();
-            if (FtWidth(title) > room && nums.Any(n => !string.IsNullOrEmpty(n.Text))) { room = Mathf.Max(60f, Place(true) - FtNameX - 16); title.rectTransform.sizeDelta = new Vector2(room, title.rectTransform.sizeDelta.y); Fit(); }
-            if (!string.IsNullOrEmpty(b.Text)) BtText(r, b.Text, FtNameX, 28, room, 20, FtLand, PanelLook.Muted);
+            var sub = string.IsNullOrEmpty(b.Text) ? null : BtText(r, b.Text, FtNameX, 28, room, 20, FtLand, PanelLook.Muted);
+            // 0.8.6: the land's line too (a third number, the pace, takes room): when it does not fit either, the numbers say their short words
+            if ((FtWidth(title) > room || (sub != null && FtWidth(sub) > room)) && nums.Any(n => !string.IsNullOrEmpty(n.Text)))
+            {
+                room = Mathf.Max(60f, Place(true) - FtNameX - 16); title.rectTransform.sizeDelta = new Vector2(room, title.rectTransform.sizeDelta.y); Fit();
+                if (sub != null) sub.rectTransform.sizeDelta = new Vector2(room, sub.rectTransform.sizeDelta.y);
+            }
             if (lane != null) FightLane(col, lane);
             if (line != null) FightRunLine(col, line);
         }
@@ -123,6 +130,7 @@ namespace Hearthwoven.Panel
             var track = RoundedPart(r, "Lane", DrTrack); track.pixelsPerUnitMultiplier = DrRadiusScale; track.rectTransform.Box(0, 0, w, FtLaneH);
             var c = Hex(lane.Colour, PanelLook.Muted);
             float left = Mathf.Clamp01(lane.Fraction) * w, was = Mathf.Clamp01(lane.Fraction2) * w;
+            var etaOut = !string.IsNullOrEmpty(lane.Note);   // 0.8.6: the time left at this pace: inside the fill after "64 % left" when it fits there, else after the note
             if (was > left + 1)
             {
                 var took = VocabImg(r, "Took", "grain-hatch-diag", c); took.rectTransform.Box(left, 0, was - left, FtLaneH);
@@ -133,7 +141,9 @@ namespace Hearthwoven.Panel
                 var fill = RoundedPart(r, "Left", c); fill.pixelsPerUnitMultiplier = DrRadiusScale; fill.rectTransform.Box(0, 0, left, FtLaneH);
                 if (!string.IsNullOrEmpty(lane.Value))
                 {
-                    var t = BtText(r, lane.Value, FtLanePad, 0, Mathf.Max(0, left - 2 * FtLanePad), FtLaneH, PanelLook.MinText, SegmentInk(c), style: FontStyles.Bold);
+                    var t = BtText(r, etaOut ? lane.Value + " · " + lane.Note : lane.Value, FtLanePad, 0, Mathf.Max(0, left - 2 * FtLanePad), FtLaneH, PanelLook.MinText, SegmentInk(c), style: FontStyles.Bold);
+                    if (etaOut && FtWidth(t) <= left - 2 * FtLanePad) etaOut = false;
+                    else if (etaOut) t.text = lane.Value;
                     if (FtWidth(t) > left - 2 * FtLanePad) t.gameObject.SetActive(false);   // too short a fill for its words: the lane's length says it
                 }
             }
@@ -143,8 +153,9 @@ namespace Hearthwoven.Panel
                 BtText(r, lane.Title, FtLanePad + 24, 0, 200, FtLaneH, PanelLook.MinText, PanelLook.Text);
             }
             if (string.IsNullOrEmpty(lane.Text)) return;
+            var said = etaOut ? lane.Text + " · " + lane.Note : lane.Text;
             var swatch = lane.Tone == "live" && was > left + 1;
-            var note = BtText(r, lane.Text, 0, 0, w, FtLaneH, PanelLook.MinText, PanelLook.Muted);
+            var note = BtText(r, said, 0, 0, w, FtLaneH, PanelLook.MinText, PanelLook.Muted);
             float nw = FtWidth(note), lead = swatch ? 18 + 6 : 0, need = nw + lead;
             if (need + FtLanePad + 8 <= w - Mathf.Max(left, was))
             {
@@ -156,7 +167,7 @@ namespace Hearthwoven.Panel
             note.gameObject.SetActive(false); Destroy(note.gameObject);
             var under = BtRow(col, FtKeyLineH);
             if (swatch) FtHatchSwatch(under, c, 0, (FtKeyLineH - 12) / 2);
-            BtText(under, lane.Text, lead, 0, w - lead, FtKeyLineH, PanelLook.MinText, PanelLook.Muted);
+            BtText(under, said, lead, 0, w - lead, FtKeyLineH, PanelLook.MinText, PanelLook.Muted);
         }
 
         static void FtHatchSwatch(RectTransform r, Color c, float x, float top)
@@ -330,10 +341,15 @@ namespace Hearthwoven.Panel
         {
             col = VStack(col, 0);
             var cols = FtItems(b, "col");
-            var fixedW = cols.Where(c => c.Id != "dealt" && c.Id != "received").Sum(c => FtCellW(c.Id, 0)) + cols.Count * FtCellGap;
+            // 0.8.6: a column of numbers is at least as wide as its head (its word and its icon), so a head never reaches over the column before it
+            // (Parries' icon sat beside Blocks' word)
+            var m = Label(col, "", PanelLook.MinText, PanelLook.Muted); m.textWrappingMode = TextWrappingModes.NoWrap;
+            float CellW(Block c, float barW) { if (c.Id == "dealt" || c.Id == "received") return FtCellW(c.Id, barW); m.text = c.Title ?? ""; return Mathf.Max(FtCellW(c.Id, barW), FtWidth(m) + (string.IsNullOrEmpty(c.Icon) ? 0 : FtHeadIcon)); }
+            var fixedW = cols.Where(c => c.Id != "dealt" && c.Id != "received").Sum(c => CellW(c, 0)) + cols.Count * FtCellGap;
             var bars = cols.Count(c => c.Id == "dealt" || c.Id == "received");
             var bar = bars == 0 ? 0 : Mathf.Clamp((Column - FtNameMin - fixedW - bars * (FtCellNum + 8)) / bars, FtCellBarMin, FtCellBarMax);
-            var widths = cols.Select(c => FtCellW(c.Id, bar)).ToList();
+            var widths = cols.Select(c => CellW(c, bar)).ToList();
+            m.gameObject.SetActive(false); Destroy(m.gameObject);
             var nameW = Column - widths.Sum() - cols.Count * FtCellGap;
             var xs = new List<float>(); var x = nameW; foreach (var w in widths) { x += FtCellGap; xs.Add(x); x += w; }
             // the head: the caption and the dealt split's key, each column's word right-aligned over its number (an icon before it)
@@ -343,10 +359,10 @@ namespace Hearthwoven.Panel
             for (int k = 0; k < cols.Count; k++)
             {
                 var c = cols[k]; var numEnd = xs[k] + (c.Id == "dealt" || c.Id == "received" ? FtCellNum : widths[k]);
-                var t = BtText(h, c.Title, 0, 0, 120, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); var tw = FtWidth(t);
+                var t = BtText(h, c.Title, 0, 0, 120, FtKeyLineH, PanelLook.MinText, PanelLook.Muted, TextAlignmentOptions.MidlineRight); var tw = FtWidth(t);   // its right edge the numbers' (0.8.6)
                 t.rectTransform.Box(numEnd - tw, 0, tw, FtKeyLineH);
                 var start = numEnd - tw;
-                if (!string.IsNullOrEmpty(c.Icon)) { BtIcon(h, c.Icon, PanelLook.Muted, numEnd - tw - 20, (FtKeyLineH - 16) / 2, 16); start -= 20; }
+                if (!string.IsNullOrEmpty(c.Icon)) { BtIcon(h, c.Icon, PanelLook.Muted, numEnd - tw - FtHeadIcon, (FtKeyLineH - 16) / 2, 16); start -= FtHeadIcon; }
                 firstHead = Mathf.Min(firstHead, start);
             }
             // the dealt split's key on the head line: after the caption where it fits before the first column's word, else in the caption's
@@ -379,11 +395,11 @@ namespace Hearthwoven.Panel
                     }
                     else if (id == "deaths")
                     {
-                        var d = FtItems(p, "deaths").FirstOrDefault(); var n = d?.Value ?? "0";
-                        if (n == "0") { BtText(r, n, cx, barTop, widths[k], PanelModel.DamageTrack, DrName, PanelLook.Faint, TextAlignmentOptions.MidlineRight); continue; }
-                        BtIcon(r, "vocab:death", PanelLook.Text, cx, barTop + (PanelModel.DamageTrack - 16) / 2, 16);
-                        BtText(r, n, cx + 18, barTop, 22, PanelModel.DamageTrack, DrName, PanelLook.Text, TextAlignmentOptions.MidlineRight, FontStyles.Bold);
-                        FtBar(r, FtItems(d, "rpart"), 1, false, cx + widths[k] - FtDeathBar, barTop, FtDeathBar);
+                        // the number at the column's right edge in every row (0.8.5 put a fall's skull and number at the cell's left, a 0 at its right);
+                        // the types of the fall's last seconds as a small bar before it
+                        var d = FtItems(p, "deaths").FirstOrDefault(); var n = d?.Value ?? "0"; var end = cx + widths[k];
+                        BtText(r, n, end - FtDeathNum, barTop, FtDeathNum, PanelModel.DamageTrack, DrName, n == "0" ? PanelLook.Faint : PanelLook.Text, TextAlignmentOptions.MidlineRight, n == "0" ? FontStyles.Normal : FontStyles.Bold);
+                        if (n != "0") FtBar(r, FtItems(d, "rpart"), 1, false, end - FtDeathNum - FtDeathGap - FtDeathBar, barTop, FtDeathBar);
                     }
                     else
                     {

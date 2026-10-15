@@ -460,9 +460,12 @@ namespace Hearthwoven.Panel
         // in the heading row: two things, both shaped like buttons). Flat: a dark ground with a gold edge at its left, no raised border; the feat
         // part opens the Feats page like the tile did, each title (B18: with its reason, quiet after the name) the Titles page with it chosen.
         // One line; the titles drop to a second line only when the first is full.
-        const float EarnedLine = 34, EarnedPad = 12, EarnedGap = 18, TitleReasonGap = 8;
-        /// <summary>The strip's ground: black at this alpha over the plate (0.8 layout D+, FEEDBACK 5: set apart from the islands by contrast; was 0.30).</summary>
-        const float StripGround = 0.55f;
+        // 0.8.6 (Joost: "a full black bar at the top. Can we make that the same color as the other islands?"): the strip is an island, its
+        // ground and its padding the islands' (it was black at 0.55 over the plate, and 12 px in); its gold edge stays clear of the round corners
+        static readonly float EarnedPad = PanelLayout.Island.Pad, EdgeInset = PanelLayout.Island.Radius - 3;
+        const float EarnedLine = 34, EarnedGap = 18, TitleReasonGap = 8;
+        /// <summary>0.8.6: the Back button's chip and its key's cap in the strip, as tall as the About button's, and the room between them.</summary>
+        const float StripChipH = 26, StripCapH = 22, StripCapGap = 8;
 
         static void FeatBandBlock(RectTransform col, Block b, Func<string, Action> link)
         {
@@ -471,7 +474,7 @@ namespace Hearthwoven.Panel
             // 0.8 layout D+ (PageHead.cs): the strip is the page's head; with no feat or title it still carries the switch, About these numbers or
             // a fellow's note, and the switch's caption on its left
             var caption = feats.Count == 0 && titles.Count == 0 ? stripSwitch?.Title : null;
-            if (feats.Count == 0 && titles.Count == 0 && stripAbout == null && stripSwitch == null && string.IsNullOrEmpty(stripNote) && stripCompare == null) return;
+            if (feats.Count == 0 && titles.Count == 0 && stripAbout == null && stripSwitch == null && string.IsNullOrEmpty(stripNote) && stripCompare == null && stripBack == null) return;
             // what goes on the line, measured first (the same label settings as drawn): (marker icon, text, colour, style, tag)
             float Measure(Rich text, float size, FontStyles style, float spacing = 0)
             {
@@ -488,6 +491,9 @@ namespace Hearthwoven.Panel
             float titleW = titleParts.Count == 0 ? 0 : Measure(Rich.Plain(b.Text ?? PanelModel.TitlesWord), PanelLook.MinText, FontStyles.UpperCase, 10) + 8
                 + titleParts.Sum(p => 22 + 6 + p.nameW + (p.reasonW > 0 ? TitleReasonGap + p.reasonW : 0) + EarnedGap) - EarnedGap;
             var inner = Column - EarnedPad * 2;
+            // 0.8.6: the Back button leads at the strip's left end, its width taken first; what was there starts after it
+            RectTransform back = null; float backW = 0;
+            if (stripBack != null) { back = BackCluster(col, stripBack); backW = TopClusterWidth(back); inner -= backW + EarnedGap; }
             // 0.8.5: Compare's legend (or a greyed chip's reason) leads the left; what was there follows it when it still fits (CompareUi.StripCompare)
             var cmpW = stripCompare != null ? StripCompare(col, stripCompare, 0, float.MaxValue, false) : 0f;
             // B38: the top items in one row: the page's view switch and its "About these numbers" button at the strip's right end, reserved
@@ -524,9 +530,16 @@ namespace Hearthwoven.Panel
             // titles then end in "+N more" where the room ends)
             var second = cluster == null && featW > 0 && titleW > 0 && featW + EarnedGap * 2 + 1 + titleW > inner;
             var box = Node("Earned", col); Size(box, -1, second ? EarnedLine * 2 : EarnedLine);
-            BtRect(box, "Ground", new Color(0f, 0f, 0f, StripGround), 0, 0, Column, second ? EarnedLine * 2 : EarnedLine);   // 0.8 layout D+: a darker band, clearly the page's head
-            if (featParts.Count > 0 || titleParts.Count > 0) BtRect(box, "Edge", PanelLook.Gold, 0, 0, 3, second ? EarnedLine * 2 : EarnedLine);   // the gold edge leads the feats and titles; an empty left has none
+            if (!stripDrawn) stripDrawn = box;   // 0.8.6: the page's strip, pinned by Fill when it leads the plate (StickyHeadUi.cs)
+            var ground = Img(box, "Ground", PanelLook.Island, PanelLook.IslandGround); if (PanelLook.Island) { ground.type = Image.Type.Sliced; ground.pixelsPerUnitMultiplier = 1f; }   // 0.8.6: an island, as the ones under it
+            ground.rectTransform.Box(0, 0, Column, second ? EarnedLine * 2 : EarnedLine);
+            if (featParts.Count > 0 || titleParts.Count > 0) BtRect(box, "Edge", PanelLook.Gold, 0, EdgeInset, 3, (second ? EarnedLine * 2 : EarnedLine) - 2 * EdgeInset);   // the gold edge leads the feats and titles; an empty left has none
             float x = EarnedPad, top = 0;
+            if (back != null)
+            {
+                back.SetParent(box, false); var ble = back.GetComponent<LayoutElement>(); if (ble) Destroy(ble);
+                back.Box(x, (EarnedLine - StripChipH) / 2, backW, StripChipH); x += backW + EarnedGap;
+            }
             if (cmpW > 0)
             {
                 x += StripCompare(box, stripCompare, x, cmpW, true);
@@ -599,6 +612,30 @@ namespace Hearthwoven.Panel
                 }
             }
         }
+
+        // 0.8.6: the Back button and its key's cap, as the About button and its cap: the chip with the opens mark turned back before "Back", then
+        // the cap 8 px after it; measured as laid out (TopClusterWidth)
+        static RectTransform BackCluster(RectTransform parent, Action back)
+        {
+            var row = Line(parent, StripCapGap);
+            Chip(row, PanelModel.BackLabel, null, false, back);
+            var chip = (RectTransform)row.GetChild(row.childCount - 1);
+            var label = chip.GetComponentInChildren<TextMeshProUGUI>();
+            if (PanelLook.Chevron && label)   // the › that marks what opens, turned to point back, in its own room before the word
+            {
+                var room = PanelLook.ChevronW + BackChevronGap;
+                label.rectTransform.offsetMin += new Vector2(room, 0);
+                var le = chip.GetComponent<LayoutElement>(); if (le) { le.minWidth += room; le.preferredWidth += room; }
+                var mark = Img(chip, "Back", PanelLook.Chevron, PanelLook.Text).rectTransform;
+                mark.anchorMin = mark.anchorMax = mark.pivot = Vector2.up / 2; mark.sizeDelta = new Vector2(PanelLook.ChevronW, PanelLook.ChevronH);
+                mark.anchoredPosition = new Vector2(PanelLayout.Chip.Pad + PanelLook.ChevronW, 0); mark.localScale = new Vector3(-1, 1, 1);   // mirrored about its left edge: it fills [Pad, Pad + ChevronW]
+            }
+            Size(Keycap(row, PanelModel.BackKeyCap), KeycapWidth(PanelModel.BackKeyCap, StripCapH), StripCapH);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(row);
+            return row;
+        }
+        /// <summary>Between the Back button's turned › and its word.</summary>
+        const float BackChevronGap = 6;
 
         static void FeatLink(Image chip, Func<string, Action> link, string target)
         {

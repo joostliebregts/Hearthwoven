@@ -76,6 +76,8 @@ const measure = (MIN) => {
     let s = e.tagName.toLowerCase(); if (e.id) s += "#" + e.id; const c = (e.getAttribute("class") || "").trim().split(/\s+/).filter(Boolean).slice(0, 2); if (c.length) s += "." + c.join("."); parts.unshift(s); } return parts.join(" > "); };
   const clipRects = (el) => { const rs = []; for (let e = el; e && e !== document.documentElement; e = e.parentElement) { const cs = getComputedStyle(e);
     if (cs.overflowX !== "visible" || cs.overflowY !== "visible") rs.push(e.getBoundingClientRect()); } return rs; };
+  // 0.8.6 the sticky head: a row scrolled under the pinned strip is hidden by it, as in game the scroll area's mask clips it at the strip's foot
+  const pins = [...document.querySelectorAll(".content > .plate > .pinhead")].map(h => h.getBoundingClientRect());
   const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = w.nextNode(); n; n = w.nextNode()) {
     const txt = n.nodeValue.replace(/\s+/g, " ").trim(); if (!txt) continue;
@@ -87,6 +89,8 @@ const measure = (MIN) => {
     let r = rects[0];
     if (r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight) continue;
     if (clipRects(el).some(c => r.right <= c.left || r.left >= c.right || r.bottom <= c.top || r.top >= c.bottom)) continue;   // clipped away entirely
+    const pin = el.closest(".pinhead") ? null : pins.find(q => r.right > q.left && r.left < q.right && r.top < q.bottom && r.bottom > q.top);
+    if (pin && r.bottom <= pin.bottom + 0.5) continue;   // wholly under the pinned strip
     const col = cs.color.match(/[\d.]+/g) || []; if (col.length > 3 && parseFloat(col[3]) === 0) continue;
     // rendered size: font-size x accumulated scale (rect height of the run vs. its unscaled line box)
     let scale = 1; for (let e = el; e && e !== document.documentElement; e = e.parentElement) { const t = getComputedStyle(e).transform; if (t && t !== "none") { const m = new DOMMatrix(t); scale *= Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1; } }   // transform scale of the ancestors; zoom is not used
@@ -101,7 +105,7 @@ const measure = (MIN) => {
     let blk = -1; for (let e = el; e && e.parentElement; e = e.parentElement) { const p = e.parentElement; if (p.matches(".content > .plate, .content .blocks")) { blk = e.classList.contains("plfade") || e.classList.contains("page-tip") ? -1 : [...p.children].indexOf(e); break; } }   // .plfade: the fade and the "More below" cue lie over the grid on purpose; the page's hover tag over a bar (PanelUi.PageTag) too
     // the one exception: a number inside a damage-bar part (.dr-seg .num), digits only, bold (PanelUi.BarDigits)
     const bar = el.classList.contains("num") && !!el.closest(".dr-seg") && /^[\d\s   ]+$/.test(txt) && /\d/.test(txt) && parseInt(cs.fontWeight) >= 600;
-    out.push({ text: txt.slice(0, 40), fs, bar, eff: Math.round(eff * 100) / 100, h: Math.round(r.height * 10) / 10, sel: cssPath(el), x: Math.round(r.left), y: Math.round(r.top), cut, side, blk, box: [r.left, r.top + 0.2 * eff, r.right, r.bottom - 0.2 * eff] });   // the ink, not the line box: a big number's line box reaches into the label under it
+    out.push({ text: txt.slice(0, 40), fs, bar, eff: Math.round(eff * 100) / 100, h: Math.round(r.height * 10) / 10, sel: cssPath(el), x: Math.round(r.left), y: Math.round(r.top), cut, side, blk, box: [r.left, Math.max(r.top + 0.2 * eff, pin ? pin.bottom : -Infinity), r.right, r.bottom - 0.2 * eff] });   // the ink, not the line box: a big number's line box reaches into the label under it
   }
   return out;
 };
@@ -143,9 +147,9 @@ const nameBox = csConst("BtFoeName") - csConst("BtFoeNamePad");
 
 // one preview: shot to its PNG and checked; everything it finds comes back in r (the runs on the report fold the pages in their order)
 async function shoot(page, n) {
-  const r = { overlaps: [], datesCut: [], feedSplit: [], feedTracks: [], fightTall: [], overviewTall: [], fellOff: [], overviewPages: 0, fellStrips: 0, awayTall: [], togetherTall: [], voyagesTall: [], smeltersTall: [], heroGrowth: [], heroLines: [], crewOff: [], deadMore: [], bareIslands: [], pastIsland: [], fireHeadsOff: [], fireCrossed: [], giftRowHits: [], british: [], hoverless: [], hoverHeavy: [], foeNamesCut: [], dealtCut: [],
+  const r = { overlaps: [], datesCut: [], feedSplit: [], feedTracks: [], fightTall: [], overviewTall: [], fellOff: [], overviewPages: 0, fellStrips: 0, awayTall: [], togetherTall: [], voyagesTall: [], smeltersTall: [], heroGrowth: [], heroLines: [], crewOff: [], deadMore: [], bareIslands: [], pastIsland: [], fireHeadsOff: [], fireCrossed: [], giftRowHits: [], british: [], hoverless: [], hoverHeavy: [], hoverCovers: [], foeNamesCut: [], dealtCut: [],
               rows: [], cuts: [], sides: [], heroCompact: false, fireDrawn: 0, fireHeads: 0, giftRows: 0, feedLogs: 0, pickPages: 0, fightPages: 0, awayPages: 0, togetherPages: 0, voyagesPages: 0, smeltersPages: 0, crewsDrawn: 0, crewPeople: 0, moreLinks: 0, barsDrawn: 0, dealtDrawn: 0, damageParts: 0, hoverPages: 0,
-              arrowWidths: null, foeNameWidths: null, dealtWidths: null };
+              arrowWidths: null, foeNameWidths: null, dealtWidths: null, pinOff: [], pinPages: 0 };
   const over = (rule, what) => r.overlaps.push({ rule, page: n, what });
   await page.goto(`file://${dir}/panel-preview.html?view=${n}`);
   await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(400);
@@ -159,6 +163,25 @@ async function shoot(page, n) {
   await page.waitForTimeout(150);
   if (!flag("--no-png")) { await page.screenshot({ path: `${dir}/preview-${n}.png` }); await page.waitForTimeout(120); await page.screenshot({ path: `${dir}/preview-${n}.png` }); }   // twice: the first shot settles the SVG-filtered icons, the second is the one kept (two renders of a page come out byte-identical)
   for (const h of await page.evaluate(collide)) over("fire", h);
+  // 0.8.6 the sticky head (Joost in game, a friend's Battle feed: "If you scroll underneath it, it needs to stay up there"): on a plate scrolled
+  // down whose strip leads it, the strip stands where it stands at rest, and from the plate's top edge to the strip's foot no row of the plate is
+  // drawn over it (every point there that hits the plate hits the strip's holder; a heading chip's tag hanging into it is not the plate's) nor
+  // shows through it (the holder's ground is opaque)
+  const pinned = await page.evaluate(() => {
+    const p = document.querySelector(".content > .plate"); if (!p || p.scrollTop <= 1) return null;
+    const first = [...p.children].find(c => !c.classList.contains("page-tip")), s = first && (first.classList.contains("earned") ? first : first.querySelector(":scope > .earned")); if (!s) return null;   // the page's hover tag leads the plate's children, drawn over them
+    const at = p.scrollTop, P = p.getBoundingClientRect(), now = s.getBoundingClientRect().top - P.top;
+    p.scrollTop = 0; const rest = s.getBoundingClientRect().top - P.top; p.scrollTop = at;
+    if (Math.abs(now - rest) > 0.5) return `the strip ${(rest - now).toFixed(1)} px above its place at rest, the plate scrolled ${at} px`;
+    const bg = getComputedStyle(first).backgroundColor; if (!/^rgb\(/.test(bg)) return `the strip's ground (${bg}) lets the rows under it show through`;   // opaque: the page's own ground
+    const S = s.getBoundingClientRect();
+    for (let y = P.top + 1; y < S.bottom - 0.5; y += 3) for (let x = P.left + 2; x < P.right - 2; x += 12) {
+      const e = document.elementFromPoint(x, y);
+      if (e && e !== p && p.contains(e) && !first.contains(e)) return `"${(e.textContent || e.className || e.tagName).trim().slice(0, 30)}" drawn over the strip at ${Math.round(x - P.left)}, ${Math.round(y - P.top)} (the plate scrolled ${at} px)`;
+    }
+    return "";
+  });
+  if (pinned !== null) { r.pinPages++; if (pinned) r.pinOff.push({ page: n, what: pinned }); }
   // the key line never runs past its room (PanelModel.KeyLine leaves keys out instead; Cooking and Company > Together ran past it, MERGE-NOTES G2/G6)
   // 0.8 hover (BarHover, PICKS 4 B): every bar with a list pairs each part with its row (the same data-k on both), so pointing at either lights the other
   const unpaired = await page.evaluate(() => [...document.querySelectorAll(".bf")].filter(bf => { const ks = sel => [...bf.querySelectorAll(sel)].map(e => e.dataset.k).sort().join(","); return ks(".bf-seg[data-k]") !== ks(".bf-tab .r[data-k]"); }).length);
@@ -190,10 +213,14 @@ async function shoot(page, n) {
   const tracks = await page.evaluate(() => [...document.querySelectorAll(".bt-fl .drl")].map(e => { const r = e.getBoundingClientRect(); return [r.left, r.width, e.closest(".bt-fl").parentElement]; })
     .map(([x, w, fight], i, all) => [x, w, new Set(all.map(t => t[2])).size]));
   // 0.9 (Joost: the fight on one screen at the book's size): a fight's or a run's page (Chapters/FightPages.cs) fits the plate without scrolling;
-  // only a row opened by a click or the About box may add to it
+  // only a row opened by a click or the About box may add to it. 0.8.6 (the lead, A): the head, the foe rows and the players fit; By type, together,
+  // the one island at the page's foot (its bar's .cmp), may lie under the fold: its height and the gap above it are left out
   const tall = await page.evaluate(() => { const s = JSON.stringify(window.CURRENT.blocks || []);
     if (!s.includes('"kind":"fighthead"') || /"kind":"aboutnumbers"[^}]*"open":1/.test(s) || /"kind":"foe"[^}]*"selected":1/.test(s) || /"kind":"fightfoerows"[^}]*"tone":"dealt"/.test(s)) return null;   // stacked (not the default) takes two islands of rows
-    const p = document.querySelector(".plate"); return p ? p.scrollHeight - p.clientHeight : null; });
+    const p = document.querySelector(".plate"); if (!p) return null;
+    const foot = [...p.querySelectorAll(".isl")].filter(i => i.querySelector(".cmp")).pop(), prev = foot && foot.previousElementSibling;
+    const under = foot ? foot.getBoundingClientRect().bottom - (prev ? prev.getBoundingClientRect().bottom : foot.getBoundingClientRect().top) : 0;
+    return Math.round(p.scrollHeight - p.clientHeight - under); });
   if (tall !== null) { r.fightPages++; if (tall > 1) r.fightTall.push({ page: n, what: `${tall} px taller than the plate` }); }
   // 0.8.5 (Joost: "Overview should fit in one screen"): Battle > Overview fits the plate in every window, nine lands found or a fellow's copy
   // too; only the About box may add to it
@@ -373,7 +400,7 @@ async function shoot(page, n) {
   // Everyone's Dealt bars, the armor bar. Each part is pointed at in turn (mouseover, then mouseout) and what shows is read; at most one tag on a
   // page, one label in an entry (PanelUi.PageTag, the entry's own words swapped; Unity counts the same in KsPanelTest's HoverCostTests)
   const hv = await page.evaluate(() => {
-    const miss = [], segs = [...document.querySelectorAll(".dr-seg")], tip = document.querySelector(".page-tip");
+    const miss = [], covers = [], segs = [...document.querySelectorAll(".dr-seg")], tip = document.querySelector(".page-tip");
     const lit = [...document.querySelectorAll(".bf .hov[data-k]")];   // a hovered-state shot's lit part: lit again after
     for (const x of lit) x.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
     const name = (bf, k) => `${(bf && bf.querySelector(".nm, b") || { textContent: "?" }).textContent.trim()}, part ${k}`;
@@ -383,18 +410,21 @@ async function shoot(page, n) {
       s.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
       const entry = [...bf.querySelectorAll(`.dr-e[data-k="${k}"] .w`)].find(w => w.dataset.on && w.textContent === w.dataset.on && w.offsetParent);
       const shown = entry ? entry.textContent : tip && tip.classList.contains("on") && tip.offsetParent && s.dataset.tip && tip.textContent === s.dataset.tip ? tip.textContent : "";
-      const pr = s.getBoundingClientRect(), tr = tip && tip.getBoundingClientRect();
-      const near = entry || (tr && Math.abs(tr.top + tr.height / 2 - (pr.top + pr.height / 2)) <= 4);   // the tag on the part's own line
+      // 0.8.6: the tag sits beside its bar (below it, or above it at the plate's or island's edge), never over it: its rect and the bar's do not meet
+      const tr = tip && tip.getBoundingClientRect(), br = (s.closest("[data-tag-x]") || s.closest(".dr-track") || s).getBoundingClientRect();
+      const over = !entry && tip && tip.classList.contains("on") && tr.left < br.right && tr.right > br.left && tr.top < br.bottom && tr.bottom > br.top;
       s.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
       const after = [...bf.querySelectorAll(`.dr-e[data-k="${k}"] .w`)].every(w => w.textContent === (w.dataset.off ?? w.textContent)) && !(tip && tip.classList.contains("on"));
-      if (!shown.trim() || !near || !after) miss.push(name(bf, k) + (!shown.trim() ? ": nothing shown" : !near ? ": the tag is off its line" : ": not set back on leaving"));
+      if (over) covers.push(name(bf, k) + ": the tag covers its bar");
+      if (!shown.trim() || !after) miss.push(name(bf, k) + (!shown.trim() ? ": nothing shown" : ": not set back on leaving"));
     }
     for (const x of lit) x.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
     const tips = document.querySelectorAll(".dr-tip").length, labels = [...document.querySelectorAll(".dr-e .w")].filter(w => w.children.length > 0).length + document.querySelectorAll(".dr-e .b").length;
-    return { parts: segs.length, miss, tips, labels };
+    return { parts: segs.length, miss, covers, tips, labels };
   });
   r.damageParts += hv.parts; if (hv.parts) r.hoverPages++;
   for (const m of hv.miss) r.hoverless.push({ page: n, what: m });
+  for (const m of hv.covers) r.hoverCovers.push({ page: n, what: m });
   if (hv.tips > 1 || hv.labels > 0) r.hoverHeavy.push({ page: n, what: `${hv.tips} hover tags (at most 1 a page), ${hv.labels} entries with a second label` });
   return r;
 }
@@ -449,6 +479,7 @@ rule("Voyages > Sailing and Cargo fit one screen: Everyone with four players in 
 rule("Company > Together fits one screen with three fellows (About shut, no Compare)", !all("togetherTall").length && (sum("togetherPages") > 0 || !whole), `${sum("togetherPages")} pages, ` + (all("togetherTall").length ? all("togetherTall").length + " taller" : sum("togetherPages") ? "all fit" : "none drawn"), all("togetherTall"));
 rule("a fight's page fits one screen (no row open, About shut)", !all("fightTall").length && (sum("fightPages") > 0 || !whole), `${sum("fightPages")} pages, ` + (all("fightTall").length ? all("fightTall").length + " taller" : sum("fightPages") ? "all fit" : "none drawn"), all("fightTall"));
 rule("Battle > Overview fits one screen in every window (nine lands found, a fellow's copy; About shut)", !all("overviewTall").length && (sum("overviewPages") > 0 || !whole), `${sum("overviewPages")} pages, ` + (all("overviewTall").length ? all("overviewTall").length + " taller" : sum("overviewPages") ? "all fit" : "none drawn"), all("overviewTall"));
+rule("the sticky head: on a scrolled plate the strip stays at its top and no row is drawn over it", !all("pinOff").length && (sum("pinPages") > 0 || !whole), `${sum("pinPages")} scrolled pages, ` + count(all("pinOff"), "the strip pinned on each"), all("pinOff"));
 rule("Where you fell: taller where more fell, as tall for as many", !all("fellOff").length && (sum("fellStrips") > 0 || !whole), `${sum("fellStrips")} strips, ` + count(all("fellOff"), "every height follows its count"), all("fellOff"));
 rule("a feat's crew: every person whole inside its detail area, none over another", !all("crewOff").length && (sum("crewsDrawn") > 0 || !whole), `${sum("crewsDrawn")} crews, ${sum("crewPeople")} people, ` + count(all("crewOff"), "none off"), all("crewOff"));
 rule("every \"+N more\" is a click that shows the rest", !all("deadMore").length, `${sum("moreLinks")} clicks, ` + count(all("deadMore"), "none dead"), all("deadMore"));
@@ -475,6 +506,8 @@ rule(`the Foes table's Dealt column holds a 6-digit number beside a full bar (${
      (dealtWidths ? dealtWidths.map(([t, w]) => `${t} ${w}`).join(", ") + (dealtNarrow.length ? `; ${dealtNarrow.length} cut` : ", all whole") : "no foe table drawn") + `; ${sum("dealtDrawn")} drawn, ` + count(all("dealtCut"), "all inside their cell"), all("dealtCut"));
 rule("every damage bar part shows its name and number on hover, at no element per part (one tag a page, one label an entry)", !all("hoverless").length && !all("hoverHeavy").length && (sum("damageParts") > 0 || !whole),
      `${sum("damageParts")} parts on ${sum("hoverPages")} pages, ` + (all("hoverless").length ? all("hoverless").length + " without" : "every one shows them") + "; " + (all("hoverHeavy").length ? all("hoverHeavy").length + " pages heavier" : "one tag a page, one label an entry"), all("hoverless").concat(all("hoverHeavy")));
+rule("a hover tag never covers the bar it describes: beside it, below or (at the plate's or island's edge) above", !all("hoverCovers").length && (sum("damageParts") > 0 || !whole),
+     `${sum("damageParts")} parts checked, ` + count(all("hoverCovers"), "no tag over its bar"), all("hoverCovers"));
 rule(`the UI source asks for no text under the ${MIN} px floor`, !uiSmall.length, count(uiSmall, "none"), uiSmall);
 rule("the model source uses no per-process string hash (the previews are the same every run)", !hashed.length, count(hashed, "none"), hashed);
 rule("US spelling in the visible text (armor, defense, color, gray, meter)", !all("british").length, count(all("british"), "no British form"), all("british").map(b => ({ page: b.page, what: `"${b.what}"` })));

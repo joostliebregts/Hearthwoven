@@ -124,7 +124,8 @@ namespace Hearthwoven
                 try
                 {
                     Load(dir, utcNow);   // deletes what is too old as it reads
-                    if (Directory.GetFiles(dir).Length == 0) Directory.Delete(dir);
+                    BlockCache.Sweep(dir, utcNow);   // 0.8.6: friends' older sessions too
+                    if (Directory.GetFileSystemEntries(dir).Length == 0) Directory.Delete(dir);
                 }
                 catch (IOException) { } catch (UnauthorizedAccessException) { }
             }

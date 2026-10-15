@@ -1,7 +1,7 @@
 // 0.8.5 (Joost in game, after a restart: Battle > Last fight said "No fight yet this session"; "last fight should show your last fight, but indicate
 // that it was x hours/days ago. Same for the feed."): your recent fights kept across a restart (src/KeptFights.cs). Here: a group fight before the
 // restart comes back as Last fight, with the fellow's part and its "2 hours ago"; another world or character never mixes in; the bounds; and the
-// file and its load time for a busy week. Fictional players: Rowan (you) and Edda share; Ylva plays along and does not. Files in a fresh temp folder.
+// file and its load time for a busy month (0.8.6: 30 days back, the newest 2 000 foes). Fictional players: Rowan (you) and Edda share; Ylva plays along and does not. Files in a fresh temp folder.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -84,31 +84,53 @@ static class KeptFightsTests
               again.Earlier(World, "s1", Now).Count == 0 && KeptFights.Load(path, Id, "Tor", out _).Sessions.Count == 0 && KeptFights.Load(path, Id + 1, "Rowan", out _).Sessions.Count == 0,
               "KF worlds and characters: Midgard's fights only in Midgard, the Ashlands' only there, both kept in the one file; the running session is never an earlier one; another name or player id: nothing");
 
-        // ---------- the bounds: 7 days back at most; the newest whole fights up to 200 foes; a foe still fighting at the save got away when it ended ----------
+        // ---------- the bounds (0.8.6): 30 days back at most; the newest whole fights up to 2 000 foes; a foe still fighting at the save got away when it ended ----------
         var week = KeptFights.Load(path, Id, "Rowan", out _);
-        var stale = week.Earlier(World, "s9", logout.AddDays(7).AddMinutes(1));
+        var stale = week.Earlier(World, "s9", logout.AddDays(30).AddMinutes(1));
+        var fresh = KeptFights.Load(path, Id, "Rowan", out _).Earlier(World, "s9", logout.AddDays(29));
         var open = new BattleRecorder(); open.Dealt(Now.AddSeconds(-20), new FoeId(-888, 1), "Wolf", "$enemy_wolf", "Mountain", D(50));
         var ob = new KeptFights { PlayerId = Id.ToString(), Name = "Rowan" }; ob.Record(KeptFights.Take(World, "s4", Now.AddMinutes(-9), Now, open, "Rowan", sharers.Contains, null), Now);
         var reread = KeptFights.FromJson(ob.ToJson(Now)).Sessions.Single().Fights.Single();
-        var many = Busy(World, Now, 7, 3, out _);
+        // age: one wolf a session, 3, 12, 29 and 31 days back; the one of 31 days is gone, the others stay
+        var ages = new KeptFights { PlayerId = Id.ToString(), Name = "Rowan" };
+        foreach (var back_ in new[] { 31, 29, 12, 3 }) ages.Record(OneWolf(World, "a" + back_, Now.AddDays(-back_)), Now.AddDays(-back_));
+        var aged = ages.Earlier(World, "s-next", Now).Select(s => (int)Math.Round((Now - s.ToUtc).TotalDays)).ToList();
+        // the cap: a busy month (150 foes an evening, five evenings a week) keeps its newest whole fights up to MaxFoes, none cut in half
+        var many = Busy(World, Now, 30, 3, out _);
         var foesKept = many.Earlier(World, "s-next", Now).SelectMany(s => s.Fights).ToList();
-        Check(stale.Count == 0 && !reread.Open && reread.Entries.Single().Outcome == FoeOutcome.GotAway && reread.Entries.Single().OutcomeText == "survived" &&
-              foesKept.Sum(f => f.Foes) <= KeptFights.MaxFoes && foesKept.Sum(f => f.Foes) > KeptFights.MaxFoes - 8 && foesKept.Min(f => f.EndUtc) > Now.AddDays(-2),
-              "KF bounds: a fight 7 days and a minute back is gone; a wolf still fighting at the save comes back as \"" + reread.Entries.Single().OutcomeText + "\", the fight ended; a busy week keeps its newest " +
-              foesKept.Sum(f => f.Foes) + " foes (of 200), whole fights");
+        var newest = foesKept.Max(f => f.EndUtc); var oldest = foesKept.Min(f => f.EndUtc);
+        Check(stale.Count == 0 && fresh.Count == 1 && !reread.Open && reread.Entries.Single().Outcome == FoeOutcome.GotAway && reread.Entries.Single().OutcomeText == "survived" &&
+              aged.SequenceEqual(new[] { 3, 12, 29 }) &&
+              KeptFights.MaxAge == TimeSpan.FromDays(30) && foesKept.All(f => f.Foes == 5) &&
+              foesKept.Sum(f => f.Foes) <= KeptFights.MaxFoes && foesKept.Sum(f => f.Foes) > KeptFights.MaxFoes - 5 && newest > Now.AddDays(-1.5) && oldest > Now.AddDays(-30) && oldest < Now.AddDays(-14),
+              "KF bounds: a fight 30 days and a minute back is gone and one of 29 days stays (sessions " + string.Join("/", aged) + " days back kept of 31, 29, 12, 3); a wolf still fighting at the save comes back as \"" +
+              reread.Entries.Single().OutcomeText + "\", the fight ended; a busy month keeps its newest " + foesKept.Sum(f => f.Foes) + " foes (of " + KeptFights.MaxFoes + "), whole fights, " +
+              Math.Round((Now - oldest).TotalDays) + " days back");
 
-        // ---------- the size and the load time: a busy week, every evening 200 foes in 40 fights with three fellows beside you ----------
-        many = Busy(World, Now, 7, 3, out var json);
+        // ---------- the size and the load time: a busy month (an evening of 150 foes in 30 fights, five evenings a week, three fellows beside you) ----------
+        many = Busy(World, Now, 30, 3, out var json);
         var file = Path.Combine(dir, "busy.fights.json"); File.WriteAllText(file, json);
         KeptFights.Load(file, Id, "Rowan", out _);   // warm: the first parse pays the JIT
         var sw = Stopwatch.StartNew(); const int runs = 5; List<KeptSession> loaded = null;
         for (int r = 0; r < runs; r++) loaded = KeptFights.Load(file, Id, "Rowan", out _).Earlier(World, "s-next", Now);
         var ms = sw.Elapsed.TotalMilliseconds / runs;
         sw.Restart(); for (int r = 0; r < runs; r++) KeptFightsJoin(loaded); var joinMs = sw.Elapsed.TotalMilliseconds / runs;
-        System.Console.WriteLine("  kept fights, a busy week (7 evenings of 200 foes in 40 fights, three fellows sharing each fight): the file " + json.Length / 1024 + " KB, its load " + ms.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) +
-                          " ms, the adapter's join of the kept fights " + joinMs.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " ms (once per session: KeptViews)");
-        Check(json.Length < 400 * 1024 && ms < 200 && loaded.SelectMany(s => s.Fights).Sum(f => f.Foes) <= KeptFights.MaxFoes,
-              "KF size: a busy week's file is " + json.Length / 1024 + " KB (under 400) and loads in " + ms.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " ms here (under 200): the newest 200 foes and the fellows' parts beside them, never the week");
+        sw.Restart(); for (int r = 0; r < runs; r++) many.ToJson(Now); var saveMs = sw.Elapsed.TotalMilliseconds / runs;   // what every local save writes whole
+        var solo = Busy(World, Now, 30, 0, out var soloJson); var duo = Busy(World, Now, 30, 1, out var oneJson);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        System.Console.WriteLine("  kept fights, a busy month (30 days, 150 foes in 30 fights on five evenings a week, three fellows sharing each fight): the file " + json.Length / 1024 + " KB (" + Gz(json) / 1024 +
+                          " KB gzipped), " + loaded.Sum(s => s.Fights.Sum(f => f.Foes)) + " foes in " + loaded.Count + " sessions, its load " + ms.ToString("0.0", inv) +
+                          " ms, one save's writing " + saveMs.ToString("0.0", inv) + " ms, the adapter's join of the kept fights " + joinMs.ToString("0.0", inv) +
+                          " ms (once per session: KeptViews); with no fellow " + soloJson.Length / 1024 + " KB, with one " + oneJson.Length / 1024 + " KB");
+        // 0.8.5 reads this file: version 1 as before, and no session holds more of yours than a feed reads back (FeedShare.MaxRead), so nothing is cut at its load
+        var perSession = many.Sessions.Select(s => s.Mine.Fights.Sum(f => f.Foes)).Max();
+        Check(json.Length < 800 * 1024 && ms < 250 && loaded.SelectMany(s => s.Fights).Sum(f => f.Foes) <= KeptFights.MaxFoes && KeptFights.Version == 1 && json.Contains("\"version\":1") &&
+              KeptFights.PerSession <= FeedShare.MaxRead && perSession <= FeedShare.MaxRead,
+              "KF size: a busy month's file is " + json.Length / 1024 + " KB (under 800) and loads in " + ms.ToString("0.0", inv) + " ms here (under 250): the newest " + KeptFights.MaxFoes +
+              " foes and the fellows' parts beside them; still version 1, and at most " + perSession + " of your foes in a session, which 0.8.5 reads whole (it reads " + FeedShare.MaxRead + ")");
+
+        // ---------- what a fellow's shared copy would cost if it carried the earlier sessions' feed too (it does not: measured only) ----------
+        FellowCost(many, inv);
 
         // ---------- 0.8.5 (the lead): boss attempts and runs per world, like the kept fights; those saved before 0.8.5 go to the world of the last save ----------
         (GroupFight, GroupRun) BossAndRun(DateTime t, uint n)
@@ -147,9 +169,55 @@ static class KeptFightsTests
         return fails;
     }
 
+    /// <summary>A session of one wolf that ended at <paramref name="end"/>.</summary>
+    static KeptSession OneWolf(string world, string id, DateTime end)
+    {
+        var r = new BattleRecorder(); r.Dealt(end.AddSeconds(-30), new FoeId(-999, 1), "Wolf", "$enemy_wolf", "Mountain", new HitData.DamageTypes { m_slash = 50 }); r.Tick(end);
+        return KeptFights.Take(world, id, end.AddHours(-2), end, r, "Rowan", n => true, null);
+    }
+
+    static int Gz(string text)
+    {
+        using (var ms = new MemoryStream())
+        {
+            using (var z = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionLevel.Optimal, true)) { var b = System.Text.Encoding.UTF8.GetBytes(text); z.Write(b, 0, b.Length); }
+            return (int)ms.Length;
+        }
+    }
+
+    /// <summary>0.8.6 (measured, not built): what a fellow's shared copy would add if it carried your earlier sessions' feed beside this session's (it
+    /// carries this session's newest FeedShare.MaxFoes only): the feed of every kept session without hits (a fellow's view of it), raw and gzipped as the server packs it.</summary>
+    static void FellowCost(KeptFights book, System.Globalization.CultureInfo inv)
+    {
+        string Feed(IEnumerable<KeptSession> sessions, int perSession)
+        {
+            var j = new Json().Open();
+            foreach (var s in sessions)
+            {
+                var feed = new FeedShare(); var fights = new List<FoeFight>(); var foes = 0;
+                foreach (var f in s.Mine.Fights.OrderByDescending(f => f.EndUtc)) { if (foes + f.Foes > perSession) break; fights.Add(f); foes += f.Foes; }
+                feed.Fights.AddRange(fights); var nums = new HashSet<int>(fights.Select(f => f.Number)); feed.Falls.AddRange(s.Mine.Falls.Where(f => nums.Contains(f.Fight)));
+                if (fights.Count == 0) continue;
+                feed.T0 = fights.Select(f => f.StartUtc).Min();
+                feed.WriteTo(j, "s" + s.Id, hits: false);
+            }
+            return j.Close().ToString();
+        }
+        var all = book.Sessions.Where(s => s.World == World).OrderByDescending(s => s.ToUtc).ToList();
+        var weekAgo = Now.AddDays(-7);
+        var latest = Feed(all.Take(1), FeedShare.MaxFoes);
+        var week = Feed(all.Where(s => s.ToUtc > weekAgo), FeedShare.MaxFoes); var weekN = all.Count(s => s.ToUtc > weekAgo);
+        var month = Feed(all, FeedShare.MaxFoes);
+        var monthFull = Feed(all, KeptFights.PerSession);
+        System.Console.WriteLine("  fellow copy, if it carried earlier sessions' feed too (newest " + FeedShare.MaxFoes + " foes of each session, no hits; today it carries one session's): this session's feed " + latest.Length / 1024 +
+                                 " KB raw, " + Gz(latest) / 1024 + " KB gzipped; a busy week (" + weekN + " earlier sessions) " + week.Length / 1024 + " KB raw, " + Gz(week) / 1024 + " KB gzipped; a busy month (" + all.Count +
+                                 " sessions) " + month.Length / 1024 + " KB raw, " + Gz(month) / 1024 + " KB gzipped; with every kept foe of the month (" + KeptFights.MaxFoes + ") " + monthFull.Length / 1024 + " KB raw, " +
+                                 Gz(monthFull) / 1024 + " KB gzipped");
+    }
+
     static void KeptFightsJoin(List<KeptSession> kept) { foreach (var s in kept) GroupFights.Join(s.Sides, s.ToUtc.AddDays(1)); }
 
-    /// <summary>A busy week in <paramref name="world"/>: an evening a day for <paramref name="days"/> days, 40 fights of five foes each, you and
+    /// <summary>A busy stretch in <paramref name="world"/>: <paramref name="days"/> days, an evening on five days of every seven, 30 fights of five foes each (150 foes), you and
     /// <paramref name="fellows"/> fellows hitting every foe, each evening's record kept at its end. Its file as written after the last evening.</summary>
     static KeptFights Busy(string world, DateTime now, int days, int fellows, out string json)
     {
@@ -158,10 +226,11 @@ static class KeptFightsTests
         var share = new HashSet<string>(names.Concat(new[] { "Rowan" }), StringComparer.OrdinalIgnoreCase);
         for (int d = days - 1; d >= 0; d--)
         {
+            if (d % 7 >= 5) continue;   // two quiet days a week
             var start = now.AddDays(-d).AddHours(-4); uint id = (uint)(d * 1000);
             var me = new BattleRecorder(); var them = names.Select(_ => new BattleRecorder()).ToArray();
             var t = start;
-            for (int f = 0; f < 40; f++)
+            for (int f = 0; f < 30; f++)
             {
                 for (int k = 0; k < 5; k++)
                 {

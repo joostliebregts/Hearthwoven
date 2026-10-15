@@ -387,7 +387,7 @@ namespace Hearthwoven
                 input.KeptSessions = Plugin.EarlierFights;   // 0.8.5: the fights of earlier sessions (KeptFights), for the feed
                 // 0.8.5: your damage after the foe's armor, every window (the log's After serves 10 min .. Session)
                 input.DealtArmourSession = Plugin.DealtArmour; input.DealtArmourSince = Plugin.DealtArmourSince; input.DealtArmourBook = Plugin.DealtArmourBook;
-                input.DealtArmourPending = Plugin.DealtArmourPending(); input.DealtArmourFromUtc = Plugin.DealtArmourFromUtc;
+                input.DealtArmourPending = Plugin.DealtArmourPending(); input.DealtArmourFromUtc = Plugin.DealtArmourFromUtc; input.SwingFromUtc = Plugin.SwingFromUtc;
             }
             catch (Exception e) { HookGuard.Fail(e, "BattleHooks.Into"); }
             // 0.9: the fight pages' book (FightAdapter): this session's group fights, boss fights and runs from every record, then the saved ones

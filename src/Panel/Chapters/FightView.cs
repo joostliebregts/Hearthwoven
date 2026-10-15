@@ -42,6 +42,8 @@ namespace Hearthwoven.Panel
         public DateTime StartUtc, EndUtc;
         /// <summary>A boss's health, 0..1: now (Live), when it reset (Reset), last seen (GotAway), 0 when Won; -1 = not known (the lane is left out).</summary>
         public float Health = -1;
+        /// <summary>0.8.6 (DPS): a boss fight's seconds under attack, the group's fighting time on the boss (BossFight.Swing); 0 = not known.</summary>
+        public float SwingSeconds;
         /// <summary>Live only: the boss's health a minute ago, 0..1 (the lane's hatched "down 8 % in the last minute"); -1 = not known.</summary>
         public float HealthMinuteAgo = -1;
         /// <summary>The foes fought, one row per kind: the boss first (Boss), then the foes fought around it; a run's all kinds it met.</summary>
@@ -54,6 +56,10 @@ namespace Hearthwoven.Panel
         public readonly List<FightSpan> Spans = new List<FightSpan>();
 
         public bool IsLive => Outcome == FightOutcome.Live;
+
+        /// <summary>0.8.6: the book's owner is one of the players in it (FightPlayer.You), a fight of their own; a fight only fellows' shared feeds
+        /// hold has none.</summary>
+        public bool YouWereIn => Players.Any(p => p.You);
         public TimeSpan Length => EndUtc > StartUtc ? EndUtc - StartUtc : TimeSpan.Zero;
 
         /// <summary>The boss's row, or null.</summary>
@@ -74,6 +80,30 @@ namespace Hearthwoven.Panel
 
         public double DealtTotal => Counted.Sum(p => DealtBy(p.Name).Values.Sum());
         public double ReceivedTotal => Counted.Sum(p => ReceivedBy(p.Name).Values.Sum());
+
+        /// <summary>
+        /// 0.8.6: this fight as another player of it sees it (a friend's book): the same foes, spans and numbers, the players new with You on
+        /// <paramref name="owner"/> (the book's owner, by name), so every book shows one fight the same. How near each other player was is the
+        /// owner's own count (Near); none known: -1.
+        /// </summary>
+        public FightView SeenBy(string owner)
+        {
+            var v = new FightView { Id = Id, Kind = Kind, Outcome = Outcome, ParentId = ParentId, Boss = Boss, Place = Place, Biome = Biome, StartUtc = StartUtc, EndUtc = EndUtc,
+                                    Health = Health, SwingSeconds = SwingSeconds, HealthMinuteAgo = HealthMinuteAgo };
+            v.Foes.AddRange(Foes); v.Spans.AddRange(Spans);
+            var near = PlayerOf(owner)?.Near;
+            foreach (var p in Players)
+            {
+                var you = string.Equals(p.Name, owner, StringComparison.OrdinalIgnoreCase);
+                var q = new FightPlayer { Name = p.Name, You = you, Has = p.Has, Shares = p.Shares, Live = p.Live, AsOfUtc = p.AsOfUtc, InsideSeconds = p.InsideSeconds, Blocks = p.Blocks, Parries = p.Parries,
+                                          SwingSeconds = p.SwingSeconds, SwingDamage = p.SwingDamage, HitsReceived = p.HitsReceived, Stopped = p.Stopped, Near = p.Near,
+                                          NearSeconds = !you && near != null && near.TryGetValue(p.Name, out var s) ? s : -1f };
+                foreach (var kv in p.ReceivedElse) q.ReceivedElse[kv.Key] = kv.Value;
+                q.Deaths.AddRange(p.Deaths);
+                if (you) v.Players.Insert(0, q); else v.Players.Add(q);   // the book's owner first, as on your own book
+            }
+            return v;
+        }
 
         internal static Dictionary<string, double> Sum(IEnumerable<Dictionary<string, double>> parts)
         {
@@ -131,6 +161,12 @@ namespace Hearthwoven.Panel
         public float InsideSeconds = -1;
         /// <summary>Hits they blocked and parried in it (a parry is a block too, counted once, as a parry).</summary>
         public int Blocks, Parries;
+        /// <summary>0.8.6 (DPS): their own fighting time in a group fight, in seconds, and the damage swung in them (FoeFight.SwingSeconds: yours, or
+        /// a fellow's shared copy from this build on); 0 = not known. The page shows the book owner's only, never two side by side.</summary>
+        public float SwingSeconds, SwingDamage;
+        /// <summary>0.8.6: who was near them in it, seconds, as their own record counted it (FoeFight.Near: yours, or a fellow's copy); null = none
+        /// known. A friend's book reads "near Edda 12 s" from it (FightView.SeenBy).</summary>
+        public Dictionary<string, float> Near;
         /// <summary>Hits that landed on them in it (blocked ones are Blocks and Parries, not here); -1 = not known: a fellow's copy does not share
         /// it, nor does a fight kept from an earlier session. The "bring a shield" line weighs blocks against it (FightPages.cs BringLine).</summary>
         public int HitsReceived = -1;
@@ -170,12 +206,27 @@ namespace Hearthwoven.Panel
     {
         public readonly List<FightView> Fights = new List<FightView>();
 
-        /// <summary>The newest fight, boss or not (never a run); null = none yet.</summary>
-        public FightView Last => Fights.FirstOrDefault(f => f.Kind != FightKind.Run);
+        /// <summary>0.8.6: your newest fight, boss or not (never a run), one you were in; null = none yet (Last fight then draws the 0.8 page). A
+        /// fight a fellow's shared feed holds that you were not in is not yours: NewerOnServer.</summary>
+        public FightView Last => Fights.FirstOrDefault(f => f.Kind != FightKind.Run && f.YouWereIn);
+
+        /// <summary>0.8.6: the group's newest fight (never a run) when you were not in it and it is newer than Last, else null: Last fight's quiet
+        /// "Newer on the server" line points at it. Fights is newest first, so it is the first fight that is not a run.</summary>
+        public FightView NewerOnServer { get { var f = Fights.FirstOrDefault(x => x.Kind != FightKind.Run); return f != null && !f.YouWereIn ? f : null; } }
 
         /// <summary>The boss fight on now, or null: Battle's Last fight entry reads "Boss fight" with the live dot while there is one.</summary>
         public FightView LiveBoss => Fights.FirstOrDefault(f => f.Kind == FightKind.Boss && f.IsLive);
 
         public FightView ById(string id) => id == null ? null : Fights.FirstOrDefault(f => f.Id == id);
+
+        /// <summary>0.8.6: the book a friend's Battle pages read: the fights this PC joined, seen by <paramref name="owner"/> (FightView.SeenBy); null when
+        /// they are in none of them (their Last fight keeps the 0.8 page from their copy).</summary>
+        public FightBook SeenBy(string owner)
+        {
+            if (string.IsNullOrEmpty(owner) || !Fights.Any(f => f.PlayerOf(owner) != null)) return null;
+            var b = new FightBook();
+            foreach (var f in Fights) b.Fights.Add(f.SeenBy(owner));
+            return b;
+        }
     }
 }

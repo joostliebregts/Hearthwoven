@@ -58,13 +58,14 @@ namespace Hearthwoven
                 {
                     if (hit != null && Local(hit.GetAttacker()) && !Local(__instance))
                     {
-                        var target = Prefab(__instance); var skill = hit.m_skill.ToString();
+                        var target = Prefab(__instance); var skill = GameNames.Of(hit.m_skill);   // the same text as ToString, worked out once per skill
                         Plugin.Session.AddDealt(target, skill, hit.m_damage);
                         // every hit, also on a foe another PC owns (the game's EnemyHits/PlayerHits miss those: owner trap)
                         SessionEvents.Add(Plugin.Events.Battle, __instance is Player ? "PlayerHits" : "EnemyHits");
                         var utc = DateTime.UtcNow; var biome = Biome();
                         Plugin.Log.AddDamage(utc, biome, true, target, skill, hit.m_damage);
                         BattleHooks.Dealt(__instance, target, hit);   // 0.8: this foe as its own creature (count per kind, battle feed)
+                        if (!(__instance is Player)) Swung(utc, hit.m_skill, skill, hit.m_damage);
                         if (!(__instance is Player)) d = new DealtHit { Utc = utc, Biome = biome, Target = target, Skill = skill, Before = hit.m_damage };   // its after in the postfix
                     }
                 });
@@ -82,6 +83,44 @@ namespace Hearthwoven
                 Plugin.Log.AddAfter(__state.Utc, __state.Biome, __state.Target, __state.Skill, __state.Before, after.Value);
                 Plugin.DealtArmour.Add(__state.Target, __state.Skill, default, __state.Before, after.Value);   // the dealt ledger: before and after of the same hits
             });
+        }
+        // 0.8.6 (DPS): your fighting time with this weapon kind: the time since its previous hit when within SwingClock.Gap, with the damage of this hit;
+        // the first hit of a stretch adds nothing. The log (the short windows) and the dealt ledger (Session, the days, All) get the same two numbers.
+        // And, per named weapon (DPS per named weapon): the weapon you hold, its upgrade level and your level in its skill, with every hit's damage.
+        static void Swung(DateTime utc, Skills.SkillType type, string skill, HitData.DamageTypes d)
+        {
+            var kind = SwingClock.KindOf(skill); var secs = Plugin.Swing.Hit(kind, utc);
+            var dmg = SwingClock.SwungOf(d);
+            if (secs > 0f)
+            {
+                Plugin.Log.AddSwing(utc, kind, secs, dmg);
+                Plugin.DealtArmour.AddSwing(kind, secs, dmg);
+                Plugin.SwingBegan(utc);
+            }
+            if (!(dmg > 0f)) return;
+            var swung = secs > 0f ? dmg : 0f; var weapon = HeldWeapon(type, out var quality, out var level);
+            Plugin.Log.AddWeapon(utc, weapon, quality, skill, level, secs, swung, dmg);
+            Plugin.DealtArmour.AddWeapon(weapon, quality, skill, level, secs, swung, dmg);
+        }
+
+        // The weapon in your hand: its prefab name and upgrade level, worked out once per item (a Unity name is a new string each time it is read, a hit must
+        // allocate nothing). Null when what you hold is not the weapon of the skill the hit was booked on (an arrow that lands after you switched, a thrown spear):
+        // the hit falls into the skill's "other" cell. Your level in the skill is the one the skills page shows.
+        static ItemDrop.ItemData heldItem; static int heldQuality = -1; static string heldPrefab;
+        static string HeldWeapon(Skills.SkillType type, out int quality, out int level)
+        {
+            quality = 0; level = 0;
+            var p = Player.m_localPlayer; if (p == null) return null;
+            var skills = p.GetSkills(); if (skills != null) level = Math.Max(0, (int)Math.Floor(skills.GetSkillLevel(type)));
+            var item = p.GetCurrentWeapon();
+            if (item?.m_shared == null || item.m_shared.m_skillType != type) return null;
+            if (!ReferenceEquals(item, heldItem) || item.m_quality != heldQuality)
+            {
+                heldItem = item; heldQuality = item.m_quality;
+                heldPrefab = item.m_dropPrefab ? string.Intern(item.m_dropPrefab.name) : type == Skills.SkillType.Unarmed ? WeaponCells.Fists : null;   // your fists are no item in the world
+            }
+            quality = heldQuality;
+            return heldPrefab;
         }
         /// <summary>A hit of yours on a creature between DamageDealt's prefix (where its before is kept) and its postfix (its after).</summary>
         sealed class DealtHit { public DateTime Utc; public string Biome, Target, Skill; public HitData.DamageTypes Before; }

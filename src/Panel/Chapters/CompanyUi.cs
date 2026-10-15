@@ -284,7 +284,7 @@ namespace Hearthwoven.Panel
                     hover.Parts[k] = seg.rectTransform; var hp = seg.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = k;
                 }
                 HoverRing(bar, hover);
-                hover.TagOver(PageTag(rows), bar, words, mid, -2, 0, barW);
+                hover.TagOver(PageTag(rows), bar, words, mid, 0, barW);
                 if (on) Edge(bar, PanelLook.Gold);   // the chosen category
             }
         }

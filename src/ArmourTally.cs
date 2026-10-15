@@ -25,8 +25,37 @@ namespace Hearthwoven
         public int Hits;
         /// <summary>A day row reached its key cap: its smallest keys were left out.</summary>
         public bool Clipped;
+        /// <summary>0.8.6, the dealt ledger only (DPS, SwingClock): per weapon kind the seconds of fighting ("melee|s") and the damage swung in them
+        /// ("melee|d", the hits after the first of each stretch), under SwingClock.SecondsKeys and DamageKeys. At most six keys, so a day row's key
+        /// cap (Clip) leaves them alone. Never shared.</summary>
+        public readonly Dictionary<string, float> Swing = new Dictionary<string, float>();
 
-        public bool Empty => Hits == 0 && Incoming.Count == 0 && Before.Count == 0 && After.Count == 0;
+        /// <summary>0.8.6, the dealt ledger only (DPS per named weapon): per weapon at its upgrade level ("SwordIron|3|Swords") the seconds of fighting, the damage swung in
+        /// them, all its damage and the range of your skill level. A session holds at most WeaponCells.PerSession named weapons, a day row PerDay (Clip); the rest fall
+        /// into the skill's "other" cell. Your own book reads all windows from it; the last 30 days' day rows are shared (dayWeapons).</summary>
+        public readonly WeaponCells Weapons = new WeaponCells();
+
+        public bool Empty => Hits == 0 && Incoming.Count == 0 && Before.Count == 0 && After.Count == 0 && Swing.Count == 0 && Weapons.Count == 0;
+
+        /// <summary>A hit of yours with a weapon, in the ledger (the log's twin, EventLog.AddWeapon): every hit adds its damage and the skill level; a hit that ended a
+        /// stretch's seconds adds those and the damage swung in them.</summary>
+        public void AddWeapon(string prefab, int quality, string skill, int level, float seconds, float swung, float all) =>
+            Weapons.Hit(DateTime.MinValue, prefab, quality, skill, level, seconds, swung, all, WeaponCells.PerSession, WeaponCells.PerDayLevels);
+
+        /// <summary>A hit's fighting time (0.8.6): <paramref name="seconds"/> and the <paramref name="damage"/> swung in them, under a weapon kind
+        /// (SwingClock.Kinds index). Nothing for a hit that starts a stretch (no seconds).</summary>
+        public void AddSwing(int kind, float seconds, float damage)
+        {
+            if (!(seconds > 0f) || !(damage > 0f) || !Json.IsFinite(seconds) || !Json.IsFinite(damage)) return;
+            Add(Swing, SwingClock.SecondsKeys[kind], seconds); Add(Swing, SwingClock.DamageKeys[kind], damage);
+        }
+
+        /// <summary>The seconds and the damage of a weapon kind ("melee", "bow", "magic").</summary>
+        public (double seconds, double damage) SwingOf(string kind)
+        {
+            Swing.TryGetValue(kind + "|s", out var s); Swing.TryGetValue(kind + "|d", out var d);
+            return (s, d);
+        }
         IEnumerable<Dictionary<string, float>> Maps() { yield return Incoming; yield return Before; yield return After; }
 
         static void Add(Dictionary<string, float> d, string key, float v) { if (v == 0f || !Json.IsFinite(v)) return; d.TryGetValue(key, out var o); d[key] = o + v; }
@@ -62,6 +91,8 @@ namespace Hearthwoven
             foreach (var kv in o.Incoming) Add(Incoming, kv.Key, kv.Value);
             foreach (var kv in o.Before) Add(Before, kv.Key, kv.Value);
             foreach (var kv in o.After) Add(After, kv.Key, kv.Value);
+            foreach (var kv in o.Swing) Add(Swing, kv.Key, kv.Value);
+            Weapons.Merge(o.Weapons);
         }
 
         public static ArmourTally Sum(params ArmourTally[] parts) { var s = new ArmourTally(); foreach (var p in parts) s.AddAll(p); return s; }
@@ -76,7 +107,8 @@ namespace Hearthwoven
             {
                 foreach (var kv in n) { float o = 0; w?.TryGetValue(kv.Key, out o); if (kv.Value - o > 0) Add(into, kv.Key, kv.Value - o); }
             }
-            M(now.Incoming, was?.Incoming, d.Incoming); M(now.Before, was?.Before, d.Before); M(now.After, was?.After, d.After);
+            M(now.Incoming, was?.Incoming, d.Incoming); M(now.Before, was?.Before, d.Before); M(now.After, was?.After, d.After); M(now.Swing, was?.Swing, d.Swing);
+            d.Weapons.Merge(WeaponCells.Minus(now.Weapons, was?.Weapons));
             return d;
         }
 
@@ -102,6 +134,8 @@ namespace Hearthwoven
             if (Incoming.Count > 0) j.Dict("incoming", Rounded(Incoming, round));
             if (Before.Count > 0) j.Dict("before", Rounded(Before, round));
             if (After.Count > 0) j.Dict("after", Rounded(After, round));
+            if (Swing.Count > 0) j.Dict("swing", Rounded(Swing, round));   // 0.8.6: an older Hearthwoven ignores the key
+            if (Weapons.Count > 0) Weapons.Write(j, "weapons", round);
         }
 
         public void WriteTo(Json j, string key) { j.Key(key).Open(); WriteFields(j); j.Close(); }
@@ -111,6 +145,8 @@ namespace Hearthwoven
             if (o == null) return this;
             Hits = (int)MiniJson.Num(o, "hits"); Clipped = MiniJson.Num(o, "clipped") > 0;
             MiniJson.Into(MiniJson.Obj(o, "incoming"), Incoming); MiniJson.Into(MiniJson.Obj(o, "before"), Before); MiniJson.Into(MiniJson.Obj(o, "after"), After);
+            MiniJson.Into(MiniJson.Obj(o, "swing"), Swing);
+            foreach (var kv in WeaponCells.Read(MiniJson.Obj(o, "weapons")).Map) Weapons.Map[kv.Key] = kv.Value;
             return this;
         }
     }
@@ -177,13 +213,16 @@ namespace Hearthwoven
     {
         /// <summary>When armour began to be recorded for this character on this PC; DateTime.MinValue = not yet (set on load, Plugin.LoadLocal).</summary>
         public DateTime FromUtc = DateTime.MinValue;
+        /// <summary>0.8.6 (DPS): when your fighting time began to be recorded on this PC (the first hit of a version that records it); MinValue = not yet.
+        /// Only the dealt ledger's book has it: the "from" date of a weapon's pace on All.</summary>
+        public DateTime SwingFromUtc = DateTime.MinValue;
         public ArmourTally Previous = new ArmourTally();
         public string LastSession = "";
         public ArmourTally Last = new ArmourTally();
         /// <summary>Oldest first: "before", months, weeks, days (DayHistory's period keys).</summary>
         public readonly List<(string Period, ArmourTally Tally)> Days = new List<(string, ArmourTally)>();
 
-        public bool IsEmpty => FromUtc == DateTime.MinValue && Previous.Empty && Last.Empty && LastSession.Length == 0 && Days.Count == 0;
+        public bool IsEmpty => FromUtc == DateTime.MinValue && SwingFromUtc == DateTime.MinValue && Previous.Empty && Last.Empty && LastSession.Length == 0 && Days.Count == 0;
 
         /// <summary>Everything recorded before the session <paramref name="current"/> (the latest saved one unless it is that session).</summary>
         public ArmourTally BeforeSession(string current) => ArmourTally.Sum(Previous, LastSession == current ? null : Last);
@@ -199,8 +238,9 @@ namespace Hearthwoven
             var same = session == LastSession;
             var diff = ArmourTally.Minus(now, same ? Last : null);
             if (!diff.Empty) AddDay(localNow.Date, diff);
-            if (!same) { if (LastSession.Length > 0) Previous.AddAll(Last); LastSession = session; }
+            if (!same) { if (LastSession.Length > 0) { Previous.AddAll(Last); Previous.Weapons.Clip(WeaponCells.PerLong); Previous.Weapons.ClipLevels(WeaponCells.PerLongLevels); } LastSession = session; }
             Last = ArmourTally.Sum(now);
+            now.Weapons.ResetPending();   // 0.8.6: the next save's skill range starts here
         }
 
         void AddDay(DateTime day, ArmourTally diff)
@@ -210,7 +250,7 @@ namespace Hearthwoven
             ArmourTally row;
             if (Days.Count > 0 && (last.Period == key || DayHistory.StartOf(last.Period) > day)) row = last.Tally;   // the clock went back: never a row out of order
             else { row = new ArmourTally(); Days.Add((key, row)); }
-            row.AddAll(diff); row.Clip(DayHistory.MaxRowKeys);
+            row.AddAll(diff); row.Clip(DayHistory.MaxRowKeys); row.Weapons.Clip(WeaponCells.PerDay); row.Weapons.ClipLevels(WeaponCells.PerDayLevels);   // 0.8.6: a day row keeps at most PerDay named weapons
             Fold(day);
         }
 
@@ -239,7 +279,7 @@ namespace Hearthwoven
                 if (!merged.TryGetValue(t, out var into)) { merged[t] = into = new ArmourTally(); order.Add(t); }
                 into.AddAll(r.Tally);
             }
-            foreach (var kv in merged) kv.Value.Clip(DayHistory.CapOf(kv.Key));
+            foreach (var kv in merged) { kv.Value.Clip(DayHistory.CapOf(kv.Key)); kv.Value.Weapons.Clip(WeaponCells.PerLong); kv.Value.Weapons.ClipLevels(WeaponCells.PerLongLevels); }
             Days.Clear();
             Days.AddRange(order.Select(k => (k, merged[k])).OrderBy(r => DayHistory.StartOf(r.k)));
         }
@@ -252,10 +292,28 @@ namespace Hearthwoven
             return s;
         }
 
+        /// <summary>0.8.6: the weapons of the last <paramref name="days"/> local days up to <paramref name="today"/>, per day key ("2026-10-11"), from the day rows plus the
+        /// running session's unsaved part (<paramref name="pending"/>, today's); at most WeaponCells.PerDay named weapons a day. The shared copy's "dayWeapons".</summary>
+        public Dictionary<string, WeaponCells> DayWeapons(DateTime today, int days, ArmourTally pending)
+        {
+            var from = today.Date.AddDays(1 - days); var d = new Dictionary<string, WeaponCells>();
+            void Put(string key, WeaponCells w)
+            {
+                if (w == null || w.Count == 0) return;
+                if (!d.TryGetValue(key, out var into)) d[key] = into = new WeaponCells();
+                into.Merge(w);
+            }
+            foreach (var r in Days) { var start = DayHistory.StartOf(r.Period); if (r.Period.Length == 10 && start >= from && start <= today.Date) Put(r.Period, r.Tally.Weapons); }
+            Put(DayHistory.DayKey(today), pending?.Weapons);
+            foreach (var w in d.Values) { w.Clip(WeaponCells.PerDay); w.ClipLevels(WeaponCells.PerDayLevels); }
+            return d;
+        }
+
         public void WriteTo(Json j, string key = "armour")
         {
             j.Key(key).Open();
             if (FromUtc > DateTime.MinValue) j.Str("from", FromUtc.ToString("o", CultureInfo.InvariantCulture));
+            if (SwingFromUtc > DateTime.MinValue) j.Str("swingFrom", SwingFromUtc.ToString("o", CultureInfo.InvariantCulture));
             Previous.WriteTo(j, "previous");
             j.Key("lastSession").Open().Str("id", LastSession); Last.WriteFields(j); j.Close();
             j.Key("days").OpenArr();
@@ -269,6 +327,7 @@ namespace Hearthwoven
             var b = new ArmourBook();
             if (o == null) return b;
             if (DateTime.TryParse(MiniJson.Str(o, "from"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var from)) b.FromUtc = from.ToUniversalTime();
+            if (DateTime.TryParse(MiniJson.Str(o, "swingFrom"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var sf)) b.SwingFromUtc = sf.ToUniversalTime();
             b.Previous.ReadFrom(MiniJson.Obj(o, "previous"));
             var last = MiniJson.Obj(o, "lastSession");
             b.LastSession = MiniJson.Str(last, "id"); b.Last.ReadFrom(last);

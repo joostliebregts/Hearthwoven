@@ -208,7 +208,7 @@ static partial class CoherenceTests
             var htmlOpeners = System.Text.RegularExpressions.Regex.Matches(html, @"\bopensMark\(").Count;   // its uses (the definition reads "opensMark = (")
             int Px(string text, string pattern) { var m = System.Text.RegularExpressions.Regex.Match(text, pattern); return m.Success ? int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) : -1; }
             var csArrow = Px(battleUi, @"BtFoeArrow = (\d+),"); var htmlArrow = Px(html, @"\(arrows \? (\d+) : 0\)");
-            Check(opensDrawn == 5 && ui.Contains("if (opens) OpensMark(target.rectTransform);") && battleUi.Contains("OpensMark(r, row.Selected, BtOpensRight);") &&
+            Check(opensDrawn == 6 && ui.Contains("if (opens) OpensMark(target.rectTransform);") && battleUi.Contains("OpensMark(r, row.Selected, BtOpensRight);") &&
                   look.Contains("new Vector2(1.5f, 1.5f), new Vector2(6.5f, 7f), new Vector2(1.5f, 12.5f)") && look.Contains("ChevronW = 8, ChevronH = 14, ChevronStroke = 1.8f") &&
                   html.Contains(@"viewBox=""0 0 8 14""><polyline points=""1.5,1.5 6.5,7 1.5,12.5"" fill=""none"" stroke=""currentColor"" stroke-width=""1.8""") && html.Contains(".opens-mk { position:absolute; top:50%; width:8px; height:14px;") &&
                   csOpeners >= 4 && csOpeners == htmlOpeners && csArrow >= 166 && csArrow == htmlArrow,

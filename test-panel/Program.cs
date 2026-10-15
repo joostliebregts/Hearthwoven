@@ -947,6 +947,7 @@ fails += ServerBookPanelTests.Run(now);   // 0.6: the server book on Sailing and
 fails += LedTests.Run(now);   // 0.6: Heavy Keel best load and the animals led, with their feats (test-panel/LedTests.cs)
 fails += ArmourPanelTests.Run(now);   // 0.7: Defence's Received / Your armour switch (test-panel/ArmourPanelTests.cs)
 fails += AfterArmourPanelTests.Run(now);   // 0.8.5: Damage and Foes with your damage after the foe's armor (test-panel/AfterArmourPanelTests.cs)
+fails += PaceTests.Run(now);   // 0.8.6: damage per second in three spots, and none where players would be compared (test-panel/PaceTests.cs)
 fails += BattleRecPanelTests.Run(now);   // 0.8: the battle record as the Battle pages read it (test-panel/BattleRecPanelTests.cs)
 fails += BattleFeedTests.Run(now);   // 0.8: the battle pages: x N only where counted, the feed's view kept, the last fight's fellows (test-panel/BattleFeedTests.cs)
 fails += FellowFeedTests.Run(now);   // 0.8.2: a fellow's Feed and Last fight as their copy shares it, in their words; an older copy; their Session from yours (test-panel/FellowFeedTests.cs)
@@ -956,6 +957,7 @@ fails += TogetherWindowsTests.Run(now);   // 0.8.5: every Together category in t
 fails += DeedsDaysPanelTests.Run(now);   // 0.8.5: a friend's Deeds pages in every window: their shared days = their own book, Everyone adds up, an older copy, 10 min while they play (test-panel/DeedsDaysPanelTests.cs)
 fails += OlderCopyTests.Run(now);   // 0.8.2 (I): a copy from an older Hearthwoven: one line per page that misses something, in one form, none on this build's (test-panel/OlderCopyTests.cs)
 fails += RejoinTests.Run(now);   // 0.8.2 (J): a fellow who reconnected during yours keeps their earlier connection's fights in your Session; foe counts add up (test-panel/RejoinTests.cs)
+fails += SessionEmptyTests.Run(now);   // 0.8.6: a fellow quiet in battle since you came in keeps the page frame in Session (heading, plate, empty block inside; test-panel/SessionEmptyTests.cs)
 fails += KeptLogTests.Run(now);   // 0.8.2: your minutes kept across a restart: 1 h and 3 h reach back, Session does not; a fellow's kept minutes count once (test-panel/KeptLogTests.cs)
 fails += DefenceTypesTests.Run(now);   // 0.7 ISC-22: Defence > Received from per foe per damage type (test-panel/DefenceTypesTests.cs)
 fails += SelfCheckTests.Run();   // Dev.SelfCheck bookkeeping, the filter key Tab and the clash scan (test-panel/SelfCheckTests.cs)
@@ -1135,7 +1137,10 @@ if (dump >= 0 && dump + 1 < args.Length)
     scenarios["battle-lastfight-long"] = scenarios["battle-feed-long"] = scenarios["battle-damage-foe-long"];
     // 0.8.2 (the hover's cost, HoverCostTests): a long feed, 100 more foes in the session in 20 fights of five, the newest FeedTop drawn, every
     // part's name and number on hover through the page's one tag
-    var feed100S = Scenario("battle-feed-100", "case: a long feed: 100 more foes in this session, 20 fights of five, each hit with three damage types; the newest 40 drawn (HoverCostTests.LongFeed)", HoverCostTests.LongFeed(now));
+    var feed100S = Scenario("battle-feed-100", "case: a long feed: 100 more foes in this session, 20 fights of five, each hit with three damage types; the newest fights up to 40 foes drawn, Show older foes at the end (HoverCostTests.LongFeed)", HoverCostTests.LongFeed(now));
+    scenarios["battle-feed-100-end"] = "case (0.8.5): the long feed scrolled to its end: Show older foes, and how many foes and fights are shown and left";
+    scenarios["battle-feed-100-scrolled"] = "case (0.8.6): the long feed scrolled part way down: the strip (its caption, the Log, Cards and Timeline chips, About these numbers) stays at the plate's top, the fights pass under it, the shade under it";
+    scenarios["battle-feed-100-more"] = "case (0.8.5): the long feed after one press of Show older foes, scrolled to its end: the next fights, whole, about 40 foes more, and what is shown and left";
     // 0.8.2 (Joost in game, Battle > Foes: The Queen's Dealt read "12 6…"): a long-played book whose top foes dealt 123 456 and 12 645, so the
     // Dealt column shows a 6-digit number with its space beside a full bar (render-check measures the column's room against "123 456")
     var bigFoes = PanelSample.Full(now);
@@ -1149,10 +1154,23 @@ if (dump >= 0 && dump + 1 < args.Length)
     // 0.9 fight pages (Chapters/FightPages.cs): the fight book the fight adapter will fill (v09-fights), not in the world yet (PanelSampleFights.cs)
     var fightsLiveS = Scenario("battle-bossfight", "case (0.9): the fight pages' sample, The Queen fought now in the Infested Citadel (the fights are not in the world until the fight adapter lands)", FightsSample.With(PanelSample.Full(now), true));
     var fightsAfterS = Scenario("battle-lastfight-group", "case (0.9): the fight pages' sample after the fights: the newest a Greydwarf camp", FightsSample.With(PanelSample.Full(now), false));
-    foreach (var n in new[] { "battle-bossfight-open", "battle-bossfight-numbers", "battle-bossfight-stacked", "battle-runs", "battle-fight-bonemass", "battle-fight-queen-reset", "battle-run-mine" }) scenarios[n] = scenarios["battle-bossfight"];
+    // 0.8.6 (Last fight is yours): a fellow's newer fight you were not in, as one quiet line under your own Last fight, and that fight's own page
+    var serverBook = FightsSample.WithServerFight(FightsSample.With(PanelSample.Full(now), false));
+    var lastServerS = Scenario("battle-lastfight-server", "case (0.8.6): Last fight is the Greydwarf camp you were in; Edda fought a Seeker 3 minutes ago without you: \"Newer on the server\" under it, a link to her fight", serverBook);
+    // 0.8.6 (DPS): the same fight with the boss nearly down, 22 % left and 9 % lost in the last minute: at this pace 2:27 left, too long for the short fill, so it follows the lane's note
+    var fightsLow = FightsSample.With(PanelSample.Full(now), true); fightsLow.Fights.LiveBoss.Health = 0.22f; fightsLow.Fights.LiveBoss.HealthMinuteAgo = 0.31f;
+    var fightsLowS = Scenario("battle-bossfight-low", "case (0.8.6): the Queen fought now with 22 % left, down 9 % in the last minute: the time left at this pace (2:27) after the lane's note, as the fill is too short to hold it", fightsLow);
+    foreach (var n in new[] { "battle-bossfight-open", "battle-bossfight-numbers", "battle-bossfight-stacked", "battle-runs", "battle-fight-bonemass", "battle-fight-queen-reset", "battle-run-mine", "battle-run-opened", "battle-fight-opened", "battle-runs-today" }) scenarios[n] = scenarios["battle-bossfight"];
+    scenarios["battle-fight-server"] = scenarios["battle-lastfight-server"];   // 0.8.6: the fellow's fight's own page
+    // 0.8.6 (Joost in game: a friend's Last fight was the 0.8 page, with other numbers than his own for the same fight): Edda's book on Rowan's PC reads the
+    // fights his PC joined, seen by her
+    var eddaFightS = Scenario("edda-battle-lastfight-fight", "case (0.8.6): Edda's Last fight on Rowan's PC: the Greydwarf camp as Rowan's page shows it, seen by her: Edda first as the book's owner, \"Rowan (you)\" near her 12 s, her DPS in the head, the same foes, dealt and received, By type, together under the players", FightsSample.Friend(FightsSample.With(PanelSample.Full(now), false), "Edda"));
+    scenarios["battle-runs-30min"] = scenarios["battle-lastfight-group"];   // 0.8.6: the fights after the fights, none in 30 min
     // 0.8.5 (test-panel/FoeNamesTests.cs): the ranged Draugr beside the Draugr, one row by the game's name; Brenna, Hildir's miniboss, a boss fight through
     // the real recorder although the game flags no boss, her Skeletons with and without a bow one row, her name's color tags off
     var kinS = Scenario("battle-damage-byfoe", "case (0.8.5): a few ranged Draugr in the Swamp this session: Damage by foe has one Draugr row, both kinds' damage and x N added up", FoeNamesTests.KinBook(now));
+    // 0.8.6 (Joost's PC, 11 Oct: two runs listed as "A dungeon", one a 34 s look with nothing fought): saved runs shaped as the PC's, through the adapter
+    var savedRunsS = Scenario("battle-runs-saved", "case (0.8.6): runs a restart kept, with the place's game name and no name token, as on Joost's PC: an Infested Mine (1 death), a Burial Chamber, and a 34 s look into another one (kept, not listed)", FightsSample.WithSavedRuns(PanelSample.Full(now)));
     var brennaS = Scenario("battle-bossfight-brenna", "case (0.8.5): Brenna, Hildir's miniboss the game does not flag a boss, won with her five Skeletons around her (three with a bow, two without: one row)", FightsSample.WithBrenna(PanelSample.Full(now), FoeNamesTests.TaggedBrenna));
     // 0.8.5 (Joost in game, after a restart: "last fight should show your last fight, but indicate that it was x hours/days ago. Same for the feed."):
     // the sample evening kept as an earlier session (KeptFights), Edda and Tor beside you in its last fight, two hours on
@@ -1160,6 +1178,18 @@ if (dump >= 0 && dump + 1 < args.Length)
     var feedEarlierS = Scenario("battle-feed-earlier", "case (0.8.5): two hours after a restart, one fight since: the feed in 7 days, this session's fight over the evening's, the evening under its own line", Hearthwoven.Panel.BattleSample.Restarted(PanelSample.Full(now), TimeSpan.FromHours(2), 10));
     // 0.8.2 (H): Edda logged out five minutes ago, so her copy is not live: 10 min to 3 h greyed, the pointer on 10 min shows why
     var eddaOff = books["Edda"].ShallowCopy(); eddaOff.Trail = null; eddaOff.ReceivedUtc = now.AddMinutes(-5);
+    // 0.8.6 (a friend's older feed, work/hearthwoven-0.8.6/DESIGN-feed-blocks.md): Edda's All: her copy's fights, then the session from three days back under its own line, the count
+    // line naming the session from nine days back that is still on the server
+    var eddaOlder = books["Edda"].ShallowCopy(); SampleSessions.Give(eddaOlder, now, 5);
+    var eddaOlderS = Scenario("battle-feed-fellow-older", "case (0.8.6): Edda's feed on All, scrolled to its end: her copy's last fights, then her session of three days back under its day and span, and the count line naming her session of nine days back that is still on the server (Show older foes)", eddaOlder);
+    // 0.8.6 (Joost in game, test build 5: "the loading took a while ... We should have something of a progress indicator there"): Edda has not fought this session and none of
+    // her sessions is on this PC yet; her All asks the server for the newest of the two, six seconds on its way: the line counts where it is and the seconds
+    var eddaFetching = books["Edda"].ShallowCopy(); eddaFetching.SharedFeed = new FeedShare(); var fetchingNear = SampleSessions.Give(eddaFetching, now, 150);
+    eddaFetching.BlockSessions = new Dictionary<string, KeptSession>(); eddaFetching.BlockStates = new Dictionary<string, string> { [fetchingNear.Id] = "loading" };
+    eddaFetching.BlockWaited = new Dictionary<string, int> { [fetchingNear.Id] = 6 }; eddaFetching.BlocksStamp = "fetching";
+    var eddaFetchingS = Scenario("battle-feed-fellow-fetching", "case (0.8.6): Edda's feed on All with none of her sessions on this PC yet: the newest of her two sessions on the server is on its way, its line says \"1 of 2\" and the seconds it has waited (the book counts them on that line only)", eddaFetching);
+    // 0.8.6 (Joost in game, test build 4): Edda in the world and live, nothing fought since you came in: her Damage in Session keeps the page frame
+    var eddaQuietS = Scenario("edda-battle-damage-session-quiet", "case (0.8.6): Edda is in the world but has not fought since you came in: her Damage in Session keeps the page's heading, chips and plate, the empty block inside", SessionEmptyTests.Quiet(books["Edda"], now));
     var eddaOffS = Scenario("edda-battle-offline", "case: Edda's last update came five minutes ago (not playing now): her 10 min to 3 h greyed, the reason under 10 min", eddaOff);
     // 0.8.2 (I): Edda's copy as Hearthwoven 0.6.5 sends it (SampleWorld.OlderJson): the pages that miss something say it once
     var eddaOld = SampleWorld.Share(SampleWorld.Make(now).owns[SampleWorld.Edda], now, "0.6.5"); var eddaBook = books["Edda"];
@@ -1185,6 +1215,15 @@ if (dump >= 0 && dump + 1 < args.Length)
     PanelState FoesOpen(string foe, TimeWindow w = TimeWindow.Session) { var s = Battle(w, "foes"); s.View[PanelModel.FoeOpenKey] = foe; return s; }   // 0.7: a foe's ranking open
     var swamp = new Dictionary<string, List<string>> { [PanelModel.BattleOverviewFilter + "|biome"] = new List<string> { "Swamp" } };
     PanelState Page(Chapter c, string page, Action<PanelState> more = null) { var s = new PanelState { Chapter = c }; if (page != null) s.Page[c] = page; more?.Invoke(s); return s; }
+    // 0.8.6: a page opened from another, as the book reaches it: the first page built and noted (PanelModel.Visited, as PanelUi.Render), then its
+    // row's link followed (PanelModel.Follow, as the click): the state the opened page is built from, with its Back button
+    PanelState OpenedFrom(PanelInput inp, PanelState from, string page)
+    {
+        var v0 = PanelModel.Build(inp, from); PanelModel.Visited(from, v0.Active, v0.Page);
+        IEnumerable<Block> Each(Block b) => new[] { b }.Concat((b.Items ?? new List<Block>()).SelectMany(Each));
+        PanelModel.Follow(from, PanelModel.Content(v0).SelectMany(Each).First(b => b.Kind == "fight" && b.Id != null && b.Id.EndsWith(page)).Id);
+        return from;
+    }
     PanelState Together(string category = null, string window = null) => Page(Chapter.Company, "together", s => { if (category != null) s.View["Company/together/category"] = category; if (window != null) s.View["Company/together/window"] = window; });
     PanelState As(string who, Chapter c, string page, Action<PanelState> more = null) { var s = Page(c, page, more); s.Player = who; return s; }
     PanelState CompareOn(PanelState s) { s.Compare = true; return s; }
@@ -1199,6 +1238,10 @@ if (dump >= 0 && dump + 1 < args.Length)
         var b = PanelModel.Content(v).SelectMany(x => x.Kind == "filterbar" ? x.Items : new List<Block> { x }).First(x => (x.Kind == "facetbar" || x.Kind == "composition") && x.Title == bar);
         PanelModel.FollowFacet(s, PanelModel.PartTarget(b, PanelModel.BarFormOf(b.Items).Rows.First(r => r.Title == part).Part));
     };
+    var longWeapons = Scenario("battle-damage-weapons", "case (0.8.6): a long evening (all damage dealt and fighting time 12 times as big, the kind rows with their weapon cells, so a pace and a change mark show and the lines add up to their row): By weapon with its most recent DPS and change marks; a weapon of several upgrade levels folded to its newest (the Iron Sword)", WeaponScenario.Longer(PanelSample.Full(now)));
+    scenarios["battle-damage-weapons-open"] = "case (0.8.6): the same long evening with the Bronze Spear's skill levels open, one row each with a bar on one scale";
+    scenarios["battle-damage-weapons-levels"] = "case (0.8.6 fold): the same long evening with the Iron Sword opened: its two upgrade levels in place under its folded line, the cursor of the keys on it";
+    var longEdda = Scenario("edda-battle-damage-weapons-open", "case (0.8.6): Edda's By weapon on a long evening, one of her weapons opened to its levels and one level to its skill levels", WeaponScenario.Longer(SampleWorld.Make(now).copies["Edda"]));
     var shots = new (string name, PanelInput inp, PanelState st, bool sharing)[]
     {
         ("battle-10min", world, Battle(TimeWindow.LastTenMinutes), true),
@@ -1298,14 +1341,25 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-bossfight-numbers", fightsLiveS, Page(Chapter.Battle, PanelModel.LastFightPage, Numbers), true),
         ("battle-bossfight-stacked", fightsLiveS, Page(Chapter.Battle, PanelModel.LastFightPage, s => s.View[PanelModel.FightLayoutKey] = PanelModel.FightStacked), true),   // the other layout, for Joost to pick
         ("battle-lastfight-group", fightsAfterS, Page(Chapter.Battle, PanelModel.LastFightPage), true),
+        ("battle-lastfight-server", lastServerS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.8.6: your Last fight with the server line
+        ("battle-fight-server", lastServerS, Page(Chapter.Battle, "fight:server-fight"), true),   // 0.8.6: that fight's own page, "You were not in this fight"
         ("battle-damage-byfoe", kinS, Page(Chapter.Battle, "damage", s => s.View["Battle/damage/view"] = "foe"), true),   // 0.8.5: Draugr and the ranged Draugr, one row
+        ("battle-bossfight-low", fightsLowS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.8.6: the lane with little left: the time at this pace after its note
         ("battle-bossfight-brenna", brennaS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.8.5: Hildir's miniboss, a boss fight
         ("battle-lastfight-earlier", lastEarlierS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.8.5: Last fight from an earlier session, "2 hours ago"
         ("battle-feed-earlier", feedEarlierS, Page(Chapter.Battle, PanelModel.FeedPage, s => { s.Window = TimeWindow.SevenDays; s.WindowPicked = true; }), true),   // 0.8.5: the feed over a restart
         ("battle-runs", fightsLiveS, Page(Chapter.Battle, PanelModel.RunsPage), true),
+        ("battle-runs-saved", savedRunsS, Page(Chapter.Battle, PanelModel.RunsPage), true),   // 0.8.6: named from the place, "Left, 1 death", the 34 s look not listed
+        // 0.8.6 (Joost: "how does one filter the runs and bosses by time?"): the window chips on Runs and bosses: Today (the run on now, its Queen under it),
+        // and 30 min after the fights (nothing in it: one line names the newest)
+        ("battle-runs-today", fightsLiveS, Page(Chapter.Battle, PanelModel.RunsPage, s => { s.Window = TimeWindow.Today; s.WindowPicked = true; }), true),
+        ("battle-runs-30min", fightsAfterS, Page(Chapter.Battle, PanelModel.RunsPage, s => { s.Window = TimeWindow.LastThirtyMinutes; s.WindowPicked = true; }), true),
         ("battle-fight-bonemass", fightsLiveS, Page(Chapter.Battle, "fight:bonemass-1"), true),
         ("battle-fight-queen-reset", fightsLiveS, Page(Chapter.Battle, "fight:queen-2"), true),
         ("battle-run-mine", fightsLiveS, Page(Chapter.Battle, "fight:mine-1"), true),
+        // 0.8.6 (Joost: "How does one get back to the previous view?"): a run and a boss fight opened from Runs and bosses, the Back button at the strip's left end
+        ("battle-run-opened", fightsLiveS, OpenedFrom(fightsLiveS, Page(Chapter.Battle, PanelModel.RunsPage), "fight:mine-1"), true),
+        ("battle-fight-opened", fightsLiveS, OpenedFrom(fightsLiveS, Page(Chapter.Battle, PanelModel.RunsPage), "fight:bonemass-1"), true),
         // 0.8.1 (Joost: "Battle feed, why can't I filter this?"): the window chips and the Biome and Foe rows; Foe = Troll open, so the fight of five
         // shows its Troll only ("1 of 5 foes"), and the last hour in Cards
         ("battle-feed-foe-troll", world, Page(Chapter.Battle, PanelModel.FeedPage, s => { s.Facets[PanelModel.FeedFilter + "|foe"] = new List<string> { "Troll" }; s.OpenFilters.Add(PanelModel.FeedFilter); }), true),
@@ -1315,6 +1369,9 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-lastfight-long", longFoeS, Battle(TimeWindow.Session, PanelModel.LastFightPage), true),
         ("battle-feed-long", longFoeS, Battle(TimeWindow.Session, PanelModel.FeedPage), true),   // 0.8.1 the Log's damage bars: the last fight with five foes, three of them Greydwarf Shamans
         ("battle-feed-100", feed100S, Battle(TimeWindow.Session, PanelModel.FeedPage), true),   // 0.8.2: a long feed, the page's one hover tag over 40 bars (HoverCostTests)
+        ("battle-feed-100-end", feed100S, Battle(TimeWindow.Session, PanelModel.FeedPage), true),   // 0.8.5: its end, Show older foes
+        ("battle-feed-100-scrolled", feed100S, Battle(TimeWindow.Session, PanelModel.FeedPage), true),   // 0.8.6: part way down, the strip pinned over the fights
+        ("battle-feed-100-more", feed100S, Page(Chapter.Battle, PanelModel.FeedPage, s => { s.Window = TimeWindow.Session; s.FeedMore = 1; }), true),   // 0.8.5: Show older foes pressed once
         ("battle-lastfight-numbers", world, Numbered(Battle(TimeWindow.Session, PanelModel.LastFightPage)), true),
         ("tor-battle-feed", books["Tor"], As("Tor", Chapter.Battle, PanelModel.FeedPage), true),
         // 0.8.2 (Joost on a fellow's book: "why no feed? I want that in", "same for last fight"): Edda's feed and last fight as her copy shares them,
@@ -1322,6 +1379,9 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("edda-battle-feed", books["Edda"], As("Edda", Chapter.Battle, PanelModel.FeedPage), true),
         ("edda-battle-feed-cards", books["Edda"], As("Edda", Chapter.Battle, PanelModel.FeedPage, s => s.View[PanelModel.FeedViewKey] = PanelModel.FeedCards), true),
         ("edda-battle-lastfight", books["Edda"], As("Edda", Chapter.Battle, PanelModel.LastFightPage), true),
+        ("edda-battle-lastfight-fight", eddaFightS, As("Edda", Chapter.Battle, PanelModel.LastFightPage), true),   // 0.8.6: her Last fight on the fight page, from your PC's joined fights
+        ("battle-feed-fellow-older", eddaOlderS, As("Edda", Chapter.Battle, PanelModel.FeedPage, s => { s.Window = TimeWindow.SinceInstall; s.WindowPicked = true; s.View[PanelModel.FeedViewKey] = PanelModel.FeedCards; }), true),   // 0.8.6: her sessions from the server, at the end of the page (Cards: the Log cuts "defeated with Rowan (you)" at its outcome column, as in 0.8.5)
+        ("battle-feed-fellow-fetching", eddaFetchingS, As("Edda", Chapter.Battle, PanelModel.FeedPage, s => { s.Window = TimeWindow.SinceInstall; s.WindowPicked = true; }), true),   // 0.8.6: a session on its way, counting
         ("battle-foes-keys", world, Page(Chapter.Battle, "foes", s => s.View[PanelModel.FoeCursorKey] = "Troll"), true),   // 0.8: the keys' cursor on Troll: its focus ring, every factor shown
         ("battle-defense", world, Battle(TimeWindow.Session, "defense"), true),
         // the day history (HISTORY-06.md): the one window set on the pages Joost asked for
@@ -1345,6 +1405,18 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-foes-1h", world, Battle(TimeWindow.LastHour, "foes"), true),
         ("battle-7days", world, Battle(TimeWindow.SevenDays), true),
         ("battle-damage-7days", world, Battle(TimeWindow.SevenDays, "damage"), true),
+        // 0.8.6 (DPS per named weapon): your By weapon with its weapons and upgrade levels under each kind (7 days has the seconds for a pace; Session the live evening), the About box
+        // open, and a friend's By weapon (Edda, from the weapons her copy shares) in 7 days and Session
+        ("battle-damage-weapons-numbers", world, Numbered(Battle(TimeWindow.SevenDays, "damage")), true),
+        ("battle-damage-weapons-10min", world, Battle(TimeWindow.LastTenMinutes, "damage"), true),
+        ("edda-battle-damage-7days", books["Edda"], As("Edda", Chapter.Battle, "damage", s => { s.Window = TimeWindow.SevenDays; s.WindowPicked = true; }), true),
+        ("edda-battle-damage", books["Edda"], As("Edda", Chapter.Battle, "damage", s => { s.Window = TimeWindow.Session; s.WindowPicked = true; }), true),
+        ("edda-battle-damage-session-quiet", eddaQuietS, As("Edda", Chapter.Battle, "damage", s => { s.Window = TimeWindow.Session; s.WindowPicked = true; }), true),   // 0.8.6: nothing fought since you came in, the same frame
+        // a long evening in the weapons (WeaponScenario: every weapon cell 12 times as long, so a pace and a change mark show): your By weapon shut, with the Bronze Spear's skill levels open, and Edda's
+        ("battle-damage-weapons", longWeapons, Battle(TimeWindow.SevenDays, "damage"), true),
+        ("battle-damage-weapons-open", longWeapons, Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.SevenDays; s.View[PanelModel.WeaponOpenKey] = "SpearBronze|Spears"; }), true),
+        ("battle-damage-weapons-levels", longWeapons, Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.SevenDays; s.View[PanelModel.WeaponOpenKey] = "SwordIron|Swords"; s.View[PanelModel.WeaponCursorKey] = "SwordIron|Swords"; }), true),
+        ("edda-battle-damage-weapons-open", longEdda, As("Edda", Chapter.Battle, "damage", s => { s.Window = TimeWindow.SevenDays; s.WindowPicked = true; s.View[PanelModel.WeaponOpenKey] = "AxeIron|Axes;AxeIron|Axes|2"; }), true),
         ("voyages-sailing-7days", world, Page(Chapter.Voyages, "sailing", s => s.Window = TimeWindow.SevenDays), true),
         ("voyages-sailing-today", world, Page(Chapter.Voyages, "sailing", s => s.Window = TimeWindow.Today), true),
         ("voyages-cargo-7days", world, Page(Chapter.Voyages, "cargo", s => s.Window = TimeWindow.SevenDays), true),
@@ -1505,6 +1577,9 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("everyone-taming", world, Ev(Page(Chapter.Deeds, "taming")), true),
         ("everyone-battle-damage", world, Ev(Battle(TimeWindow.LastHour, "damage")), true),
         ("everyone-battle-damage-weapon", world, Ev(Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.LastHour; s.View["Battle/damage/group"] = "weapon"; })), true),
+        // 0.8.6 (the tag beside its bar, render-check): Everyone > Damage > By weapon, Session; PANEL_HOVER: the pointer on Melee's Blunt part, whose tag says both numbers, "Blunt 1 180: 960 got through, 220 stopped", beside the bar, not over it
+        ("everyone-battle-damage-weapon-all", world, Ev(Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.SinceInstall; s.View["Battle/damage/group"] = "weapon"; })), true),   // 0.8.6 (Joost in game): All, most of it from before armor was counted: plain bars and the one line where the split is known
+        ("everyone-battle-damage-weapon-hover", world, Ev(Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.Session; s.View["Battle/damage/group"] = "weapon"; })), true),
         ("everyone-battle-damage-type", world, Ev(Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.Session; s.View["Battle/damage/group"] = "type"; })), true),   // types down, players across (group-battle b)
         ("everyone-battle-damage-7days", world, Ev(Battle(TimeWindow.SevenDays, "damage")), true),   // 0.9: each fellow's days by weapon kind and type: By player with splits, By weapon, By type
         ("everyone-battle-damage-today", world, Ev(Battle(TimeWindow.Today, "damage")), true),   // 0.9: By player with every row's split, and the one line that each player's whole day counts
@@ -1577,6 +1652,7 @@ if (dump >= 0 && dump + 1 < args.Length)
     // 0.8 layout D+ (Islands.cs): every block a page draws sits in exactly one island: none lost, none twice (the strip and the heading row's
     // blocks excepted; a switch opens into its chosen view, a page's two columns into two islands, Recent's group into one island per player)
     var islandsOff = new List<string>();
+    var numbersOff = new List<string>();   // 0.8.6 honest numbers (HonestNumbersTests.cs): no part bigger than its whole, no share above 100 %
     var groupSparks = new List<string>();   // FEEDBACK 13: fellow players share no days, so a group page has no growth line anywhere
     List<string> IslandsLost(Block pl)
     {
@@ -1611,6 +1687,7 @@ if (dump >= 0 && dump + 1 < args.Length)
                  var v = s.name == "could-not-draw" ? PanelModel.CouldNotDraw(s.inp, s.st) : PanelModel.Build(s.inp, s.st);
                  s.inp.Fellows = keep;
                  loose.AddRange(PanelModel.LooseText(v).Select(t => s.name + ": " + t));
+                 numbersOff.AddRange(HonestNumbers.Off(v).Select(t => s.name + ": " + t));
                  if (v.EveryoneOn && PanelModel.Content(v).Any(b => (b.Items ?? new List<Block>()).Any(i => i.Kind == PanelModel.SparkKind))) groupSparks.Add(s.name);
                  if (PanelModel.PlateOf(v) is Block pl && pl.Tone != PanelModel.PlateFull) islandsOff.AddRange(IslandsLost(pl).Select(t => s.name + ": " + t));
                  var give = PanelModel.Content(v).FirstOrDefault(b => b.Kind == "giving");
@@ -1628,10 +1705,12 @@ if (dump >= 0 && dump + 1 < args.Length)
     Check(loose.Count == 0, "header space: no text between the strip and the hero on any of the " + shots.Length + " preview pages (" + loose.Count + " found)");
     foreach (var t in islandsOff.Take(20)) System.Console.WriteLine("  island: " + t);
     Check(groupSparks.Count == 0, "group pages: no growth line on any Everyone page (" + (groupSparks.Count == 0 ? "none of " + shots.Count(x => x.st.Everyone) + " shots with Everyone on" : string.Join(", ", groupSparks)) + ")");
+    foreach (var t in numbersOff.Take(20)) System.Console.WriteLine("  numbers: " + t);
+    Check(numbersOff.Count == 0, "honest numbers: on every preview page no weapon line is bigger than its kind row nor do the lines add up to more; every after-armor part adds up to what was swung (got through + stopped; a weak part its counted part); a share above 100 % says why; a window with any damage from before armor was counted has no split and says where it is known (" + numbersOff.Count + " off)");
     Check(islandsOff.Count == 0, "islands: every block of every preview page sits in exactly one island, none lost, none twice (" + islandsOff.Count + " off)");
     // 0.8 hover (BarHover, PICKS 4 B): a hovered-state shot names the bar (its place among the page's bars with a list) and the part the pointer is on
-    js += "window.PANEL_HOVER = {\"edda-battle-offline\": {\"win\": \"LastTenMinutes\"}, \"deeds-woodcutting-hover\": {\"bar\": 0, \"part\": 1}, \"battle-damage-hover\": {\"bar\": 0, \"part\": 5}, \"battle-damage-foe-hover\": {\"bar\": 1, \"part\": 3}, \"company-away-3days-hover\": {\"bar\": 1, \"part\": 2}, \"everyone-battle-foes-hover\": {\"bar\": 0, \"part\": 1}, \"battle-foes-open-hover\": {\"bar\": 0, \"part\": 1}, \"battle-damage-afterarmor\": {\"bar\": 0, \"part\": 2}, \"battle-foes-afterarmor\": {\"bar\": 0, \"part\": 0}};\n";
-    js += "window.PANEL_SCROLL = {\"deeds-cooking-today\": \"Who enjoyed your food\"};\n";   // 0.8.5: the plate scrolled to a section, as the wheel does in game
+    js += "window.PANEL_HOVER = {\"edda-battle-offline\": {\"win\": \"LastTenMinutes\"}, \"deeds-woodcutting-hover\": {\"bar\": 0, \"part\": 1}, \"battle-damage-hover\": {\"bar\": 0, \"part\": 5}, \"battle-damage-foe-hover\": {\"bar\": 1, \"part\": 3}, \"company-away-3days-hover\": {\"bar\": 1, \"part\": 2}, \"everyone-battle-damage-weapon-hover\": {\"bar\": 0, \"part\": 0}, \"everyone-battle-foes-hover\": {\"bar\": 0, \"part\": 1}, \"battle-foes-open-hover\": {\"bar\": 0, \"part\": 1}, \"battle-damage-afterarmor\": {\"bar\": 0, \"part\": 2}, \"battle-foes-afterarmor\": {\"bar\": 0, \"part\": 0}};\n";
+    js += "window.PANEL_SCROLL = {\"deeds-cooking-today\": \"Who enjoyed your food\", \"battle-feed-100-end\": \"end\", \"battle-feed-100-scrolled\": 610, \"battle-feed-100-more\": \"end\", \"battle-feed-fellow-older\": \"end\"};\n";   // 0.8.5: the plate scrolled to a section, as the wheel does in game ("end": to its end; 0.8.6: a number, that many px)
     js += "window.PANEL_RICH = [" + string.Join(", ", PanelRich.Kinds.Select(k => "\"" + k + "\"")) + "];   // richtext-fix: the block kinds whose labels have rich text on (PanelRich.Kinds)\n";
     System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "preview-data.js"), js);
     System.Console.WriteLine("wrote " + System.IO.Path.Combine(dir, "preview-data.js"));

@@ -649,7 +649,7 @@ namespace Hearthwoven.Panel
             var notes = new List<string>();
             if (bar != null && unsplit.Count > 0) notes.Add(JoinNames(unsplit) + (unsplit.Count == 1 ? " number is" : " numbers are") + " not split by kind, so the bar leaves " + (unsplit.Count == 1 ? "it" : "them") + " out.");
             if (state.Chapter == Chapter.Battle && page == "damage")
-                BattleGroupSwitch(view, state, page, blocks, bar, inSum.Select(k => (people[k].Name, rows[k].Title, ms[k])).ToList(), notes);
+                BattleGroupSwitch(input, w, x => GroupWindowOpen(g, input, x), view, state, page, blocks, bar, inSum.Select(k => (people[k].Name, rows[k].Title, ms[k])).ToList(), notes);
             else if (foes)
             {
                 BattleGroupFoes(input, view, state, page, w, blocks, inSum.Select(k => (people[k].Name, rows[k].Title, ms[k])).ToList());
@@ -740,13 +740,13 @@ namespace Hearthwoven.Panel
         /// damage by type; By weapon is the page's own view over every player's hits together; By type is the page's grid with the players across
         /// (group-battle b: damage types down, a column per player headed by their shield, totals right and under). 0.9: in a day window too, from
         /// the parts each fellow shares per day; a copy before 0.9 (one total per day) is left out of both, and its line says so (GroupMeasure.Waits).</summary>
-        static void BattleGroupSwitch(PanelView view, PanelState state, string page, List<Block> byPlayer, Block bar, List<(string name, string label, GroupMeasure m)> players, List<string> notes)
+        static void BattleGroupSwitch(PanelInput input, TimeWindow w, Func<TimeWindow, bool> open, PanelView view, PanelState state, string page, List<Block> byPlayer, Block bar, List<(string name, string label, GroupMeasure m)> players, List<string> notes)
         {
             if (bar != null) byPlayer.Add(bar);
             var split = players.Where(p => p.m.Rows != null).ToList();
             var rows = split.SelectMany(p => p.m.Rows).ToList();
             List<Block> byWeapon = null, byType = null;
-            var grid = split.Count > 0 ? PlayersGrid(split) : null;
+            var grid = split.Count > 0 ? PlayersGrid(split, AllCounted(rows)) : null;
             if (grid != null)
             {
                 var mixes = DamageMixes(rows);
@@ -759,15 +759,18 @@ namespace Hearthwoven.Panel
             // one who shares none: the faded piece, not split); By player stays each player's share of the group
             var after = AnySplit(rows);
             if (after) AboutLines(view, (AfterAboutTitle, AfterAbout(null, TimeWindow.Session)));
+            // 0.8.6: damage from before armor was counted anywhere in the group's window: plain bars, and the one line where the split is known
+            var countedLine = CountedLine(input, w, rows, open);
+            if (countedLine != null) { byWeapon?.Insert(1, new Block { Kind = "note", Text = countedLine }); byType?.Insert(1, new Block { Kind = "note", Text = countedLine }); }
             Switch(view, state, page, "group", after ? DealtAfterCaption : DealtCaption, ("player", "By player", byPlayer), ("weapon", ByWeapon, byWeapon), ("type", ByType, byType));
         }
 
         /// <summary>By type with Everyone (group-battle b): the page's damage grid (DamageGrid) with a column per player instead of a weapon kind,
         /// each headed by their shield; one bar scale for the whole grid, totals right and under, a player with none of a type an empty cell.</summary>
-        static Block PlayersGrid(List<(string name, string label, GroupMeasure m)> players)
+        static Block PlayersGrid(List<(string name, string label, GroupMeasure m)> players, bool counted)
         {
             var cell = new Dictionary<string, double>(); var after = new Dictionary<string, DealtAmount>();   // 0.8.5: each cell's after (AfterPart)
-            foreach (var p in players) foreach (var r in DealtRows(p.m.Rows ?? new List<DamageRow>()))
+            foreach (var p in players) foreach (var r in DealtRows(p.m.Rows ?? new List<DamageRow>(), counted))
             {
                 var k = r.Type + "|" + p.name; cell.TryGetValue(k, out var o); cell[k] = o + r.Amount;
                 BumpDealt(after, k, r);
@@ -789,9 +792,9 @@ namespace Hearthwoven.Panel
                 items.Add(new Block
                 {
                     Kind = "dmgtype", Id = t, Title = TypeName(t), Icon = DamageIcon(t), Colour = DamageColour(t), Value = NAtLeast(total), Src = SrcFellows, Source = TagFellows,
-                    Text = ThroughLine(players.Select(p => after.TryGetValue(t + "|" + p.name, out var a) ? a : default).Aggregate(new DealtAmount(), (x, y) => x + y)),
+                    Text = ThroughLine(players.Select(p => after.TryGetValue(t + "|" + p.name, out var a) ? a : default).Aggregate(new DealtAmount(), (x, y) => x + y), TypeName(t)),
                     Items = players.Select(p => { var v = Get(cell, t + "|" + p.name); var c = new Block { Kind = "cell", Id = p.name, Value = v > 0 ? NAtLeast(v) : "", Fraction = (float)(v / max), Colour = DamageColour(t) };
-                                                  return v > 0 && after.TryGetValue(t + "|" + p.name, out var a) ? AfterPart(c, a, NotSplitWords) : c; }).ToList(),
+                                                  return v > 0 && after.TryGetValue(t + "|" + p.name, out var a) ? AfterPart(c, a) : c; }).ToList(),
                 });
             }
             return new Block { Kind = "damagegrid", Title = AllTypes, Value = NAtLeast(cell.Values.Sum()), Src = SrcFellows, Source = TagFellows, Items = items };

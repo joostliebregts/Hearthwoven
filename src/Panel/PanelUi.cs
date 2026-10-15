@@ -63,6 +63,7 @@ namespace Hearthwoven.Panel
             if (migrated.layout != KeyLayout.Value || migrated.filterKey != FilterKey.Value) { FilterKey.Value = migrated.filterKey; KeyLayout.Value = migrated.layout; }
             BindSnapshotConfig(config);   // Dev: panel snapshots (PanelSnapshot.cs)
             WatchConfig(config);          // live settings: a change in Gale applies while the game runs (ConfigWatch.cs)
+            GroupShare.Blocks.Changed = RefreshSoon;   // 0.8.6: a friend's session arrived, failed or went: the page is built again soon
             BindSampleConfig(config);     // Dev: the fictional sample for screenshots (PanelSampleUi.cs)
             BindReuseConfig(config);      // Dev: the book's objects kept between drawings (PanelReuse.cs)
             BindBenchConfig(config);      // Dev: the in-game page bench (PanelBench.cs)
@@ -74,6 +75,9 @@ namespace Hearthwoven.Panel
         bool open;
         internal bool IsOpen => open;
         float nextRefresh;
+        static volatile bool refreshWanted;
+        /// <summary>0.8.6: build the open page again at the next frame, not at the next two-second refresh (a friend's session came from the server).</summary>
+        public static void RefreshSoon() => refreshWanted = true;
         string shown, lastPage;
         int playerPage;
         GameObject root;
@@ -182,6 +186,8 @@ namespace Hearthwoven.Panel
                 if (PanelModel.FilterAnyOpen(state, FilterNow()) && !state.ShowAbout && !Pressed() && (Key(KeyCode.Escape) || Button("JoyButtonB") || (TabCloses && Key(KeyCode.Tab)))) { PanelModel.FilterLeave(state, view); Render(true); return; }
                 // 0.8.5: Esc (or B) shuts the Compare menu first, the page stays
                 if (state.CompareMenu && !state.ShowAbout && !Pressed() && (Key(KeyCode.Escape) || Button("JoyButtonB"))) { state.CompareMenu = false; state.CompareCursor = -1; Render(true); return; }
+                // 0.8.6: on a page with the Back button the pad's B is that button (the pad has no Backspace); elsewhere B still closes the book
+                if (view != null && view.Back != null && !state.ShowAbout && !Pressed() && Button("JoyButtonB")) { if (PanelModel.Back(state)) Render(true); return; }
                 if (Pressed() || Key(KeyCode.Escape) || (TabCloses && Key(KeyCode.Tab)) || Button("JoyButtonB")) { Close(); return; }
                 if (state.FilterRow >= 0 && !state.ShowAbout && FilterKeys()) { }   // the filter focus: A/D, W/S, Enter, Delete and the filter key are its own (FacetModel.cs)
                 else if (state.CompareMenu && !state.ShowAbout && CompareMenuKeys()) { }   // 0.8.5: the Compare menu: W/S, Enter, Backspace are its own
@@ -190,6 +196,8 @@ namespace Hearthwoven.Panel
                 else if (Key(KeyCode.Backspace)) { if (PanelModel.Back(state)) Render(true); }   // back to the page you came from
                 else if (FeatsKeys()) { }   // on the Feats chapter A/D (and the D-pad) choose the feat; Q/E still turn the chapters (Chapters/FeatsUi.cs)
                 else if (FoesKeys()) { }    // 0.8: on Foes A/D move between the foes, Enter opens one; Q/E still turn the chapters (Chapters/FoesKeysUi.cs)
+                else if (WeaponKeys()) { }  // 0.8.6: on By weapon A/D move between the weapons that open, Enter opens one (Chapters/FoesKeysUi.cs)
+                else if (FeedKeys()) { }    // 0.8.5: on the feed Enter shows older foes (Chapters/BattleFeedUi.cs)
                 else if (Button("TabLeft") || Button("JoyTabLeft") || Key(KeyCode.LeftArrow) || Key(KeyCode.A)) { state.ShowAbout = false; PanelModel.StepChapter(state, -1); Render(true); }
                 else if (Button("TabRight") || Button("JoyTabRight") || Key(KeyCode.RightArrow) || Key(KeyCode.D)) { state.ShowAbout = false; PanelModel.StepChapter(state, 1); Render(true); }
                 else if (Key(KeyCode.W) || Key(KeyCode.UpArrow) || Button("JoyDPadUp")) { PanelModel.StepList(state, view, -1); Render(true); }   // on About: its own list
@@ -202,7 +210,8 @@ namespace Hearthwoven.Panel
                 else if (view != null && !state.ShowAbout && ((BookKey != null && BookKey.Value != KeyCode.None && Key(BookKey.Value)) || Button("JoyButtonY"))) { if (PanelModel.StepBook(state, view)) Render(true); }   // 0.8: the player row by keys and pad
                 Wheel();
                 PageKeys();   // 0.8: Page Up / Page Down and the pad's right stick scroll the page (0.7 scrolled by the wheel only; Chapters/FoesKeysUi.cs)
-                if (Time.unscaledTime >= nextRefresh) Render(false);
+                if (Time.unscaledTime >= nextRefresh || refreshWanted) { refreshWanted = false; Render(false); }
+                FetchTick();   // 0.8.6: a friend's session on its way: its line counts the seconds (Chapters/BattleFeedUi.cs)
             }
             catch (Exception e) { Failed("panel", e); PanelModel.ToSafePage(state); Close(); }   // a page that throws never gets here (Draw): this is the keys or the frame itself; the next opening starts on a page that cannot repeat it
         }
@@ -279,6 +288,8 @@ namespace Hearthwoven.Panel
             state.ShowNumbers = false;   // and with "About these numbers" shut
             state.CompareMenu = false;   // and the Compare menu (0.8.5)
             state.ShowAll = null;   // and every item grid folded (0.8.1, Show all lasts one visit)
+            state.FeedMore = 0;   // and the battle feed at its first page (0.8.5)
+            PanelModel.FoldWeapons(state);   // and every weapon on By weapon folded (0.8.6)
             KeyFocus = false; pointerKnown = false;   // the hotkey that opened the panel is not a move inside it: no focus ring yet
             PanelLook.Resolve();
             PanelLook.RetryMissing();
@@ -510,7 +521,26 @@ namespace Hearthwoven.Panel
             other.Trail = trail; other.Timed = GroupShare.ServerLive && LiveFellows.CopyIdOf(json).Length > 0; other.ServerLive = GroupShare.ServerLive;   // B33: their numbers inside your session
             other.OnThisSession = GroupShare.Joins.SeenThisConnection(GroupShare.Fellows.NameOf(key)); other.ViewerSessionStartUtc = self.SessionStartUtc;
             other.Cached = GroupShare.IsCached(key);   // B23: shown from this PC until the server's copy comes
+            FillBlocks(other, key);
             return other;
+        }
+
+        /// <summary>0.8.6 (a friend's older feed): the sessions the server lists for this fellow, the ones fetched as kept sessions of theirs, and the ones on their way or lost.
+        /// The one their running copy is (its session id) is the copy itself, not an earlier one.</summary>
+        static void FillBlocks(PanelInput other, string key)
+        {
+            var blocks = GroupShare.Blocks;
+            var rows = blocks.RowsOf(key, other.SessionId);
+            other.BlockRows = rows.Count > 0 ? rows : null;
+            other.BlocksStamp = blocks.Version + "|" + key;
+            if (rows.Count == 0) return;
+            other.BlockSessions = new Dictionary<string, KeptSession>(); other.BlockStates = new Dictionary<string, string>();
+            foreach (var r in rows)
+            {
+                var s = blocks.SessionOf(r.Id, "", other.PlayerName);
+                if (s != null) other.BlockSessions[r.Id] = s;
+                else { var st = blocks.StateOf(r.Id); if (st == FellowBlocks.State.Loading) other.BlockStates[r.Id] = "loading"; else if (st == FellowBlocks.State.Failed) other.BlockStates[r.Id] = "failed"; }
+            }
         }
 
         // what your inventory holds now, read once per page build and only when a page asks (the Foes ranking): item tokens
@@ -683,8 +713,11 @@ namespace Hearthwoven.Panel
             Fill(v);   // this failing too goes to Frame's catch: the book closes, logged
         }
 
+        bool feedAppend;   // the drawing asked for is Show older foes (LinkTo): DrawPage tries AppendFeed before Fill
+
         void DrawPage(bool force)
         {
+            var append = feedAppend; feedAppend = false; var before = view; var beforeJson = shown;
             if (force) SavePrefs();
             nextRefresh = Time.unscaledTime + 2f;
             if (GroupShare.Sharing()) { GroupShare.Request(); GroupShare.LiveRequest(); }   // keeps the group fresh while open: full copies at most every 30 s, live updates every 10 s (0.7)
@@ -706,6 +739,7 @@ namespace Hearthwoven.Panel
             state.CompareKey = CompareKey == null || CompareKey.Value == KeyCode.None ? "" : GameNames.Of(CompareKey.Value);
             MarkPhase(1);   // measured renders only (PanelBench.cs): the input gathered
             var v = PanelModel.Build(subject ?? self, state);
+            if (v.FetchBlock != null) GroupShare.WantBlock(v.FetchBlock);   // 0.8.6: the friend's session the feed needs next (a page ahead, or a press waits on it)
             PanelModel.AddPlayers(v, self.PlayerName, GroupNames(self.PlayerName), state.Player, SharingShown(), self.Solo, SampleMode.On ? null : GroupShare.Joining(self.PlayerName), state.BookKey);   // 0.7: who just joined, dimmed; 0.8: the book key in the key line
             view = v;
             PanelModel.Visited(state, v.Active, v.Page);   // the back stack (Backspace)
@@ -715,7 +749,7 @@ namespace Hearthwoven.Panel
             if (!force && json == broken) return;   // the page whose drawing threw, unchanged: its could-not-draw page stays, no redraw every 2 s
             shown = drawing = json;
             MarkPhase(3); if (marks != null) marks.Drew = true;
-            Fill(v);
+            if (!(append && AppendFeed(before, beforeJson, v))) Fill(v);
             drawing = null;
             MarkPhase(4);   // the UI objects made; the canvas and text meshes follow (MeasuredRender)
             FollowFoe();   // 0.8: a foe the keys moved to is brought into view (Chapters/FoesKeysUi.cs)
@@ -801,6 +835,7 @@ namespace Hearthwoven.Panel
             plateFill = Img(right, "Plate", null, PlateColour); PlateBox(plateFill.rectTransform, 0);
             plateEdge = Kit(right, "PlateEdge", "meter-track"); PlateBox(plateEdge.rectTransform, 0);
             content = Scroller("Blocks", right, 0, PanelLayout.Heading.Blocks, -1, 0, PanelLayout.Heading.BlocksGap);
+            BuildPin(right);   // 0.8.6: where the strip that leads the plate is pinned, over the scroll area (StickyHeadUi.cs)
 
             keys = Label(frame, "", PanelLayout.Keys.Text, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); keys.textWrappingMode = TextWrappingModes.NoWrap;
             keys.rectTransform.Bottom(PanelLayout.Keys.Side, PanelLayout.Keys.Bottom, W - 2 * PanelLayout.Keys.Side, PanelLayout.Keys.Height);
@@ -834,7 +869,8 @@ namespace Hearthwoven.Panel
         // ---------- scrolling: one wheel notch moves at least one row; a soft fade where more lies beyond the edge ----------
 
         // Key: an area inside the page, by its path under the content column (B31: kept across a rebuild of the same page); Placed: its block set its own position
-        class Scroll { public ScrollRect Rect; public Image Top, Bottom; public GameObject Cue; public bool ByRow, Easing, Placed; public float Target, Velocity; public string Key; }
+        // Shade: the content column's only, the shade under the pinned strip (StickyHeadUi.cs), shown with the top fade
+        class Scroll { public ScrollRect Rect; public Image Top, Bottom, Shade; public GameObject Cue; public bool ByRow, Easing, Placed; public float Target, Velocity; public string Key; }
         readonly List<Scroll> scrollers = new List<Scroll>();
 
         // B31 (Joost in game 0.7: on Titles, after scrolling down, a hover near the top threw the list back to the top). A scroll area inside the page is
@@ -854,7 +890,8 @@ namespace Hearthwoven.Panel
         {
             foreach (var s in scrollers) if (s.Rect && s.Rect.content && s.Key != null && s.Rect.transform.IsChildOf(under)) keptScroll[s.Key] = ScrollAt(s);
         }
-        const float WheelStep = 64f, FadeHeight = 40f, FadeInset = 12f, EaseTime = 0.04f;   // SmoothDamp 0.04 s: settled in about 0.12 s
+        const float WheelStep = 64f, FadeInset = 12f, EaseTime = 0.04f;   // SmoothDamp 0.04 s: settled in about 0.12 s
+        static readonly float FadeHeight = PanelLayout.Plate.Fade;
         static float Room(Scroll s) => PanelModel.ScrollRoom(s.Rect.content.rect.height, s.Rect.viewport.rect.height);
 
         void Wheel()
@@ -903,6 +940,7 @@ namespace Hearthwoven.Panel
             var y = s.Rect.content.anchoredPosition.y;   // 0 = top, room = bottom
             s.Top.enabled = room > 0f && y > 1f;
             s.Bottom.enabled = room > 0f && y < room - 1f;
+            if (s.Shade) s.Shade.enabled = s.Top.enabled;   // rows under the pinned strip (its object is inactive while nothing is pinned)
             if (s.Cue) s.Cue.SetActive(s.Bottom.enabled);   // "More feats below": only while the bottom fade shows (Chapters/FeatsUi.cs)
         }
 
@@ -945,7 +983,8 @@ namespace Hearthwoven.Panel
         void Fill(PanelView v)
         {
             personColors = v.PersonColors;
-            fillView = v; feedLogCols = null;   // the feed's Log measures its columns over this page's fights, once (Chapters/BattleFeedUi.cs)
+            Unpin();   // 0.8.6: the last drawing's pinned strip goes, the scroll area has the plate's whole room again (StickyHeadUi.cs)
+            fillView = v; feedLogCols = null; feedMoreLine = null; fetchLine = null;   // the feed's Log measures its columns over this page's fights, once; its Show older line and its Getting line are drawn anew (Chapters/BattleFeedUi.cs)
             var pageKey = v.Active + "/" + v.Page + "/" + state.Player;
             var newPage = pageKey != lastPage; lastPage = pageKey;
             lastFillNew = newPage; chromeKept = false; fills++;   // the parity check's notes (PanelReuse.cs)
@@ -1100,8 +1139,10 @@ namespace Hearthwoven.Panel
                 if (PanelUi.topSwitch != null) { SwitchRow(content, PanelUi.topSwitch, switchAbout, LinkTo); switchOnTop = true; }
                 stripNote = v.StripNote;   // 0.8 layout D+: a fellow's book says whose copy and when at the strip's right end (PageHead.cs)
                 stripCompare = v.CompareNow != null || v.CompareNote != null ? v : null;   // 0.8.5: Compare's legend, or a greyed chip's reason, leads the strip (CompareUi.StripCompare)
+                stripBack = v.Back != null ? Safe(() => { if (PanelModel.Back(state)) Render(true); }) : null;   // 0.8.6: the Back button does what Backspace does
                 PlateIslands(content, plate);   // 0.8 layout D+: the strip, then the islands (IslandsUi.cs)
                 EndPlate();
+                PinStrip();   // 0.8.6: the strip stays at the plate's top while the islands scroll under it (StickyHeadUi.cs)
             }
             if (plate == null && v.Badges.Count > 0)
             {
@@ -1142,7 +1183,7 @@ namespace Hearthwoven.Panel
         }
 
         // the plate's drawing done (or broken off: DrawCouldNot): its column, strip and switches back to the open page's
-        static void EndPlate() { plated = false; Column = Wide; stripAbout = null; headAbout = null; aboutRow = null; stripSwitch = null; switchAbout = null; switchInStrip = false; PanelUi.topSwitch = null; switchOnTop = false; stripNote = null; stripCompare = null; islanded = false; legendsLater = false; legends.Clear(); }
+        static void EndPlate() { plated = false; Column = Wide; stripAbout = null; headAbout = null; aboutRow = null; stripSwitch = null; switchAbout = null; switchInStrip = false; PanelUi.topSwitch = null; switchOnTop = false; stripNote = null; stripCompare = null; stripBack = null; islanded = false; legendsLater = false; legends.Clear(); }
 
         Action PlayerClick(Choice c) { var id = c.Id; return () => { state.Player = id; state.Everyone = false; Render(true); }; }   // a name chosen: that one book, Everyone off
 
@@ -1169,7 +1210,7 @@ namespace Hearthwoven.Panel
         {
             plateFill.enabled = plateEdge.enabled = on;
             var box = (RectTransform)content.parent;
-            if (on) PlateBox(box, PlateInset); else { box.offsetMin = Vector2.zero; box.offsetMax = new Vector2(0, -PanelLayout.Heading.Blocks); }
+            if (on) ScrollBox(box); else { box.offsetMin = Vector2.zero; box.offsetMax = new Vector2(0, -PanelLayout.Heading.Blocks); }
             var vlg = content.GetComponent<VerticalLayoutGroup>();
             vlg.padding = on ? new RectOffset(PlatePadX, PlatePadX, plateFull ? FullPadTop : PlatePadTop, PlatePadBottom) : new RectOffset(2, 2, 2, 2);
             vlg.spacing = !on ? PanelLayout.Heading.BlocksGap : plateFull ? FullGap : PlateGap;   // off the plate: the page that could not be drawn
@@ -1195,7 +1236,7 @@ namespace Hearthwoven.Panel
         {
             PlateBox(plateFill.rectTransform, 0); PlateBox(plateEdge.rectTransform, 0);
             var box = (RectTransform)content.parent;
-            PlateBox(box, PlateInset);
+            ScrollBox(box);
             if (plateFull) { FeatsSettle(box); return; }   // a full plate keeps the whole room (its grid grows into it, measured again here)
             var cut = PanelModel.PlateCut(box.rect.height, ContentNeed());
             if (cut <= 0) return;
@@ -1287,6 +1328,8 @@ namespace Hearthwoven.Panel
         // a click's target: a page ("Battle/defense") or a view of a switch ("view:Skills/overview/view=practised")
         Action LinkTo(string target) => Safe(() =>
         {
+            feedAppend = target == PanelModel.FeedMoreTarget;   // 0.8.5: Show older foes draws only the new page when it can (Chapters/BattleFeedUi.cs AppendFeed)
+            if (target == PanelModel.FeedFetchTarget) { var id = PanelModel.FeedMoreLine(view)?.Value; if (id != null) GroupShare.RetryBlock(id); Render(true); return; }   // 0.8.6: Try again on a friend's session that did not arrive
             PanelModel.Follow(state, target); Render(true);
             if (target.StartsWith(PanelModel.ViewTarget, StringComparison.Ordinal)) Debug.Log("[Hearthwoven] view chip: " + target.Substring(PanelModel.ViewTarget.Length));
         });
@@ -1601,7 +1644,7 @@ namespace Hearthwoven.Panel
                 case "featdetail": FeatDetailBlock(col, b); return true;
                 case "knownfor": KnownForBlock(col, b, link); return true;
                 case "featband": FeatBandBlock(col, b, link); return true;
-                case "damagegrid": case "dmgmix": case "foetable": case "foetypes": case "guard": case "sources": case "armour": case "deathstrip": case "deaths": case "deathrows": BattleBlock(col, b, link); return true;   // ch-battle
+                case "damagegrid": case "dmgmix": case PanelModel.WeaponListKind: case "foetable": case "foetypes": case "guard": case "sources": case "armour": case "deathstrip": case "deaths": case "deathrows": BattleBlock(col, b, link); return true;   // ch-battle
                 case "dealtfoes": case "feed": case PanelModel.FeedLineKind: case "fightfoes": case "fightreceived": BattleBlock(col, b, link); return true;   // 0.8 Battle (Chapters/BattleFeedUi.cs)
                 case PanelModel.FightHeadKind: case PanelModel.FightFoesKind: case PanelModel.FightPlayersKind: case PanelModel.FightListKind: FightBlock(col, b, link); return true;   // 0.9 fight pages (Chapters/FightUi.cs)
                 case "headlink": return true;   // drawn in the heading row (HeadRight)
