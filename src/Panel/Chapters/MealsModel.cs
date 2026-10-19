@@ -49,6 +49,57 @@ namespace Hearthwoven.Panel
         public const string MealsGatheredAbout = "Food with no cook on it: picked, found or gathered, such as berries, mushrooms or honey.";
         public const string MealsPlayersAbout = "Each player's meals are counted on their own PC, as they last shared them.";
 
+        /// <summary>0.9.2 (Joost chose it from a prototype): Meals by dish's second column, what one serving of the dish gives as the game's own food
+        /// data says (GameData.DishStats: ItemData.m_food, m_foodStamina, m_foodEitr, m_foodBurnTime): a small bar in the boosts' colours (Your
+        /// combinations' health, stamina, eitr) on one scale for the list, and its numbers with how long it lasts ("80 · 26 · 30m").</summary>
+        public const string ServingKind = "serving", MealsServingText = "and what one serving gives";
+
+        /// <summary>One serving of a dish as the game's data has it: health, stamina, eitr, and how long it lasts in seconds.</summary>
+        public sealed class FoodStats
+        {
+            public float Health, Stamina, Eitr, Seconds;
+            public double Total => Math.Max(0, Health) + Math.Max(0, Stamina) + Math.Max(0, Eitr);
+        }
+
+        /// <summary>How long a serving lasts as the column says it: whole minutes ("30m"), an hour or more "1h 5m"; null for none.</summary>
+        public static string ServingTime(float seconds)
+        {
+            if (float.IsNaN(seconds) || seconds <= 0) return null;
+            var m = (int)Math.Round(seconds / 60.0, MidpointRounding.AwayFromZero);
+            if (m < 1) m = 1;
+            return m < 60 ? m + "m" : m / 60 + "h" + (m % 60 > 0 ? " " + m % 60 + "m" : "");
+        }
+
+        /// <summary>A dish row's serving (Kind ServingKind): its bar's length on the list's one scale in Fraction2 (Fraction stays 0: the row's own parts
+        /// make its whole), its parts per boost in Your combinations' colours (Fraction: their share of the serving), Text its numbers and how long it
+        /// lasts ("80 · 26 · 30m"; eitr only when there is some). null when the game's data gives the dish no food value: the column stays empty, never 0.</summary>
+        public static Block ServingOf(FoodStats s, double most)
+        {
+            if (s == null || !(s.Total > 0) || most <= 0) return null;
+            var said = new List<string> { ComboValue(s.Health), ComboValue(s.Stamina) };
+            if (s.Eitr > 0) said.Add(ComboValue(s.Eitr));
+            var time = ServingTime(s.Seconds); if (time != null) said.Add(time);
+            return new Block
+            {
+                Kind = ServingKind, Text = string.Join(" · ", said), Fraction2 = (float)Math.Min(1, s.Total / most),
+                Items = ComboParts(s.Health, s.Stamina, s.Eitr),
+            };
+        }
+
+        /// <summary>A dish's serving from the game's data (PanelInput.DishStats), by its token (or its prefab, when no token is known); null: not known (a
+        /// mod's dish the data has no food value for, the folded row).</summary>
+        static FoodStats StatsOf(PanelInput input, string dish)
+        {
+            if (input?.DishStats == null || string.IsNullOrEmpty(dish) || dish == FoldId) return null;
+            try
+            {
+                var token = dish.StartsWith("$") ? dish : Ask(input.ItemToken, dish);
+                var s = (token != null ? input.DishStats(token) : null) ?? input.DishStats(dish);
+                return s != null && s.Total > 0 && !double.IsNaN(s.Total) && !double.IsInfinity(s.Total) ? s : null;
+            }
+            catch { return null; }
+        }
+
         public static string MealsFrom(double n) => "Hearthwoven counted every meal you enjoyed on this PC, from your bag and from feasts: " + N(n) + " so far.";
         public static string OtherDishes(int n) => n + (n == 1 ? " other dish" : " other dishes");
 
@@ -137,10 +188,13 @@ namespace Hearthwoven.Panel
             var max = shown.Max(x => x.total); var tag = TagOfSrc(src); var folded = all.Count - (MealsTop - 1);
             // a dish's own colour as Cooking gives it (its icon's colour, kept apart from the others on the page; a palette colour by name without one)
             var tint = ItemTint(input);
+            // 0.9.2: what one serving gives, on one scale for the list (a player's own book; the group's by-cook bars keep their line)
+            var stats = byCook ? new Dictionary<string, FoodStats>() : shown.ToDictionary(x => x.dish, x => StatsOf(input, x.dish));
+            var most = stats.Values.Where(s => s != null).Select(s => s.Total).DefaultIfEmpty(0).Max();
             var colours = byCook ? null : BarColours(shown.Where(x => x.dish != FoldId).Select(x => (x.dish, DishTitle(input, x.dish), tint(x.dish.StartsWith("$") ? x.dish : Ask(input.ItemToken, x.dish) ?? x.dish), false)).ToList(), shown.Any(x => x.dish == FoldId));
             return new Block
             {
-                Kind = "sources", Title = MealsByDish, Text = byCook ? MealsSplit : null, Src = src, Source = tag,
+                Kind = "sources", Title = MealsByDish, Text = byCook ? MealsSplit : most > 0 ? MealsServingText : null, Src = src, Source = tag,
                 Items = shown.Select(x =>
                 {
                     var title = x.dish == FoldId ? OtherDishes(folded) : DishTitle(input, x.dish);
@@ -149,7 +203,8 @@ namespace Hearthwoven.Panel
                         Kind = "source", Id = x.dish, Title = title, Icon = x.dish == FoldId ? "" : "item:" + x.dish, Tone = byCook ? null : DamagePlayerTone,
                         Value = N(x.total), Fraction = (float)(x.total / max), Src = src, Source = tag,
                         Items = byCook ? CookParts(x.cooks, owner, cookTitle, inGroup)
-                                       : new List<Block> { new Block { Kind = "part", Id = x.dish, Title = title, Colour = x.dish == FoldId ? BarOtherColour : colours[x.dish], Fraction = 1 } },
+                                       : new List<Block> { new Block { Kind = "part", Id = x.dish, Title = title, Colour = x.dish == FoldId ? BarOtherColour : colours[x.dish], Fraction = 1 } }
+                                         .Concat(new[] { stats.TryGetValue(x.dish, out var st) ? ServingOf(st, most) : null }.Where(s => s != null)).ToList(),
                     };
                 }).ToList(),
             };
@@ -186,9 +241,11 @@ namespace Hearthwoven.Panel
             Add(view, Hero((total > 0 ? N(total) : null, Label1(total, "meal eaten", "meals eaten"), SrcPc, null),
                            (tried > 0 ? N(tried) : null, Label1(tried, "dish tried", "dishes tried"), SrcPc, null)));
             Add(view, MealsByDishRows(src, dishes, false, input.PlayerName, null, SrcPc));   // no other players on a player's own book (Joost)
+            foreach (var b in CombosIsland(input, day, w, total)) view.Blocks.Add(b);   // 0.9: the foods you had on together (Chapters/MealCombosModel.cs)
             if (total <= 0 && day == null) view.Blocks.Add(Empty(NothingFrom(input, StartOf(input, null)), Voice(input, MealsEmptyLine)));
             if (day == null) AboutNumbers(view, input, StartOf(input, null), MealsAboutBefore, MealsFrom(total), MealsAboutDetails);   // your own book (a fellow's copy has no dates)
             Plate(view, MealsIcon, RecordedScope(input));
+            if (HasMealPlan(input) && HasFoods(input)) PlateOf(view).Items.Insert(0, MealPlanLink());   // 0.9.5: the strip's chip to Meal plan, the planner's own page (Chapters/MealPlanModel.cs)
             if (day != null) { DeedsDayLines(input, day, MealsPageId, view, w); FellowDayLines(input, day, MealsPageId, view, w); }   // nothing in the window, a very full day; a fellow's whole day
         }
 

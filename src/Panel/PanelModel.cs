@@ -9,7 +9,7 @@ namespace Hearthwoven.Panel
     /// <summary>Battle's time windows, shortest first; SinceInstall is the total this PC folded (LocalTotals), which has no biome and no time.</summary>
     /// <summary>One window set for the panel (HISTORY-06.md): the session's event log (10 min .. Session), the day history (Today, 7 days,
     /// 30 days: local calendar days) and All (since install). Chosen by name (Enum.Parse), never stored as a number.</summary>
-    public enum TimeWindow { LastTenMinutes, LastThirtyMinutes, LastHour, LastThreeHours, Session, Today, SevenDays, ThirtyDays, SinceInstall }
+    public enum TimeWindow { LastTenMinutes, LastThirtyMinutes, LastHour, LastThreeHours, Session, Today, Yesterday, ThreeDays, SevenDays, ThirtyDays, SinceInstall }
 
     public class PanelState
     {
@@ -58,7 +58,18 @@ namespace Hearthwoven.Panel
         public string FeedMoreAt;
         public string NumbersKey = "Y";                     // shows and hides "About these numbers" (Panel.NumbersKey); Y: no game default, no group mod binds it
         public string BookKey = "B";                        // 0.8: steps whose book the page shows, as the player row's chips do (Panel.BookKey; StepBook)
-        public string FeatSel = "";                         // the Feats chapter: the feat the detail area shows (mouse hover, A/D); "" = the first card of the view
+        public string FeatSel = "";                         // the Feats chapter: the feat the detail area shows (a click, A/D); "" = none on Earned, Unsung and Together (0.9.2), the first title on Titles
+        /// <summary>0.9.2 whose page FeatSel was chosen on ("earned|" your own Earned, "together|Tor"): a choice is kept while that page is on screen and
+        /// let go when the page is opened again (FeatsModel.FeatCards); null = set from outside (a test, a preview), taken as it is; "" = used up.</summary>
+        public string FeatSelAt;
+        /// <summary>0.9 New feats (Chapters/FeatsModel.cs): the visit of Earned or Together in your own book that is under way (its page id; null =
+        /// none), and the feats that were New when it began, newest first: they stay first for the visit, so a card just opened does not jump
+        /// away. Never saved: leaving the page or opening the book begins a new visit, which opens on the newest New feat.</summary>
+        public string FeatsVisit;
+        public readonly List<string> FeatsVisitNew = new List<string>();
+        /// <summary>0.9 New feats: the feat opened in this visit (the one the page opened on, or a click or A/D; never a hover, which only shows
+        /// the detail: a mouse sweep must not clear the New marks, Joost: new feats are hard to spot). FeatsSeen marks it seen.</summary>
+        public string FeatOpen;
         public string PageOf(Chapter c) => Page.TryGetValue(c, out var p) ? p : null;
         public readonly List<PanelPlace> History = new List<PanelPlace>();   // the back stack while the panel is open (PanelNav.cs)
         public PanelPlace Here;                                              // the page shown now
@@ -80,6 +91,8 @@ namespace Hearthwoven.Panel
         public bool CompareMenu;
         public int CompareCursor = -1;
         public string CompareKey = "J";
+        /// <summary>0.9.5: the key that marks every New feat read on Earned and Together (Panel.MarkReadKey; Chapters/FeatsReadAll.cs).</summary>
+        public string ReadKey = "R";
     }
 
     /// <summary>
@@ -104,6 +117,9 @@ namespace Hearthwoven.Panel
         /// <summary>The click target of the block's Note, when the Note is a fold's "+N more" (0.8.2: never a dead "+N more"): Recent's strips and a
         /// player's gains open every kind with ShowAllTarget. null: the Note is plain words.</summary>
         public string NoteLink;
+        /// <summary>0.9.2 (Meals' Plan a meal, Chapters/MealPlanModel.cs): the click target of the block itself (a food tile, a filled slot, a row of Your
+        /// combinations), followed as any link (Follow); null: no click. Written as "link" only when set.</summary>
+        public string Link;
         /// <summary>Where the numbers come from, machine-readable for the source marks: "character" (the game's own counters
         /// since the character was made), "measured" (Hearthwoven on this PC, or the player's own shared record), "fellows"
         /// (recorded on fellow players' PCs). Items inherit their block's source.</summary>
@@ -186,6 +202,20 @@ namespace Hearthwoven.Panel
         // ---------- 0.8.6 (Chapters/WeaponRows.cs) ----------
         /// <summary>A row that opens in place (a weapon level's skill levels): its press toggles, it ends in the ›, turned down while it is open (Selected).</summary>
         public bool Opens;
+
+        // ---------- 0.9 (Chapters/FeatsModel.cs) ----------
+        /// <summary>A feat card with an earned tier not opened yet: the New mark (the Feats tab's gold dot and the word "New", top right).
+        /// Written as "new" only when set.</summary>
+        public bool New;
+
+        // ---------- 0.9 feat look (Chapters/FeatLook.cs) ----------
+        /// <summary>The "feats" grid and its details: the feat look's cards (FeatLookOn, 2); 0 = the cards as before (Titles). Written as "look" only when set.</summary>
+        public int Look;
+        /// <summary>A feat card and its detail under a look: the family's name ("Forgekeeper") and its calm colour ("#rrggbb"); the hatch is Pattern.
+        /// Written as "family" and "ground" only when set.</summary>
+        public string Family, Ground;
+        /// <summary>A feat card under a look: its one short plain line ("5 000 ore and fuel"). Written as "line" only when set.</summary>
+        public string Line;
     }
 
     public class Choice { public string Id, Label, Icon; public bool Selected, Disabled; public bool Dot; /* a gold dot: something new to see (earned feats not opened yet) */ public bool Waits; /* a greyed day window of your own book that works later: pressable, its WaitLine says when (B17) */ public string Why; /* a greyed window chip's own reason, under it on hover (PageHead.cs) */ }   // Disabled: drawn dim, does nothing (the biome chip where a page has no biomes)
@@ -884,11 +914,13 @@ namespace Hearthwoven.Panel
         public static string WindowLabel(TimeWindow w) =>
             w == TimeWindow.LastTenMinutes ? "Last 10 minutes" : w == TimeWindow.LastThirtyMinutes ? "Last 30 minutes" : w == TimeWindow.LastHour ? "Last hour" :
             w == TimeWindow.LastThreeHours ? "Last 3 hours" : w == TimeWindow.Session ? "This session" : w == TimeWindow.Today ? "Today" :
+            w == TimeWindow.Yesterday ? "Yesterday" : w == TimeWindow.ThreeDays ? "Last 3 days" :   // 0.9.1 (Joost: "I want to know what happened yesterday")
             w == TimeWindow.SevenDays ? "Last 7 days" : w == TimeWindow.ThirtyDays ? "Last 30 days" : "All";   // 0.7 rule W.2: All (the page's own dates say when)
         /// <summary>The window as a chip says it (six chips must fit the heading row); the plate's own line carries the full name.</summary>
         public static string WindowShort(TimeWindow w) =>
             w == TimeWindow.LastTenMinutes ? "10 min" : w == TimeWindow.LastThirtyMinutes ? "30 min" : w == TimeWindow.LastHour ? "1 h" :
             w == TimeWindow.LastThreeHours ? "3 h" : w == TimeWindow.Session ? "Session" : w == TimeWindow.Today ? "Today" :
+            w == TimeWindow.Yesterday ? "Yesterday" : w == TimeWindow.ThreeDays ? "3 days" :
             w == TimeWindow.SevenDays ? "7 days" : w == TimeWindow.ThirtyDays ? "30 days" : "All";
         /// <summary>How long a fellow player's newest bucket ran (their copy's span; an unknown copy: this build's).</summary>
         static int SpanOf(PanelInput i) => i?.Log != null && i.Log.Span >= 1 ? i.Log.Span : EventLog.BucketMinutes;
@@ -1102,7 +1134,7 @@ namespace Hearthwoven.Panel
         static readonly (string id, string label, string icon)[] DeedsList =
         {
             (RecentPageId, RecentTitle, RecentIcon),   // 0.7: what grew lately, yours and the group's (Chapters/RecentPage.cs); first, the book still opens on the Overview
-            ("overview", "Overview", ListOverview), ("cooking", "Cooking", "title:cook"), (MealsPageId, MealsLabel, MealsIcon), ("building", "Building", "title:builder"), ("groundwork", "Groundwork", "vocab:ground-lower"), ("crafting", "Crafting", "title:smith"),
+            ("overview", "Overview", ListOverview), ("cooking", "Cooking", "title:cook"), (MealsPageId, MealsLabel, MealsIcon), (MealPlanPageId, MealPlanLabel, MealPlanIcon), ("building", "Building", "title:builder"), ("groundwork", "Groundwork", "vocab:ground-lower"), ("crafting", "Crafting", "title:smith"),
             ("woodcutting", "Woodcutting", "title:woodcutter"), ("mining", "Mining", "title:miner"), ("farming", "Farming", "title:farmer"),
             ("fishing", "Fishing", "title:fisher"), ("taming", "Taming", "title:tamer"),
         };
@@ -1140,6 +1172,7 @@ namespace Hearthwoven.Panel
                     break;
             }
             // 0.8: a fellow's copy without a feed (0.8.2: one from before 0.8.2, FeedShare): the feed and the last fight stay in the list, greyed, and their page says why
+            if (c == Chapter.Deeds && !HasMealPlan(input)) items = items.Where(x => x.id != MealPlanPageId);   // 0.9.5: Meal plan is your own book's (a fellow's copy has no planner)
             var list = items.Select(x => new Choice { Id = x.id, Label = x.label, Icon = x.icon, Disabled = c == Chapter.Battle && input != null && !input.IsSelf && input.SharedFeed == null && (x.id == FeedPage || x.id == LastFightPage) }).ToList();
             if (c == Chapter.Battle) FightEntries(input, list);   // 0.9: Runs and bosses, and Last fight as "Boss fight" while one is on (Chapters/FightPages.cs)
             return list;
@@ -1181,7 +1214,7 @@ namespace Hearthwoven.Panel
             if (state.ShowAbout) view.List.AddRange(AboutList.Select(x => new Choice { Id = x.id, Label = x.label }));
             else view.List.AddRange(ListOf(input, state.Chapter));
             var page = state.ShowAbout ? state.AboutPage : state.PageOf(state.Chapter);
-            if (view.List.Count > 0 && !view.List.Any(l => l.Id == page) && !(state.Chapter == Chapter.Battle && !state.ShowAbout && FightOn(input, page) != null))   // 0.9: a fight's own page belongs to Runs and bosses (FightPages.cs); Deeds opens on its Overview (Recent sits above it); Company still opens on Fireside (Since you were away is chosen, or opens by itself)
+            if (view.List.Count > 0 && !view.List.Any(l => l.Id == page) && !(state.Chapter == Chapter.Battle && !state.ShowAbout && FightOn(input, page) != null) && !(state.Chapter == Chapter.Deeds && !state.ShowAbout && (page == SetsPageId || IsDeedFeedPage(page) || DeedSubParent(page) != null)) && !(state.Chapter == Chapter.Battle && !state.ShowAbout && IsDamageHistoryPage(page)))   // 0.9: Armor sets belongs to Crafting (Chapters/ArmorSets.cs)   // 0.9: a fight's own page belongs to Runs and bosses (FightPages.cs); Deeds opens on its Overview (Recent sits above it); Company still opens on Fireside (Since you were away is chosen, or opens by itself)
                 page = !state.ShowAbout && state.Chapter == Chapter.Deeds ? "overview"
                      : state.Chapter == Chapter.Company && !state.ShowAbout && view.List.Count > 1 && view.List[0].Id == AwayPage ? view.List[1].Id : view.List[0].Id;
             view.Page = page;
@@ -1211,7 +1244,7 @@ namespace Hearthwoven.Panel
                 case Chapter.Deeds:
                     Deeds(input, page, titles, view, state);
                     // a fellow's Deeds page keeps every window chip, greyed but All (as Battle): the plate's second line says why
-                    if (!input.IsSelf && view.Windows.Count > 0 && view.Windows.Any(c => c.Disabled) && PlateOf(view) is Block deedsPlate)
+                    if (!input.IsSelf && view.Windows.Count > 0 && view.Windows.Any(c => c.Disabled) && !IsDeedFeedPage(page) && PlateOf(view) is Block deedsPlate)   // 0.9: a friend's deed feed greys its own chips, each with why (DeedFeedChips)
                         deedsPlate.Text = (string.IsNullOrEmpty(deedsPlate.Text) ? "" : deedsPlate.Text + "\n") + (page == RecentPageId ? RecentWindowsLine(input) : DeedsWindowsLine(input, page));   // Recent: its own reason (B33)
                     break;
                 case Chapter.Company: Company(input, page, state, view); break;
@@ -1231,6 +1264,7 @@ namespace Hearthwoven.Panel
                 && !(view.Recorded && view.ShownWindow == TimeWindow.SinceInstall)   // a 0.7 page on All: the automatic "Recorded from" label speaks instead (rule W.2)
                 && !view.EveryoneOn)   // 0.8: the "Everyone" tag stands before the title and the chosen chip says the window (PICKS: the heading never truncates)
                 view.HeadingWindow = WindowLabelFor(input, view.ShownWindow.Value).ToLowerInvariant();
+            if (view.HasFilters && view.ShownWindow == TimeWindow.Yesterday) view.HeadingWindow = YesterdayWords(input);   // 0.9.1: "Recent, yesterday, Sunday 18 Oct"
             if (view.HasFilters && view.ShownWindow.HasValue && view.ShownWindow != TimeWindow.SinceInstall && state.Chapter != Chapter.Battle) view.Windowed = true;   // a window, not since install: no "since install" label
             // a plate's title badges go in the strip at its top with their reason (FeatsFinish, B18), no longer in the heading row's pill
             var plate = PlateOf(view);
@@ -1274,7 +1308,9 @@ namespace Hearthwoven.Panel
             FoesFinish(state, view);   // 0.8: the Foes page's cursor and its keys (Chapters/FoesKeys.cs)
             WeaponsFinish(state, view);   // 0.8.6: By weapon's cursor and its keys (Chapters/WeaponRows.cs)
             FeedFinish(state, view);   // 0.8.5: the feed's Show older foes key (Chapters/BattleFeedModel.cs)
+            MealPlanFinish(state, view);   // 0.9.2: Plan a meal (0.9.5: Meal plan's page), its cursor and its keys (Chapters/MealPlanModel.cs)
             GrowthLine(input, view);   // 0.8: the growth line from the day history beside the page's hero (Chapters/GrowthLines.cs)
+            DeedFeedLinks(input, view);   // 0.9: the Feed chip in the heading row of every Deeds page with a growth line and of Recent (Chapters/DeedFeedModel.cs)
             PlaceAboutNumbers(state, view);   // the page's "About these numbers" button, and its box when open, under the hero (RecordedModel.cs)
             ColorPeople(view);
             FilterFocusFix(state, view);   // the filter focus (FacetModel.cs)
@@ -1340,7 +1376,7 @@ namespace Hearthwoven.Panel
             // 0.8.2 (I): a fellow's empty Session said "Choose Session to see <name>'s last session." with Session chosen (Joost, a friend's Foes):
             // their Session is your session's span (B33), so it says since when, and where their earlier fights are
             var fellowSince = session && !input.IsSelf && SessionFrom(input).HasValue;
-            var b = Empty(fellowSince ? "Nothing " + SinceViewer(input) : session ? NothingYet + " this session" : window == TimeWindow.Today ? "Nothing today" : window == TimeWindow.SinceInstall ? "Nothing recorded" : "Nothing in the " + WindowLabel(window).ToLowerInvariant(),
+            var b = Empty(fellowSince ? "Nothing " + SinceViewer(input) : session ? NothingYet + " this session" : window == TimeWindow.SinceInstall ? "Nothing recorded" : "Nothing " + InWindowWords(window),
                           input.IsSelf || IsDayWindow(window) ? (session ? "Fight something and it fills up." : DayEmptyLine)   // 0.9: a fellow's day (their Damage) as your own
                                        : fellowSince ? (input.SharedSinceInstall ? "Choose All for " + Name(input) + "'s totals." : Name(input) + "'s earlier sessions are not shared.")
                                        : session ? "Choose Session to see " + Name(input) + "'s last session."
@@ -1473,6 +1509,11 @@ namespace Hearthwoven.Panel
             // (DeedsWindow), so its own code, filters included, works on the window's rows
             if (page == RecentPageId) { RecentPage(input, view, state); return; }   // Deeds > Recent (Chapters/RecentPage.cs): its own chips and views
             if (page == MealsPageId) { Meals(input, view, state); return; }   // 0.8.1 Deeds > Meals (Chapters/MealsModel.cs): its own chips and its group view
+            if (page == MealPlanPageId) { MealPlanPage(input, state, view); return; }   // 0.9.5 Deeds > Meal plan (Chapters/MealPlanModel.cs): the planner's own page, its meal pinned, no window chips
+            if (page == SetsPageId) { ArmorSetsPage(input, state, view); return; }   // 0.9 Crafting > Armor sets (Chapters/ArmorSets.cs): the character's whole life, no window chips; its own group view
+            if (IsDeedFeedPage(page)) { DeedFeedPage(input, view, state, page); return; }   // 0.9: a deed's feed, or the mixed one from Recent (Chapters/DeedFeedModel.cs): its own chips and filter
+            if (HistoryParent(page) is string historyOf) { DeedHistoryPage(input, state, view, historyOf); return; }   // 0.9 a deed's History, opened from its hero's growth line (Chapters/DeedHistory.cs)
+            if (TryDayPage(page, out var dayOf, out var dayPicked)) { DeedsOneDay(input, state, view, dayOf, dayPicked); return; }   // 0.9 one day of a deed, opened from a History column (Chapters/DeedHistory.cs)
             var offered = WindowsOf(Chapter.Deeds, page);
             // 0.7: the short windows (10 min .. Session) come from this session's DeedLog (DeedsShort), built into the same kind of copy, so the
             // pages and their filters need nothing new. A Deeds page shows All until a window is chosen: the book's default Session is Battle's
@@ -1698,6 +1739,7 @@ namespace Hearthwoven.Panel
             if (FightOn(input, page) is FightView fight) { FightPage(input, view, state, page, fight); return; }
             if (page == RunsPage && input.Fights != null) { RunsView(input, view, state); return; }
             if (IsFightPage(page)) { view.Heading = RunsLabel; view.Blocks.Add(Empty(FightGone, FightGoneText)); Plate(view, "ui:chapter-battle"); return; }
+            if (IsDamageHistoryPage(page)) { DamageHistoryView(input, state, view); return; }   // 0.9.5 draft: Damage history, opened from By weapon's growth line (Chapters/DamageHistory.cs)
             if (page == LastFightPage) { view.Scope = input.IsSelf ? "This session · your last fight" : "This session"; BattleLastFight(input, view, state); return; }
             // every Battle page has the one window set (HISTORY-06.md): the log's short windows, the day history's days, All. A day window
             // reads a copy of the input whose totals are the window's rows (InWindow), so it takes the since-install path of each page
@@ -1721,7 +1763,7 @@ namespace Hearthwoven.Panel
             var rows = since ? DamageSinceInstallRows(src) : Damage(input.Log, w, "", now, SessionFrom(input));   // B33: a fellow's Session from your session's start
             var taken = rows.Where(r => r.Dir == "taken").ToList();
             var deaths = Deaths(input.Log, since ? TimeWindow.Session : w, "", now, since && !input.IsSelf ? null : SessionFrom(input));   // your own: this session's (0.8.2: never your kept minutes')
-            if (day) { var start = WindowStartUtc(input, w); deaths = deaths.Where(d => !start.HasValue || d.Time >= start.Value).ToList(); }   // the falls of this session that lie in the day window
+            if (day) { var start = WindowStartUtc(input, w); deaths = deaths.Where(d => (!start.HasValue || d.Time >= start.Value) && BeforeEnd(input, w, d.Time)).ToList(); }   // the falls of this session that lie in the day window
             if (windowed)
             {
                 // a fellow's book: their last session, and since install when they share it; the other windows stay in the row, greyed
@@ -2279,8 +2321,10 @@ namespace Hearthwoven.Panel
             if (FollowFacet(s, target)) return;   // a filter bar's chip, token, bar part or Clear all (FacetModel.cs)
             if (target == NumbersTarget) { s.ShowNumbers = !s.ShowNumbers; return; }   // the "About these numbers" button (RecordedModel.cs)
             if (target == ShowAllTarget) { s.ShowAll = ShowAllKey(s); return; }   // 0.8.1: a folded item grid's Show all tile (DeedsModel.cs)
-            if (target == FeedMoreTarget) { s.FeedMore++; return; }   // 0.8.5: the feed's Show older foes (Chapters/BattleFeedModel.cs)
+            if (target == FeedMoreTarget) { s.FeedMore++; return; }
+            if (FollowPlanLoad(s, target)) return;   // 0.9.5: a row of Your combinations opens Meal plan with its foods in the slots (Chapters/MealPlanModel.cs)   // 0.8.5: the feed's Show older foes (Chapters/BattleFeedModel.cs)
             if (target != null && target.StartsWith(WeaponToggleTarget, StringComparison.Ordinal)) { ToggleWeapon(s, target.Substring(WeaponToggleTarget.Length)); return; }   // 0.8.6: a weapon line opens or shuts (Chapters/WeaponRows.cs)
+            if (target != null && target.StartsWith(KindToggleTarget, StringComparison.Ordinal)) { ToggleKind(s, target.Substring(KindToggleTarget.Length)); return; }   // 0.9.5: a weapon kind's lines shut or open (Chapters/WeaponRows.cs)
             if (target == CompareTarget) { s.Compare = !s.Compare; s.CompareTip = false; return; }   // Together's Compare chip (CompareModel.cs)
             if (target == CompareMenuTarget) { s.CompareMenu = !s.CompareMenu; s.CompareCursor = -1; s.CompareTip = false; return; }   // 0.8.5: the heading's Compare chip opens its menu
             if (target == CompareCloseTarget) { s.CompareMenu = false; s.CompareCursor = -1; return; }   // and a click outside it shuts it
@@ -2294,9 +2338,10 @@ namespace Hearthwoven.Panel
             Jump(s, target);
         }
 
-        /// <summary>The page's view switch: its first switch box, else the one Together carries under its category chips.</summary>
+        /// <summary>The page's view switch: its first switch box, else the one Together carries under its category chips. Never the Feats pages' strip
+        /// caption (FeatsIntroKey, a switch with no views): the Feats chapter keeps no view key.</summary>
         public static Block SwitchOf(PanelView v) =>
-            Content(v).FirstOrDefault(b => b.Kind == "switch") ?? Content(v).Where(b => b.Kind == "together").SelectMany(b => b.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "switch");
+            Content(v).FirstOrDefault(b => b.Kind == "switch" && b.Id != FeatsIntroKey) ?? Content(v).Where(b => b.Kind == "together").SelectMany(b => b.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "switch");
 
         /// <summary>The view key: the page's first switch moves to its next view (wraps). false when the page has none.</summary>
         /// <summary>Company > Together's block (its category chips and, under Damage dealt, the window chips), or null on any other page.</summary>
@@ -2474,7 +2519,7 @@ namespace Hearthwoven.Panel
         {
             var p = (target ?? "").Split('/');
             if ((p.Length == 2 || p.Length == 3) && Enum.TryParse(p[0], out Chapter c)) { s.Chapter = c; s.Page[c] = p[1]; s.Opening = true; }   // 0.8.6: opened from the page shown (PanelNav.BackShown)
-            if (p.Length == 3 && p[0] == Chapter.Feats.ToString()) s.FeatSel = p[2];   // "Feats/titles/wallwarden": that card chosen (a title in a page's strip)
+            if (p.Length == 3 && p[0] == Chapter.Feats.ToString()) { s.FeatSel = p[2]; s.FeatSelAt = p[1] + "|" + (s.Player ?? ""); }   // "Feats/titles/wallwarden": that card chosen (a title in a page's strip)
         }
 
         public const int Palette = 8;
@@ -2664,6 +2709,11 @@ namespace Hearthwoven.Panel
                 else if (b.Change != null) j.Str("change", b.Change);   // 0.8.6: a weapon level's change mark (no period before)
                 if (b.Opens) j.Num("opens", 1);
                 if (b.Cursor) j.Num("cursor", 1);   // 0.8.6: a weapon line under the keys' cursor
+                if (!string.IsNullOrEmpty(b.Link)) j.Str("link", b.Link);   // 0.9.2: a food tile's, a slot's or a combination's click (Chapters/MealPlanModel.cs)
+                if (b.New) j.Num("new", 1);   // 0.9: a feat card's New mark
+                if (b.Look > 0) j.Num("look", b.Look);   // 0.9 feat look (FeatLookOn): written only when set
+                if (b.Family != null) j.Str("family", b.Family).Str("ground", b.Ground ?? "");
+                if (b.Line != null) j.Str("line", b.Line);
                 if (b.NowHead != null) j.Str("nowHead", b.NowHead).Str("beforeHead", b.BeforeHead ?? "");   // 0.8.1: the compare rows' column heads
                 if (b.Chip != null) { j.Key("chip"); B(b.Chip); }
                 j.Key("items").OpenArr(); foreach (var i in b.Items ?? new List<Block>()) B(i); j.CloseArr();
@@ -2678,7 +2728,7 @@ namespace Hearthwoven.Panel
         /// <summary>Every player-visible string in the view (for the no-em-dash check and localisation review).</summary>
         public static IEnumerable<string> AllText(PanelView v)
         {
-            IEnumerable<string> Of(Block b) => new[] { b.Title, b.Value, b.Value2, b.Rate, b.Text, b.Note, b.Pill, b.Before, b.Change, b.BeforeLabel, b.NowHead, b.BeforeHead }.Concat((b.Items ?? new List<Block>()).SelectMany(Of)).Concat(b.Chip != null ? Of(b.Chip) : Enumerable.Empty<string>());
+            IEnumerable<string> Of(Block b) => new[] { b.Title, b.Value, b.Value2, b.Rate, b.Text, b.Note, b.Pill, b.Before, b.Change, b.BeforeLabel, b.NowHead, b.BeforeHead, b.Family, b.Line }.Concat((b.Items ?? new List<Block>()).SelectMany(Of)).Concat(b.Chip != null ? Of(b.Chip) : Enumerable.Empty<string>());
             return new[] { v.Title, v.Owner, v.Scope, v.Heading, v.ShareNote, v.EveryoneSub, v.EveryoneWhy, v.WindowWhy, v.StripNote, v.Back,   // 0.8 layout D+: the window chips' reason, the strip's note (PageHead.cs); 0.8.6 the Back button
                            v.Windows.FirstOrDefault(c => c.Id == v.WindowTip)?.Why }   // the pressed chip's own reason, shown now (the others only on hover)
                 .Concat(new[] { v.Chapters, v.List, v.Badges, v.Toggle, v.Windows, v.Biomes, v.Players }.SelectMany(cs => cs.Select(c => c.Label)))

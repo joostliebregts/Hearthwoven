@@ -40,7 +40,7 @@ namespace Hearthwoven.Panel
         // ---------- where the chip works ----------
 
         /// <summary>Whether the chip shows the group on this page: one of GroupPages, or Deeds > Recent and Meals (their own group views, RecentPage.cs, MealsModel.cs).</summary>
-        public static bool EveryoneWorks(Chapter c, string page) => GroupPageOf(c, page) != null || (c == Chapter.Deeds && (page == RecentPageId || page == MealsPageId));
+        public static bool EveryoneWorks(Chapter c, string page) => GroupPageOf(c, page) != null || (c == Chapter.Deeds && (page == RecentPageId || page == MealsPageId || page == SetsPageId));
 
         /// <summary>The pages of a chapter where the chip works, in its list's order (id, label); empty for Skills, Feats and Company.</summary>
         static List<(string id, string label)> EveryonePages(Chapter c)
@@ -91,13 +91,21 @@ namespace Hearthwoven.Panel
                 sub = "on " + all[0] + EveryoneAndMore;
                 var back = about && EveryoneWorks(c, page) ? (c, page) : about && here.Count > 0 ? (c, NearestEveryonePage(c, page)) : (Chapter.Deeds, NearestEveryonePage(Chapter.Deeds, deedsPage ?? "overview"));
                 to = back.Item1 + "/" + back.Item2;
-                var label = EveryonePages(back.Item1).First(x => x.id == back.Item2).label;
+                var label = EveryonePageLabel(back.Item1, back.Item2);
                 name = back.Item1 == c && !about ? label : ChapterRow.First(x => x.id == back.Item1).label + " > " + label;
             }
             var press = "Press to open " + name + " for the whole group.";
             return (sub, sub.EndsWith(EveryoneAndMore, StringComparison.Ordinal) ? "The group view is on " + JoinNames(all) + ". " + press : press, to);
         }
         public const string EveryoneOtherPages = "on the other pages", EveryoneAndMore = " and more";
+
+        /// <summary>A page's name for the chip's hover: its list entry, or a page opened from another one (0.9: Crafting's Armor sets is not in the
+        /// Deeds list, so About opened there threw in EveryoneOff: the simulator walk, 18 Oct).</summary>
+        static string EveryonePageLabel(Chapter c, string id)
+        {
+            foreach (var x in EveryonePages(c)) if (x.id == id) return x.label;
+            return c == Chapter.Deeds && id == SetsPageId ? SetsLabel : id ?? "";
+        }
 
         /// <summary>
         /// A press on the greyed chip, or the book key landing on it: the page it names opens with Everyone on, on your own book (About shut).
@@ -553,7 +561,7 @@ namespace Hearthwoven.Panel
             c.DisplayName = c.DisplayName ?? me.DisplayName; c.ItemKind = c.ItemKind ?? me.ItemKind; c.GatherKind = c.GatherKind ?? me.GatherKind; c.Rock = c.Rock ?? me.Rock; c.TreeOf = c.TreeOf ?? me.TreeOf; c.PieceKind = c.PieceKind ?? me.PieceKind;
             c.ItemColour = c.ItemColour ?? me.ItemColour; c.StationDish = c.StationDish ?? me.StationDish; c.CropOf = c.CropOf ?? me.CropOf; c.ItemType = c.ItemType ?? me.ItemType;
             c.MainMaterial = c.MainMaterial ?? me.MainMaterial; c.PieceTab = c.PieceTab ?? me.PieceTab; c.PieceMaterial = c.PieceMaterial ?? me.PieceMaterial;
-            c.DishType = c.DishType ?? me.DishType; c.DishBoost = c.DishBoost ?? me.DishBoost; c.ItemToken = c.ItemToken ?? me.ItemToken; c.RecipeYield = c.RecipeYield ?? me.RecipeYield; c.Foe = c.Foe ?? me.Foe; c.FoeKin = c.FoeKin ?? me.FoeKin;
+            c.DishType = c.DishType ?? me.DishType; c.DishBoost = c.DishBoost ?? me.DishBoost; c.DishStats = c.DishStats ?? me.DishStats; c.ItemToken = c.ItemToken ?? me.ItemToken; c.RecipeYield = c.RecipeYield ?? me.RecipeYield; c.Foe = c.Foe ?? me.Foe; c.FoeKin = c.FoeKin ?? me.FoeKin;
             c.ViewerSessionStartUtc = c.ViewerSessionStartUtc ?? me.SessionStartUtc;
             return c;
         }

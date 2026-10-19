@@ -21,7 +21,7 @@ namespace Hearthwoven
     [BepInPlugin(Guid, "Hearthwoven", Version)]
     public class Plugin : BaseUnityPlugin
     {
-        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.8.6", RpcName = "Hearthwoven_Profile";
+        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.9.9", RpcName = "Hearthwoven_Profile";
         static ConfigEntry<bool> sendStats, logRouted, shareWithGroup;
         static ConfigEntry<float> intervalMinutes;
         static ConfigEntry<int> compressAfterDays, intervalLayout;
@@ -133,6 +133,87 @@ namespace Hearthwoven
         internal static DateTime? InstalledUtc => Totals != null && Totals.FirstRunUtc > DateTime.MinValue ? Totals.FirstRunUtc : (DateTime?)null;
         /// <summary>The feats earned on this PC and the hook counters (saved with the local totals, shared in the snapshot); null until the totals load.</summary>
         internal static FeatsLedger FeatsLedger => Totals?.Feats;
+
+        // ---------- 0.9, the records (work/hearthwoven-0.9/DESIGN.md section 1; the panel's fields: PanelInput.Upgrades .. DeedStretches) ----------
+
+        /// <summary>0.9, record 1: one upgrade you made (UpgradeHooks), into the UpgradeLog of the local totals; dropped while they are not loaded.</summary>
+        internal static void Upgraded(UpgradeMoment m)
+        {
+            if (Totals == null || m == null) return;
+            if (Totals.Upgrades.FromUtc == DateTime.MinValue) Totals.Upgrades.FromUtc = m.Utc;
+            Totals.Upgrades.Add(m);
+        }
+        internal static UpgradeLog Upgrades => Totals?.Upgrades;
+        /// <summary>0.9 (Meals' Your combinations): one meal, the foods you now have on (ClientHooks.Eat), into the local totals' MealCombos on the
+        /// local day; dropped while the totals are not loaded or before recording began.</summary>
+        internal static void AteCombination(System.Collections.Generic.IEnumerable<string> foods, float health, float stamina, float eitr)
+        {
+            if (Totals == null || !Totals.Combos.Begun) return;
+            Totals.Combos.Add(foods, health, stamina, eitr, DateTime.Now.Date);
+        }
+        internal static MealCombos MealCombos => Totals != null && Totals.Combos.Begun ? Totals.Combos : null;
+        internal static DateTime? UpgradesFrom => Totals != null && Totals.Upgrades.FromUtc > DateTime.MinValue ? Totals.Upgrades.FromUtc : (DateTime?)null;
+        /// <summary>0.9, record 3: token -> first local day made or placed; null until the totals load.</summary>
+        internal static System.Collections.Generic.Dictionary<string, DateTime> FirstsDays() => Totals != null && Totals.Firsts.Begun ? Totals.Firsts.Days() : null;
+        internal static DateTime? FirstsFrom => Totals != null && Totals.Firsts.Begun ? Totals.Firsts.FromUtc : (DateTime?)null;
+        /// <summary>0.9, record 2: your deed stretches of earlier sessions in this world (KeptDeeds), loaded with the totals on the first spawn.</summary>
+        static KeptDeeds keptDeeds; static string keptDeedsPath;
+        /// <summary>The character's known recipes and pieces, and the materials it has held (read once per character for the firsts' Before; guarded).</summary>
+        // in a class of their own: Plugin's static initializer must not touch the game's Player type (the tests load Plugin without the game)
+        static class Known
+        {
+            internal static readonly GameField<Player, System.Collections.Generic.HashSet<string>> Recipes = new GameField<Player, System.Collections.Generic.HashSet<string>>("m_knownRecipes");
+            internal static readonly GameField<Player, System.Collections.Generic.HashSet<string>> Material = new GameField<Player, System.Collections.Generic.HashSet<string>>("m_knownMaterial");
+        }
+        static DeedSession liveDeeds; static long liveDeedsMinute; static int liveDeedsKeys = -1, liveDeedsUps = -1;
+
+        /// <summary>This session's deed stretches as they stand now (DeedStretches.Build over Deeds > Recent's minutes, the upgrades and the firsts).</summary>
+        static DeedSession DeedSessionNow(DateTime now)
+        {
+            var deeds = DeedsNow();
+            Totals.Firsts.Note(deeds.Buckets);   // the firsts of the minutes so far, before they become moments
+            return DeedStretches.Build(keptWorld, SessionId, ConnectedUtc, now, deeds.Buckets, Totals.Upgrades.Between(ConnectedUtc, now.AddSeconds(1)), Totals.Firsts,
+                                       Panel.GameData.ItemKind, Panel.GameData.PieceKind, Panel.GameData.GatherKind);
+        }
+
+        /// <summary>0.9, record 2 for the panel (PanelInput.DeedStretches): this session's stretches (Live; built again when the minute, the number
+        /// of minute keys or the upgrades change) first, then the earlier sessions of this world kept on this PC, newest first. null: not recorded
+        /// (the totals or the world not loaded).</summary>
+        internal static System.Collections.Generic.List<DeedSession> DeedStretchesNow()
+        {
+            if (Totals == null || keptWorld == null) return null;
+            var now = DateTime.UtcNow; var minute = now.Ticks / TimeSpan.TicksPerMinute;
+            if (liveDeeds == null || liveDeeds.Id != SessionId || minute != liveDeedsMinute || Deeds.Buckets.Count != liveDeedsKeys || Totals.Upgrades.Total != liveDeedsUps)
+            {
+                liveDeeds = DeedSessionNow(now); liveDeeds.Live = true;
+                liveDeedsMinute = minute; liveDeedsKeys = Deeds.Buckets.Count; liveDeedsUps = Totals.Upgrades.Total;
+            }
+            var list = new System.Collections.Generic.List<DeedSession>();
+            if (liveDeeds.Stretches.Count > 0) list.Add(liveDeeds);
+            if (keptDeeds != null) list.AddRange(keptDeeds.Earlier(keptWorld, SessionId, now));
+            return list;
+        }
+
+        static void LoadKeptDeeds(long id, string name)
+        {
+            keptDeeds = null; liveDeeds = null;
+            keptDeedsPath = keptPath != null ? KeptDeeds.PathFor(totalsPath) : null;
+            if (keptDeedsPath == null) return;
+            keptDeeds = KeptDeeds.Load(keptDeedsPath, id, name, out var problem);
+            if (problem != null) LogOnce(problem);
+        }
+
+        /// <summary>With every local save: this session's stretches in place of their last save, the file trimmed and written (only once there is one).</summary>
+        static void SaveKeptDeeds()
+        {
+            if (keptDeeds == null || keptDeedsPath == null || Totals == null || keptWorld == null) return;
+            var now = DateTime.UtcNow;
+            var s = DeedSessionNow(now);
+            if (s.Stretches.Count == 0 && !keptDeeds.Sessions.Any(x => x.World == keptWorld && x.Id == SessionId)) return;
+            keptDeeds.Record(s, now);
+            keptDeeds.Save(keptDeedsPath, now);
+        }
+
         static string totalsPath, totalsFor;
         internal static SessionEvents EventsBefore = new SessionEvents();
         internal static SessionEvents EventsSinceInstall => SessionEvents.Sum(EventsBefore, Events);
@@ -323,12 +404,14 @@ namespace Hearthwoven
             // one fragment every 250 ms, never a burst
             GroupShare.Tick(now);
             if (nextSend > 0f) { try { Deeds.Tick(DateTime.UtcNow, Events, deedGame); } catch (Exception e) { LogOnce("recent deeds not booked: " + e.Message); } }   // Deeds > Recent: books the minute that ended (one comparison per frame); never stops Update (REVIEW-07 #10)
+            if (nextSend > 0f && Player.m_localPlayer != null) { try { Deeds.NoteLand(DateTime.UtcNow, ClientHooks.Biome()); } catch (Exception e) { LogOnce("land per minute not noted: " + e.Message); } }   // 0.9 Best arrows: the land of this minute (the biome looked up once a second; one comparison per frame)
             if (nextSend > 0f) BattleHooks.Tick(now);   // the battle record: fights end, kills settle, once a second (one comparison per frame)
             if (DevCheck.On) { DevCheck.Tick(); DevCheck.PerfTick(); DevCheck.SyncTick(); }   // Dev.SelfCheck: the filter-key watch, the frame cost (one line a minute)
             if (Outbox.Count > 0 && now >= nextFragment && ZRoutedRpc.instance != null && !Panel.SampleMode.On) { ZRoutedRpc.instance.InvokeRoutedRPC(RpcName, Outbox.Dequeue()); nextFragment = now + 0.25f; }
             // 0.8.6: your closed sessions go to the server as blocks (a friend's older feed), after your own snapshot
             if (nextSend > 0f && GroupShare.BlocksOn)
-                try { GroupShare.UploadTick(now, Outbox.Count > 0, sendStats.Value, () => keptFights?.Earlier(keptWorld, SessionId, DateTime.UtcNow) ?? new System.Collections.Generic.List<KeptSession>(), SessionId); }
+                try { GroupShare.UploadTick(now, Outbox.Count > 0, sendStats.Value, () => keptFights?.Earlier(keptWorld, SessionId, DateTime.UtcNow) ?? new System.Collections.Generic.List<KeptSession>(), SessionId,
+                                                 () => keptDeeds != null ? keptDeeds.Earlier(keptWorld, SessionId, DateTime.UtcNow) : Totals == null ? null : new System.Collections.Generic.List<DeedSession>()); }   // 0.9: and their deed stretches, once the totals (and so the kept deeds) are loaded (TRACK-feeds.md)
                 catch (Exception e) { LogOnce("feed blocks not sent: " + e.Message); }
         }
 
@@ -437,7 +520,10 @@ namespace Hearthwoven
                                   history?.DayDealt(today, 30, pending),   // 0.9: the same days by weapon kind and type, for the group's By weapon and By type on Today to 30 days
                                   keptShared,              // 0.8.2: your kept minutes of earlier connections here, beside this connection's log
                                   Panel.PanelModel.DayDeeds(history, today, 30, pending, DeedKinds),   // 0.8.5: your Deeds per day, for fellows' Deeds pages on Today to 30 days
-                                  Totals?.DealtAfter.DayWeapons(today, 30, DealtArmourPending()));   // 0.8.6: your weapons per day by upgrade level, for fellows' By weapon on Today to 30 days
+                                  Totals?.DealtAfter.DayWeapons(today, 30, DealtArmourPending()),   // 0.8.6: your weapons per day by upgrade level, for fellows' By weapon on Today to 30 days
+                                  Panel.GameData.Warm() && profile.m_playerStats != null && profile.m_playerStats.Length > 0 && profile.m_playerStats[0] != null
+                                      ? Panel.PanelModel.ArmorMadeOf(profile.m_playerStats[0].m_itemCraftStats, Panel.GameData.ItemType) : null,   // 0.9: which armor pieces you made, yes or no (Armor sets)
+                                  armorSince: Totals != null ? ArmourSince : null, armorFromUtc: ArmourFromUtc);   // 0.9 (armor-share): your armour ledger per damage type, for a friend's Defense
         }
 
         /// <summary>
@@ -515,6 +601,7 @@ namespace Hearthwoven
                 BiomeBefore = Totals?.BiomeBefore(SessionId) ?? new BiomeTally();
                 try { LoadKept(id, name); } catch (Exception e) { Kept = null; keptShared = null; LogOnce("recent minutes not loaded: " + e.Message); }   // 0.8.2: the short windows reach back across a restart
                 try { LoadKeptFights(id, name); } catch (Exception e) { keptFights = null; EarlierFights = new System.Collections.Generic.List<KeptSession>(); LogOnce("kept fights not loaded: " + e.Message); }   // 0.8.5: Last fight and the feed too
+                try { LoadKeptDeeds(id, name); } catch (Exception e) { keptDeeds = null; LogOnce("kept deeds not loaded: " + e.Message); }   // 0.9: the deed stretches of earlier sessions
                 try { AdoptLogs(); } catch (Exception e) { LogOnce("boss attempts and runs not given a world: " + e.Message); }   // 0.8.5: those saved before 0.8.5
                 if (!shareWithGroup.Value) ForgetKeptFellows();   // switched off while the game was closed: no fellow's part stays either (B23)
                 // the game's own counters as they stand now, once per character and kind (an older install: on the first load of
@@ -527,6 +614,29 @@ namespace Hearthwoven
                         Totals.TakeBaseline(kind, counter, kind == "pickedUp" ? EventsSinceInstall.PickedUp : kind == LocalTotals.BattleKind ? EventsSinceInstall.Battle : null))
                         took = true;
                 if (Totals.FillStarts(DateTime.UtcNow)) took = true;   // the counter groups' start dates (schema 4 "starts"), once
+                // 0.9: the records begin on the first load of a version that has them (schema 8): upgrades from now, firsts with what was made or
+                // placed before, the feats seen per tier from the old counts (FeatsLedger.MigrateSeen)
+                try
+                {
+                    if (Totals.Upgrades.FromUtc == DateTime.MinValue) { Totals.Upgrades.FromUtc = DateTime.UtcNow; took = true; }
+                    if (Totals.Combos.FromUtc == DateTime.MinValue) { Totals.Combos.FromUtc = DateTime.UtcNow; took = true; }   // Meals' Your combinations
+                    gameNow.TryGetValue("itemsCrafted", out var crafted); gameNow.TryGetValue("piecesPlaced", out var placed);
+                    if (Totals.Firsts.Begin(DateTime.UtcNow, crafted, placed, EventsSinceInstall.Made)) took = true;
+                    if (Totals.Feats.MigrateSeen(Panel.PanelModel.IsGroupFeat)) took = true;
+                }
+                catch (Exception e) { LogOnce("0.9 records not begun: " + e.Message); }
+                // review fix: what the character already knows (its recipes and pieces, the materials it has held) was likely made before 0.9:
+                // never a new first; a first already given to one is kept as "first recorded" and never shared (FirstsBook.SeedKnown)
+                try
+                {
+                    var p = Player.m_localPlayer;
+                    if (p != null && !Totals.Firsts.KnownSeeded && Totals.Firsts.SeedKnown(Known.Recipes.Of(p).Concat(Known.Material.Of(p)).ToList()))
+                    {
+                        took = true;
+                        if (keptDeeds != null && keptDeedsPath != null && keptDeeds.FlagKnownFirsts(Totals.Firsts)) keptDeeds.Save(keptDeedsPath, DateTime.UtcNow);
+                    }
+                }
+                catch (Exception e) { LogOnce("known recipes not read for the firsts: " + e.Message); }
                 if (took) Totals.Save(totalsPath, DateTime.UtcNow);
             }
             catch (Exception e) { Totals = null; log?.LogWarning("local totals not loaded: " + e.Message); }
@@ -604,12 +714,14 @@ namespace Hearthwoven
                     try { Totals.Foes.Record(SessionId, Battle.Counts(null), DateTime.Now); } catch (Exception e) { LogOnce("foes ledger not recorded: " + e.Message); }
                     try { Totals.DealtAfter.Record(SessionId, DealtArmour, DateTime.Now); } catch (Exception e) { LogOnce("dealt ledger not recorded: " + e.Message); }
                     try { NoteBossFights(); } catch (Exception e) { LogOnce("boss attempts not noted: " + e.Message); }
+                    try { Totals.Firsts.Note(DeedsNow().Buckets); } catch (Exception e) { LogOnce("firsts not noted: " + e.Message); }   // 0.9, record 3
                     Totals.Save(totalsPath, DateTime.UtcNow);
                 }
             }
             catch (Exception e) { log?.LogWarning("local totals not saved: " + e.Message); }
             try { SaveKept(); } catch (Exception e) { LogOnce("recent minutes not saved: " + e.Message); }
             try { SaveKeptFights(); } catch (Exception e) { LogOnce("kept fights not saved: " + e.Message); }
+            try { SaveKeptDeeds(); } catch (Exception e) { LogOnce("kept deeds not saved: " + e.Message); }   // 0.9, record 2
             try { SaveMarks(); } catch (Exception e) { LogOnce("fellow marks not saved: " + e.Message); }
         }
 
@@ -665,7 +777,7 @@ namespace Hearthwoven
         /// </summary>
         static void LoadKept(long id, string name)
         {
-            Kept = null; keptShared = null; joinedLog = null; Deeds.Earlier.Clear();
+            Kept = null; keptShared = null; joinedLog = null; Deeds.Earlier.Clear(); Deeds.EarlierLands.Clear();
             keptWorld = ZNet.instance != null ? FellowCache.ScopeKey(ZNet.instance.GetWorldName(), ZNet.instance.GetWorldUID()) : null;
             keptPath = Totals != null && totalsPath != null && keptWorld != null ? KeptMinutes.PathFor(totalsPath) : null;
             keptId = id; keptName = name;
@@ -674,6 +786,7 @@ namespace Hearthwoven
             if (problem != null) LogOnce(problem);
             if (kept == null) return;
             foreach (var kv in kept.Deeds) Deeds.Earlier[kv.Key] = kv.Value;
+            foreach (var kv in kept.Lands) Deeds.EarlierLands[kv.Key] = kv.Value;   // 0.9: the land of those minutes
             foreach (var kv in kept.Armour.Damage) { ArmourMinutes.Damage.TryGetValue(kv.Key, out var o); ArmourMinutes.Damage[kv.Key] = o + kv.Value; }   // read only for 10 min .. 3 h (ArmourModel.ArmourIn)
             foreach (var kv in kept.Armour.Hits) { ArmourMinutes.Hits.TryGetValue(kv.Key, out var o); ArmourMinutes.Hits[kv.Key] = o + kv.Value; }
             Kept = kept; keptShared = kept.SharedJson();   // written once: the shared copy carries it as is
@@ -687,7 +800,7 @@ namespace Hearthwoven
             var now = DateTime.UtcNow;
             ForgetKept(now);
             var deeds = DeedsNow();   // the running minute booked
-            var k = KeptMinutes.Take(now, LogWithEarlier, ArmourMinutes, deeds.Buckets, deeds.Earlier);
+            var k = KeptMinutes.Take(now, LogWithEarlier, ArmourMinutes, deeds.Buckets, deeds.Earlier).WithLands(deeds.Lands, deeds.EarlierLands);   // 0.9: and the land of each minute
             k.World = keptWorld; k.PlayerId = keptId.ToString(System.Globalization.CultureInfo.InvariantCulture); k.Name = keptName ?? "";
             k.Save(keptPath, now);
         }
@@ -697,7 +810,7 @@ namespace Hearthwoven
         static void ForgetKept(DateTime nowUtc)
         {
             if (Kept == null || nowUtc < ConnectedUtc.AddMinutes(181)) return;
-            Kept = null; keptShared = null; joinedLog = null; Deeds.Earlier.Clear();
+            Kept = null; keptShared = null; joinedLog = null; Deeds.Earlier.Clear(); Deeds.EarlierLands.Clear();
         }
 
         // Every session builds a new ZRoutedRpc; register on each new one exactly once (mods that registered once went
@@ -720,7 +833,7 @@ namespace Hearthwoven
                 ConnectedUtc = DateTime.UtcNow; Kept = null; keptShared = null; keptPath = keptWorld = keptName = null; joinedLog = joinedOf = null;   // 0.8.2: the kept minutes load again on spawn (LoadKept)
                 keptFights = null; keptFightsPath = null; EarlierFights = new System.Collections.Generic.List<KeptSession>();   // 0.8.5: the kept fights too (LoadKeptFights)
                 Totals = null; totalsPath = totalsFor = null; EventsBefore = new SessionEvents(); DamageBefore = new DamageTally(); BiomeBefore = new BiomeTally();   // loaded again on spawn (P7)
-                GroupShare.Clear(); nextSend = -1f; lastFullSend = -100f; FeatsCounters.Streak = 0;
+                GroupShare.Clear(); nextSend = -1f; lastFullSend = -100f; FeatsCounters.NewSession();
                 liveBase = liveBaseId = null; liveSeq = 0; liveBusy = false; liveDone = null;   // live updates start from this connection's first full copy
                 Armour = new ArmourTally(); ArmourMinutes = new ArmourLog();   // the armour ledger starts over with the session too
                 Battle = new BattleRecorder(); DealtArmour = new ArmourTally(); Swing = new SwingClock();   // the battle record and the dealt ledger too (0.8, 0.8.5), and the fighting clock (0.8.6)

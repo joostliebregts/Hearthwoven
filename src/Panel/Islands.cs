@@ -8,6 +8,8 @@ namespace Hearthwoven.Panel
     {
         /// <summary>PanelModel.IslandWide, IslandHalf (two of them side by side) or IslandPlain (a row without an outline: a link, an open About box).</summary>
         public string Span;
+        /// <summary>0.9.5: pinned under the page's strip with it (StickyHeadUi.PinStrip): Meal plan's meal, the first island. The preview's pinhead too.</summary>
+        public bool Pin;
         public readonly List<IslandPart> Parts = new List<IslandPart>();
     }
 
@@ -40,6 +42,11 @@ namespace Hearthwoven.Panel
         public const int IslandHalfRows = 4;
 
         /// <summary>The islands of a page's plate, in reading order (the strip and the heading row's blocks are not in them).</summary>
+        /// <summary>0.9.5: Meal plan's foods island (Best for, the marks' line, the lands' headings and foods; its meal is the pinned island above it).</summary>
+        static bool InPlan(Island island) => island != null && island.Span == IslandWide && island.Parts.Any(p => p.Block.Id == MealPlanBestKey || (p.Block.Kind == "itemgrid" && p.Block.Tone == MealPlanTone));
+        /// <summary>0.9.5: the island of Meal plan's meal (the slots and the summed bar), pinned under the strip when it is the plate's first.</summary>
+        static bool IsPlanMeal(Island island) => island != null && island.Span == IslandWide && island.Parts.Any(p => p.Block.Id == MealPlanId && p.Block.Kind == "sources");
+
         public static List<Island> Islands(Block plate)
         {
             var islands = new List<Island>();
@@ -47,7 +54,8 @@ namespace Hearthwoven.Panel
             if (plate.Tone == PlateFull)   // the Feats chapter: its grid takes the whole room the detail area leaves (FeatsUi.FeatsRoom), as it was
             {
                 var all = new Island { Span = IslandPlain };
-                for (int k = 0; k < (plate.Items?.Count ?? 0); k++) all.Parts.Add(new IslandPart { Block = plate.Items[k], Path = k.ToString() });
+                for (int k = 0; k < (plate.Items?.Count ?? 0); k++)
+                    if (plate.Items[k]?.Kind != "featband") all.Parts.Add(new IslandPart { Block = plate.Items[k], Path = k.ToString() });   // 0.8.93: the strip is drawn once, above (PlateIslands); drawn again it said the page's line twice
                 islands.Add(all); return islands;
             }
             var strip = (plate.Items ?? new List<Block>()).Any(b => b.Kind == "featband") ? TopSwitch(plate) : null;   // its chips ride in the strip
@@ -74,6 +82,9 @@ namespace Hearthwoven.Panel
                         sorted.Parts.Add(part); joinNext = b.Kind == "section"; continue;
                     }
                     sorted = null;
+                    // 0.9.2 Meals' Plan a meal (Chapters/MealPlanModel.cs): its lands' headings and foods stay in one island (0.9.5: the one Best for leads; the
+                    // meal's row is an island of its own above it, pinned)
+                    if ((b.Id == MealPlanId || b.Id == MealPlanBestKey) && head.Count == 0 && b.Kind != "sources" && InPlan(islands.LastOrDefault())) { islands[islands.Count - 1].Parts.Add(part); continue; }
                     switch (b.Kind)
                     {
                         case "featband": case "headlink": case "divider": continue;   // the strip, the heading row's chip; no divider lines (Joost, part 4)
@@ -85,7 +96,7 @@ namespace Hearthwoven.Panel
                         case "filterbar":   // the head line of what it filters: the island of its bars, or with none shown the next island; the battle
                                             // feed's its own island (it filters every fight, and each fight is an island of its own)
                             if (head.Count == 0 && b.Tone == "inline" && FiltersStripAbove(islands.LastOrDefault(), b)) { islands[islands.Count - 1].Parts.Add(part); continue; }   // 0.8.5: the Overview's tiles' line, in their island
-                            if ((b.Items ?? new List<Block>()).Any(x => x.Kind == "facetbar" && x.Tone != "hidden") || b.Open || b.Id == FeedFilter) Put(IslandWide, part); else head.Add(part);
+                            if ((b.Items ?? new List<Block>()).Any(x => x.Kind == "facetbar" && x.Tone != "hidden") || b.Open || b.Id == FeedFilter || IsDeedFeedFilter(b.Id)) Put(IslandWide, part); else head.Add(part);   // 0.9: a deed feed's too (Chapters/DeedFeedModel.cs)
                             continue;
                         case FeedLineKind: Put(IslandPlain, part); continue;   // the battle feed: the quiet time between two fight islands, what is left out, outside them
                         case "switch":
@@ -139,7 +150,15 @@ namespace Hearthwoven.Panel
                                 else Put(IslandWide, part);
                                 continue;
                             }
+                        case "itemgrid" when b.Tone == SetBandTone:   // 0.9 Armor sets: a land's sets are one island, a band each (Chapters/ArmorSets.cs)
+                            {
+                                var last = islands.LastOrDefault();
+                                if (head.Count == 0 && last != null && last.Span == IslandWide && last.Parts.Count > 0 && last.Parts[last.Parts.Count - 1].Block.Kind == "itemgrid" && last.Parts[last.Parts.Count - 1].Block.Tone == SetBandTone) last.Parts.Add(part);
+                                else Put(IslandWide, part);
+                                continue;
+                            }
                         case "composition": Put(b.Tone != OneRowTone && b.Tone != FightTypesTone && HalfLegend(b.Items) ? IslandHalf : IslandWide, part); continue;   // one damage row: as wide as its island
+                        case UseDetailKind: Put(IslandPlain, part); continue;   // 0.9 What to use: an open foe's Best and Worst islands under the table, as under By foe's open row
                         case "ranking": Put((b.Items?.Count ?? 0) <= IslandHalfRows ? IslandHalf : IslandWide, part); continue;
                         default: Put(IslandWide, part); continue;
                     }
@@ -147,6 +166,7 @@ namespace Hearthwoven.Panel
             }
             Walk(plate.Items, "");
             if (head.Count > 0) Put(IslandPlain);
+            if (IsPlanMeal(islands.FirstOrDefault())) islands[0].Pin = true;   // 0.9.5 Meal plan: its meal stays in sight while the foods scroll
             // half islands pair up; an odd one in the middle of the page spans the plate, the last one may stand alone; a player's island never
             // spans it (Recent's group of three: one player drawn twice as wide as the others would rank them, 0.8.1 review 5), it stays a half
             for (int i = 0; i < islands.Count;)
@@ -184,7 +204,7 @@ namespace Hearthwoven.Panel
             j.Key("islands").OpenArr();
             foreach (var island in Islands(plate))
             {
-                j.Open().Str("span", island.Span).Key("parts").OpenArr();
+                j.Open().Str("span", island.Span); if (island.Pin) j.Num("pin", 1); j.Key("parts").OpenArr();
                 foreach (var p in island.Parts) { j.Open().Str("path", p.Path); if (p.Only >= 0) j.Num("only", p.Only); if (p.Row) j.Num("row", 1); j.Close(); }
                 j.CloseArr().Close();
             }

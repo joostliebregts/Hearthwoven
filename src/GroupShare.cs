@@ -34,6 +34,9 @@ namespace Hearthwoven
         public const string LiveTag = "hw-live-1";
         /// <summary>0.8.6, after the live tag: this server keeps friends' older sessions as blocks (FeedBlocks.cs) and lists them here. A 0.8.5 reader stops at it.</summary>
         public const string BlocksTag = "hw-blocks-1";
+        /// <summary>0.9 (deed feeds), after the blocks tag: this server keeps friends' deed stretches in their session blocks and lists the sessions that hold
+        /// some here (the same index form, the stretches in the count's place). A 0.8.6 reader stops at it.</summary>
+        public const string DeedsTag = "hw-deeds-1";
         /// <summary>How often a 0.7 client sends its live update while playing and asks for the fellows' while the book is open (seconds).</summary>
         public const float LiveEvery = 10f;
         public const int MaxQueue = 600, MaxAgeDays = 14;
@@ -169,9 +172,9 @@ namespace Hearthwoven
             try
             {
                 if (ZNet.instance == null || ZNet.instance.IsServer()) return;
-                var keep = ReadList(pkg, out var books, out var keys, out var live, out var blocks);
+                var keep = ReadList(pkg, out var books, out var keys, out var live, out var blocks, out var deeds);
                 ListSeen = true; ServerLive = live;
-                TakeBlockIndex(blocks);
+                TakeBlockIndex(blocks, deeds);
                 Fellows.KeepOnly(keys, keep);
                 LiveIn.KeepOnly((ICollection<string>)keys ?? Group.Keys);   // the list's own keys: a fellow just listed keeps an update that waits for its copy   // by key from a server with the identity fix, else by name (an older server)
                 Trails.KeepOnly(Group.Keys); FellowCopies.KeepOnly(Group.Keys);
@@ -196,12 +199,16 @@ namespace Hearthwoven
 
         /// <summary>The list with its tagged parts; <paramref name="blocks"/> (0.8.6, BlocksTag): the block index JSON (BlockIndex.Read), null from a
         /// server without it.</summary>
-        public static HashSet<string> ReadList(ZPackage pkg, out string books, out List<string> keys, out bool live, out string blocks)
+        public static HashSet<string> ReadList(ZPackage pkg, out string books, out List<string> keys, out bool live, out string blocks) => ReadList(pkg, out books, out keys, out live, out blocks, out _);
+
+        /// <summary>The list with its tagged parts; <paramref name="deeds"/> (0.9, DeedsTag): the deeds index JSON (BlockIndex.Read, the stretches in the count's
+        /// place), null from a server without it.</summary>
+        public static HashSet<string> ReadList(ZPackage pkg, out string books, out List<string> keys, out bool live, out string blocks, out string deeds)
         {
             int n = pkg.ReadInt();
             var names = new HashSet<string>();
             for (int i = 0; i < n; i++) names.Add(pkg.ReadString());
-            books = null; keys = null; live = false; blocks = null;
+            books = null; keys = null; live = false; blocks = null; deeds = null;
             while (pkg.GetPos() < pkg.Size())
             {
                 var tag = pkg.ReadString();
@@ -209,6 +216,7 @@ namespace Hearthwoven
                 else if (tag == KeysTag) { int k = pkg.ReadInt(); keys = new List<string>(); for (int i = 0; i < k; i++) keys.Add(pkg.ReadString()); }
                 else if (tag == LiveTag) live = pkg.ReadInt() >= LiveDelta.Version;
                 else if (tag == BlocksTag) { try { blocks = Transport.Unpack(pkg.ReadByteArray()); } catch (Exception) { blocks = null; } }
+                else if (tag == DeedsTag) { try { deeds = Transport.Unpack(pkg.ReadByteArray()); } catch (Exception) { deeds = null; } }
                 else break;
             }
             return names;
@@ -216,13 +224,14 @@ namespace Hearthwoven
 
         /// <summary>Server: the list for one answer (ReadList reads it). <paramref name="keys"/>: each name's fellow key, after the book;
         /// <paramref name="live"/>: the live tag last (0.7), so every older reader has stopped before it.</summary>
-        public static ZPackage WriteList(IList<string> names, string booksJson, IList<string> keys = null, bool live = false, string blocksJson = null)
+        public static ZPackage WriteList(IList<string> names, string booksJson, IList<string> keys = null, bool live = false, string blocksJson = null, string deedsJson = null)
         {
             var list = new ZPackage(); list.Write(names.Count); foreach (var nm in names) list.Write(nm);
             if (booksJson != null) { list.Write(BooksTag); list.Write(Transport.Pack(booksJson)); }
             if (keys != null) { list.Write(KeysTag); list.Write(keys.Count); foreach (var k in keys) list.Write(k ?? ""); }
             if (live) { list.Write(LiveTag); list.Write(LiveDelta.Version); }
             if (live && blocksJson != null) { list.Write(BlocksTag); list.Write(Transport.Pack(blocksJson)); }   // 0.8.6: after the live tag, so every older reader has stopped before it
+            if (live && blocksJson != null && deedsJson != null) { list.Write(DeedsTag); list.Write(Transport.Pack(deedsJson)); }   // 0.9: after the blocks tag, where a 0.8.6 reader has stopped
             return list;
         }
 
@@ -440,7 +449,8 @@ namespace Hearthwoven
                 // 0.6: the server's book for you and each sharer, after the names (an older client stops reading there), then each
                 // name's fellow key (two players with one name both show; an older client stops before it)
                 var list = WriteList(answer.Names, ServerBookHooks.Shared(PeerIdentity.Key(peer), answer.Keys, answer.Names, answer.Fellows), answer.Fellows, live: true,
-                                     blocksJson: BuildBlockIndex(PeerIdentity.Key(peer), answer.Keys, answer.Fellows, DateTime.UtcNow));   // 0.8.6: this server keeps friends' older sessions
+                                     blocksJson: BuildBlockIndex(PeerIdentity.Key(peer), answer.Keys, answer.Fellows, DateTime.UtcNow),   // 0.8.6: this server keeps friends' older sessions
+                                     deedsJson: BuildBlockIndex(PeerIdentity.Key(peer), answer.Keys, answer.Fellows, DateTime.UtcNow, deeds: true));   // 0.9: and their deed stretches
                 ZRoutedRpc.instance.InvokeRoutedRPC(sender, ListRpc, list);
                 foreach (var copy in answer.Send)
                     for (int i = 0; i < copy.Parts.Count; i++)
@@ -511,7 +521,8 @@ namespace Hearthwoven
         /// <summary>Host: the answer a client would get, applied here: every copy received, the rest forgotten, the book read.
         /// <paramref name="books"/> (file keys, names, fellow keys) gives the book's JSON, <paramref name="blocks"/> (file keys, fellow keys) the blocks index (0.8.6).
         /// Null sources: you do not share, so nobody.</summary>
-        public static void HostAnswer(IList<KeyValuePair<string, string>> sources, Func<IList<string>, IList<string>, IList<string>, string> books, Func<IList<string>, IList<string>, string> blocks = null)
+        public static void HostAnswer(IList<KeyValuePair<string, string>> sources, Func<IList<string>, IList<string>, IList<string>, string> books, Func<IList<string>, IList<string>, string> blocks = null,
+                                      Func<IList<string>, IList<string>, string> deeds = null)
         {
             var fileKeys = new List<string>(); var names = new List<string>(); var keys = new List<string>();
             foreach (var s in sources ?? new List<KeyValuePair<string, string>>())
@@ -522,7 +533,7 @@ namespace Hearthwoven
             }
             Fellows.KeepOnly(keys, names); Trails.KeepOnly(Group.Keys); FellowCopies.KeepOnly(Group.Keys);
             ReadBooks(books?.Invoke(fileKeys, names, keys));
-            TakeBlockIndex(sources != null ? blocks?.Invoke(fileKeys, keys) : null);   // you host: this PC keeps the blocks (0.8.6)
+            TakeBlockIndex(sources != null ? blocks?.Invoke(fileKeys, keys) : null, sources != null ? deeds?.Invoke(fileKeys, keys) : null);   // you host: this PC keeps the blocks (0.8.6) and the deed stretches in them (0.9)
         }
 
         static void RequestLocal()
@@ -531,7 +542,8 @@ namespace Hearthwoven
             if (profile == null) return;
             var ownKey = PeerIdentity.KeyOf(profile.GetPlayerID(), "", 0);
             var sources = HostSources(Dir, ownKey, DateTime.UtcNow);
-            HostAnswer(sources, (fileKeys, names, keys) => ServerBookHooks.Shared(ownKey, fileKeys, names, keys), (fileKeys, keys) => BuildBlockIndex(ownKey, fileKeys, keys, DateTime.UtcNow));
+            HostAnswer(sources, (fileKeys, names, keys) => ServerBookHooks.Shared(ownKey, fileKeys, names, keys), (fileKeys, keys) => BuildBlockIndex(ownKey, fileKeys, keys, DateTime.UtcNow),
+                       (fileKeys, keys) => BuildBlockIndex(ownKey, fileKeys, keys, DateTime.UtcNow, deeds: true));
             LastReply = Time.realtimeSinceStartup; ListSeen = sources != null; ServerLive = true;   // you host: this PC keeps the live updates
         }
 
@@ -755,7 +767,7 @@ namespace Hearthwoven
         }
 
         /// <summary>Server: the index for one requester (BlockIndex): its own held ids and each listed sharer's blocks, by fellow key. Null when it cannot be built.</summary>
-        static string BuildBlockIndex(string ownKey, IList<string> fileKeys, IList<string> fellowKeys, DateTime now)
+        static string BuildBlockIndex(string ownKey, IList<string> fileKeys, IList<string> fellowKeys, DateTime now, bool deeds = false)
         {
             try
             {
@@ -764,24 +776,31 @@ namespace Hearthwoven
                 for (int i = 0; i < fileKeys.Count && i < fellowKeys.Count; i++)
                 {
                     if (string.IsNullOrEmpty(fellowKeys[i])) continue;
-                    var rows = store.Listed(fileKeys[i], now);
+                    var rows = BlockIndex.Part(store.Listed(fileKeys[i], now), deeds);   // 0.9: the fights index lists sessions with fights only (a 0.8.6 reader must never ask for a block of deeds alone)
                     if (rows.Count > 0) of.Add(new KeyValuePair<string, List<BlockRow>>(fellowKeys[i], rows));
                 }
                 return BlockIndex.Write(store.Rows(ownKey, now).Select(r => r.Id), of);
             }
-            catch (Exception e) { Debug.LogWarning("[Hearthwoven] feed block index: " + e.Message); return null; }
+            catch (Exception e) { Debug.LogWarning("[Hearthwoven] feed block " + (deeds ? "deeds " : "") + "index: " + e.Message); return null; }
         }
 
-        /// <summary>Client: the list's index (null: this server keeps none, so nothing is uploaded or asked).</summary>
-        static void TakeBlockIndex(string json)
+        /// <summary>Client: the list's indexes (null: this server keeps none, so nothing is uploaded or asked). <paramref name="deedsJson"/> (0.9): the deeds index;
+        /// null from a server before 0.9, which keeps no deed stretches (DeedsOn false: none are sent to it).</summary>
+        static void TakeBlockIndex(string json, string deedsJson = null)
         {
             var ix = json == null ? null : BlockIndex.Read(json);
-            BlocksOn = ix != null; BlockMine = ix?.Mine ?? new HashSet<string>();
-            Blocks.TakeRows(ix?.Of);
-            if (ix != null) { var of = ix.Of; QueueCache(dir => BlockCache.KeepOnly(dir, of)); }   // FB5: the cache holds only what the list names
+            var dx = ix == null || deedsJson == null ? null : BlockIndex.Read(deedsJson);
+            BlocksOn = ix != null; DeedsOn = dx != null; BlockMine = ix?.Mine ?? new HashSet<string>();
+            var deedRows = BlockIndex.DeedRows(dx?.Of);
+            Blocks.TakeRows(ix?.Of, deedRows);
+            if (ix != null) { var keep = BlockIndex.Joined(ix.Of, deedRows); QueueCache(dir => BlockCache.KeepOnly(dir, keep)); }   // FB5: the cache holds only what the lists name
         }
 
-        static void ClearBlocks() { BlocksOn = false; BlockMine = new HashSet<string>(); blocksTried.Clear(); blockOutbox.Clear(); nextBlockUp = nextBlockFragment = 0f; Blocks.Clear(); }
+        static void ClearBlocks() { BlocksOn = false; DeedsOn = false; BlockMine = new HashSet<string>(); blocksTried.Clear(); blockOutbox.Clear(); nextBlockUp = nextBlockFragment = 0f; Blocks.Clear(); }
+
+        /// <summary>Client (0.9): this server keeps friends' deed stretches (its list carried the deeds tag): your closed sessions go up with theirs, and a
+        /// friend's deed feeds reach back 30 days. False on a server before 0.9.</summary>
+        public static bool DeedsOn;
 
         /// <summary>Client: the friends' sessions (rows from the list, blocks in memory and in the cache); the feed asks it for what it wants to show.</summary>
         public static readonly FellowBlocks Blocks = new FellowBlocks { Ask = AskBlock, ReadCache = ReadBlockCache };
@@ -911,7 +930,7 @@ namespace Hearthwoven
         /// while the server announced blocks (the list's tag), you share and send, and your own snapshot is not still going out (it goes first). A hosted
         /// world puts the block in its own store, no message. Each session once per connection (a refused or skipped one is not tried again until the next).
         /// </summary>
-        internal static void UploadTick(float now, bool snapshotBusy, bool sendStats, Func<List<KeptSession>> earlier, string currentSession)
+        internal static void UploadTick(float now, bool snapshotBusy, bool sendStats, Func<List<KeptSession>> earlier, string currentSession, Func<List<DeedSession>> deedsEarlier = null)
         {
             if (!BlocksOn || !sendStats || !Sharing() || Panel.SampleMode.On || ZNet.instance == null || ZRoutedRpc.instance == null) return;
             var host = IsHost();
@@ -926,15 +945,19 @@ namespace Hearthwoven
                 return;
             }
             if (snapshotBusy || now < nextBlockUp) return;
-            var plan = Uploads.Plan(earlier(), BlockMine, blocksTried, DateTime.UtcNow);
+            // 0.9: where the server keeps deed stretches, each closed session goes up once with its fights and its deeds together; until your kept deeds are
+            // loaded (null) nothing goes, so no session leaves without its deeds
+            List<DeedSession> deeds = null;
+            if (DeedsOn && deedsEarlier != null) { deeds = deedsEarlier(); if (deeds == null) { nextBlockUp = now + 5f; return; } }
+            var plan = Uploads.Plan(earlier(), deeds, BlockMine, blocksTried, DateTime.UtcNow);
             if (plan.Count == 0) { nextBlockUp = now + 5f; return; }
             var s = plan[0]; blocksTried.Add(s.Id);
             if (host)
             {
                 nextBlockUp = now + (float)Uploads.UpEvery;   // no message to the server: the usual pace only
                 var profile = Game.instance?.GetPlayerProfile();
-                var json = FeedBlock.Write(s); var block = json == null ? null : FeedBlock.Read(json);
-                var why = profile == null ? "no profile" : ServerBlocks().Put(PeerIdentity.KeyOf(profile.GetPlayerID(), "", 0), block, DateTime.UtcNow, currentSession);
+                var packedHere = Uploads.Pack(s, out var why0); var block = packedHere == null ? null : FeedBlock.Read(Transport.Unpack(packedHere));
+                var why = block == null ? why0 ?? "nothing to keep" : profile == null ? "no profile" : ServerBlocks().Put(PeerIdentity.KeyOf(profile.GetPlayerID(), "", 0), block, DateTime.UtcNow, currentSession);
                 if (why != null) Debug.Log($"[Hearthwoven] feed block {s.Id} not kept on this PC: {why}");
                 return;
             }

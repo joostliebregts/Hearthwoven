@@ -171,6 +171,11 @@ namespace Hearthwoven.Panel
         // ---------- 0.7 words (REDESIGN-RULES.md part 0, rule E): a fellow's copy says whose PC it is, or that it is only the session they last shared ----------
 
         /// <summary>One fellow's copy, on a row: "Recorded on Tor's PC", or "as Tor last shared it" when the copy is only their last session.</summary>
+        /// <summary>0.9 (Joost in game on 0.8.91: the first Company opening froze the game): the line where Fireside's drawing will stand while its
+        /// geometry is worked out on a worker (FireLayout.Request), with the step it is on; never "0 of".</summary>
+        public static string FireWaitWords(int step) => FireWaitText + " " + N(Math.Max(1, Math.Min(FireLayout.Stages, step))) + " of " + N(FireLayout.Stages);
+        public const string FireWaitText = "Reading the group's books \u2026";
+
         public static string FellowWords(string name, bool sharedSince) => sharedSince ? "Recorded on " + name + "'s PC" : "as " + name + " last shared it";
 
         /// <summary>
@@ -592,7 +597,7 @@ namespace Hearthwoven.Panel
             foreach (var p in parts.Where(x => !x.In))
                 lines.Add(p.Waits ?? (p.Self ? "You" : p.Name) + ": " + (p.Gap ?? "not in this window") + ".");
             var counted = parts.Where(x => x.In).ToList();
-            if (counted.All(x => x.Value <= 0)) lines.Add(w == TimeWindow.Session ? "Nothing this session." : w == TimeWindow.Today ? "Nothing today." : "Nothing in the " + WindowLabel(w).ToLowerInvariant() + ".");
+            if (counted.All(x => x.Value <= 0)) lines.Add(w == TimeWindow.Session ? "Nothing this session." : "Nothing " + InWindowWords(w) + ".");
             else if (w == TimeWindow.Session && counted.Any(x => !x.Self)) lines.Add(WindowFellowSession);
             else if (IsDayWindow(w) && counted.Any(x => !x.Self)) lines.Add(DayWindowLine(w));   // a fellow's day is their whole day, also before you came online
             return lines;
@@ -606,7 +611,7 @@ namespace Hearthwoven.Panel
             // a day window (HISTORY-06.md): your own day history; a fellow's shared damage dealt per day (their "dealtByDay", the last 30 days)
             if (p.IsSelf) { var c = InWindow(p, w); return c == null ? 0 : DealtRows(DamageSinceInstallRows(c)).Sum(r => (double)r.Amount); }
             if (p.DealtByDay == null) return 0;
-            DateTime from = DayFrom(viewer, w), to = LocalToday(viewer);
+            DateTime from = DayFrom(viewer, w), to = DayTo(viewer, w);
             double sum = 0;
             foreach (var kv in p.DealtByDay)
                 if (DateTime.TryParseExact(kv.Key, "yyyy-MM-dd", Inv, System.Globalization.DateTimeStyles.None, out var d) && d >= from && d <= to && kv.Value > 0) sum += kv.Value;
@@ -647,7 +652,7 @@ namespace Hearthwoven.Panel
             }
             if (text != null) { }
             else if (stale.Count > 0) text = "Nothing in this window from " + JoinNames(stale) + ": their latest shared record is older.";
-            else if (dealt.Items.All(p => p.Fraction <= 0)) text = w == TimeWindow.Session ? "Nothing dealt this session." : "Nothing dealt in the " + WindowLabel(w).ToLowerInvariant() + ".";
+            else if (dealt.Items.All(p => p.Fraction <= 0)) text = w == TimeWindow.Session ? "Nothing dealt this session." : "Nothing dealt " + InWindowWords(w) + ".";
             else if (w == TimeWindow.Session && others.Count > 0) text = WindowFellowSession;
             else if (IsDayWindow(w) && others.Count > 0) text = DayWindowLine(w);   // 0.9: a fellow's day is their whole day, also before you came online
             return text == null ? new List<string>() : new List<string> { text };

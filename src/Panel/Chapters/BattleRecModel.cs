@@ -56,8 +56,8 @@ namespace Hearthwoven.Panel
             if (IsShortWindow(w)) return w == TimeWindow.Session ? live : input.Battle?.Counts(Cutoff(w, input.NowUtc));
             if (w == TimeWindow.SinceInstall) return WithFighting(input.FoesSince ?? live, live);
             if (input.FoeBook == null || !DayOpen(input, w)) return null;
-            var sum = input.FoeBook.Sum(DayFrom(input, w), LocalToday(input));
-            if (input.FoesPending != null) sum.AddAll(input.FoesPending);   // the running session since the last save: always today
+            var sum = input.FoeBook.Sum(DayFrom(input, w), DayTo(input, w));
+            if (input.FoesPending != null && HoldsToday(w)) sum.AddAll(input.FoesPending);   // the running session since the last save: always today (never Yesterday)
             return WithFighting(sum, live);
         }
 

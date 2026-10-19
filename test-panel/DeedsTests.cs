@@ -269,7 +269,7 @@ static class DeedsTests
         Check(q.Kind == "grades" && q.Items.Select(i => i.Value).SequenceEqual(new[] { "104", "71", "44", "22", "9", "1" }) && q.Items.All(i => i.Icon == "item:$animal_fish1"), "deeds fishing: caught by quality 1..6, the most caught fish as the picture");
         var per = After(fishing, "Fish caught");
         Check(per.Kind == "itemgrid" && per.Items.Select(i => i.Title + "=" + i.Value).SequenceEqual(new[] { "Perch=88", "Pike=61", "Tuna=60", "Giant Herring=42" }) && per.Value == null && PanelModel.Content(fishing).First(b => b.Kind == "section" && b.Title == "Fish caught").Value == "251" && Find(Show(rich, "taming"), "counts").Tone == "framed", "deeds fishing: caught per kind from the game's fish record, its total in the section title (Fish caught 251: the named kinds, which add up to the 251 caught; no remainder tile); Taming draws thin framed tiles");
-        Check(PanelModel.Content(Show(input, "fishing")).All(b => b.Kind == "empty" || b.Kind == "plate"), "deeds fishing: nothing caught, nothing drawn");
+        Check(PanelModel.Content(Show(input, "fishing")).All(b => b.Kind == "empty" || b.Kind == "plate" || b.Kind == "headlink" || b.Kind == "featband"), "deeds fishing: nothing caught, nothing drawn");   // 0.9: the Feed chip and the strip that carries it
         // fish-held: the sample's kinds add up to its Caught row (both are booked at the same reeled-in catch), so the page never shows two numbers
         // that disagree; real data that differs shows the kinds' own total in the section title, never Caught's
         var hclRows = Find(fishing, "ranking"); var caughtRow = hclRows?.Items.FirstOrDefault(i => i.Title == "Caught")?.Value;
@@ -318,7 +318,7 @@ static class DeedsTests
         var valid = true;
         foreach (var v in views) try { var d = JsonDocument.Parse(PanelModel.ToJson(v)); if (!PanelModel.ToJson(v).Contains("\"columns\"")) valid = false; } catch { valid = false; }
         Check(valid, "deeds: preview JSON valid, the new fields included");
-        var unmarkedDeed = views.SelectMany(PanelModel.Content).FirstOrDefault(b => !(b.Kind == "section" || b.Kind == "note" || b.Kind == "sort" || b.Kind == "aboutnumbers" || PanelModel.IsBox(b) || PanelModel.IsFeatKind(b.Kind) || b.Src != null));
+        var unmarkedDeed = views.SelectMany(PanelModel.Content).FirstOrDefault(b => !(b.Kind == "section" || b.Kind == "note" || b.Kind == "sort" || b.Kind == "aboutnumbers" || b.Kind == "headlink" || PanelModel.IsBox(b) || PanelModel.IsFeatKind(b.Kind) || b.Src != null));
         Check(unmarkedDeed == null, "deeds: every block with a number carries its source mark" + (unmarkedDeed != null ? ": " + unmarkedDeed.Kind + " '" + (unmarkedDeed.Title ?? unmarkedDeed.Text) + "'" : ""));
         Check(views.All(v => PanelModel.PlateOf(v) != null), "deeds: every page sits on the plate");
 

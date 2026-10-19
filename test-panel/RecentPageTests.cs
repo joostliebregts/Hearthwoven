@@ -33,7 +33,7 @@ static class RecentPageTests
         string Sections(PanelView v) => string.Join(", ", All(v).Where(b => b.Kind == "section").Select(b => b.Title + " " + b.Value));
         var ten = Show(me, TimeWindow.LastTenMinutes); var half = Show(me, TimeWindow.LastThirtyMinutes); var session = Show(me, TimeWindow.Session);
         Check(Sections(ten) == "Trees felled +1" && Sections(half) == "Brought in +2, Trees felled +1" && Sections(session) == "Brought in +17, Trees felled +1" &&
-              All(half).Where(b => b.Kind == "item").All(b => b.Title != "Wood") && Texts(ten).Any(t => Names(t, TimeWindow.LastTenMinutes)) && ten.Windows.Select(c => c.Label).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "7 days", "30 days", "All" }),
+              All(half).Where(b => b.Kind == "item").All(b => b.Title != "Wood") && Texts(ten).Any(t => Names(t, TimeWindow.LastTenMinutes)) && ten.Windows.Select(c => c.Label).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "Yesterday", "3 days", "7 days", "30 days", "All" }),
               "Recent: each window shows only what grew inside it (10 min: the tree; 30 min: the stone too, no wood; Session: all of it), Battle's chips 10 min .. All (B33)");
         var quiet = new PanelInput { PlayerName = "Rowan", IsSelf = true, NowUtc = at.AddMinutes(30), SessionStartUtc = at.AddMinutes(-55), Deeds = log, Events = ev };
         var empty = Show(quiet, TimeWindow.LastTenMinutes);
@@ -75,9 +75,10 @@ static class RecentPageTests
         tor.Fellows = world.Fellows.Where(f => f != tor).Concat(new[] { world }).ToList();
         var torBook = Show(tor, TimeWindow.LastTenMinutes, null, "Tor");
         var open = torBook.Windows.Where(c => !c.Disabled).Select(c => c.Id).ToList();
-        Check(open.SequenceEqual(new[] { TimeWindow.Session.ToString(), TimeWindow.SinceInstall.ToString() }) && torBook.Windows.Single(c => c.Selected).Id == TimeWindow.Session.ToString() &&
+        Check(open.SequenceEqual(new[] { TimeWindow.Session, TimeWindow.Today, TimeWindow.Yesterday, TimeWindow.ThreeDays, TimeWindow.SevenDays, TimeWindow.ThirtyDays, TimeWindow.SinceInstall }.Select(x => x.ToString())) &&
+              torBook.Windows.Single(c => c.Selected).Id == TimeWindow.Session.ToString() &&
               Says(torBook, "Tor", PanelModel.SinceViewer(tor)) && NoZero(torBook) && All(torBook).Any(b => b.Kind == "section"),
-              "Recent on a fellow's book: Session (since your session began) and All; their days and the short windows (no live updates) greyed; never 0");
+              "Recent on a fellow's book: Session (since your session began), their shared days (0.9.1) and All; the short windows (no live updates) greyed; never 0");
 
         // ---------- 7 days: the kills have no foes per day: their count stands as one entry with its line, never a 0 per foe ----------
         var week = Show(world, TimeWindow.SevenDays);

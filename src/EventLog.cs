@@ -33,6 +33,20 @@ namespace Hearthwoven
         /// map, so no reader of Damage or Hits ever meets it; folded with them. Two keys a minute at most.</summary>
         public readonly Dictionary<string, float> Guard = new Dictionary<string, float>();
         public const string GuardBlock = "block", GuardParry = "parry";
+        /// <summary>0.9 (armor-share; Joost: "add friends' armour view ... to 0.9"): the hits on your armor per minute and damage type, the armour ledger's two
+        /// numbers without foe or cause: "2026-10-07T20:14Z|b|slash" -> what reached your armor, "...|a|slash" -> what got through (ArmourHooks, the same hit
+        /// ArmourTally and ArmourLog book), so a fellow's Defense cuts their 10 min .. 3 h and Session the way it cuts Guard (FellowTrail.Joined, logBefore,
+        /// SessionFrom). Its own map: no reader of Damage or Hits ever meets it, and an older Hearthwoven ignores the key. Folded, joined and cut with the
+        /// rest; at most 16 keys a minute and MaxArmorKeys in all (past it the oldest minute goes and ArmorClipped says so). Totals only, never a place.</summary>
+        public readonly Dictionary<string, float> Armor = new Dictionary<string, float>();
+        public const string ArmorReached = "b", ArmorThrough = "a";
+        /// <summary>The bound of Armor: a day-long session (190 one-minute buckets of at most 16 keys, then at most 96 keys an hour folded) stays under it.</summary>
+        public const int MaxArmorKeys = 6000;
+        /// <summary>Armor reached MaxArmorKeys and its oldest minutes went (the page says so).</summary>
+        public bool ArmorClipped;
+        /// <summary>The log keeps Armor (this PC's own; a fellow's copy whose measuredLog has "armor"). False: a Hearthwoven before 0.9, whose armor is
+        /// not shared (never read as nothing stopped).</summary>
+        public bool ArmorKept = true;
         /// <summary>0.8.5: your hits after the foe's resistances and armor (AfterArmour), under the same keys as their Damage ("...|dealt|Troll|Axes|slash"
         /// -> after), every key on a foe from AfterFrom on (a type the foe is immune to: 0). Its own map, so no reader of Damage ever meets it;
         /// folded, joined and cut with it. Hits on players have none (their armor is not known here: Measured says so). Written as "stopped"
@@ -90,7 +104,7 @@ namespace Hearthwoven
             var now = Bucket(utc); if (now == lastFold) return;
             lastFold = now;
             var cut = Bucket(utc.AddMinutes(-FoldAfterMinutes));
-            FoldKeys(Damage, cut); FoldKeys(Hits, cut); FoldKeys(Guard, cut); FoldKeys(After, cut); FoldKeys(Swing, cut); Weapons.Fold(cut);
+            FoldKeys(Damage, cut); FoldKeys(Hits, cut); FoldKeys(Guard, cut); FoldKeys(After, cut); FoldKeys(Swing, cut); FoldKeys(Armor, cut); Weapons.Fold(cut);
         }
 
         /// <summary>0.8.5: a bucket ("2026-10-07T20:14Z", or a key that starts with one) whose hits on foes have their After: at or after AfterFrom.</summary>
@@ -127,6 +141,41 @@ namespace Hearthwoven
         /// except a weapon's first hit in a minute.</summary>
         public void AddWeapon(DateTime utc, string prefab, int quality, string skill, int level, float seconds, float swung, float all) =>
             Weapons.Hit(utc, prefab, quality, skill, level, seconds, swung, all, WeaponCells.PerMinute);
+
+        /// <summary>0.9 (armor-share): one hit on your armor as ArmourHooks books it in the armour ledger: per battle type what reached your armor
+        /// (<paramref name="before"/>) and what got through (<paramref name="after"/>), under this minute. Nothing for a hit that reached nothing.</summary>
+        public void AddArmor(DateTime utc, HitData.DamageTypes before, HitData.DamageTypes after)
+        {
+            var b = ArmourTally.Of(before); var a = ArmourTally.Of(after);
+            bool any = false;
+            for (int k = 0; k < b.Length; k++) if (b[k] > 0 && Json.IsFinite(b[k])) any = true;
+            if (!any) return;
+            Fold(utc); Changes++;
+            var minute = Bucket(utc);
+            for (int k = 0; k < ArmourTally.Types.Length; k++)
+            {
+                if (b[k] > 0 && Json.IsFinite(b[k])) BumpArmor(minute + "|" + ArmorReached + "|" + ArmourTally.Types[k], b[k]);
+                if (a[k] > 0 && Json.IsFinite(a[k])) BumpArmor(minute + "|" + ArmorThrough + "|" + ArmourTally.Types[k], a[k]);
+            }
+        }
+
+        // a key of Armor: a new key past MaxArmorKeys first drops the oldest minute (the short windows and Session want the newest)
+        void BumpArmor(string k, float v)
+        {
+            if (!Armor.ContainsKey(k) && Armor.Count >= MaxArmorKeys) DropOldestArmor();
+            Armor.TryGetValue(k, out var o); Armor[k] = o + v;
+        }
+
+        void DropOldestArmor()
+        {
+            string oldest = null;
+            foreach (var key in Armor.Keys) if (key.Length >= 17 && (oldest == null || string.CompareOrdinal(key, 0, oldest, 0, 17) < 0)) oldest = key;
+            if (oldest == null) return;
+            var gone = new List<string>();
+            foreach (var key in Armor.Keys) if (string.CompareOrdinal(key, 0, oldest, 0, 17) == 0) gone.Add(key);
+            foreach (var key in gone) Armor.Remove(key);
+            ArmorClipped = true;
+        }
 
         /// <summary>One held block (ClientHooks.Block, where SessionEvents.Blocks counts it); <paramref name="parry"/>: it was a parry too.</summary>
         public void AddGuard(DateTime utc, bool parry)
@@ -227,11 +276,11 @@ namespace Hearthwoven
             if (earlier == null) return later;
             if (later == null) return earlier;
             // 0.8.5: After from the earlier part's start when it has one, else from the later's (the earlier's minutes, older, stay unmeasured)
-            var j = new EventLog { Span = Math.Max(earlier.Span, later.Span), GuardKept = later.GuardKept, DeathsNotListed = earlier.DeathsNotListed + later.DeathsNotListed,
+            var j = new EventLog { Span = Math.Max(earlier.Span, later.Span), GuardKept = later.GuardKept, ArmorKept = earlier.ArmorKept && later.ArmorKept, ArmorClipped = earlier.ArmorClipped || later.ArmorClipped, DeathsNotListed = earlier.DeathsNotListed + later.DeathsNotListed,
                                    AfterFrom = earlier.AfterFrom.Length > 0 ? earlier.AfterFrom : later.AfterFrom, WeaponsKept = later.WeaponsKept };
             foreach (var log in new[] { earlier, later })
             {
-                Add(log.Damage, j.Damage); Add(log.Hits, j.Hits); Add(log.Guard, j.Guard); Add(log.After, j.After); Add(log.Swing, j.Swing); j.Weapons.Merge(log.Weapons);
+                Add(log.Damage, j.Damage); Add(log.Hits, j.Hits); Add(log.Guard, j.Guard); Add(log.After, j.After); Add(log.Swing, j.Swing); Add(log.Armor, j.Armor); j.Weapons.Merge(log.Weapons);
                 j.Deaths.AddRange(log.Deaths);
             }
             j.Deaths.Sort((a, b) => a.Time.CompareTo(b.Time));
@@ -246,9 +295,9 @@ namespace Hearthwoven
         /// </summary>
         public EventLog Between(DateTime fromUtc, DateTime untilUtc)
         {
-            var b = new EventLog { Span = Span, GuardKept = GuardKept, AfterFrom = AfterFrom, WeaponsKept = WeaponsKept };
+            var b = new EventLog { Span = Span, GuardKept = GuardKept, AfterFrom = AfterFrom, WeaponsKept = WeaponsKept, ArmorKept = ArmorKept, ArmorClipped = ArmorClipped };
             string lo = Bucket(fromUtc), hi = untilUtc == DateTime.MaxValue ? null : Bucket(untilUtc);
-            KeysBetween(Damage, b.Damage, lo, hi); KeysBetween(Hits, b.Hits, lo, hi); KeysBetween(Guard, b.Guard, lo, hi); KeysBetween(After, b.After, lo, hi); KeysBetween(Swing, b.Swing, lo, hi);
+            KeysBetween(Damage, b.Damage, lo, hi); KeysBetween(Hits, b.Hits, lo, hi); KeysBetween(Guard, b.Guard, lo, hi); KeysBetween(After, b.After, lo, hi); KeysBetween(Swing, b.Swing, lo, hi); KeysBetween(Armor, b.Armor, lo, hi);
             foreach (var kv in Weapons.Between(lo, hi).Map) b.Weapons.Map[kv.Key] = kv.Value;
             foreach (var d in Deaths) if (d.Time >= fromUtc && d.Time < untilUtc) b.Deaths.Add(d);
             return b;
@@ -271,6 +320,29 @@ namespace Hearthwoven
             void A(string k, float v) { if (v != 0f && Json.IsFinite(v)) f(k, v); }
             A("blunt", d.m_blunt); A("slash", d.m_slash); A("pierce", d.m_pierce); A("chop", d.m_chop); A("pickaxe", d.m_pickaxe);
             A("fire", d.m_fire); A("frost", d.m_frost); A("lightning", d.m_lightning); A("poison", d.m_poison); A("spirit", d.m_spirit); A("damage", d.m_damage);
+        }
+
+        // 0.9: Armor to tenths, nothing that rounds to 0
+        IEnumerable<KeyValuePair<string, float>> ArmorRounded()
+        {
+            foreach (var kv in Armor) { var v = (float)Math.Round(kv.Value, 1); if (v > 0) yield return new KeyValuePair<string, float>(kv.Key, v); }
+        }
+
+        /// <summary>0.9: a shared "armor" map read with the intake's care: only "minute|b|type" and "minute|a|type" keys of the eight battle types with
+        /// a finite amount above 0, at most MaxArmorKeys (the rest is said as clipped). null: the sender keeps none (ArmorKept false).</summary>
+        void ReadArmor(Dictionary<string, object> armor)
+        {
+            ArmorKept = armor != null;
+            if (armor == null) return;
+            var all = new Dictionary<string, float>(); MiniJson.Into(armor, all);
+            foreach (var kv in all)
+            {
+                var p = kv.Key.Split('|');
+                if (p.Length != 3 || p[0].Length != 17 || (p[1] != ArmorReached && p[1] != ArmorThrough) || Array.IndexOf(ArmourTally.Types, p[2]) < 0) continue;
+                if (!(kv.Value > 0) || !Json.IsFinite(kv.Value)) continue;
+                if (Armor.Count >= MaxArmorKeys) { ArmorClipped = true; break; }
+                Armor[kv.Key] = kv.Value;
+            }
         }
 
         // what the foe's armor took off each measured key (a weakness: less than 0), only where it is not nothing: a key it left as it was is not written
@@ -300,6 +372,7 @@ namespace Hearthwoven
             j.Num("bucketMinutes", BucketMinutes).Num("deathsNotListed", DeathsNotListed).Dict("damage", Damage).Dict("hits", Hits).Dict("guard", Guard);
             if (swing && Swing.Count > 0) j.Dict("swing", Swing);   // 0.8.6: an older Hearthwoven ignores the key
             if (WeaponsKept) Weapons.WriteTimed(j, "weapons");   // 0.8.6: shared on purpose; written also empty, so a reader can tell "no weapons" from an older Hearthwoven
+            if (ArmorKept) { j.Dict("armor", ArmorRounded()); if (ArmorClipped) j.Num("armorClipped", 1); }   // 0.9 (armor-share): written also empty, so a reader can tell "nothing reached their armor" from an older Hearthwoven; an older reader ignores the key
             if (AfterFrom.Length > 0) j.Str("afterFrom", AfterFrom).Dict("stopped", Stopped());   // 0.8.5: the after as what was stopped, nothing where nothing was
             j.Key("deaths").OpenArr();
             foreach (var d in Deaths)
@@ -322,6 +395,7 @@ namespace Hearthwoven
             if (wk != null) foreach (var kv in WeaponCells.ReadTimed(wk).Map) Weapons.Map[kv.Key] = kv.Value;
             MiniJson.Into(MiniJson.Obj(log, "swing"), Swing);   // 0.8.6: your fighting time per minute and weapon kind (an older sender keeps none)
             MiniJson.Into(MiniJson.Obj(log, "guard"), Guard); GuardKept = MiniJson.Obj(log, "guard") != null;   // 0.8.2: blocks and parries per minute (an older sender keeps none)
+            ReadArmor(MiniJson.Obj(log, "armor")); if (MiniJson.Num(log, "armorClipped") > 0) ArmorClipped = true;   // 0.9 (armor-share): the hits on their armor per minute (an older sender keeps none)
             AfterFrom = MiniJson.Str(log, "afterFrom"); if (AfterFrom.Length < 17) AfterFrom = "";   // 0.8.5: your hits after the foe's armor (an older sender keeps none)
             if (AfterFrom.Length > 0)
             {

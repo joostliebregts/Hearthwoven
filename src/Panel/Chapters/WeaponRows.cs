@@ -81,7 +81,7 @@ namespace Hearthwoven.Panel
             if (IsDayWindow(w))
             {
                 if (input.DayWeapons == null) return null;
-                DateTime from = DayFrom(input, w), to = LocalToday(input);
+                DateTime from = DayFrom(input, w), to = DayTo(input, w);
                 var sum = new WeaponCells();
                 foreach (var day in input.DayWeapons)
                     if (DateTime.TryParseExact(day.Key, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) && d >= from && d <= to) sum.Merge(day.Value);
@@ -214,6 +214,52 @@ namespace Hearthwoven.Panel
             }
         }
 
+        // ---------- 0.9.5 the kind toggle (Joost in game, on By weapon: "Can we get a toggle on 'Melee' and 'Bow' etc..") ----------
+
+        /// <summary>
+        /// Each weapon kind's row on By weapon (Melee, Bow, Magic) shuts or opens the weapon lines under it: a press on the row (its picture, its name, the
+        /// book's opens mark at its end, as Plan a meal's heading) or Enter on the keys' cursor. Open by default; shut, the row keeps its total, its DPS chip,
+        /// its bar and its legend, only its weapon lines (and any levels opened under them) are not drawn; opened again they come back as they were (the
+        /// lines' own open state, WeaponOpenKey, is left alone). The kinds that are shut are kept between sessions with the views the book remembers
+        /// (RememberedViews, PanelPrefs), one set for every book (yours, a friend's): KindShutKey holds them, sorted, OpenSep between; none shut, no key.
+        /// A kind row toggles only where it has weapon lines under it (Everyone's By weapon, a compare and a biome choice draw none); every kind row of a
+        /// page with weapon lines is marked (Tone KindTone): the opens mark stands after its name, measured into the name column, so the bars stay on one scale.
+        /// </summary>
+        public const string KindShutKey = "Battle/damage/kindshut", KindToggleTarget = "kind:", KindTone = "kind";
+        public const string KindHideKeyLine = "[Enter] Hide", KindShowKeyLine = "[Enter] Show";   // as short as the lines' "[Enter] Open": the key line has no room for more
+        public static string KindToggleLink(string kind) => KindToggleTarget + (kind ?? "");
+        /// <summary>The kinds shut on By weapon (none: an empty set).</summary>
+        public static HashSet<string> KindShut(PanelState s) =>
+            s != null && s.View.TryGetValue(KindShutKey, out var v) && !string.IsNullOrEmpty(v) ? new HashSet<string>(v.Split(OpenSep), StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
+        public static bool KindIsOpen(PanelState s, string kind) => !KindShut(s).Contains(kind ?? "");
+        /// <summary>A press on a kind's row (or Enter on the cursor's): its weapon lines shut, or open when shut; the other kinds stay as they are.</summary>
+        public static void ToggleKind(PanelState s, string kind)
+        {
+            if (s == null || string.IsNullOrEmpty(kind)) return;
+            var shut = KindShut(s);
+            if (!shut.Remove(kind)) shut.Add(kind);
+            if (shut.Count == 0) s.View.Remove(KindShutKey);
+            else s.View[KindShutKey] = string.Join(OpenSep.ToString(), shut.OrderBy(x => x, StringComparer.Ordinal));
+        }
+
+        /// <summary>By weapon's rows in page order (BattleDamage): each kind's row and, while it is open, its weapon lines. With <paramref name="lists"/> every row
+        /// keeps the opens mark's room (KindTone) and a row with lines under it toggles them (Opens, Selected = open, Link its toggle).</summary>
+        static void KindRows(PanelState state, List<Block> mixes, Dictionary<string, Block> lists, List<Block> into)
+        {
+            var shut = KindShut(state);
+            foreach (var m in mixes)
+            {
+                Block list = null;
+                if (lists != null)
+                {
+                    m.Tone = KindTone;
+                    if (lists.TryGetValue(m.Id, out list)) { m.Opens = true; m.Selected = !shut.Contains(m.Id); m.Link = KindToggleLink(m.Id); }
+                }
+                into.Add(m);
+                if (list != null && m.Selected) into.Add(list);
+            }
+        }
+
         // ---------- the keys (0.8.6 fold): as on Foes (Chapters/FoesKeys.cs), A/D (the arrows, the D-pad) move a cursor between the lines that open, Enter, Space or
         // the pad's A opens or shuts the cursor's line, Q/E still turn the chapters ----------
 
@@ -226,41 +272,57 @@ namespace Hearthwoven.Panel
             return r;
         }
 
+        /// <summary>0.9.5: the keys' stops on By weapon in page order: each kind row that toggles (KindRows), then the lines under it that open.</summary>
+        public static List<Block> WeaponStops(PanelView v)
+        {
+            var r = new List<Block>();
+            if (v == null || v.ShowAbout || v.Active != Chapter.Battle || v.Page != "damage") return r;
+            foreach (var b in Content(v))
+                if (b.Kind == "dmgmix" && b.Opens) r.Add(b);
+                else if (b.Kind == WeaponListKind && b.Items != null) foreach (var i in b.Items) if (i.Kind == WeaponLineKind && i.Opens) r.Add(i);
+            return r;
+        }
+
+        /// <summary>A stop's key in WeaponCursorKey: a weapon line's Id, a kind row's toggle (so a kind never reads as a line).</summary>
+        public static string StopId(Block b) => b == null ? null : b.Kind == "dmgmix" ? KindToggleLink(b.Id) : b.Id;
+
         static string WeaponCursor(PanelState s) => s != null && s.View.TryGetValue(WeaponCursorKey, out var c) ? c : null;
 
-        /// <summary>A/D: the cursor moves to the next line that opens (wraps); the first press puts it on the first. false when there is none.</summary>
+        /// <summary>A/D: the cursor moves to the next stop, a kind row or a line that opens (wraps); the first press puts it on the first. false when there is none.</summary>
         public static bool StepWeapon(PanelState s, PanelView v, int d)
         {
-            var rows = VisibleWeaponLines(v);
+            var rows = WeaponStops(v);
             if (rows.Count == 0) return false;
-            var at = rows.FindIndex(r => r.Id == WeaponCursor(s));
-            s.View[WeaponCursorKey] = rows[at >= 0 ? ((at + d) % rows.Count + rows.Count) % rows.Count : 0].Id;
+            var at = rows.FindIndex(r => StopId(r) == WeaponCursor(s));
+            s.View[WeaponCursorKey] = StopId(rows[at >= 0 ? ((at + d) % rows.Count + rows.Count) % rows.Count : 0]);
             return true;
         }
 
-        /// <summary>Enter, Space or the pad's A: the cursor's line opens, or shuts when open (no cursor yet: the first line).</summary>
+        /// <summary>Enter, Space or the pad's A: the cursor's line opens, or shuts when open; on a kind row its weapon lines shut or open (no cursor yet: the first stop).</summary>
         public static bool ToggleWeaponCursor(PanelState s, PanelView v)
         {
-            var rows = VisibleWeaponLines(v);
+            var rows = WeaponStops(v);
             if (rows.Count == 0) return false;
-            var row = rows.FirstOrDefault(r => r.Id == WeaponCursor(s)) ?? rows[0];
-            s.View[WeaponCursorKey] = row.Id;
-            ToggleWeapon(s, row.Id);
+            var row = rows.FirstOrDefault(r => StopId(r) == WeaponCursor(s)) ?? rows[0];
+            s.View[WeaponCursorKey] = StopId(row);
+            if (row.Kind == "dmgmix") ToggleKind(s, row.Id); else ToggleWeapon(s, row.Id);
             return true;
         }
 
-        /// <summary>Build's last step on By weapon with lines that open: the cursor's line is marked (Cursor) and the key line says what A/D and Enter do.</summary>
+        /// <summary>Build's last step on By weapon with stops: the cursor's stop is marked (Cursor) and the key line says what A/D and Enter do (on a kind row:
+        /// hide or show its weapons).</summary>
         static void WeaponsFinish(PanelState state, PanelView view)
         {
-            var rows = VisibleWeaponLines(view);
+            var rows = WeaponStops(view);
             if (rows.Count == 0) return;
             var cursor = WeaponCursor(state);
-            if (!string.IsNullOrEmpty(cursor)) foreach (var r in rows) if (r.Id == cursor) r.Cursor = true;
+            if (!string.IsNullOrEmpty(cursor)) foreach (var r in rows) if (StopId(r) == cursor) r.Cursor = true;
             if (state.FilterRow >= 0) return;   // the filter focus has the keys (FacetModel.cs)
             var at = view.Keys.IndexOf("[Q/E·A/D] Chapter");
             if (at >= 0) view.Keys[at] = "[Q/E] Chapter";
             var page = view.Keys.IndexOf("[W/S] Page");
-            view.Keys.InsertRange(page >= 0 ? page + 1 : view.Keys.Count, new[] { WeaponKeyLine, FoeOpenKeyLine });
+            var stop = rows.FirstOrDefault(r => StopId(r) == cursor) ?? rows[0];   // what Enter acts on (no cursor yet: the first stop)
+            view.Keys.InsertRange(page >= 0 ? page + 1 : view.Keys.Count, new[] { WeaponKeyLine, stop.Kind == "dmgmix" ? (stop.Selected ? KindHideKeyLine : KindShowKeyLine) : FoeOpenKeyLine });
         }
 
         public const string WeaponKeyLine = "[A/D] Weapon";

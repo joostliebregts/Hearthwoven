@@ -55,7 +55,12 @@ namespace Hearthwoven.Panel
         public static readonly string[] DdMeals = { DdAte, DdFeastOf };
         public const string DdFelled = "felled", DdChop = "chop";
         /// <summary>The game's counters a day share carries (day growth, as the day rows keep them).</summary>
-        public static readonly string[] GameShared = { "CraftWeapon", "CraftArmor", "CraftTool", "CraftTrinket", "Upgrades", "HarvestCrop", "FishCaught", "FishHooked", "CreatureTamed", "TamedPetting" };
+        public static readonly string[] GameShared = { "CraftWeapon", "CraftArmor", "CraftTool", "CraftTrinket", "Upgrades", "HarvestCrop", "FishCaught", "FishHooked", "CreatureTamed", "TamedPetting", DayKillsPart };
+        /// <summary>0.9.1 (Joost: "who was on yesterday and what happened"): the game's kill counter's growth per day (a count, no foe), so a fellow's
+        /// Recent shows their foes defeated on Yesterday to 30 days. Its name stands first in the game family's names on every copy that shares it,
+        /// also with nothing defeated (SharesDayKills): a copy without it (before 0.9.1) shares none, never "defeated nothing". About 15 bytes of
+        /// JSON once per copy plus a few per day with kills (test-panel/YesterdayTests.cs measures it).</summary>
+        public const string DayKillsPart = "EnemyKills";
         /// <summary>The most parts one family keeps for one day (the largest stay): a mod with hundreds of dishes cannot grow a copy.</summary>
         public const int DayDeedsParts = 24;
         /// <summary>The version that first shares the Deeds days (OlderLine names it when a fellow's copy has none).</summary>
@@ -138,6 +143,7 @@ namespace Hearthwoven.Panel
             if (days == null) return;
             var names = new Dictionary<string, List<string>>(); var totals = new Dictionary<string, double>();
             names[DdVoyage] = new List<string> { DdSail, DdHelm };   // always: the mark that this copy shares voyage and cargo days, also with nothing sailed (SharesVoyageDays)
+            names[DdGame] = new List<string> { DayKillsPart };   // 0.9.1, always: the mark that this copy shares the foes defeated per day (SharesDayKills)
             foreach (var part in names[DdVoyage]) totals[DdVoyage + "|" + part] = 0;
             foreach (var day in days.OrderBy(d => d.Key, StringComparer.Ordinal))
                 foreach (var fam in day.Value ?? new Dictionary<string, Dictionary<string, float>>())
@@ -204,13 +210,17 @@ namespace Hearthwoven.Panel
         /// without them is a day without sailing. false: a copy without it (the 0.8.5 test build, or older) shares no voyage days.</summary>
         public static bool SharesVoyageDays(Dictionary<string, object> o) =>
             o != null && o.TryGetValue(DayDeedsNames, out var n) && n is Dictionary<string, object> nd && nd.ContainsKey(DdVoyage);
+        /// <summary>0.9.1: a copy's "dayDeeds" names the kill counter in its game family (WriteDayDeeds always does): a day without it is a day without
+        /// foes defeated. false: a copy before 0.9.1 shares no foes defeated per day.</summary>
+        public static bool SharesDayKills(Dictionary<string, object> o) =>
+            o != null && o.TryGetValue(DayDeedsNames, out var n) && n is Dictionary<string, object> nd && nd.TryGetValue(DdGame, out var g) && g is List<object> gl && gl.Contains(DayKillsPart);
 
         /// <summary>A fellow's shared Deeds in a day window (their "dayDeeds"), family -> part -> amount over the window's days in the viewer's
         /// calendar (<paramref name="viewer"/>: your book, or the fellow's book read on this PC); null when their copy shares none (before 0.8.5).</summary>
         public static Dictionary<string, Dictionary<string, double>> FellowDeedsIn(PanelInput p, TimeWindow w, PanelInput viewer)
         {
             if (p?.DayDeeds == null || p.IsSelf || !IsDayWindow(w)) return null;
-            DateTime from = DayFrom(viewer ?? p, w), to = LocalToday(viewer ?? p);
+            DateTime from = DayFrom(viewer ?? p, w), to = DayTo(viewer ?? p, w);
             var sum = new Dictionary<string, Dictionary<string, double>>();
             foreach (var day in p.DayDeeds)
             {
@@ -255,7 +265,7 @@ namespace Hearthwoven.Panel
         public static PanelInput FellowDeedsWindow(PanelInput input, TimeWindow w, PanelInput viewer = null)
         {
             var s = FellowDeedsIn(input, w, viewer);
-            var c = s == null ? null : SharedCopy(input, s, w, DayFrom(viewer ?? input, w), LocalToday(viewer ?? input));
+            var c = s == null ? null : SharedCopy(input, s, w, DayFrom(viewer ?? input, w), DayTo(viewer ?? input, w));
             if (c != null) c.Window.Whole = input;
             return c;
         }

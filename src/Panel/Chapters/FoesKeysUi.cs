@@ -32,7 +32,7 @@ namespace Hearthwoven.Panel
             if (view == null || view.ShowAbout || view.Active != Chapter.Battle || view.Page != "damage") return false;
             var d = Key(KeyCode.A) || Key(KeyCode.LeftArrow) || Button("JoyDPadLeft") ? -1 : Key(KeyCode.D) || Key(KeyCode.RightArrow) || Button("JoyDPadRight") ? 1 : 0;
             var enter = d == 0 && (Key(KeyCode.Return) || Key(KeyCode.KeypadEnter) || Key(KeyCode.Space) || Button("JoyButtonA"));
-            if ((d == 0 && !enter) || PanelModel.VisibleWeaponLines(view).Count == 0) return false;   // no line that opens: A/D turn the chapters as everywhere
+            if ((d == 0 && !enter) || PanelModel.WeaponStops(view).Count == 0) return false;   // no kind row or line that opens: A/D turn the chapters as everywhere
             if (d != 0 ? PanelModel.StepWeapon(state, view, d) : PanelModel.ToggleWeaponCursor(state, view)) { foeCursorRow = null; foeFollow = true; Render(true); }
             return true;
         }

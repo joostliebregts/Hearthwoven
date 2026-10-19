@@ -156,7 +156,7 @@ static class BattleFeedTests
             var greyed = PanelModel.Build(edda, FeedAt(TimeWindow.LastTenMinutes, "Edda")).Windows.Where(c => c.Disabled).ToList();
             Check(tenFoes == feedFights.Sum(f => f.Entries.Count(e => e.EndUtc >= cut)) && tenFoes > 0 && tenFoes < feedFights.Sum(f => f.Foes) && SaysWindow(ten, TimeWindow.LastTenMinutes) &&
                   ten.Windows.Count(c => c.Disabled) == 0 &&
-                  greyed.Select(c => c.Id).SequenceEqual(new[] { "Today", "SevenDays", "ThirtyDays", "SinceInstall" }) && greyed.Take(3).All(c => c.Why == PanelModel.FeedDaysWhy) && greyed[3].Why == PanelModel.FeedAllWhy,
+                  greyed.Select(c => c.Id).SequenceEqual(new[] { "Today", "Yesterday", "ThreeDays", "SevenDays", "ThirtyDays", "SinceInstall" }) && greyed.Take(5).All(c => c.Why == PanelModel.FeedDaysWhy) && greyed[5].Why == PanelModel.FeedAllWhy,
                   "BF 0.8.1 window: 10 min shows " + tenFoes + " foes (those hit since " + cut.ToString("HH:mm") + "), the page names the window in full; every window open on your own feed, the days and All greyed with their own reason on Edda's");
             // the window and the filter kept between sessions: the window the feed showed is noted and written with the view; a fresh game (no window
             // chosen yet) opens the feed on it while the other pages keep Session; 7 days chosen elsewhere shows 7 days on your feed (0.8.5: it
@@ -263,6 +263,33 @@ static class BattleFeedTests
                   feedUi.Contains("FeedPageColumns(col, fights)") && feedUi.Contains("PanelModel.FeedPageEntries(PanelModel.Content(fillView))") && mirror.Contains("const page = feedPageEntries()"),
                   "BF 0.8.2 one track: the Log's columns come from all " + logFights.Count + " fights of the page (" + logFights.Count(Hurt) + " where something hurt you, " + logFights.Count(f => !Hurt(f)) +
                   " where nothing did; " + pageEntries.Count + " entries), in Unity (PanelUi.FeedPageColumns) and the mirror (feedPageEntries), never one fight island's own");
+
+            // 0.9 (Joost: "on the timeline we should get the same kind of little damage bar graph as we do on the log card"): the Timeline draws a
+            // foe's dealt damage as the Log's damage bar (a "Dealt" node, PanelModel.BarFormOf over its dealt parts, on the Log's track width) and its
+            // received words beside it; a foe you never hit gets no bar. Unity does not run here, so the builder's source says it, branch by branch
+            string Code(string c) => System.Text.RegularExpressions.Regex.Replace(c, @"//[^\n]*", "");
+            string Body(string code, string head)
+            {
+                var at = code.IndexOf(head, StringComparison.Ordinal); if (at < 0) return "";
+                var open = code.IndexOf('{', at); int depth = 0;
+                for (int i = open; i >= 0 && i < code.Length; i++) { if (code[i] == '{') depth++; else if (code[i] == '}' && --depth == 0) return code.Substring(open, i - open + 1); }
+                return "";
+            }
+            var ui = Code(feedUi); var tl = Body(ui, "static void FeedTimeline("); var hit = Body(tl, "if (dealt.Count > 0)");
+            int Count(string s, string what) { int n = 0; for (int i = s.IndexOf(what, StringComparison.Ordinal); i >= 0; i = s.IndexOf(what, i + 1, StringComparison.Ordinal)) n++; return n; }
+            var tlView = PanelModel.Build(world, new PanelState { Chapter = Chapter.Battle, Page = { [Chapter.Battle] = PanelModel.FeedPage }, View = { [PanelModel.FeedViewKey] = PanelModel.FeedTimeline } });
+            var tlEntries = Fights(tlView).Where(f => f.Kind == "fight").SelectMany(f => f.Items.Where(e => e.Kind == "entry")).ToList();
+            var tlHit = tlEntries.Where(e => (e.Items ?? new List<Block>()).Any(p => p.Kind == PanelModel.FeedDealt)).ToList();
+            Check(Find(tlView, "feed")?.Tone == PanelModel.FeedTimeline && tlHit.Count > 0 && tlHit.All(e => e.Fraction > 0) &&
+                  tl.Contains("var dealt = (e.Items ?? new List<Block>()).Where(p => p.Kind == PanelModel.FeedDealt).ToList();") &&
+                  Count(tl, "Node(\"Dealt\", r)") == 1 && Count(hit, "Node(\"Dealt\", r)") == 1 &&
+                  hit.Contains("DamageBar(bar, PanelModel.BarFormOf(dealt, true), null, e.Fraction, true, 0, trackW, shares: false)") && hit.Contains("FeedReceived") == false && hit.Contains("rx = x + trackW + FdRecvGap") &&
+                  !tl.Contains("FeedLine(") && !tl.Contains("BtRich(") && Count(tl, "DamageBar(") == 1 &&
+                  ui.Contains("FeedTimeline(col, entries, i + 1 < fights.Count ? (f.Items ?? new List<Block>()).FirstOrDefault(x => x.Kind == \"gap\") : null, FeedTrackW(logCols))") &&
+                  Body(ui, "static void FeedLog(").Contains("var trackW = FeedTrackW(cols);") &&
+                  mirror.Contains("if ((e.items || []).some(p => p.kind === \"dealt\")) return `<div class=\"d fl\">${feedBar(e, trackW)}") && !mirror.Contains("btFeedLine("),
+                  "BF 0.9 Timeline bar: a foe with dealt damage gets a \"Dealt\" damage bar on the Log's track (" + tlHit.Count + " of " + tlEntries.Count +
+                  " Timeline entries in the sample), drawn only in the dealt branch, received words beside it; no dealt, no bar; the mirror the same (btTimelineD, feedBar)");
         }
 
         // ---------- the feed's view, kept between sessions ----------

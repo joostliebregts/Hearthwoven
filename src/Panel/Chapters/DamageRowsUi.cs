@@ -28,13 +28,50 @@ namespace Hearthwoven.Panel
         /// <summary>The rows of one list: <paramref name="rows"/> carry Title, Value (the total), Value2 (the "×N" or null), Icon (or Tone "type"
         /// with Colour), Fraction (the total against the list's largest) and Items: Kind "part" per damage type and an optional Kind "pips".
         /// <paramref name="dealt"/>: damage you dealt (the number and the true line in gold), else damage you received.</summary>
-        static void DamageRows(RectTransform col, IList<Block> rows, bool dealt)
+        static void DamageRows(RectTransform col, IList<Block> rows, bool dealt, Func<string, Action> link = null)
         {
             if (rows == null || rows.Count == 0) return;
             var list = VStack(col, PanelModel.DamageFoeGap);
             float whoW = NameColumn(list, rows), numW = NumberColumn(list, rows.Select(r => r.Value));
-            float trackX = whoW + DrCol + numW + DrCol, trackW = Mathf.Max(80f, Column - trackX);
-            foreach (var row in rows) DamageRow(list, row, dealt, whoW, numW, trackX, trackW);
+            if (rows.Count == 1 && IsPlanMeal(rows[0])) { whoW = PlanSlotsWidth(rows[0]); numW = 0; }   // 0.9.6 Meal plan's pinned meal: the slots alone, no number column, the bar right after them
+            // 0.9.2 Meals by dish: what one serving gives, a column of its own right of the track (the eaten bar gives way)
+            var servW = rows.Any(r => ServingOf(r) != null) ? ServingColumn(list, rows) : 0f;
+            float trackX = whoW + DrCol + numW + DrCol, trackW = Mathf.Max(80f, Column - trackX - (servW > 0 ? DrCol + servW : 0f));
+            foreach (var row in rows)
+            {
+                var r = DamageRow(list, row, dealt, whoW, numW, trackX, trackW, link);
+                if (servW > 0) ServingCell(r, ServingOf(row), Column - servW);
+            }
+        }
+
+        // 0.9.2 Meals by dish, what one serving gives (PanelModel.ServingOf; the mirror's .dr-serv): the bar's longest, its height, the gap between
+        // its parts and from it to the numbers (at the book's 14 px floor, muted)
+        const float DrServBar = 90, DrServH = 10, DrServPartGap = 2, DrServGap = 8, DrServPartMin = 2;
+        static Block ServingOf(Block row) => row?.Items?.FirstOrDefault(i => i.Kind == PanelModel.ServingKind);
+        static float ServingColumn(RectTransform parent, IList<Block> rows)
+        {
+            var measure = Label(parent, "", PanelLook.MinText, PanelLook.Muted); measure.textWrappingMode = TextWrappingModes.NoWrap;
+            float w = 0;
+            foreach (var r in rows) { var s = ServingOf(r); if (s == null) continue; measure.text = s.Text ?? ""; w = Mathf.Max(w, Mathf.Ceil(measure.preferredWidth) + DrTextSlack); }
+            measure.gameObject.SetActive(false); Destroy(measure.gameObject);
+            return DrServBar + DrServGap + w;
+        }
+        // one row's serving on the bar's line: the small bar (its parts as long as their values, the whole on the list's one scale), then its numbers;
+        // a dish the game's data gives no food value: nothing (never a 0)
+        static void ServingCell(RectTransform row, Block s, float x0)
+        {
+            if (s == null) return;
+            var parts = (s.Items ?? new List<Block>()).Where(p => p.Fraction > 0).ToList();
+            var barW = Mathf.Max(parts.Count * DrFillMin, DrServBar * Mathf.Clamp01(s.Fraction2));
+            var room = barW - DrServPartGap * Mathf.Max(0, parts.Count - 1); float x = x0, y = (PanelModel.DamageTrack - DrServH) / 2;
+            foreach (var p in parts)
+            {
+                var w = Mathf.Max(DrServPartMin, room * p.Fraction);
+                var seg = RoundedPart(row, "Serving", Hex(p.Colour, PanelLook.Accent)); seg.pixelsPerUnitMultiplier = DrRadiusScale; seg.rectTransform.Box(x, y, w, DrServH);
+                x += w + DrServPartGap;
+            }
+            var t = Label(row, s.Text ?? "", PanelLook.MinText, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); t.textWrappingMode = TextWrappingModes.NoWrap;
+            t.rectTransform.Box(x0 + DrServBar + DrServGap, 0, Mathf.Ceil(t.preferredWidth) + DrTextSlack, PanelModel.DamageTrack);
         }
 
         // Battle's rows by player (Everyone's Damage and Defence, Last fight; PanelModel.DamagePlayerRows): the caption, then a damage row per player,
@@ -95,7 +132,7 @@ namespace Hearthwoven.Panel
             foreach (var r in rows)
             {
                 measure.text = r.Title ?? "";
-                whoW = Mathf.Max(whoW, DrNameX + Mathf.Ceil(measure.preferredWidth) + 2 + (string.IsNullOrEmpty(r.Value2) ? 0 : 8 + BadgeWidth(parent, r.Value2)));
+                whoW = Mathf.Max(whoW, DrNameX + Mathf.Ceil(measure.preferredWidth) + 2 + (KindMarks(r) ? DrKindMark : 0) + (string.IsNullOrEmpty(r.Value2) ? 0 : 8 + BadgeWidth(parent, r.Value2)));
             }
             measure.gameObject.SetActive(false); Destroy(measure.gameObject);
             return Mathf.Min(whoW, DrWhoMax);
@@ -118,15 +155,15 @@ namespace Hearthwoven.Panel
         // and one scale. PanelModel.DamageWidestNumber never undershoots the run's largest; a later number wider still grows to the left
         static RectTransform dmgRun; static TextMeshProUGUI dmgRunLabel; static float dmgRunNumW, dmgRunWhoW;
 
-        static void DamageRunRow(RectTransform col, Block b)
+        static void DamageRunRow(RectTransform col, Block b, Func<string, Action> link = null)
         {
             if (!(dmgRun != null && dmgRun.parent == col && dmgRun.GetSiblingIndex() == col.childCount - 1))
             {
                 dmgRun = VStack(col, PanelModel.DamageFoeGap); dmgRunLabel = null;
                 dmgRunNumW = NumberColumn(dmgRun, new[] { PanelModel.DamageWidestNumber(b), b.Value }); dmgRunWhoW = NameColumn(dmgRun, new[] { b });   // the weapon kinds' names are short: DrWho
             }
-            float trackX = dmgRunWhoW + DrCol + dmgRunNumW + DrCol, trackW = Mathf.Max(80f, Column - trackX);
-            DamageRow(dmgRun, b, true, dmgRunWhoW, dmgRunNumW, trackX, trackW);
+            float trackX = dmgRunWhoW + DrCol + dmgRunNumW + DrCol, trackW = Mathf.Max(80f, Column - trackX);   // 0.9.5: a kind row's opens mark stands after its name (KindOpens), so its bar keeps the whole track
+            DamageRow(dmgRun, b, true, dmgRunWhoW, dmgRunNumW, trackX, trackW, link);
             // the run's label only while it is still this run's (PanelReuse.cs: a plain text a cleared page left may be handed out again elsewhere)
             if (dmgRunLabel && dmgRunLabel.transform.parent == dmgRun) dmgRunLabel.transform.SetAsLastSibling();
             else { dmgRunLabel = null; if (Labelled(b)) dmgRunLabel = Since(dmgRun, PanelLayout.Text.Floor, b); }
@@ -181,25 +218,129 @@ namespace Hearthwoven.Panel
             }
             if (dmgRunLabel && dmgRunLabel.transform.parent == dmgRun) dmgRunLabel.transform.SetAsLastSibling();   // the run's "Recorded from" line stays after its last row
         }
+        // 0.9.5 (Joost in game: "Can we get a toggle on 'Melee' and 'Bow' etc.."): a weapon kind's row on By weapon shuts or opens the weapon lines under it
+        // (PanelModel.KindRows), as a weapon line that opens does: the whole row a press, lit under the pointer while shut, the book's opens mark right after the
+        // kind's name, before its DPS chip (Joost, 19 Oct: "on the actual name ... closer"), turned down while open; the keys' cursor in the focus ring. The name
+        // column measures the mark's room (NameColumn), so the column keeps its width and the bar its whole track. Mirrored by dmgRows' kind rows in preview/panel-preview.html
+        static void KindOpens(RectTransform row, Block b, Action toggle, float markX)
+        {
+            var ground = RoundedPart(row, "Ground", Color.clear, raycast: true); ground.rectTransform.Stretch(); ground.transform.SetAsFirstSibling();
+            if (!b.Selected) { var lit = row.gameObject.AddComponent<TintOnHover>(); lit.Ground = ground; lit.Lit = BtRowHover; }
+            row.gameObject.AddComponent<Press>().Act = toggle;
+            var r = Node("Head", row); r.Box(markX, 0, PanelLook.ChevronW, PanelModel.DamageTrack);   // the mark's own box on the name's line, after the name
+            OpensMark(r, b.Selected, 0);
+            if (b.Cursor) { FocusRing(row, 0); foeCursorRow = row; }   // the keys' cursor (WeaponKeys), brought into view as a weapon line's
+        }
+
+        // 0.9 Meals' Your combinations: a dish's picture, the gap to the next and the names' gap under them (the mirror's .dr-combo). The picture is What to
+        // use's item picture (UtIcon, 40), the size the panel uses for an item you must recognize (Joost, 18 Oct: "I always look at the icons"; at 22 px
+        // the dishes did not read); the row grows to hold it, the bar stays at the row's top as every damage row's
+        const float DrComboIcon = UtIcon, DrComboGap = 4, DrComboUnder = 2;
+
+        // 0.9.6 Meal plan's pinned meal (Joost, the pinned meal on screen: "just make it efficient with the margin/padding. let's ensure the food text doesn't
+        // need 2 lines. We know what we clicked. Icons only would be good. And then the bar all at one row height"): one row as tall as a slot (DrComboIcon).
+        // The three slots as pictures only, a food's name in a tag under its slot while the pointer is on it (SlotNameTag); a filled slot's click still
+        // empties it. Then the bar on the rest of the row, centred on the slots' height, its legend ("Health 141 · Stamina 141 · first wears off after 25
+        // min") on the line under it, no true-length line (the meal has one length). Nothing picked: the empty track, "Pick foods below" in the legend's
+        // place (PlanMealBar). The mirror: dmgRows' plan row in preview/panel-preview.html; render-check's pinned-meal rule measures it
+        static bool IsPlanMeal(Block row) => row != null && row.Tone == PanelModel.ComboTone && row.Id == PanelModel.MealPlanId;
+        static float PlanSlotsWidth(Block row)
+        {
+            var n = (row.Items ?? new List<Block>()).Count(i => i.Kind == PanelModel.ComboDishKind);
+            return n > 0 ? n * DrComboIcon + (n - 1) * DrComboGap : 0;
+        }
+
+        // the pinned meal's bar, centred on the slots' height (a node of its own, moved once it is drawn); returns the row's height
+        static float PlanMealBar(RectTransform r, BarForm form, Block row, float trackX, float trackW)
+        {
+            var host = Node("Meal", r);
+            float bh;
+            if (form.Rows.Count > 0) bh = DamageBar(host, form, null, row.Fraction, false, trackX, trackW, closing: row.Text, trueLine: false, exact: true);
+            else
+            {
+                var track = RoundedPart(host, "Track", DrTrack); track.pixelsPerUnitMultiplier = DrRadiusScale; track.rectTransform.Box(trackX, 0, trackW, PanelModel.DamageTrack);
+                var top = PanelModel.DamageTrack + PanelModel.DamageInner;
+                if (!string.IsNullOrEmpty(row.Text)) BtText(host, row.Text, trackX, top, trackW, PanelModel.DamageShareLine, PanelLayout.Text.Floor, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
+                bh = top + PanelModel.DamageShareLine;
+            }
+            host.Box(0, Mathf.Max(0, Mathf.Round((DrComboIcon - bh) / 2)), trackX + trackW, bh);
+            return Mathf.Max(DrComboIcon, bh);
+        }
+
+        // a food's name under its slot while the pointer is on it (SwapOnHover), in the page tag's look (PageTag: opaque in the plate's colour, bold at the
+        // book's floor); its own canvas sorts it over the foods that scroll under the pinned meal (as a greyed chip's reason, ReasonTag)
+        static GameObject SlotNameTag(RectTransform row, string words, float x, float top)
+        {
+            var tag = Node("Name", row);
+            tag.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            var canvas = tag.gameObject.AddComponent<Canvas>(); canvas.overrideSorting = true;
+            var root = row.GetComponentInParent<Canvas>();
+            if (root) { canvas.sortingLayerID = root.rootCanvas.sortingLayerID; canvas.sortingOrder = root.rootCanvas.sortingOrder + 5; }
+            var ground = RoundedPart(tag, "Ground", new Color(PlateColour.r, PlateColour.g, PlateColour.b, 1f)); ground.raycastTarget = false; ground.rectTransform.Stretch();
+            var t = Label(tag, words, PanelLook.MinText, BarHover.LitText, style: FontStyles.Bold, align: TextAlignmentOptions.Center);
+            t.textWrappingMode = TextWrappingModes.NoWrap; t.rectTransform.Stretch();
+            tag.Box(x, top + HoverTag.Apart, Mathf.Ceil(t.preferredWidth) + 2 * HoverTag.Pad, PanelModel.DamageBar + HoverTag.Rise);
+            tag.gameObject.SetActive(false);
+            return tag.gameObject;
+        }
         const float DrLevelIndent = 16, DrTrackLeast = 80, DrNameLeast = 20;   // an upgrade level under its weapon a little in; the least room of the words after the damage and of a name
         const float DrSkillBarH = 8, DrSkillBarLeast = 3, DrMarkGap = 6;   // an open skill level: its bar's height and least length; the gap round a change mark
+        const float DrKindMarkGap = 6, DrKindMark = DrKindMarkGap + PanelLook.ChevronW;   // 0.9.5 a kind row's opens mark: its gap after the name (the name's box keeps 2 px slack) and the room it takes
+        static bool KindMarks(Block row) => row.Opens && row.Tone == PanelModel.KindTone;   // a weapon kind's row that shuts or opens its lines (KindOpens)
 
         /// <summary>One damage row in <paramref name="list"/>; returns it, so a page can add a column of its own right of the track (While away's For you).</summary>
-        static RectTransform DamageRow(RectTransform list, Block row, bool dealt, float whoW, float numW, float trackX, float trackW)
+        static RectTransform DamageRow(RectTransform list, Block row, bool dealt, float whoW, float numW, float trackX, float trackW, Func<string, Action> link = null)
         {
             var r = Node("Foe", list);
             var items = row.Items ?? new List<Block>();
             var pips = items.FirstOrDefault(i => i.Kind == "pips");
             float h = PanelModel.DamageTrack, line = PanelModel.DamageTrack;
             // the name column, centred on the bar's track: picture, name (a long one gives way), the "×N" chip right after it
-            if ((row.Icon ?? "").StartsWith("vocab:weapon-", System.StringComparison.Ordinal)) BtIcon(r, row.Icon, PanelLook.Gold, 0, 1, 22);   // a weapon kind (By weapon)
+            var plan = IsPlanMeal(row);   // 0.9.6 Meal plan's pinned meal: one row, the slots as pictures only (PlanMealBar)
+            if (row.Tone == PanelModel.ComboTone)   // 0.9 Meals' Your combinations: the dishes' pictures side by side, their names on the line under them
+            {
+                var dishes = items.Where(i => i.Kind == PanelModel.ComboDishKind).ToList();
+                for (int k = 0; k < dishes.Count; k++)
+                {
+                    var dx = k * (DrComboIcon + DrComboGap);
+                    if (dishes[k].Tone == PanelModel.PlanEmptyTone)   // 0.9.2 Plan a meal: an empty slot, dashed as a piece not made yet (Armor sets)
+                    {
+                        var slot = Node("Slot", r); slot.Box(dx, 0, DrComboIcon, DrComboIcon); DashEdge(slot, DrComboIcon, DrComboIcon, NotMadeEdge);
+                        continue;
+                    }
+                    BtMarker(r, dishes[k].Icon, dx, 0, DrComboIcon);
+                    var empty = !string.IsNullOrEmpty(dishes[k].Link) ? link?.Invoke(dishes[k].Link) : null;
+                    if (empty != null || (plan && !string.IsNullOrEmpty(dishes[k].Title)))   // a filled slot: its click empties it; the pinned meal's says its food on hover
+                    {
+                        var hit = Img(r, "Slot", null, Color.clear, raycast: true); hit.rectTransform.Box(dx, 0, DrComboIcon, DrComboIcon);
+                        if (empty != null) hit.gameObject.AddComponent<Press>().Act = empty;
+                        if (plan && !string.IsNullOrEmpty(dishes[k].Title)) hit.gameObject.AddComponent<SwapOnHover>().On = SlotNameTag(r, dishes[k].Title, dx, DrComboIcon);
+                    }
+                }
+                if (plan) h = DrComboIcon;   // 0.9.6: no names under the pinned meal's slots (their hover says them)
+                else
+                {
+                    // the names wrap onto a second line rather than give way (three long names are wider than the column; never a cut name)
+                    var names = BtText(r, row.Title, 0, DrComboIcon + DrComboUnder, whoW, DrNoteH, PanelLook.MinText, PanelLook.Muted, TextAlignmentOptions.TopLeft);
+                    names.textWrappingMode = TextWrappingModes.Normal; names.overflowMode = TextOverflowModes.Overflow;
+                    var nh = Mathf.Max(DrNoteH, Mathf.Ceil(names.GetPreferredValues(row.Title ?? "", whoW, 0).y));
+                    names.rectTransform.sizeDelta = new Vector2(names.rectTransform.sizeDelta.x, nh);
+                    h = Mathf.Max(h, DrComboIcon + DrComboUnder + nh);
+                }
+            }
+            else if ((row.Icon ?? "").StartsWith("vocab:weapon-", System.StringComparison.Ordinal)) BtIcon(r, row.Icon, PanelLook.Gold, 0, 1, 22);   // a weapon kind (By weapon)
             else BattleSourcePicture(r, row);   // a foe's trophy, a cause's or a damage type's swatch
-            float room = whoW - DrNameX, chip = string.IsNullOrEmpty(row.Value2) ? 0 : BadgeWidth(r, row.Value2) + 8;
-            var name = BtText(r, row.Title, DrNameX, 0, room, line, DrName, PanelLook.Text);
-            var nw = Mathf.Max(0, Mathf.Min(Mathf.Ceil(name.preferredWidth) + 2, room - chip));
-            name.rectTransform.sizeDelta = new Vector2(nw, name.rectTransform.sizeDelta.y);
-            if (chip > 0) Badge(r, row.Value2, DrNameX + nw + 8, (line - BadgeH) / 2);
-            if (pips != null)
+            float room = whoW - DrNameX, chip = string.IsNullOrEmpty(row.Value2) ? 0 : BadgeWidth(r, row.Value2) + 8, mark = KindMarks(row) ? DrKindMark : 0, markX = 0;
+            if (row.Tone != PanelModel.ComboTone)
+            {
+                var name = BtText(r, row.Title, DrNameX, 0, room, line, DrName, PanelLook.Text);
+                var nw = Mathf.Max(0, Mathf.Min(Mathf.Ceil(name.preferredWidth) + 2, room - chip - mark));
+                name.rectTransform.sizeDelta = new Vector2(nw, name.rectTransform.sizeDelta.y);
+                markX = DrNameX + nw + DrKindMarkGap;   // 0.9.5 a kind row's opens mark right after its name (KindOpens), its chip after the mark
+                if (chip > 0) Badge(r, row.Value2, DrNameX + nw + mark + 8, (line - BadgeH) / 2);
+            }
+            if (row.Tone == PanelModel.ComboTone) { }   // its names stand under its pictures (above)
+            else if (pips != null)
             {
                 PipsAt(r, pips, DrNameX, line + 6, room);   // filled = defeated, ring = got away
                 h = Mathf.Max(h, line + 6 + PipsHeight(pips, room));
@@ -218,8 +359,17 @@ namespace Hearthwoven.Panel
             }
             var form = PanelModel.BarFormOf(items.Where(i => i.Kind == "part").ToList(), true);
             var mix = items.Where(i => i.Kind == "mix").ToList();
-            if (form.Rows.Count > 0) h = Mathf.Max(h, DamageBar(r, form, row.Tone == PanelModel.DamagePlayerTone ? PanelModel.BarFormOf(mix) : null, row.Fraction, dealt, trackX, trackW, shares: row.Tone != PanelModel.DamageNoLineTone, closing: row.Text));
+            // 0.9.2 Meals' Your combinations: the bar its food values on the list's one scale from zero (no floor), the thin line its meals (Fraction2)
+            var combo = row.Tone == PanelModel.ComboTone;
+            if (plan) h = PlanMealBar(r, form, row, trackX, trackW);   // 0.9.6: centred on the slots, its legend under it, one row
+            else if (form.Rows.Count > 0) h = Mathf.Max(h, DamageBar(r, form, row.Tone == PanelModel.DamagePlayerTone ? PanelModel.BarFormOf(mix) : null, row.Fraction, dealt, trackX, trackW, shares: row.Tone != PanelModel.DamageNoLineTone, closing: row.Text,
+                                                              exact: combo, trueFraction: combo ? row.Fraction2 : -1f));
             else if (!string.IsNullOrEmpty(row.Text)) BtText(r, row.Text, trackX, 0, trackW, line, PanelLayout.Text.Body, PanelLook.Muted, style: FontStyles.Italic);   // a player with no number: their words where the bar would be
+            if (!string.IsNullOrEmpty(row.Link) && link?.Invoke(row.Link) is Action load)   // 0.9.2: a row of Your combinations loads it into Plan a meal
+            {
+                if (row.Opens) KindOpens(r, row, load, markX);   // 0.9.5: a weapon kind's row on By weapon shuts or opens its weapon lines
+                else { var hit = Img(r, "Load", null, Color.clear, raycast: true); hit.rectTransform.Stretch(); hit.transform.SetAsFirstSibling(); hit.gameObject.AddComponent<Press>().Act = load; }
+            }
             Size(r, -1, h);
             return r;
         }
@@ -265,11 +415,14 @@ namespace Hearthwoven.Panel
         // the part too. No object per part for it (0.8.1's speed): the parts are the pointer targets, the entry keeps its one label
         // closing (0.8.5): words after the line's entries, a row with parts' Text ("73 % got through", PanelModel.ThroughLine): one label, no key
         // trueLine false (0.8.5, the overview's What hurt you): one row has nothing to compare with, so no true-length line under it
-        static float DamageBar(RectTransform r, BarForm form, BarForm mix, float fraction, bool dealt, float x0, float trackW, bool shares = true, string closing = null, bool trueLine = true)
+        // exact (0.9.2, Meals' Your combinations): the bar from zero, no floor (its parts as long as their values); trueFraction (0 or more): the thin
+        // line's own length (the combination's meals), else the bar's fraction
+        static float DamageBar(RectTransform r, BarForm form, BarForm mix, float fraction, bool dealt, float x0, float trackW, bool shares = true, string closing = null, bool trueLine = true,
+                               bool exact = false, float trueFraction = -1f)
         {
             int n = form.Rows.Count;
             var track = RoundedPart(r, "Track", DrTrack); track.pixelsPerUnitMultiplier = DrRadiusScale; track.rectTransform.Box(x0, 0, trackW, PanelModel.DamageTrack);
-            var barW = trackW * PanelModel.DamageBarWidth(fraction);
+            var barW = trackW * (exact ? PanelModel.DamageTrueWidth(fraction) : PanelModel.DamageBarWidth(fraction));
             var bar = Node("Bar", r); bar.Box(x0, (PanelModel.DamageTrack - PanelModel.DamageBar) / 2, barW, PanelModel.DamageBar);
             var hover = r.gameObject.AddComponent<BarHover>(); hover.Init(n);
             // the parts on the bar's own width plus one gap (the first starts at the bar's start, the last ends at its end), each at least DamagePartMin wide
@@ -285,7 +438,7 @@ namespace Hearthwoven.Panel
                 seg.rectTransform.Box(spans[k].from * span, 0, w, PanelModel.DamageBar); mid[k] = spans[k].from * span + w / 2;
                 hover.Parts[k] = seg.rectTransform; var hp = seg.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = k;
                 if (stopped) { StoppedPart(seg, row, w, c); continue; }
-                if (string.IsNullOrEmpty(row.Value) || row.Other) continue;   // the folded rest carries no number inside
+                if (string.IsNullOrEmpty(row.Value) || row.Other || row.Part?.Tone == PanelModel.ComboTone) continue;   // the folded rest, and a combination's part (its number in front is meals), carry no number inside
                 BarDigits(seg.transform, row.Value, w, SegmentInk(c));   // the number inside the part where it fits at the book's floor, in the ink that reads on the colour
             }
             HoverRing(bar, hover);
@@ -294,7 +447,7 @@ namespace Hearthwoven.Panel
             var top = PanelModel.DamageTrack + PanelModel.DamageInner;
             if (trueLine)
             {
-                RoundedPart(r, "True", dealt ? DrTrueDealt : DrTrueReceived).rectTransform.Box(x0, top, Mathf.Max(2f, trackW * PanelModel.DamageTrueWidth(fraction)), PanelModel.DamageTrue);
+                RoundedPart(r, "True", dealt ? DrTrueDealt : DrTrueReceived).rectTransform.Box(x0, top, Mathf.Max(2f, trackW * PanelModel.DamageTrueWidth(trueFraction >= 0 ? trueFraction : fraction)), PanelModel.DamageTrue);
                 top += PanelModel.DamageTrue + PanelModel.DamageInner;
             }
             // no entry keys the parts (no share line, or a player's line of their damage by type), or (0.8.5) a row of damage dealt with its after,

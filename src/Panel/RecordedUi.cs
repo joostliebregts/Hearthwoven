@@ -84,10 +84,11 @@ namespace Hearthwoven.Panel
 
         // B38: what rides at the right end of the top row: the view switch (its key, its chips), then the About button with its key; the
         // node is measured as laid out (its width: TopClusterWidth). shortAbout: "Numbers" for "About these numbers"
-        static RectTransform TopCluster(RectTransform parent, Block sw, Block about, bool shortAbout, Func<string, Action> link, string note = null)
+        static RectTransform TopCluster(RectTransform parent, Block sw, Block about, bool shortAbout, Func<string, Action> link, string note = null, IList<Block> links = null)
         {
             var row = Line(parent, 8, TextAnchor.MiddleRight);
             if (!string.IsNullOrEmpty(note)) { var n = Label(row, note, PanelLook.MinText, PanelLook.Muted, style: FontStyles.Italic, align: TextAlignmentOptions.MidlineRight); n.textWrappingMode = TextWrappingModes.NoWrap; }   // 0.8 layout D+: a fellow's book, whose copy and when
+            foreach (var hl in links ?? new List<Block>()) Chip(row, hl.Title, hl.Icon, false, link?.Invoke(hl.Id));   // 0.9: a Deeds page's links (Feed, Sets), before its views and About (Chapters/DeedFeedModel.cs StripLinks)
             if (sw != null) SwitchChips(row, sw, link);
             if (sw != null && about != null) Size(Node("Gap", row), 8, 1);
             if (about != null) AboutButton(row, about, link, shortAbout ? PanelModel.AboutShort : null);
@@ -110,11 +111,18 @@ namespace Hearthwoven.Panel
             if (spark != null)   // its columns only; the span ("since 1 Oct") on hover and in About these numbers (Chapters/GrowthLinesUi.cs, PageHead.cs)
             {
                 sparkBox = Spark(right, spark, false, caption: false);
-                if (!string.IsNullOrEmpty(spark.Title))
+                // 0.9: your line opens the deed's History (its Id, Chapters/DeedHistory.cs), the word after the columns says so
+                var history = string.IsNullOrEmpty(spark.Id) ? null : link?.Invoke(spark.Id);
+                if (history != null) { var word = Label(sparkBox, PanelModel.HistoryWord, PanelLook.MinText, PanelLook.Gold); word.textWrappingMode = TextWrappingModes.NoWrap; Size(word, -1, SparkH); }   // as tall as the columns: the hero keeps its height
+                if (!string.IsNullOrEmpty(spark.Title) || history != null)
                 {
                     var hit = sparkBox.gameObject.AddComponent<Image>(); hit.color = new Color(0f, 0f, 0f, 0f); hit.raycastTarget = true;
-                    var tag = ReasonTag(sparkBox, spark.Title); tag.gameObject.SetActive(false);
-                    sparkBox.gameObject.AddComponent<SwapOnHover>().On = tag.gameObject;
+                    if (!string.IsNullOrEmpty(spark.Title))
+                    {
+                        var tag = ReasonTag(sparkBox, spark.Title); tag.gameObject.SetActive(false);
+                        sparkBox.gameObject.AddComponent<SwapOnHover>().On = tag.gameObject;
+                    }
+                    if (history != null) sparkBox.gameObject.AddComponent<Press>().Act = history;
                 }
             }
             if (s != null)

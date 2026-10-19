@@ -65,7 +65,7 @@ static class FeatsTests
         var brewers = Brewers(when); var seven = Brewers(when, "Ylva", "Bryn", "Sigrid");
         (string name, PanelInput inp, PanelState st)[] shots = new (string name, PanelInput inp, PanelState st)[]
         {
-            ("feats", full, Feats("earned")),
+            ("feats", full, Feats("earned")),   // 0.9.2: no card chosen when the page opens: the whole grid, no detail area
             ("feats-ferryman", edda, Feats("earned", "ferryman", "Edda")),
             ("feats-heavykeel", edda, Feats("earned", "heavykeel", "Edda")),
             ("feats-drover", full, Feats("earned", "drover")),
@@ -73,7 +73,9 @@ static class FeatsTests
             ("deeds-taming-led", full, Deeds("taming")),
             ("feats-unsung", full, Feats("unsung", "stoodfast")),
             ("feats-unsung-waiting", older, Feats("unsung", "heavykeel", "Tor")),
-            ("feats-together", full, Feats("together")),
+            ("feats-together", full, Feats("together")),   // none chosen: the full list, the More below cue over the grid's foot
+            ("feats-unsung-none", full, Feats("unsung")),   // none chosen, the cue over the grid's foot
+            ("feats-together-chosen", full, Feats("together", "meadhall")),   // a card chosen: the detail area under the grid, the cue still over it
             ("feats-together-early", FeatsSample.EarlyGroup(when), Feats("together", "copperwed")),   // 0.7: the Swamp's feats wait, Copper Wed to Tin under its riddle, The Hall Well Fed I
             ("feats-together-wellfed", FeatsSample.EarlyGroup(when), Feats("together", "wellfed")),
             ("feats-together-tor", tor, Feats("together", "bogiron", "Tor")),   // a fellow's book: the same group numbers
@@ -85,6 +87,25 @@ static class FeatsTests
             ("feats-tor-unsung", tor, Feats("unsung", "keptfires", "Tor")),
             ("feats-titles", full, Feats("titles")),   // B18: every title, the held ones with why, the rest with what earns them
             ("feats-titles-tor", tor, Feats("titles", player: "Tor")),
+            // 0.9 New feats (test-panel/FeatsNewTests.cs): the New feats first, each with its mark until it is chosen (0.9.2: the page opens on none)
+            ("feats-new", FeatsSample.WithNew(full, false, 2), Feats("earned")),   // one New card left, "· 1 new"
+            ("feats-new-two", FeatsSample.WithNew(full, false, 3), Feats("earned")),   // two left, "· 2 new"
+            ("feats-new-together", FeatsSample.WithNew(full, true, 3), Feats("together")),   // the group's
+            ("feats-new-unsung", FeatsSample.WithNew(full, false, 2), Feats("unsung")),   // from Unsung: the Earned entry keeps its gold dot
+            // 0.9.5 Mark read (test-panel/FeatsReadAllTests.cs): the action in the strip while the page has New cards, and the page after it
+            ("feats-markread", FeatsReadAllTests.Both(full, 3, 2), Feats("earned")),   // "Mark 5 read": Earned's three and Together's two
+            ("feats-markread-many", FeatsReadAllTests.Both(full, 99, 99), Feats("earned")),   // every tier New: the longest count, the line and the field still whole
+            ("feats-markread-together", FeatsReadAllTests.Both(full, 3, 2), Feats("together")),
+            ("feats-markread-done", FeatsReadAllTests.Read(FeatsReadAllTests.Both(full, 3, 2)), Feats("earned")),   // after it: no action, no New mark, no dot
+            // 0.9.1 feats, batch 2 (FeatsBatch2Tests): the Armsman's weapon styles on Unsung, a new hook's feat earned, One Crew on Together
+            ("feats-batch2-armsman-axes", full, Feats("unsung", "axes")),
+            ("feats-batch2-armsman", full, Feats("unsung", "swords")),
+            ("feats-batch2-earned-storm", full, Feats("earned", "throughstorm")),
+            ("feats-batch2-earned", full, Feats("earned", "longroad")),
+            ("feats-batch2-together", full, Feats("together", "onecrew")),
+            // 0.9.2 Together, batch 3 (TogetherBatch3Tests): a shared feat and a set feat chosen
+            ("feats-batch3-together-longtable", full, Feats("together", "longtable")),
+            ("feats-batch3-together", full, Feats("together", "felledtogether")),
         }.Concat(Joost() is PanelInput j ? new[] { ("feats-joost-unsung", j, Feats("unsung", "keptfires")), ("feats-joost-earned", j, Feats("earned")), ("feats-joost-together", j, Feats("together")), ("feats-joost-defense-30min", JoostWall(), Defence(TimeWindow.LastThirtyMinutes)), ("feats-joost-defense-all", JoostWall(), Defence(TimeWindow.SinceInstall)), ("feats-joost-titles", JoostWall(), Feats("titles", "miner")) } : new (string, PanelInput, PanelState)[0]).ToArray();
         return string.Join(",\n", shots.Select(s =>
         {
@@ -164,13 +185,15 @@ static class FeatsTests
         if (j == null) return fails;
         var own = PanelModel.FeatDefs.Where(d => !d.Group).ToList();
         var values = own.ToDictionary(d => d.Id, d => PanelModel.FeatValue(d, j));
-        Check(own.All(d => PanelModel.FeatTier(d, j) == 0), "joost: no feat is earned on his real numbers (" + string.Join(", ", own.Select(d => d.Id + "=" + values[d.Id].ToString("0.##"))) + ")");
+        Check(own.Where(d => d.Id != "sidebyside" && d.Id != "manylands").All(d => PanelModel.FeatTier(d, j) == 0) && PanelModel.FeatTier(PanelModel.FeatById("sidebyside"), j) == 1 && PanelModel.FeatTier(PanelModel.FeatById("manylands"), j) == 2,
+              "joost: on his real numbers only his own record's lines are crossed (Side by Side I: 4 boss fights won with fellows; Many Lands Walked II: 5 lands) (" + string.Join(", ", own.Select(d => d.Id + "=" + values[d.Id].ToString("0.##"))) + ")");
         Check(values["waymate"] == 0 && values["keptfires"] == 0 && values["turnedblades"] == 0 && values["arms"] == 0 && values["fulltable"] == 0,
               "joost: the zeros are real: no fellow's grave opened in his record, nothing into smelters and no parries since 8 Oct, his own food and gear on himself do not count");
         var unsung = PanelModel.Build(j, new PanelState { Chapter = Chapter.Feats, FeatSel = "keptfires", Page = { [Chapter.Feats] = "unsung" } });
         var cards = PanelModel.Content(unsung).First(b => b.Kind == "feats").Items;
         string NoteOf(string id) => cards.Single(c => c.Id == id).Note;
-        Check(cards.Count == 16 && cards.All(c => !string.IsNullOrEmpty(c.Note)), "joost: all 16 Unsung cards say why they read what they read: " + string.Join("; ", cards.Select(c => c.Id + "=" + c.Note)));
+        var jUnsung = PanelModel.FeatDefs.Count(d => !d.Group && PanelModel.OwnVisible(d, j) && PanelModel.FeatTier(d, j) == 0);
+        Check(cards.Count == jUnsung && cards.All(c => !string.IsNullOrEmpty(c.Note)), "joost: all " + jUnsung + " Unsung cards say why they read what they read: " + string.Join("; ", cards.Select(c => c.Id + "=" + c.Note)));
         Check(NoteOf("keptfires") == "counting from 8 Oct" && NoteOf("shieldwall") == "counting from 8 Oct" && NoteOf("drover") == "counting from 8 Oct",
               "joost: a feat counted on this PC says it is counted from his install day (8 Oct), not from the character's start (0.7, hard case 15)");
         Check(new[] { "fulltable", "feastgiver", "arms", "ferryman" }.All(id => NoteOf(id) == PanelModel.NeedsFellows), "joost: a feat worked out from fellows says it needs fellows who share (none shared that evening)");
@@ -197,7 +220,8 @@ static class FeatsTests
                              s.IndexOf("unlock", StringComparison.OrdinalIgnoreCase) < 0 && s.IndexOf("friend", StringComparison.OrdinalIgnoreCase) < 0),
               "feats words: no dash, no \"at least\", never \"achievement\" or \"unlock\" (the game's and the platform's words), \"fellow players\" never \"friends\"");
         var usedFamilies = defs.Select(d => d.Family).Distinct().ToList();
-        Check(usedFamilies.All(f => PanelModel.SagaTitles.Any(t => t.Id == f) || f == "helper"), "feats table: every feat sits under a title family's emblem (Waymate has no title yet: the helper's)");
+        Check(usedFamilies.All(f => PanelModel.SagaTitles.Any(t => t.Id == f) || new[] { "helper", "delver", "archer", "mage", "melee" }.Contains(f)) && usedFamilies.All(f => PanelModel.FeatFamily(f).id == f),
+              "feats table: every feat sits under a title family's emblem, or a family named without a title (the helper's, 0.9: Delver, Bowhand, Staffbearer; 0.9.1: Armsman), each with its colour");
         Check(PanelModel.FeatDefs.Where(d => d.Needs != null).Select(d => d.Id).OrderBy(x => x).SequenceEqual(new[] { "born", "drover", "heavykeel", "ironforge", "longlead", "oreroad" }),
               "feats table: Ore Road, Heavy Keel, Drover, Long Lead, Born in Your Care and Iron for the Forge (the server's book) wait for their data key");
 
@@ -228,16 +252,21 @@ static class FeatsTests
               "chapter: its own left list (Earned, Unsung, Together, Titles); Deeds no longer has a Feats entry");
         var qe = new PanelState(); PanelModel.StepChapter(qe, 1); var qe2 = new PanelState { Chapter = Chapter.Feats }; PanelModel.StepChapter(qe2, 1); var qe3 = new PanelState { Chapter = Chapter.Skills }; PanelModel.StepChapter(qe3, 1);
         Check(qe.Chapter == Chapter.Feats && qe2.Chapter == Chapter.Company && qe3.Chapter == Chapter.Deeds, "chapter: Q/E follow the tab row: Deeds, Feats, Company ... Skills, then Deeds again");
-        Check(feats.Page == "earned" && feats.Heading == "Earned feats" && Find(feats, "switch") == null,
-              "page: Earned is its own page under its heading, no Earned / Unsung switch (the list says it)");
-        Check(Says(feats, PanelModel.FeatsDefinition) && Says(feats, "8 of 16") && Says(Page(full, "unsung"), PanelModel.UnsungDefinition) && !PanelModel.FeatsDefinition.Contains("rank"),
-              "page: the page says what a feat is (or what Unsung means) and how many of yours are earned (8 of 16)");
+        Check(feats.Page == "earned" && feats.Heading == "Earned feats" && Find(feats, "switch", b => b.Id != PanelModel.FeatsIntroKey) == null,
+              "page: Earned is its own page under its heading, no Earned / Unsung switch (the list says it; the strip carries only the page's line, FeatLookTests)");
+        var shownOwn = PanelModel.FeatDefs.Count(d => !d.Group && PanelModel.OwnVisible(d, full));
+        Check(Says(feats, PanelModel.FeatsDefinition) && Says(feats, "20 of " + shownOwn) && Says(Page(full, "unsung"), PanelModel.UnsungDefinition) && !PanelModel.FeatsDefinition.Contains("rank"),
+              "page: the page says what a feat is (or what Unsung means) and how many of yours are earned (20 of " + shownOwn + ", a land's own feat counted once the land is found)");
         var grid = Find(feats, "feats");
-        Check(grid.Items.Select(c => c.Title).SequenceEqual(new[] { "Kept the Fires", "Heavy Keel", "Ferryman", "Shield Wall", "Unbroken", "Drover", "Long Lead", "Waymate" }),
-              "page: Earned lists the eight earned feats in the table's order (title families), not by size or rarity: " + string.Join(", ", grid.Items.Select(c => c.Title)));
-        Check(grid.Items.All(c => c.Tone == "earned" && c.Level >= 1 && c.Icon == PanelModel.FeatIcon(PanelModel.FeatById(c.Id))), "page: earned cards carry their feat's picture (the family emblem, or Codex's own line picture: Waymate, the young, the lead rope) and their tier");
-        Check(grid.Items.Count(c => c.Selected) == 1 && grid.Items[0].Selected, "page: the first card is selected on open, so the detail area is never empty");
-        var detail = Find(feats, "featdetail");
+        Check(grid.Items.Select(c => c.Title).SequenceEqual(new[] { "Kept the Fires", "Heavy Keel", "Ferryman", "Crewmate", "Shield Wall", "Unbroken", "Many Lands Walked", "Groundbreaker", "Timber for the Hall",
+                                                           "Every Grove", "Stone for the Walls", "Every Field", "Tapped the Root", "Drover", "Long Lead", "Fish for the Hall", "Waters of Every Land",
+                                                           "A Fish to Tell Of", "Waymate", "Fed by Many Hands" }),
+              "page: Earned lists the twenty earned feats in the table's order (title families), not by size or rarity: " + string.Join(", ", grid.Items.Select(c => c.Title)));
+        Check(grid.Items.All(c => c.Tone == "earned" && c.Level >= 1 && c.Icon == PanelModel.FeatScene(c.Id, PanelModel.FeatIcon(PanelModel.FeatById(c.Id)), PanelModel.SceneExists)), "page: earned cards carry their feat's picture (0.9.1 its own drawn scene; without one the family emblem or Codex's line picture) and their tier");
+        Check(grid.Items.Count(c => c.Selected) == 0 && Find(feats, "featdetail") == null, "page (0.9.2, Joost: \"show me the full list before I select anything\"): no card is chosen when the page opens, and there is no detail area");
+        var opened = Page(full, more: s => s.FeatSel = "keptfires");
+        var detail = Find(opened, "featdetail");
+        Check(Find(opened, "feats").Items.Single(c => c.Selected).Id == "keptfires", "page: a chosen card shows in the detail area under the grid");
         Check(detail != null && detail.Id == grid.Items[0].Id && detail.Title == "Kept the Fires" && detail.Value.Contains("Tier I") && detail.Value.Contains("II at 5 000") && detail.Colour == PanelModel.TierColours[1], "detail: one fixed area under the grid shows the selected feat (name, tier in bronze, the next tier)");
         var tiers = Rules(detail).Split(" | ");
         Check(tiers.Length == 3 && tiers[0].StartsWith("[x] I ") && tiers[0].Contains("1 000") && tiers[1].StartsWith("[ ] II ") && tiers[1].Contains("5 000") && tiers[2].StartsWith("[ ] III ") && tiers[2].Contains("20 000"),
@@ -267,7 +296,7 @@ static class FeatsTests
         // the Unsung view: the rule of an unearned feat, honest captions
         var unsung = Page(full, "unsung");
         var ug = Find(unsung, "feats");
-        Check(ug.Items.All(c => c.Level == 0 && (c.Tone == "unsung" && !string.IsNullOrEmpty(c.Text) && c.Text.Length <= 22 || c.Tone == PanelModel.FeatWaitingTone && c.Text == PanelModel.NotCountedShort)) && ug.Items.Count == PanelModel.OwnFeatCount - 8, "unsung: the other " + ug.Items.Count + " feats, grey, each with its rule in a few words on the tile (the ones not counted yet say so)");
+        Check(ug.Items.All(c => c.Level == 0 && (c.Tone == "unsung" && !string.IsNullOrEmpty(c.Text) && c.Text.Length <= 22 || c.Tone == PanelModel.FeatWaitingTone && c.Text == PanelModel.NotCountedShort)) && ug.Items.Count == shownOwn - 20, "unsung: the other " + ug.Items.Count + " feats, grey, each with its rule in a few words on the tile (the ones not counted yet say so)");
         Check(ug.Items.Where(c => c.Tone == PanelModel.FeatWaitingTone).Select(c => c.Id).OrderBy(x => x).SequenceEqual(defs.Where(d => !d.Group && PanelModel.FeatWaiting(d, full)).Select(d => d.Id).OrderBy(x => x)) && ug.Items.Single(c => c.Title == "Stood Fast").Tone == "unsung",
               "unsung: exactly the feats whose data is not counted yet carry the waiting tone and the line \"not counted yet\"");
         // a fellow whose sender is from before the bests were shared: Heavy Keel and Long Lead have no data key from them (older version)
@@ -287,8 +316,8 @@ static class FeatsTests
         Check(Find(unsungPicked, "featdetail").Title == "Turned Blades" && Find(unsungPicked, "feats").Items.Single(c => c.Selected).Id == "turnedblades" &&
               Find(unsungPicked, "featdetail").Items.Single(x => x.Kind == "caveat").Text.Contains("Tower shields never parry"),
               "unsung: the detail area follows the selection (the Unsung view with an unearned feat's rule)");
-        var strayed = Page(full, more: s => s.FeatSel = "turnedblades");   // a selection from the other view: this view takes its first card
-        Check(Find(strayed, "featdetail").Id == Find(strayed, "feats").Items[0].Id, "page: a selection that is not in the view shown falls back to the view's first card");
+        var strayed = Page(full, more: s => s.FeatSel = "turnedblades");   // a selection from the other view: this view has none
+        Check(Find(strayed, "featdetail") == null && !Find(strayed, "feats").Items.Any(c => c.Selected), "page: a selection that is not in the view shown chooses nothing there (0.9.2: no first card by itself)");
 
         // ---------- keys: A/D choose, F flips, the footer says so ----------
         Check(feats.Keys.Contains("[A/D] Feat") && feats.Keys.Contains("[Q/E] Chapter") && feats.Keys.Contains("[W/S] Page") && !feats.Keys.Any(k => k.Contains("Q/E·A/D")) && !feats.Keys.Any(k => k.Contains("View")),
@@ -296,11 +325,12 @@ static class FeatsTests
         Check(!Page(full, "cooking").Keys.Contains("[A/D] Feat") && Page(full, "cooking").Keys.Contains("[Q/E·A/D] Chapter"), "keys: other pages keep A/D for the chapters");
         var step = new PanelState { Chapter = Chapter.Feats };
         var seen = new List<string>();
-        for (int k = 0; k < 9; k++) { var v = PanelModel.Build(full, step); PanelModel.StepFeat(step, v, 1); seen.Add(step.FeatSel); }
-        Check(seen.SequenceEqual(new[] { "heavykeel", "ferryman", "shieldwall", "unbroken", "drover", "longlead", "waymate", "keptfires", "heavykeel" }), "keys: D moves to the next card, left to right, and wraps from the last to the first: " + string.Join(", ", seen));
+        for (int k = 0; k < 21; k++) { var v = PanelModel.Build(full, step); PanelModel.StepFeat(step, v, 1); seen.Add(step.FeatSel); }
+        Check(seen.SequenceEqual(new[] { "keptfires", "heavykeel", "ferryman", "crewmate", "shieldwall", "unbroken", "manylands", "groundbreaker", "timber", "everygrove", "stonewalls", "everyfield", "tappedroot",
+                                         "drover", "longlead", "fishhall", "everywater", "fishtotell", "waymate", "fedbymany", "keptfires" }), "keys: with none chosen D chooses the first card (0.9.2), then moves to the next, left to right, and wraps from the last to the first: " + string.Join(", ", seen));
         var back = new PanelState { Chapter = Chapter.Feats };
         PanelModel.StepFeat(back, PanelModel.Build(full, back), -1);
-        Check(back.FeatSel == "waymate", "keys: A from the first card wraps to the last");
+        Check(back.FeatSel == "fedbymany", "keys: with none chosen A chooses the last card");
         Check(Find(unsung, "feats").Tone == "unsung" && !PanelModel.StepView(new PanelState { Chapter = Chapter.Feats }, feats, 1), "keys: Unsung is a list entry (W/S), no view switch to flip");
         Check(!PanelModel.StepFeat(new PanelState(), new PanelView(), 1), "keys: a page without feat cards has nothing to step");
         // B31 (Joost in game 0.7): rows 58 apart, a 200 px view, 300 px of range; scrolled to 240, a hover chooses a card in row 4 (232-284)
@@ -326,10 +356,11 @@ static class FeatsTests
         var overview = Page(full, "overview");
         var known = Find(overview, "knownfor");
         Check(known != null && known.Title == "Known for" && known.Id == "Feats/earned" && known.Items.Count == 3 && known.Items.All(i => i.Colour == PanelModel.TierColour((int)i.Level, i.Count)), "known for: Deeds > Overview has one line with up to three feats");
-        Check(known.Items.Select(i => i.Title).SequenceEqual(new[] { "Drover", "Unbroken", "Kept the Fires" }),
+        Check(known.Items.Select(i => i.Title).SequenceEqual(new[] { "A Fish to Tell Of", "Drover", "Many Lands Walked" }),   // A Fish to Tell Of at III, then tier II each; those read from the record carry no date
               "known for: the highest tier first, then the most recent (no comparison with anyone else): " + string.Join(", ", known.Items.Select(i => i.Title)));
         Check(Find(Page(full, "overview", s => s.View["Deeds/overview/view"] = "unsung"), "knownfor") == null, "known for: not on the Unsung view");
         var none = Full(); none.Feats = new FeatsLedger(); none.Events = new SessionEvents(); none.Character = new Dictionary<string, float>(); none.Fellows = null;
+        none.KnownBiomes = null; none.PiecesPlaced = new Dictionary<string, float>(); none.ItemsPickedUp = new Dictionary<string, float>(); none.ItemsCrafted = new Dictionary<string, float>(); none.Harvested = null; none.Baseline = null;   // 0.9: the records the new feats read
         Check(Find(Page(none, "overview"), "knownfor") == null && Find(Page(none), "note")?.Text == PanelModel.FeatsNone, "known for: nobody earned anything: no line, and the Feats page says so");
         var bandBlock = Find(Page(full, "defense", chapter: Chapter.Battle), "featband"); var band = bandBlock == null ? null : new Block { Items = PanelModel.BandFeats(bandBlock) };   // the strip's feats (its titles apart, B18)
         Check(band != null && band.Items.Select(i => i.Title).SequenceEqual(new[] { "Shield Wall", "Unbroken" }) && band.Items[0].Value == "I" && band.Items[0].Text.Contains("4 Oct") && band.Items[0].Text.Contains("Black Forest"),
@@ -337,9 +368,10 @@ static class FeatsTests
         Check(band.Items.Count > 0 && band.Items.All(i => i.Note == PanelModel.FeatLabel), "band: every feat chip on an owner page carries the small \"Feat\" tag");
         Check(Find(Page(full, "defense", chapter: Chapter.Battle), "featband") != null && !PanelModel.Content(Page(full, "defense", chapter: Chapter.Battle)).Any(b => b.Kind == "zone"),
               "band (0.7): Battle > Defense carries its feats' strip, and no zones any more");
-        Check(PanelModel.BandFeats(Find(Page(full, "cooking"), "featband")).Count == 0 && PanelModel.BandFeats(Find(Page(full, "sailing", chapter: Chapter.Voyages), "featband")).Single().Title == "Ferryman" && PanelModel.BandFeats(Find(Page(full, "smelters", chapter: Chapter.Stores), "featband")).Single().Title == "Kept the Fires" &&
+        Check(PanelModel.BandFeats(Find(Page(full, "cooking"), "featband")).Select(i => i.Title).SequenceEqual(new[] { "Fed by Many Hands" }) &&
+              PanelModel.BandFeats(Find(Page(full, "sailing", chapter: Chapter.Voyages), "featband")).Select(i => i.Title).SequenceEqual(new[] { "Ferryman", "Crewmate" }) && PanelModel.BandFeats(Find(Page(full, "smelters", chapter: Chapter.Stores), "featband")).Single().Title == "Kept the Fires" &&
               PanelModel.BandFeats(Find(Page(full, "deaths", chapter: Chapter.Battle), "featband")).Single().Title == "Waymate",
-              "band: each page shows only its own feats (Voyages > Sailing the Ferryman, Hall > Smelters the fires, Battle > Deaths the Waymate)");
+              "band: each page shows only its own feats (Voyages > Sailing the Ferryman and Crewmate, Hall > Smelters the fires, Battle > Deaths the Waymate, Cooking the food fellows made you)");
         Check(PanelModel.BandFeats(Find(Page(tor, "defense", chapter: Chapter.Battle), "featband")).Select(i => i.Title).SequenceEqual(new[] { "Shield Wall", "Stood Fast", "Unbroken", "Turned Blades" }), "band: a fellow's owner page shows their feats too");
         // B18 (Joost in game: "Wallwarden" twice on Defence, and not in Feats, read as a feat he lacked): a title shows once on its page, says why and
         // opens Feats > Titles; it is all-time, so a short window leaves it out; the Titles page lists every title, held ones with their reasons
@@ -367,9 +399,10 @@ static class FeatsTests
               "dots: a gold dot on the Feats tab (and, inside it, on Earned) while earned feats are not seen");
         var onFeats = Page(full);
         Check(PanelModel.OnFeatsPage(onFeats) && !onFeats.Chapters.Any(c => c.Dot) && !onFeats.List.Any(l => l.Dot), "dots: the Earned page itself carries none (the page you are reading answers its own dot)");
-        // fix4: every feat shows whole in its grid (four rows of four, no row cut), and a grid that has more says so (PanelModel.FeatsMore)
-        Check(Math.Ceiling(PanelModel.OwnFeatCount / 4.0) * 52 + (Math.Ceiling(PanelModel.OwnFeatCount / 4.0) - 1) * 6 <= PanelModel.FeatsGridRoom && PanelModel.FeatsMore.Contains("wheel") && PanelModel.FeatsMore.Contains("A/D"),
-              "feats: all " + PanelModel.OwnFeatCount + " feats fit the grid's room in whole rows at four across (52 px cards, 6 px apart), and a longer grid names the wheel and A/D as the way on");
+        // fix4: the grid's least room holds four whole rows of four (no row cut), and a grid that has more says so (PanelModel.FeatsMore). 0.9: the
+        // 17th own feat (Clad for Every Land, Armor sets) is a fifth row: where the plate leaves no more room it scrolls in under the cue
+        Check(4 * 52 + 3 * 6 <= PanelModel.FeatsGridRoom && PanelModel.FeatsMore.Contains("wheel") && PanelModel.FeatsMore.Contains("A/D"),
+              "feats: four whole rows of four fit the grid's room (52 px cards, 6 px apart); the " + PanelModel.OwnFeatCount + " feats scroll in rows under it, and a longer grid names the wheel and A/D as the way on");
         Check(PanelModel.SwitchOf(dotted)?.KeyCap == "F" && PanelModel.SwitchOf(Page(full)) == null && PanelModel.SwitchOf(Page(full, "defense", chapter: Chapter.Battle))?.KeyCap == null,
               "feats: the view key's cap stays at Deeds > Overview's Earned / Unsung switch; the Feats chapter has none");
 
@@ -388,7 +421,7 @@ static class FeatsTests
             var together = Page(world, "together", st => st.FeatSel = "ironforge");
             var g = Find(together, "feats"); var gd = Find(together, "featdetail");
             var forge = PanelModel.FeatById("ironforge");
-            Check(g.Items.Select(c => c.Id).SequenceEqual(new[] { "copperwed", "bogiron", "ironforge", "charcoal", "workshop", "wellfed", "meadhall", "clad", "manycrafts" }) && together.Heading == PanelModel.FeatsTogetherHeading && TimesSaid(together, PanelModel.TogetherDefinition) == 1,
+            Check(g.Items.Select(c => c.Id).SequenceEqual(new[] { "copperwed", "bogiron", "ironforge", "silvervein", "blackmetal", "charcoal", "workshop", "wellfed", "meadhall", "onehearth", "onecrew", "herdgrows", "clad", "quarry", "woodpile", "fleet", "doorways", "garden", "everyland", "oldpowers", "felledtogether", "sharedtable", "longtable", "handtohand", "onemap", "manycrafts" }) && together.Heading == PanelModel.FeatsTogetherHeading && TimesSaid(together, PanelModel.TogetherDefinition) == 1,
                   "together: the group's feats on their own page in journey order (the Black Forest's, the Swamp's with Iron for the Forge, the cross-cutting ones, the variety one last), with one line on what a group feat is: " + string.Join(", ", g.Items.Select(c => c.Id)));
             var unload = new[] { world }.Concat(world.Fellows).Where(p => p.Book != null).GroupBy(p => p.PlayerName).Select(x => x.First().Book).Sum(b => b.Delivered.Where(kv => CargoVoyage.MetalOre.Contains(kv.Key)).Sum(kv => kv.Value)) / 1000.0;
             Check(Math.Abs(PanelModel.FeatValue(forge, world) - unload) < 1e-6 && unload > 1000 && gd.Items.Single(x => x.Kind == "progress").Title == PanelModel.FeatProgress(forge, unload, 10000) && gd.Items.Single(x => x.Kind == "counted").Text == PanelModel.CountedServer,
@@ -444,7 +477,7 @@ static class FeatsTests
         var rowan = Full();
         rowan.Feats.Earned.Remove("ferryman");   // noticed afresh below
         var food = PanelModel.EvaluateFeats(rowan, Now.AddDays(1), "Swamp", null);
-        Check(food.Where(f => !f.feat.Group).Select(f => f.feat.Id).SequenceEqual(new[] { "ferryman" }) && rowan.Feats.Moment("ferryman").Value.Noticed && rowan.Feats.Moment("ferryman").Value.Biome == null,
+        Check(food.Where(f => !f.feat.Group && f.feat.Derived).Select(f => f.feat.Id).SequenceEqual(new[] { "ferryman" }) && rowan.Feats.Moment("ferryman").Value.Noticed && rowan.Feats.Moment("ferryman").Value.Biome == null,
               "derived: Ferryman I from Edda's 2.5 hours under his helm, noticed rather than seen: " + string.Join(", ", food.Select(f => f.feat.Id + f.tier)));
         SessionEvents.Add(rowan.Fellows.First(f => f.PlayerName == "Finch").Events.AteFoodMadeBy, "Rowan|Bread", 2);
         Check(PanelModel.EvaluateFeats(rowan, Now.AddDays(2), "Swamp", null).Select(f => f.feat.Id).SequenceEqual(new[] { "fulltable" }),

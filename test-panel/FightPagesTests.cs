@@ -156,7 +156,7 @@ static class FightPagesTests
             var thirty = PanelModel.Build(after, At(PanelModel.RunsPage, s => { s.Window = TimeWindow.LastThirtyMinutes; s.WindowPicked = true; }));
             var empty = Find(thirty, "empty");
             Check(ids.SequenceEqual(new[] { "inner", "live", "straddle" }) && tight.SequenceEqual(new[] { "live" }) && all == 6 &&
-                  thirty.Windows.Count == 9 && thirty.ShownWindow == TimeWindow.LastThirtyMinutes && empty != null && empty.Title == "Nothing in the last 30 min" && empty.Text.StartsWith("Newest run: ") && empty.Text.EndsWith(" ago."),
+                  thirty.Windows.Count == 11 && thirty.ShownWindow == TimeWindow.LastThirtyMinutes && empty != null && empty.Title == "Nothing in the last 30 min" && empty.Text.StartsWith("Newest run: ") && empty.Text.EndsWith(" ago."),
                   "FP Runs and bosses by time: began before and ended inside counts, ended before does not, a live one is in, a boss fight follows its run (" + string.Join(",", ids) + "); an empty 30 min says so and names the newest (" + empty?.Title + " / " + empty?.Text + ")");
         }
 

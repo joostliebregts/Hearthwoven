@@ -39,7 +39,7 @@ static class HoverCostTests
             c.Bars_++; c.Parts += n;
             if (row.Tone == PanelModel.DamagePlayerTone || Of(row, "part").Any(p => p.Whole != null)) c.Tagged += n; else c.Keyed += n;   // 0.8.5: a row of damage dealt with its after says its words on the tag
         }
-        void Bar(List<Block> parts)   // PanelUi.DamageBar with no share line (the feed's Log and Cards, a ranking line)
+        void Bar(List<Block> parts)   // PanelUi.DamageBar with no share line (the feed's Log, Cards and Timeline, a ranking line)
         {
             var n = PanelModel.BarFormOf(parts, true).Rows.Count; if (n == 0) return;
             c.Bars_++; c.Parts += n; c.Tagged += n;
@@ -55,7 +55,6 @@ static class HoverCostTests
                     foreach (var a in Of(b, "armorbar")) if (PanelModel.BarFormOf(Of(a, "part"), true).Rows.Count > 0) { c.Bars_++; c.Parts++; c.Armor++; }
                     break;
                 case "feed":
-                    if (b.Tone == PanelModel.FeedTimeline) break;   // the Timeline draws no damage bar
                     foreach (var e in Of(b, "fight").SelectMany(f => Of(f, "entry"))) Bar(Of(e, PanelModel.FeedDealt));
                     break;
                 case "foetable":
@@ -102,8 +101,10 @@ static class HoverCostTests
         {
             ("the sample feed, Log", world, Feed(PanelModel.FeedLog)),
             ("the sample feed, Cards", world, Feed(PanelModel.FeedCards)),
+            ("the sample feed, Timeline", world, Feed(PanelModel.FeedTimeline)),   // 0.9: the Timeline draws the damage bar too
             ("the long feed, Log", longFeed, Feed(PanelModel.FeedLog)),
             ("the long feed, Cards", longFeed, Feed(PanelModel.FeedCards)),
+            ("the long feed, Timeline", longFeed, Feed(PanelModel.FeedTimeline)),
             ("Damage by foe", world, Battle("damage", s => s.View["Battle/damage/view"] = "foe")),
             ("Damage by weapon", world, Battle("damage")),
             ("Defense", world, Battle("defense")),

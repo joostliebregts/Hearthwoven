@@ -242,11 +242,73 @@ namespace Hearthwoven.Panel
         public static Plan Build(Block giving, double cx, double cy)
         {
             var items = giving.Items ?? new List<Block>();
-            var key = cx + "," + cy + "|" + string.Join(";", items.Select(i => i.Kind + ":" + i.Id + ":" + i.Title + ":" + i.Text + ":" + i.Tone + ":" + i.Value + ":" + i.Fraction + ":" + (i.Selected ? 1 : 0)));
+            var key = KeyOf(items, cx, cy);
             lock (cache) if (cache.TryGetValue(key, out var hit)) return hit;
-            var plan = Make(items, cx, cy);
-            lock (cache) { if (cache.Count > 64) cache.Clear(); cache[key] = plan; }
+            var plan = Make(items, cx, cy, null);
+            KeepPlan(key, plan);
             return plan;
+        }
+
+        static string KeyOf(List<Block> items, double cx, double cy) =>
+            cx + "," + cy + "|" + string.Join(";", items.Select(i => i.Kind + ":" + i.Id + ":" + i.Title + ":" + i.Text + ":" + i.Tone + ":" + i.Value + ":" + i.Fraction + ":" + (i.Selected ? 1 : 0)));
+
+        static void KeepPlan(string key, Plan plan) { lock (cache) { if (cache.Count > 64) cache.Clear(); cache[key] = plan; } }
+
+        // ---------- the open book's way (0.9, Joost in game on 0.8.91: "when I open the company tab for the first time ... it sort of freezes the game") ----------
+
+        /// <summary>Make's steps, said on the wait line while a worker works the plan out: the players and their corridors, every thread's ports,
+        /// the bends, the counts.</summary>
+        public const int Stages = 4;
+        const int StepPorts = 2, StepBends = 3, StepCounts = 4;
+
+        /// <summary>A plan on its way: the step the worker is on (1 .. Stages, never 0), and Done once it is kept (or failed: the book then works it
+        /// out itself on its next drawing, as before 0.9).</summary>
+        public sealed class Pending
+        {
+            volatile int stage = 1; volatile bool done;
+            public int Stage => stage;
+            public bool Done => done;
+            internal void At(int s) { if (s > stage && s <= Stages) stage = s; }
+            internal void Finish() => done = true;
+        }
+
+        static readonly Dictionary<string, Pending> working = new Dictionary<string, Pending>();
+        static readonly HashSet<string> failed = new HashSet<string>();
+
+        /// <summary>For the open book (CompanyUi.Giving): a plan already worked out comes back at once; otherwise null, and a worker thread works it
+        /// out (Make is Unity-free) while the page shows the wait line; <paramref name="wait"/> says how far it is and when it is done (the book then
+        /// draws the page again, PanelUi.FireTick). The geometry took 10 ms for four players and 0.5 to 0.8 s for a busy six or a group of twelve
+        /// on the Mini (more in the game's Mono), all on the frame that drew Fireside first: the freeze Joost saw. A plan the worker could not make
+        /// is made here, on the caller, as before.</summary>
+        public static Plan Request(Block giving, double cx, double cy, out Pending wait)
+        {
+            wait = null;
+            var items = (giving?.Items ?? new List<Block>()).ToList();   // the worker's own list: the drawing's blocks are never changed after the build
+            var key = KeyOf(items, cx, cy);
+            bool here;
+            lock (cache)
+            {
+                if (cache.TryGetValue(key, out var hit)) return hit;
+                if (working.TryGetValue(key, out wait)) return null;
+                here = failed.Contains(key);
+                if (!here) { wait = new Pending(); working[key] = wait; }
+            }
+            if (here) { var plan = Make(items, cx, cy, null); KeepPlan(key, plan); return plan; }
+            var w = wait;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { KeepPlan(key, Make(items, cx, cy, w)); }
+                catch { lock (cache) failed.Add(key); }
+                finally { lock (cache) working.Remove(key); w.Finish(); }
+            });
+            return null;
+        }
+
+        /// <summary>Whether the plan for this block is worked out already (a cache hit: drawing it costs nothing more).</summary>
+        public static bool Ready(Block giving, double cx, double cy)
+        {
+            var key = KeyOf(giving?.Items ?? new List<Block>(), cx, cy);
+            lock (cache) return cache.ContainsKey(key);
         }
 
         /// <summary>One thread's end on a shield, while the ports are laid out.</summary>
@@ -287,7 +349,7 @@ namespace Hearthwoven.Panel
             return y;
         }
 
-        static Plan Make(List<Block> items, double cx, double cy)
+        static Plan Make(List<Block> items, double cx, double cy, Pending progress)
         {
             var players = items.Where(i => i.Kind == "player").ToList(); var gifts = items.Where(i => i.Kind == "gift").ToList();
             int n = players.Count; var centre = (x: cx, y: -cy);
@@ -348,6 +410,7 @@ namespace Hearthwoven.Panel
                 if (mid > 0) { hi = Math.Min(hi, from); lo = Math.Max(lo, to - 2 * Math.PI); } else { lo = Math.Max(lo, to); hi = Math.Min(hi, from + 2 * Math.PI); }
                 room[p.Id] = (lo, hi);
             }
+            progress?.At(StepPorts);
             // every thread's two ports
             var ends = new Dictionary<Block, (Port from, Port to)>(); var pairOf = new Dictionary<Block, Bundle>();
             foreach (var B in bundles)
@@ -391,6 +454,7 @@ namespace Hearthwoven.Panel
                 }
                 foreach (var g in plan.Drawn) { var B = pairOf[g]; plan.Geos[g] = Lane(pos[g.Title], ends[g].from.Phi, ends[g].from.Dir, pos[g.Text], ends[g].to.Phi, ends[g].to.Dir, B.TwoWay ? WaySplit * (1 - B.Tight / (double)Tightest) : 0); }
             }
+            progress?.At(StepBends);
             // the bend: BaseBend for every pair, then each pair in trouble moves (Trouble): one whose thread passes the hearth bends further (1); one that
             // passes near a third shield (Clear) or over a name, or crosses a pair it must cross (their players alternate round the ring) at under
             // MinCrossDeg and 2, first draws its threads closer together (Tight) and then bends less (-1); two pairs that cross or run together where
@@ -455,6 +519,7 @@ namespace Hearthwoven.Panel
             foreach (var g in plan.Drawn) plan.Geos[g].Fraction = g.Fraction;   // the count sets the line and its arrowhead (StrokeOf)
             var drawnGeos = plan.Drawn.Select(g => plan.Geos[g]).ToList();
             for (int i = 0; i < drawnGeos.Count; i++) for (int j = i + 1; j < drawnGeos.Count; j++) plan.Crossed.AddRange(Crossings(drawnGeos[i].Pts, drawnGeos[j].Pts).Select(x => x.at));
+            progress?.At(StepCounts);
             // the counts of your gifts at their threads' middles (the two ways have bowed apart there); the counts going one way step along it in lane
             // order, so food and gear side by side never want the same spot
             foreach (var B in bundles)

@@ -49,6 +49,10 @@ namespace Hearthwoven.Panel
         /// <summary>The left-list entry a page belongs to: a fight's or a run's own page is Runs and bosses'.</summary>
         /// <summary>0.8.6: a group fight's page (a fight of the server you were not in, opened from Last fight's line) belongs to Last fight.</summary>
         public static string ListEntryOf(PanelInput input, Chapter c, string page) =>
+            c == Chapter.Deeds && page == SetsPageId ? "crafting" :   // 0.9: Armor sets, opened from Crafting (Chapters/ArmorSets.cs)
+            c == Chapter.Deeds && IsDeedFeedPage(page) ? DeedFeedFamilyOf(page) ?? RecentPageId :   // 0.9: a deed feed belongs to its page, the mixed one to Recent (Chapters/DeedFeedModel.cs)
+            c == Chapter.Deeds && DeedSubParent(page) is string deedOf ? deedOf :   // 0.9: a deed's History and its days belong to the deed's page (Chapters/DeedHistory.cs)
+            c == Chapter.Battle && IsDamageHistoryPage(page) ? "damage" :   // 0.9.5 draft: Damage history belongs to Damage (Chapters/DamageHistory.cs)
             c == Chapter.Battle && IsFightPage(page) ? (input?.Fights?.ById(page.Substring(FightPagePrefix.Length))?.Kind == FightKind.Group ? LastFightPage : RunsPage) : page;
 
         /// <summary>Where a fight's row leads: the fight Last fight holds opens there (its entry lit), any other its own page.</summary>
@@ -242,6 +246,7 @@ namespace Hearthwoven.Panel
             FightBody(input, view, state, page, f);
             if (!f.YouWereIn) view.StripNote = NotInFightOf(input);   // 0.8.6: a fight a fellow's feed holds, opened from Last fight's server line: the strip's quiet slot says so
             AboutLines(view, boss ? FightAboutBoss : FightAboutGroup, (FoeRowsAboutTitle, FoeRowsAbout), (DealtReceivedAboutTitle, DealtReceivedAbout), (DamageBarsAboutTitle, FightBarsAbout), (FallsAboutTitle, FallsUntyped(f) ? FallsAbout : null),
+                             (WeakAboutTitle, ShowsWeakness(input, f) ? WeakAbout : null),   // 0.9.4 draft: what the foe is weak to (Chapters/FightWeakness.cs)
                              (KeptAboutTitle, asLast && !boss && BeforeThisSession(input, f.EndUtc) ? KeptAbout : null),   // 0.8.5: Last fight kept from an earlier session (a boss attempt: the BossLog's)
                              (DpsAboutTitle, PaceNumber(input, f) != null ? DpsAbout(input, TimeWindow.Session, boss ? DpsBoss : DpsFight, f.IsLive) : null));   // 0.8.6: what DPS is, once
             Plate(view, "ui:chapter-battle");
@@ -292,7 +297,8 @@ namespace Hearthwoven.Panel
             view.Scope = "Run · " + name;
             view.Blocks.Add(FightHead(input, f));
             FightBody(input, view, state, page, f);
-            AboutLines(view, FightAboutRun, (FoeRowsAboutTitle, FoeRowsAbout), (DealtReceivedAboutTitle, DealtReceivedAbout), (DamageBarsAboutTitle, FightBarsAbout), (FallsAboutTitle, FallsUntyped(f) ? FallsAbout : null));
+            AboutLines(view, FightAboutRun, (FoeRowsAboutTitle, FoeRowsAbout), (DealtReceivedAboutTitle, DealtReceivedAbout), (DamageBarsAboutTitle, FightBarsAbout), (FallsAboutTitle, FallsUntyped(f) ? FallsAbout : null),
+                             (WeakAboutTitle, ShowsWeakness(input, f) ? WeakAbout : null));   // 0.9.4 draft (Chapters/FightWeakness.cs)
             Plate(view, "ui:chapter-battle");
             view.Blocks[0].Pill = RunWord(f) + (f.IsLive ? " · " + Lapse(f.Length) : " after " + FightLength(f.Length));   // 0.8.6: "Inside now · 18 min", as a fight's "Fighting now · 8 s"
         }
@@ -344,7 +350,7 @@ namespace Hearthwoven.Panel
                 Kind = FightHeadKind, Tone = run ? "run" : group ? "group" : "boss", Id = f.Boss, Colour = colour,
                 // a group fight has no name: its land, and how many of its foes fell ("8 of 9 foes defeated")
                 Title = group ? (f.Biome != null ? BiomeName(f.Biome) : "A fight") : FightName(input, f),
-                Text = group ? (fought == 0 ? null : defeated == fought ? (fought == 1 ? "its foe defeated" : "all " + N(fought) + " foes defeated") : N(defeated) + " of " + N(fought) + (fought == 1 ? " foe defeated" : " foes defeated")) : f.Biome != null ? BiomeName(f.Biome) : null,
+                Text = group ? (fought == 0 ? null : defeated == fought ? (fought == 1 ? "foe defeated" : "all " + N(fought) + " foes defeated") : N(defeated) + " of " + N(fought) + (fought == 1 ? " foe defeated" : " foes defeated")) : f.Biome != null ? BiomeName(f.Biome) : null,
                 Icon = run ? RunsIcon : group ? (f.Biome != null ? BiomeEmblem(f.Biome) : FoeMark) : BossTrophy(input, f.Boss),
                 Items = new List<Block>
                 {
@@ -449,6 +455,7 @@ namespace Hearthwoven.Panel
                 var pct = WholeShares(types.Select(t => all[t]).ToList());
                 rows.Add(new Block { Kind = "rkey", Title = "Received", Items = types.Select((t, k) => new Block { Kind = "key", Id = t, Title = TypeName(t) + " " + pct[k] + " %", Colour = DamageColour(t), Fraction = (float)(all[t] / sum) }).ToList() });
             }
+            if (receivedCol) rows.AddRange(WeakLines(input, foes, f.Kind == FightKind.Run));   // 0.9.4 draft (A): what each kind is weak to, under the keys (Chapters/FightWeakness.cs)
             return new Block { Kind = FightFoesKind, Id = key, Tone = cols, Items = rows };
         }
 
@@ -555,10 +562,10 @@ namespace Hearthwoven.Panel
         /// began before and ended inside counts; it ended before does not); a live one is always in; a boss fight in a run the book keeps follows its
         /// run, and a run holding a live boss fight is in.
         /// </summary>
-        public static List<FightView> RunsInWindow(IEnumerable<FightView> fights, DateTime? from)
+        public static List<FightView> RunsInWindow(IEnumerable<FightView> fights, DateTime? from, DateTime? to = null)
         {
             var all = fights.ToList();
-            bool Overlaps(FightView f) => !from.HasValue || f.IsLive || f.EndUtc >= from.Value;
+            bool Overlaps(FightView f) => (!from.HasValue || f.IsLive || f.EndUtc >= from.Value) && (!to.HasValue || f.StartUtc < to.Value);   // 0.9.1: Yesterday ends at midnight
             FightView RunOf(FightView f) => f.Kind == FightKind.Boss && f.ParentId != null ? all.FirstOrDefault(r => r.Kind == FightKind.Run && r.Id == f.ParentId) : null;
             bool In(FightView f)
             {
@@ -573,6 +580,7 @@ namespace Hearthwoven.Panel
         static string RunsWindowWords(TimeWindow w) =>
             w == TimeWindow.LastTenMinutes ? "the last 10 min" : w == TimeWindow.LastThirtyMinutes ? "the last 30 min" : w == TimeWindow.LastHour ? "the last hour" :
             w == TimeWindow.LastThreeHours ? "the last 3 hours" : w == TimeWindow.Session ? "this session" : w == TimeWindow.Today ? "today" :
+            w == TimeWindow.Yesterday ? "yesterday" : w == TimeWindow.ThreeDays ? "the last 3 days" :
             w == TimeWindow.SevenDays ? "the last 7 days" : "the last 30 days";
 
         /// <summary>
@@ -609,12 +617,12 @@ namespace Hearthwoven.Panel
             if (kept.Count == 0) { view.Blocks.Add(Empty(NoRunsYet, NoRunsText)); Plate(view, "ui:chapter-battle"); return; }
             var win = RunsWindowChips(state, view);
             if (win != TimeWindow.SinceInstall) view.Scope += " · " + WindowLabel(win).ToLowerInvariant();
-            var listed = RunsInWindow(kept, RunsFrom(input, win));
+            var listed = RunsInWindow(kept, RunsFrom(input, win), WindowEndUtc(input, win));
             if (listed.Count == 0)
             {
                 // the newest outside the window: a run, or a boss fight not nested in a run
                 var newest = kept.Where(f => !(f.Kind == FightKind.Boss && kept.Any(r => r.Kind == FightKind.Run && r.Id == f.ParentId))).OrderByDescending(f => f.EndUtc).First();
-                view.Blocks.Add(Empty("Nothing in " + RunsWindowWords(win), "Newest " + (newest.Kind == FightKind.Run ? "run" : "boss fight") + ": " + AgoWords(input.NowUtc - newest.EndUtc) + "."));
+                view.Blocks.Add(Empty("Nothing " + (IsOneDay(win) || win == TimeWindow.Session ? "" : "in ") + RunsWindowWords(win), "Newest " + (newest.Kind == FightKind.Run ? "run" : "boss fight") + ": " + AgoWords(input.NowUtc - newest.EndUtc) + "."));
                 Plate(view, "ui:chapter-battle");
                 return;
             }

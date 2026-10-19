@@ -37,8 +37,10 @@ namespace Hearthwoven
         /// <summary>Deeds > Recent's buckets (DeedLog keys) and the armour minutes (ArmourLog keys), as kept.</summary>
         public readonly Dictionary<string, float> Deeds = new Dictionary<string, float>();
         public readonly ArmourLog Armour = new ArmourLog();
+        /// <summary>0.9: the land you were in per minute (DeedLog.Lands keys), as kept; this PC only, like the deeds (never in SharedJson).</summary>
+        public readonly Dictionary<string, float> Lands = new Dictionary<string, float>();
 
-        public bool Empty => Log.Damage.Count == 0 && Log.Hits.Count == 0 && Log.Guard.Count == 0 && Log.Swing.Count == 0 && Log.Weapons.Count == 0 && Log.Deaths.Count == 0 && Deeds.Count == 0 && Armour.Damage.Count == 0 && Armour.Hits.Count == 0;
+        public bool Empty => Log.Damage.Count == 0 && Log.Hits.Count == 0 && Log.Guard.Count == 0 && Log.Armor.Count == 0 && Log.Swing.Count == 0 && Log.Weapons.Count == 0 && Log.Deaths.Count == 0 && Deeds.Count == 0 && Armour.Damage.Count == 0 && Armour.Hits.Count == 0 && Lands.Count == 0;
 
         /// <summary>The file beside a character's totals file (LocalTotals.PathFor): "&lt;id&gt;-&lt;name&gt;.minutes.json".</summary>
         public static string PathFor(string totalsPath) =>
@@ -69,12 +71,21 @@ namespace Hearthwoven
             return k;
         }
 
+        /// <summary>0.9: keeps the land minutes (DeedLog.Lands, EarlierLands) from FromUtc on, as Take keeps the deed buckets.</summary>
+        public KeptMinutes WithLands(params IDictionary<string, float>[] lands)
+        {
+            var lo = EventLog.Bucket(FromUtc);
+            foreach (var d in lands) if (d != null) EventLog.KeysBetween(d, Lands, lo, null);
+            return this;
+        }
+
         public string ToJson(DateTime savedUtc)
         {
             var j = new Json().Open().Num("version", Version).Str("world", World).Str("playerId", PlayerId).Str("name", Name)
                               .Str("saved", savedUtc.ToString("o", Inv)).Str("from", FromUtc.ToString("o", Inv));
             j.Key("log").Open(); Log.WriteFields(j); j.Close();
             j.Dict("deeds", Deeds).Dict("armorDamage", Armour.Damage).Dict("armorHits", Armour.Hits);
+            if (Lands.Count > 0) j.Dict("lands", Lands);   // 0.9: an added key; a reader before 0.9 leaves it
             return j.Close().ToString();
         }
 
@@ -86,6 +97,7 @@ namespace Hearthwoven
             k.Log.ReadFrom(MiniJson.Obj(root, "log"));
             MiniJson.Into(MiniJson.Obj(root, "deeds"), k.Deeds);
             MiniJson.Into(MiniJson.Obj(root, "armorDamage"), k.Armour.Damage); MiniJson.Into(MiniJson.Obj(root, "armorHits"), k.Armour.Hits);
+            MiniJson.Into(MiniJson.Obj(root, "lands"), k.Lands);   // 0.9; none in a file from before
             return k;
         }
 
@@ -120,6 +132,7 @@ namespace Hearthwoven
             string lo = EventLog.Bucket(from), hi = EventLog.Bucket(connectedUtc);
             EventLog.KeysBetween(k.Deeds, kept.Deeds, lo, hi);
             EventLog.KeysBetween(k.Armour.Damage, kept.Armour.Damage, lo, hi); EventLog.KeysBetween(k.Armour.Hits, kept.Armour.Hits, lo, hi);
+            EventLog.KeysBetween(k.Lands, kept.Lands, lo, hi);   // 0.9
             return kept.Empty ? null : kept;
         }
 

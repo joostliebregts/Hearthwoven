@@ -39,6 +39,7 @@ namespace Hearthwoven.Panel
         static readonly HashSet<string> grillDishes = new HashSet<string>(), ovenDishes = new HashSet<string>(), stationInputs = new HashSet<string>(), fermenterInputs = new HashSet<string>(), feastItems = new HashSet<string>();   // Deeds: Cooking's filter (Type)
         static readonly Dictionary<string, string> boosts = new Dictionary<string, string>();   // Deeds: Cooking's filter (Main boost: item token -> its biggest food value)
         static readonly Dictionary<string, string> materials = new Dictionary<string, string>();   // Deeds: Crafting (item token -> main material)
+        static readonly Dictionary<string, int> maxQuality = new Dictionary<string, int>();   // 0.9: Crafting's Upgrades per item (item token -> m_maxQuality)
         static readonly Dictionary<string, string> pieceMats = new Dictionary<string, string>();   // Deeds: Building (piece token -> main material)
         static readonly Dictionary<string, int> pieceCats = new Dictionary<string, int>();   // Deeds: Building (piece token -> Piece.m_category as its number)
         static readonly Dictionary<int, string> tabLabels = new Dictionary<int, string>(), catNames = new Dictionary<int, string>();   // category -> the hammer tab's label; category -> its words, once found (B16)
@@ -49,7 +50,13 @@ namespace Hearthwoven.Panel
         static readonly Dictionary<string, PanelModel.RockData> rocks = new Dictionary<string, PanelModel.RockData>();   // Deeds: Mining (prefab a pickaxe hits -> its rock)
         static readonly Dictionary<string, string> trees = new Dictionary<string, string>();   // Deeds: Woodcutting (tree, log or log half -> its tree)
         static readonly Dictionary<string, string> foeKin = new Dictionary<string, string>();   // Battle (0.8.5): creature prefab -> the main prefab of its name
+        static readonly List<ArmorPiece> armor = new List<ArmorPiece>();   // 0.9 Armor sets: every armor piece with its recipe and set name
+        static readonly Dictionary<string, string> madeFrom = new Dictionary<string, string>();   // 0.9: an item a station converts into -> what it is made from (a cast hardened)
         static bool ready;
+
+        /// <summary>0.9 (Armor sets, Chapters/ArmorSets.cs): every armor piece of the game's data (helmet, chest, legs, cape; mods' too), with its set name,
+        /// the recipe that makes it (station, level, ingredients) or the cast it is hardened from; null until the game data is read.</summary>
+        public static IList<ArmorPiece> ArmorPieces() { Ensure(); return ready ? armor : null; }
 
         public static string ItemKind(string token) { Ensure(); return token != null && items.TryGetValue(token, out var k) ? k : null; }
         public static string GatherKind(string token) { Ensure(); return token != null && gather.TryGetValue(token, out var k) ? k : null; }
@@ -78,6 +85,40 @@ namespace Hearthwoven.Panel
         }
         /// <summary>A food's biggest food value ("health", "stamina", "eitr", "balanced": PanelModel.DishBoostOf); null = no food value or not known.</summary>
         public static string DishBoost(string token) { Ensure(); return token != null && boosts.TryGetValue(token, out var k) ? k : null; }
+        /// <summary>0.9.2 Meals by dish: one serving of a food as the game's data has it (m_food, m_foodStamina, m_foodEitr, m_foodBurnTime), by its token or its prefab; null = no food value.</summary>
+        public static PanelModel.FoodStats DishStats(string key) { Ensure(); return key != null && servings.TryGetValue(key, out var s) ? s : null; }
+        static readonly Dictionary<string, PanelModel.FoodStats> servings = new Dictionary<string, PanelModel.FoodStats>();   // token and prefab -> one serving (Meals by dish)
+        static readonly List<KeyValuePair<string, string>> foodItems = new List<KeyValuePair<string, string>>();   // 0.9.2: every food (token -> its first prefab), in the game's order
+        static readonly HashSet<string> foodTokens = new HashSet<string>();   // 0.9.3: the tokens in foodItems (an edible item's first prefab)
+        static readonly Dictionary<string, KeyValuePair<List<string>, string>> recipeOf = new Dictionary<string, KeyValuePair<List<string>, string>>();   // 0.9.2: item token -> its first enabled recipe's ingredients and station prefab
+        static List<PanelModel.FoodData> foods;
+
+        /// <summary>0.9.2 Meals' Plan a meal: every food of the game's data (an item with a food value; mods' and feasts' too), each token once, with one
+        /// serving's values (m_food, m_foodStamina, m_foodEitr, m_foodBurnTime), whether it sets out a feast, and what says where it comes from: its
+        /// recipe's ingredients and station, what a cooking station, fermenter or mill makes it from, and those one step on (PanelModel.FoodLand);
+        /// null until the game data is read. Worked out once.</summary>
+        public static IList<PanelModel.FoodData> Foods()
+        {
+            Ensure();
+            if (!ready) return null;
+            if (foods != null) return foods;
+            var list = new List<PanelModel.FoodData>();
+            foreach (var kv in foodItems)
+            {
+                try
+                {
+                    var s = servings.TryGetValue(kv.Value, out var own) ? own : servings[kv.Key];   // the edible prefab's own values (0.9.3: never another item's of the same name)
+                    var f = new PanelModel.FoodData { Token = kv.Key, Prefab = kv.Value, Type = "Consumable", Health = s.Health, Stamina = s.Stamina, Eitr = s.Eitr, Seconds = s.Seconds, Feast = feastItems.Contains(kv.Key) };
+                    void Add(string t) { if (!string.IsNullOrEmpty(t) && !f.From.Contains(t)) f.From.Add(t); }
+                    void Step(string t) { Add(t); if (t != null && madeFrom.TryGetValue(t, out var raw)) Add(raw); }
+                    if (recipeOf.TryGetValue(kv.Key, out var rec)) { f.Station = rec.Value; foreach (var t in rec.Key) Step(t); }
+                    if (madeFrom.TryGetValue(kv.Key, out var src)) { Add(src); if (recipeOf.TryGetValue(src, out var r2)) foreach (var t in r2.Key) Step(t); }
+                    list.Add(f);
+                }
+                catch { }
+            }
+            return foods = list;
+        }
         /// <summary>An item's main material from its recipe ("Bronze"): the ingredient that best marks the tier (PanelModel.MainMaterial); null = no recipe or no ingredient that marks a tier.</summary>
         public static string MainMaterial(string token) { Ensure(); return token != null && materials.TryGetValue(token, out var k) ? k : null; }
         /// <summary>The hammer tab a piece sits on ("Furniture"): the label its piece table gives that category, else the category's own name, else the name a mod gave it (B16); null = not known (Piece.m_category), counted as "Other".</summary>
@@ -185,6 +226,8 @@ namespace Hearthwoven.Panel
         public static string ItemToken(string prefab) { Ensure(); return prefab != null && tokens.TryGetValue(prefab, out var k) ? k : null; }
         /// <summary>How many of an item one craft puts in the bag (Recipe.m_amount: 4 sausages); the most when several recipes make it, 0 = no recipe known.
         /// The game's craft counter books one per craft, eaters one per serving (DeedsModel.MadeOf, CompanyModel.MakerMade).</summary>
+        /// <summary>0.9: the highest quality (upgrade level) the game allows an item (m_maxQuality); 0 = not known.</summary>
+        public static int MaxQuality(string token) { Ensure(); return token != null && maxQuality.TryGetValue(token, out var n) ? n : 0; }
         public static int RecipeYield(string token) { Ensure(); return token != null && yields.TryGetValue(token, out var n) ? n : 0; }
         /// <summary>The game's own sprite of a piece by its name token ("$piece_woodwall"), as the build menu shows it.</summary>
         public static Sprite PieceIcon(string token) { Ensure(); return token != null && pieceIcons.TryGetValue(token, out var s) ? s : null; }
@@ -221,6 +264,47 @@ namespace Hearthwoven.Panel
                 var top = own[w];
                 var piece = top.split != null && own.TryGetValue(top.split, out var s) ? s : default;   // what the whole rock breaks into
                 rocks[kv.Key] = new PanelModel.RockData { Whole = w, Mined = top.mined || PanelModel.RockMined(top.component, top.pickaxe, false, piece.mined), Drop = top.drop ?? piece.drop ?? kv.Value.drop };
+            }
+        }
+
+        /// <summary>0.9 (Armor sets): every armor piece of ObjectDB with the first enabled recipe that makes it (or, for a piece a station hardens
+        /// from a cast, the cast's recipe), its set name and its set bonus's shown name. Reads only; a piece that throws is left out.</summary>
+        static void ArmorFrom(HashSet<string> refined)
+        {
+            var recipes = new Dictionary<string, Recipe>();
+            foreach (var r in ObjectDB.instance.m_recipes ?? new List<Recipe>())
+            {
+                var made = r && r.m_enabled && r.m_item ? r.m_item.m_itemData?.m_shared?.m_name : null;
+                if (!string.IsNullOrEmpty(made) && !recipes.ContainsKey(made)) recipes[made] = r;
+            }
+            var seen = new HashSet<string>();
+            foreach (var go in ObjectDB.instance.m_items)
+            {
+                try
+                {
+                    var shared = go ? go.GetComponent<ItemDrop>()?.m_itemData?.m_shared : null;
+                    if (shared == null || string.IsNullOrEmpty(shared.m_name) || !PanelModel.IsArmorSlot(shared.m_itemType.ToString()) || !seen.Add(shared.m_name)) continue;
+                    var p = new ArmorPiece
+                    {
+                        Token = shared.m_name, Prefab = go.name, Name = LocalizedName(shared.m_name), Slot = shared.m_itemType.ToString(),
+                        SetName = shared.m_setName ?? "", SetSize = shared.m_setSize,
+                        SetEffect = shared.m_setStatusEffect && !string.IsNullOrEmpty(shared.m_setStatusEffect.m_name) ? LocalizedName(shared.m_setStatusEffect.m_name) : null,
+                    };
+                    if (!recipes.TryGetValue(p.Token, out var recipe) && madeFrom.TryGetValue(p.Token, out var cast) && recipes.TryGetValue(cast, out recipe)) p.MadeAs = cast;
+                    if (recipe != null)
+                    {
+                        p.HasRecipe = true; p.StationLevel = recipe.m_minStationLevel;
+                        if (recipe.m_craftingStation) { p.Station = recipe.m_craftingStation.name; p.StationName = LocalizedName(recipe.m_craftingStation.m_name); }
+                        foreach (var req in recipe.m_resources ?? new Piece.Requirement[0])
+                        {
+                            var rs = req != null && req.m_resItem ? req.m_resItem.m_itemData?.m_shared : null;
+                            if (rs == null || string.IsNullOrEmpty(rs.m_name) || req.m_amount <= 0) continue;
+                            p.Recipe.Add(new ArmorCost { Token = rs.m_name, Name = LocalizedName(rs.m_name), Amount = req.m_amount, Refined = refined.Contains(rs.m_name) });
+                        }
+                    }
+                    armor.Add(p);
+                }
+                catch { }
             }
         }
 
@@ -262,7 +346,17 @@ namespace Hearthwoven.Panel
                     if (shared == null || string.IsNullOrEmpty(shared.m_name)) continue;
                     if (!items.ContainsKey(shared.m_name)) items[shared.m_name] = PanelModel.ItemKindOf(shared.m_itemType.ToString(), shared.m_name);
                     if (!types.ContainsKey(shared.m_name)) types[shared.m_name] = shared.m_itemType.ToString();
+                    if (!maxQuality.ContainsKey(shared.m_name)) maxQuality[shared.m_name] = shared.m_maxQuality;   // 0.9: Crafting's Upgrades per item ("now level 3 of 4")
                     if (!tokens.ContainsKey(go.name)) tokens[go.name] = shared.m_name;
+                    if (shared.m_food > 0 || shared.m_foodStamina > 0 || shared.m_foodEitr > 0)
+                    {
+                        var serving = new PanelModel.FoodStats { Health = shared.m_food, Stamina = shared.m_foodStamina, Eitr = shared.m_foodEitr, Seconds = shared.m_foodBurnTime };
+                        if (!servings.ContainsKey(shared.m_name)) servings[shared.m_name] = serving;
+                        // 0.9.3 Plan a meal: only what the game lets you eat (Humanoid.CanConsumeItem: a Consumable; Player.ConsumeItem eats it as a food only
+                        // with m_food above 0): an uncooked pie or raw meat is a Material, never a food to plan (PanelModel.IsEdible says the same)
+                        if (shared.m_itemType == ItemDrop.ItemData.ItemType.Consumable && shared.m_food > 0 && foodTokens.Add(shared.m_name)) foodItems.Add(new KeyValuePair<string, string>(shared.m_name, go.name));
+                        if (!servings.ContainsKey(go.name)) servings[go.name] = serving;
+                    }
                     if (!boosts.ContainsKey(shared.m_name)) { var boost = PanelModel.DishBoostOf(shared.m_food, shared.m_foodStamina, shared.m_foodEitr); if (boost != null) boosts[shared.m_name] = boost; }
                     LearnTabs(shared.m_buildPieces);
                     var table = shared.m_buildPieces?.m_pieces;   // hammer, hoe, cultivator, feast tray, mods' tools
@@ -309,16 +403,22 @@ namespace Hearthwoven.Panel
                         {
                             var dish = c?.m_to?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(dish)) { stationDishes.Add(dish); (cooker.m_useFuel ? ovenDishes : grillDishes).Add(dish); }
                             var raw = c?.m_from?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(raw)) stationInputs.Add(raw);
+                            if (!string.IsNullOrEmpty(dish) && !string.IsNullOrEmpty(raw) && !madeFrom.ContainsKey(dish)) madeFrom[dish] = raw;
                         }
                     var fermenter = go.GetComponent<Fermenter>();
                     if (fermenter && fermenter.m_conversion != null)
-                        foreach (var c in fermenter.m_conversion) { var basis = c?.m_from?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(basis)) fermenterInputs.Add(basis); }
+                        foreach (var c in fermenter.m_conversion)
+                        {
+                            var basis = c?.m_from?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(basis)) fermenterInputs.Add(basis);
+                            var to = c?.m_to?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(basis) && !string.IsNullOrEmpty(to) && !madeFrom.ContainsKey(to)) madeFrom[to] = basis;
+                        }
                     var smelter = go.GetComponent<Smelter>();
                     if (smelter && smelter.m_conversion != null)
                         foreach (var c in smelter.m_conversion)
                         {
                             var made = c?.m_to?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(made)) refined.Add(made);
                             var taken = c?.m_from?.m_itemData?.m_shared?.m_name; if (!string.IsNullOrEmpty(taken)) smelted.Add(taken);
+                            if (!string.IsNullOrEmpty(made) && !string.IsNullOrEmpty(taken) && !madeFrom.ContainsKey(made)) madeFrom[made] = taken;
                         }
                     var loot = go.GetComponent<CharacterDrop>();
                     if (loot && loot.m_drops != null)
@@ -345,6 +445,9 @@ namespace Hearthwoven.Panel
                     {
                         var made = r && r.m_item ? r.m_item.m_itemData?.m_shared?.m_name : null;
                         if (!string.IsNullOrEmpty(made) && r.m_amount > 1 && (!yields.TryGetValue(made, out var y) || r.m_amount > y)) yields[made] = r.m_amount;
+                        if (!string.IsNullOrEmpty(made) && r.m_enabled && r.m_resources != null && !recipeOf.ContainsKey(made))   // 0.9.2: Plan a meal's lands (Foods)
+                            recipeOf[made] = new KeyValuePair<List<string>, string>(r.m_resources.Where(q => q != null && q.m_resItem).Select(q => q.m_resItem.m_itemData?.m_shared?.m_name).Where(n => !string.IsNullOrEmpty(n)).ToList(),
+                                                                                    r.m_craftingStation ? r.m_craftingStation.name : null);
                         if (string.IsNullOrEmpty(made) || materials.ContainsKey(made) || r.m_resources == null) continue;
                         var recipe = new List<Ingredient>();
                         foreach (var req in r.m_resources)
@@ -370,6 +473,7 @@ namespace Hearthwoven.Panel
                     if (m != null) pieceMats[kv.Key] = m;
                 }
                 foreach (var kv in PanelModel.FoeKinOf(creatures)) foeKin[kv.Key] = kv.Value;
+                ArmorFrom(refined);
                 Debug.Log("[Hearthwoven] panel game data: " + items.Count + " items, " + pieces.Count + " pieces, " + gather.Count + " gathered kinds, " + creatures.Count + " creatures");
             }
             catch (Exception e) { Debug.LogWarning("[Hearthwoven] panel game data: " + e.Message); }

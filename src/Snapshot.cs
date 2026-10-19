@@ -16,7 +16,9 @@ namespace Hearthwoven
                                    SessionEvents eventsSinceInstall = null, DamageTally damageSinceInstall = null, BiomeTally biomeSinceInstall = null, System.DateTime? biomeFromUtc = null, FeatsLedger feats = null,
                                    IDictionary<string, float> dealtByDay = null, IEnumerable<string> knownBiomes = null, string copyId = null, FoeShare foes = null, FeedShare feed = null,
                                    IDictionary<string, Dictionary<string, float>> dayDealt = null, string logBefore = null,
-                                   IDictionary<string, Dictionary<string, Dictionary<string, float>>> dayDeeds = null, IDictionary<string, WeaponCells> dayWeapons = null)
+                                   IDictionary<string, Dictionary<string, Dictionary<string, float>>> dayDeeds = null, IDictionary<string, WeaponCells> dayWeapons = null,
+                                   IEnumerable<string> armorMade = null,
+                                   ArmourTally armorSince = null, System.DateTime? armorFromUtc = null)
         {
             // Absolute values only: a resend after a reconnect or crash replaces, never adds.
             var j = new Json().Open()
@@ -98,6 +100,15 @@ namespace Hearthwoven
             // as sent, less death positions and worlds; GroupServe packs the file's text), so no server change; an older reader ignores the key
             var biomes = knownBiomes?.Where(b => !string.IsNullOrEmpty(b)).Distinct().Take(16).ToList();
             if (biomes != null && biomes.Count > 0) j.Raw("knownBiomes", "[" + string.Join(",", biomes.Select(Json.Q).ToArray()) + "]");
+            // 0.9 (Armor sets): which armor pieces you made, yes or no per item token, nothing more (no count, no date): the group's Armor sets show who
+            // made each set in full. At most 300 tokens; written whenever the game data is read, also empty, so a reader can tell "none made" from an
+            // older Hearthwoven. An older reader ignores the key
+            var armor = armorMade?.Where(t => !string.IsNullOrEmpty(t)).Distinct().Take(300).ToList();
+            if (armor != null) j.Raw(Panel.PanelModel.ArmorMadeKey, "[" + string.Join(",", armor.Select(Json.Q).ToArray()) + "]");
+            // 0.9 (armor-share; Joost: a friend's Defense shows What their armor stopped): your armour ledger since it began, per damage type only (what
+            // reached your armor, what got through, the hits, its start date: at most 17 numbers, no foe, no place). The short windows travel as the log's
+            // "armor" minutes (EventLog.Armor), beside the blocks. Written whenever the ledger is loaded, also empty; an older reader ignores the key
+            armorSince?.WriteShared(j, armorFromUtc);
             // 0.8: the foes you fought per kind and what became of them, this session and since recording began (FoeShare: compact, at most 60 kinds
             // each). An older reader ignores the key
             foes?.WriteTo(j);

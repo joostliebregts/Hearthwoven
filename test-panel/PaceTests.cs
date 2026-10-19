@@ -270,7 +270,9 @@ static class PaceTests
         // the keys, as on Foes: A/D move a cursor over the lines that open (the focus ring on it), Enter opens or shuts the cursor's line, the key line says so; another page or book folds them all
         var ks = new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.SinceInstall, WindowPicked = true, Page = { [Chapter.Battle] = "damage" } };
         var kv0 = PanelModel.Build(mist, ks); var firstOpens = PanelModel.VisibleWeaponLines(kv0);
-        var stepped = PanelModel.StepWeapon(ks, kv0, 1); var kv1 = PanelModel.Build(mist, ks);
+        var stepped = PanelModel.StepWeapon(ks, kv0, 1);   // 0.9.5: the first press lands on the first kind row (WeaponStops); step on to the first line that opens
+        var toLine = firstOpens.Count > 0 ? PanelModel.WeaponStops(kv0).FindIndex(b => b.Id == firstOpens[0].Id) : 0; for (int i = 0; i < toLine; i++) PanelModel.StepWeapon(ks, kv0, 1);
+        var kv1 = PanelModel.Build(mist, ks);
         var cursorLine = PanelModel.VisibleWeaponLines(kv1).FirstOrDefault(i => i.Cursor);
         PanelModel.ToggleWeaponCursor(ks, kv1); var kv2 = PanelModel.Build(mist, ks); var opened = PanelModel.VisibleWeaponLines(kv2).FirstOrDefault(i => i.Cursor);
         var kept = PanelModel.WeaponOpen(ks).Count == 1;

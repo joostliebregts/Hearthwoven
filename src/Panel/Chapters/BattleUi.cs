@@ -29,13 +29,13 @@ namespace Hearthwoven.Panel
             switch (b.Kind)
             {
                 case "damagegrid": BattleGrid(col, b); break;
-                case "dmgmix": DamageRunRow(col, b); break;   // 0.8: a weapon's damage row; the page's weapons make one list (DamageRowsUi.cs)
+                case "dmgmix": DamageRunRow(col, b, link); break;   // 0.8: a weapon's damage row; the page's weapons make one list (DamageRowsUi.cs)
                 case PanelModel.WeaponListKind: WeaponLines(col, b, link); break;   // 0.8.6: a kind's weapons and their upgrade levels under its row, in the same list
                 case "foetable": BattleFoeTable(col, b, link); break;
                 case "foetypes": BattleFoeTypes(col, b); break;
                 case "guard": BattleGuard(col, b, link); break;
-                case "sources": case "dealtfoes": BattleSources(col, b); break;   // dealtfoes: Damage > By foe (0.8), the same form with the "×N" and the marks
-                case "feed": BattleFeed(col, b); break;   // 0.8 (Chapters/BattleFeedUi.cs)
+                case "sources": case "dealtfoes": BattleSources(col, b, link); break;   // dealtfoes: Damage > By foe (0.8), the same form with the "×N" and the marks
+                case "feed": BattleFeed(col, b, link); break;   // 0.8 (Chapters/BattleFeedUi.cs)
                 case PanelModel.FeedLineKind: FeedQuiet(col, b, link); break;   // 0.8.1: between the feed's fight islands (Chapters/BattleFeedUi.cs)
                 case "fightfoes": FightFoes(col, b); break;
                 case "fightreceived": FightReceived(col, b); break;
@@ -43,6 +43,8 @@ namespace Hearthwoven.Panel
                 case "deathstrip": BattleDeathStrip(col, b); break;
                 case "deaths": BattleDeathList(col, b); break;
                 case "deathrows": BattleDeathRows(col, b, link); break;
+                case PanelModel.UseTableKind: UseTable(col, b, link); break;   // 0.9 What to use (Chapters/WhatToUseUi.cs)
+                case PanelModel.UseDetailKind: BtCaption(col, b.Title, b.Text); BattleRanking(col, b, true); break;   // 0.9: an open foe's ranking under What to use's table
             }
             if (Labelled(b) && b.Kind != "dmgmix" && b.Kind != PanelModel.WeaponListKind) Since(col, PanelLayout.Text.Floor, b);   // a page without a time window: counted on this PC since install (the weapons' list says it once, after its last row)
         }
@@ -172,6 +174,8 @@ namespace Hearthwoven.Panel
             if (cursor) { var fm = factor.gameObject.AddComponent<FocusMark>(); fm.Focused = true; fm.Hide = icon.gameObject; factor.gameObject.SetActive(KeyFocus); icon.gameObject.SetActive(!KeyFocus); }
         }
 
+        const float BtArrowIcon = 22, BtArrowPad = 4;   // the Best arrow cell: its icon's room before the name (none on a tie, 0.9), the room kept after it
+
         static void BattleFoeTable(RectTransform col, Block b, Func<string, Action> link)
         {
             var rows = (b.Items ?? new List<Block>()).Where(i => i.Kind == "foe").ToList();
@@ -235,8 +239,12 @@ namespace Hearthwoven.Panel
                 var arrow = cells.FirstOrDefault(i => i.Kind == "arrow");
                 if (arrow != null)
                 {
-                    BtMarker(r, arrow.Icon, BtFoeName + BtFoeDealt, 11, 18);
-                    BtText(r, arrow.Title, BtFoeName + BtFoeDealt + 22, 0, BtFoeArrow - 26, BtFoeRow, PanelLook.MinText, PanelLook.Text);
+                    var tie = arrow.Tone == PanelModel.TieTone;   // 0.9: a tie has no one arrow's picture, its name takes the icon's room
+                    if (!tie) BtMarker(r, arrow.Icon, BtFoeName + BtFoeDealt, 11, 18);
+                    var room = tie ? default(float) : BtArrowIcon;
+                    var at = BtText(r, arrow.Title, BtFoeName + BtFoeDealt + room, 0, BtFoeArrow - room - BtArrowPad, BtFoeRow, PanelLook.MinText, PanelLook.Text);
+                    if (tie) at.textWrappingMode = TextWrappingModes.Normal;   // a long tie ("Blackmetal or Frost Arrow") takes two lines, never cut
+                    if (arrow.Tone == PanelModel.TieTone && !string.IsNullOrEmpty(arrow.Text)) ArrowTieHover(r, arrow.Text, BtFoeName + BtFoeDealt, BtFoeArrow);   // 0.9: why two are named
                 }
                 var mods = cells.Where(i => i.Kind == "mod").ToList();
                 for (int k = 0; k < mods.Count && k < types.Count; k++) BattleMeterCell(r, x0 + k * tw + (tw - BtCellW) / 2, mods[k], cursor);
@@ -317,14 +325,17 @@ namespace Hearthwoven.Panel
 
         const float BtRankLine = 50, BtRankName = 20, BtRankBarTop = 22, BtRankHead = 22, BtRankNumGap = 8;   // a line: name and status, its number and bar 2 px under, 4 px to the next
 
-        static void BattleRanking(RectTransform parent, Block rk)
+        // 0.9 (What to use, Chapters/WhatToUse.cs): <paramref name="own"/> = the ranking on its own (UseDetailKind), not in an open foe's band:
+        // no band padding, the plate's full column
+        static void BattleRanking(RectTransform parent, Block rk, bool own = false)
         {
             var rows = (rk.Items ?? new List<Block>()).Where(r => r.Kind == "rankrow").ToList();
             var who = (rk.Items ?? new List<Block>()).FirstOrDefault(r => r.Kind == PanelModel.WhoHitKind || r.Kind == PanelModel.YourHitsKind);   // 0.8.2 Everyone: who hit it, first; 0.8.5 your own book: your hits on it
             if (rows.Count == 0 && who == null) return;
             var box = VStack(parent, 6);
-            box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(BtBandPadX, BtBandPadX, 4, BtBandPadBottom);
-            var inner = Column - 2 * BtBandPadX;
+            var padX = own ? 0 : BtBandPadX;
+            box.GetComponent<VerticalLayoutGroup>().padding = own ? new RectOffset() : new RectOffset(BtBandPadX, BtBandPadX, 4, BtBandPadBottom);
+            var inner = Column - 2 * padX;
             if (who != null) WhoHitIsland(box, who, inner);
             if (rows.Count == 0) return;
             // one number column for the whole detail, as wide as its widest number, so every bar starts at one x and keeps one scale
@@ -344,7 +355,18 @@ namespace Hearthwoven.Panel
                 var area = BtRow(box, h);
                 for (int k = 0; k < groups.Count; k++) RankIsland(area, groups[k], k * (iw + IslandGap), iw, h, numW);
             }
-            var small = Label(box, rk.Note ?? "", PanelLook.MinText, PanelLook.Faint); small.textWrappingMode = TextWrappingModes.Normal;
+            var small = Label(box, rk.Note ?? "", PanelLook.MinText, PanelLook.Faint, style: own ? FontStyles.Italic : FontStyles.Normal);   // 0.9 Best arrows: its one small italic line small.textWrappingMode = TextWrappingModes.Normal;
+        }
+
+        /// <summary>0.9 (Best arrow tie): the arrow cell of a tie says why both are named when pointed at, through the page's one tag (as the Dealt
+        /// bar's numbers, BarHover.TagOver): the cell rings, the tag shows <paramref name="words"/> beside it. The row's press still opens the foe.</summary>
+        static void ArrowTieHover(RectTransform row, string words, float x, float w)
+        {
+            var cell = RoundedPart(row, "Tie", Color.clear, raycast: true); cell.rectTransform.Box(x, 0, w, BtFoeRow);
+            var hover = row.gameObject.AddComponent<BarHover>(); hover.Init(1);
+            hover.Parts[0] = cell.rectTransform; var hp = cell.gameObject.AddComponent<HoverPart>(); hp.Bar = hover; hp.Index = 0;
+            hover.TagOver(PageTag(row), cell.rectTransform, new[] { words }, new float[1], default, BtFoeDealt + BtFoeArrow, centred: false);   // the tag at the cell's start, as the Dealt bar's
+            HoverRing(cell.rectTransform, hover);
         }
 
         // one group in its island: its name, its count in the room the name leaves (0.8.2: a half each cut "157 owned, made o..."), its lines
@@ -511,13 +533,13 @@ namespace Hearthwoven.Panel
         // 0.8: one row per foe in the damage rows (DamageRowsUi.cs), which replace B40-B41's band per foe: the picture, name, "×N" and
         // total on the bar's line, every foe's bar on one scale with its zero at a quarter of the track
 
-        static void BattleSources(RectTransform col, Block b)
+        static void BattleSources(RectTransform col, Block b, Func<string, Action> link = null)
         {
             var rows = (b.Items ?? new List<Block>()).Where(i => i.Kind == "source").ToList();
             if (rows.Count == 0) return;
             // 0.8 (Damage > By foe, dealtfoes): the one-line key of the marks at the caption's right end
             var key = (b.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "pipkey");
-            if (key == null) BtCaption(col, b.Title, b.Text);
+            if (key == null) { if (b.Id != PanelModel.MealPlanId) BtCaption(col, b.Title, b.Text); }   // 0.9.6: Meal plan's pinned meal has no caption line (it was an empty one)
             else
             {
                 var head = Line(col, 8);
@@ -528,7 +550,7 @@ namespace Hearthwoven.Panel
             }
             // 0.8 (Joost's damage bars, density-feedback/DAMAGE-BARS.md): one row per foe, its bar's zero at a quarter of the track, the true
             // length under it, the types' shares on one line under that (Chapters/DamageRowsUi.cs); dealt on By foe, received on Defence
-            DamageRows(col, rows, b.Kind == "dealtfoes");
+            DamageRows(col, rows, b.Kind == "dealtfoes", link);   // 0.9.2: a row or a slot of Meals' combinations and plan is a click
         }
 
         // a source's picture (B25): a creature's trophy or the foe mark; a cause that is no creature (smoke, a fall) the swatch of the type it
@@ -558,7 +580,7 @@ namespace Hearthwoven.Panel
             var trackX = NameColumn(col, rows) + DrCol + NumberColumn(col, rows.Select(r => r.Value)) + DrCol;   // as DamageRows lays the rows out
             var bar = (b.Items ?? new List<Block>()).FirstOrDefault(i => i.Kind == "armorbar");
             if (bar != null) ArmourBar(col, bar, trackX);
-            if (b.Tone == "key") ArmourKey(col, trackX);
+            if (b.Tone == PanelModel.ArmourKeyTone || b.Tone == PanelModel.FellowArmourKeyTone) ArmourKey(col, trackX, b.Tone == PanelModel.FellowArmourKeyTone);   // 0.9: a fellow's in their words
             DamageRows(col, rows, false);
         }
 
@@ -585,7 +607,7 @@ namespace Hearthwoven.Panel
         }
 
         // the key under the bar: a whole part (what reached your armor), its filled piece (got through), its outlined piece (stopped by your armor)
-        static void ArmourKey(RectTransform col, float trackX)
+        static void ArmourKey(RectTransform col, float trackX, bool theirs = false)
         {
             var key = Line(col, 6); key.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset((int)trackX, 0, 0, 0);
             void Entry(string words, float fill, bool outline)
@@ -596,9 +618,9 @@ namespace Hearthwoven.Panel
                 if (fill > 0) BtRect(sw, "Fill", PanelLook.Muted, 0, 0, fill, 14);
                 Label(key, words, PanelLayout.Text.Floor, PanelLook.Muted).textWrappingMode = TextWrappingModes.NoWrap;
             }
-            Entry(PanelModel.ArmourKeyWhole, 9, true);
+            Entry(theirs ? PanelModel.FellowArmourKeyWhole : PanelModel.ArmourKeyWhole, 9, true);
             Entry(PanelModel.ArmourKeyThrough, 22, false);
-            Entry(PanelModel.ArmourKeyStopped, 0, true);
+            Entry(theirs ? PanelModel.FellowArmourKeyStopped : PanelModel.ArmourKeyStopped, 0, true);
         }
 
         // an outlined box: four thin edges, the inside left open
@@ -848,6 +870,31 @@ namespace Hearthwoven.Panel
             return made;
         }
 
+        /// <summary>0.9 (Best arrows): each made prefab's first enabled recipe's ingredients (quality 1), as the armor sets read them (GameData.ArmorFrom);
+        /// a recipe that throws is left out.</summary>
+        static Dictionary<string, List<ArmorCost>> Costs()
+        {
+            var d = new Dictionary<string, List<ArmorCost>>();
+            foreach (var r in ObjectDB.instance.m_recipes ?? new List<Recipe>())
+            {
+                try
+                {
+                    if (!r || !r.m_enabled || !r.m_item || d.ContainsKey(r.m_item.gameObject.name)) continue;
+                    var list = new List<ArmorCost>();
+                    foreach (var req in r.m_resources ?? new Piece.Requirement[0])
+                    {
+                        var rs = req != null && req.m_resItem ? req.m_resItem.m_itemData?.m_shared : null;
+                        if (rs == null || string.IsNullOrEmpty(rs.m_name) || req.m_amount <= 0) continue;
+                        string name = null; try { name = Localization.instance != null ? Localization.instance.Localize(rs.m_name) : null; } catch { name = null; }
+                        list.Add(new ArmorCost { Token = rs.m_name, Name = name, Amount = req.m_amount });
+                    }
+                    d[r.m_item.gameObject.name] = list;
+                }
+                catch { }
+            }
+            return d;
+        }
+
         /// <summary>Every bolt (ammo "$ammo_bolts") and weapon (one- and two-handed, bows; not pickaxes) in ObjectDB with battle damage, its
         /// base damage (quality 1), for the Foes ranking (0.7). Read once; null before ObjectDB loads.</summary>
         public static IList<PanelModel.ArrowData> Gear()
@@ -857,7 +904,7 @@ namespace Hearthwoven.Panel
             var list = new List<PanelModel.ArrowData>();
             try
             {
-                var made = Recipes();
+                var made = Recipes(); var costs = Costs();
                 foreach (var go in ObjectDB.instance.m_items)
                 {
                     var shared = go ? go.GetComponent<ItemDrop>()?.m_itemData?.m_shared : null;
@@ -868,6 +915,7 @@ namespace Hearthwoven.Panel
                              && shared.m_skillType != Skills.SkillType.Pickaxes) kind = "weapon";
                     if (kind == null) continue;
                     var a = new PanelModel.ArrowData { Prefab = go.name, Token = shared.m_name, Kind = kind, Recipe = made.Contains(go.name) };
+                    if (costs.TryGetValue(go.name, out var cost)) a.Cost = cost;   // 0.9 What to use: its materials
                     var dt = shared.m_damages;
                     void Put(string k, float v) { if (v > 0) a.Damage[k] = v; }
                     Put("blunt", dt.m_blunt); Put("slash", dt.m_slash); Put("pierce", dt.m_pierce); Put("fire", dt.m_fire); Put("frost", dt.m_frost);
@@ -888,11 +936,13 @@ namespace Hearthwoven.Panel
             try
             {
                 var made = Recipes();
+                var costs = Costs();
                 foreach (var go in ObjectDB.instance.m_items)
                 {
                     var shared = go ? go.GetComponent<ItemDrop>()?.m_itemData?.m_shared : null;
                     if (shared == null || shared.m_itemType != ItemDrop.ItemData.ItemType.Ammo || shared.m_ammoType != "$ammo_arrows") continue;
                     var a = new PanelModel.ArrowData { Prefab = go.name, Token = shared.m_name, Recipe = made.Contains(go.name) };
+                    if (costs.TryGetValue(go.name, out var cost)) a.Cost = cost;   // 0.9 Best arrows: what its recipe asks
                     var dt = shared.m_damages;
                     void Put(string k, float v) { if (v > 0) a.Damage[k] = v; }
                     Put("blunt", dt.m_blunt); Put("slash", dt.m_slash); Put("pierce", dt.m_pierce); Put("fire", dt.m_fire); Put("frost", dt.m_frost);

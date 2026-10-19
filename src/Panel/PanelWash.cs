@@ -50,6 +50,8 @@ namespace Hearthwoven.Panel
         /// <summary>The group bars' track on Everyone (EveryoneUi).</summary>
         public static readonly Wash GroupTrack = new Wash(".gr-track {", "rgba(107,82,50,.22)", Island);
         /// <summary>A damage row's true-length line (DamageRowsUi): gold for damage dealt, quiet for damage received.</summary>
+        /// <summary>0.9 feat look (FeatLookUi.TierBar): the tier bar, a part not reached yet.</summary>
+        public static readonly Wash FeatLookTrack = new Wash(".lk .lkbar i {", "rgba(107,82,51,.35)", Page);
         public static readonly Wash TrueDealt = new Wash(".dr-true {", "rgba(232,194,122,.8)", Island), TrueReceived = new Wash(".dr-true.recv {", "rgba(185,166,136,.8)", Island);
         /// <summary>About's Since when (AboutUi.SinceWhen): its rules, the install day's dashes.</summary>
         public static readonly Wash SinceRule = new Wash("out += bar(x0, foot", "rgba(107,82,51,.3)", Island), InstallMark = new Wash("out += bar(xi, y, 1, 3", "rgba(232,169,72,.6)", Island);
@@ -71,6 +73,8 @@ namespace Hearthwoven.Panel
         public static readonly Wash HoverLine = new Wash(":hover { outline", "rgba(232,194,122,.45)", Island);
         /// <summary>A chosen filter chip and a chosen token (FacetUi.FacetOn).</summary>
         public static readonly Wash ChipOn = new Wash(".fb-chip.on {", "rgba(232,169,72,.2)", Page);
+        /// <summary>0.9.3 the chosen feat card's warm lift over its ground (FeatsUi.FeatChosen), under its gold frame.</summary>
+        public static readonly Wash FeatChosen = new Wash(".fcard .fsel {", "rgba(232,194,122,.08)", Page);
         /// <summary>Compare's menu: the chosen option's ground and edge (CompareUi).</summary>
         public static readonly Wash MenuChosen = new Wash(".cmenu .cm-opt.sel {", "rgba(232,194,122,.16)", Menu), MenuChosenEdge = new Wash(".cmenu .cm-opt.sel {", "rgba(232,194,122,.55)", Menu);
 
@@ -79,19 +83,22 @@ namespace Hearthwoven.Panel
         public static readonly Wash BossBand = new Wash(".ft-boss {", "rgba(232,194,122,.16)", Track.Look), BossEdge = new Wash(".ft-boss {", "rgba(232,194,122,.55)", Track.Look);
         /// <summary>"Everyone" before the page's title, and the rule between the players and Everyone in the players' bar (EveryoneUi).</summary>
         public static readonly Wash EveryoneTag = new Wash(".ev-tag {", "rgba(232,194,122,.16)", Head), EveryoneRule = new Wash(".ev-rule {", "rgba(232,194,122,.35)", Bar);
-        /// <summary>The gold edge of a dark tag: why Everyone is off (EveryoneUi), the Feats grid's More below cue (.fcue span).</summary>
+        /// <summary>The gold edge of a dark tag: why Everyone is off (EveryoneUi). (0.9.2: the Feats grid's More below cue lost its tag: a band over the grid's foot, FeatsUi.FeatMoreCue.)</summary>
         public static readonly Wash TagEdge = new Wash(".ev-why {", "rgba(232,194,122,.5)", Menu);
         /// <summary>A key's cap in the frame (PanelUi.KeyCap), its edge.</summary>
         public static readonly Wash KeycapEdge = new Wash(".kc {", "rgba(232,194,122,.35)", Head);
         /// <summary>Compare's legend in the strip: the solid swatch and the outline (CompareUi).</summary>
         public static readonly Wash KeySolid = new Wash("i.cmp-sol {", "rgba(242,232,214,.92)", Strip), KeyTrace = new Wash("i.cmp-out {", "rgba(242,232,214,.8)", Strip);
 
+        /// <summary>0.9 Armor sets: a piece not made yet, its tile's dashed edge (DeedsUi.SetBand, the item grid's "not made" tile).</summary>
+        public static readonly Wash NotMadeEdge = new Wash(".ig-t.notmade {", "rgba(185,166,136,.6)", Island);
+
         /// <summary>Every wash above, for the test.</summary>
         public static readonly Wash[] All =
         {
             IslandGround, Track, Band, RowHover, Line, BattleTrack, Rule, Tree, GroupTrack, TrueDealt, TrueReceived, SinceRule, InstallMark, Reach, SparkBar, SparkMark,
             NoPlaceEdge, NotchNext, WaitingRim, TierRim, HoverBand, HoverLine, ChipOn, MenuChosen, MenuChosenEdge, BossBand, BossEdge, EveryoneTag, EveryoneRule, TagEdge,
-            KeycapEdge, KeySolid, KeyTrace,
+            KeycapEdge, KeySolid, KeyTrace, NotMadeEdge, FeatChosen,
         };
 
         /// <summary>The colour that draws in game what <paramref name="mirror"/> (a translucent colour as the mirror writes it) draws over

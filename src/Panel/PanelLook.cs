@@ -75,6 +75,14 @@ namespace Hearthwoven.Panel
         /// <summary>0.8.6 the shade under the pinned strip while rows lie above it (StickyHeadUi.cs), darkest at the strip's foot.</summary>
         public static readonly Color StripShade = new Color(0f, 0f, 0f, 0.45f);
         public const float TierMarkScale = 2.5f;
+        /// <summary>0.9 feat looks (Chapters/FeatLookUi.cs): the family ground's fade to the right (white, its alpha rising along FeatLookShape.GroundStops),
+        /// the family wash from the left (falling along WashStops) and the soft disc behind an icon (FeatLookShape.Disc), all tinted by the caller.</summary>
+        public static Sprite GroundFade, GroundFadeDown, WashFade, SoftDisc;
+        /// <summary>0.9.1 the soft band of the card's own ground under a feat card's text (Feats.TextBacking Fade): rising over its width to FeatLookShape.Backing.</summary>
+        public static Sprite BackingFade;
+        /// <summary>0.9.2 the More below cue's band over the Feats grid's foot: nothing at its top, the card's own ground at FeatLookShape.CueGround at its
+        /// bottom (FeatLookShape.CueStops; tinted by the caller).</summary>
+        public static Sprite CueFade;
         static bool resolved;
 
         public static void Resolve()
@@ -99,6 +107,12 @@ namespace Hearthwoven.Panel
             Triangle = Drawn(TriangleTexture());
             Chevron = Drawn(ChevronTexture());
             Island = IslandSprite();
+            // 0.9.1: each ramp's alpha as the game must draw it to show what the mirror shows (FeatLookShape.Veil, Ink: the book blends in linear space)
+            GroundFade = Drawn(RampTexture(FeatLookShape.GroundStops, "hearthwoven-ground-fade", false, FeatLookShape.Veil)); GroundFadeDown = Drawn(RampTexture(FeatLookShape.DownStops, "hearthwoven-ground-fade-down", true, FeatLookShape.Veil));
+            WashFade = Drawn(RampTexture(FeatLookShape.WashStops, "hearthwoven-wash-fade", false, a => FeatLookShape.Ink(a * FeatLookShape.Wash)));
+            BackingFade = Drawn(RampTexture(FeatLookShape.BackingStops, "hearthwoven-backing-fade", false, a => FeatLookShape.Veil(a * FeatLookShape.Backing)));
+            CueFade = Drawn(RampTexture(FeatLookShape.CueStops, "hearthwoven-cue-fade", true, FeatLookShape.Veil));
+            SoftDisc = Drawn(SoftDiscTexture());
             Debug.Log("[Hearthwoven] Hearthwoven panel uses font '" + (Body ? Body.name : "TMP default") + "', titles '" + (Title ? Title.name : "TMP default") +
                       "', digits '" + (Plain ? Plain.name : "TMP default") + "'" + (Plain == Body ? " (LiberationSans not found: the panel's own font)" : ""));
         }
@@ -400,7 +414,8 @@ namespace Hearthwoven.Panel
         static string[] People => PanelModel.PlayerPalette;   // the one player palette table (PanelModel.PlayerPalette)
         public static Color PersonColor(int index) => Hex(People[((index % People.Length) + People.Length) % People.Length]);
         /// <summary>Codex's pure white line masks that are multiplied by the list and feat gold (kit-additions: "multiply by list/feat gold").</summary>
-        public static bool GoldLine(string icon) => icon == "vocab:list-feats" || icon == "vocab:feat-waymate" || icon == "vocab:young-creature" || icon == "vocab:lead-rope" || icon == "vocab:cargo-mark";
+        public static bool GoldLine(string icon) => icon == "vocab:list-feats" || icon == "vocab:feat-waymate" || icon == "vocab:young-creature" || icon == "vocab:lead-rope" || icon == "vocab:cargo-mark" ||
+            icon != null && icon.StartsWith("vocab:" + PanelModel.FeatSceneSprite, StringComparison.Ordinal);   // the feat scenes: white line, grey fills (multiplied, the fills go dark)
 
         /// <summary>The shield's tint: the grey shield sprite (mean about 0.6) multiplied by the player colour lifted by that much,
         /// so the painted face reads in the palette colour itself, not a darker, more saturated one (Joost's F11 run).</summary>
@@ -431,11 +446,19 @@ namespace Hearthwoven.Panel
         {
             var bytes = Resource(name);
             if (bytes == null || LoadImage == null) return null;
-            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = name, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            // 0.9.1 (Joost: the feat pictures "seem very fuzzy"): a feat's scene is drawn at half its texels (112 at 56 px, 72 at 36 px) and smaller still on a
+            // panel scaled below 1 or a screen under 1080p; without mipmaps the bilinear filter samples only some texels there and the thin lines shimmer and
+            // blur. Its own mip chain (LoadImage builds it), trilinear, a little sharpened
+            var mips = name.IndexOf(FeatSceneTexture, StringComparison.Ordinal) >= 0;
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, mips) { name = name, wrapMode = TextureWrapMode.Clamp, filterMode = mips ? FilterMode.Trilinear : FilterMode.Bilinear };
+            if (mips) tex.mipMapBias = FeatSceneBias;
             if (!(bool)LoadImage.Invoke(null, new object[] { tex, bytes })) return null;
             if (repeatX) { tex.wrapModeU = TextureWrapMode.Repeat; tex.wrapModeV = TextureWrapMode.Clamp; }
             return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, border);
         }
+
+        const string FeatSceneTexture = "feat-scene-";
+        const float FeatSceneBias = -0.3f;
 
         // A sprite set: embedded PNGs plus their manifest (filename -> size, border, type, tint). Only a sliced entry keeps
         // its border; a simple one is placed whole.
@@ -602,6 +625,39 @@ namespace Hearthwoven.Panel
             return t;
         }
 
+        // 0.9 feat looks: a horizontal ramp, its alpha along the stops (x 0..1 -> alpha), clamped so a stretched Image keeps the ends
+        static Texture2D RampTexture((float x, float a)[] stops, string name, bool down = false, Func<float, float> game = null)
+        {
+            const int n = 128, across = 4;
+            int w = down ? across : n, h = down ? n : across;
+            var t = new Texture2D(w, h, TextureFormat.RGBA32, false) { name = name, wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    var a = FeatLookShape.Ramp(stops, down ? 1f - (y + 0.5f) / h : (x + 0.5f) / w);   // down: from the top (texture y runs up)
+                    px[y * w + x] = new Color(1, 1, 1, game != null ? game(a) : a);
+                }
+            t.SetPixels32(px); t.Apply(false, true);
+            return t;
+        }
+
+        // 0.9 feat looks: the soft dark disc behind an icon, full in the middle and gone at its rim (FeatLookShape.Disc)
+        static Texture2D SoftDiscTexture()
+        {
+            const int s = 64;
+            var t = new Texture2D(s, s, TextureFormat.RGBA32, false) { name = "hearthwoven-soft-disc", wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[s * s];
+            for (int y = 0; y < s; y++)
+                for (int x = 0; x < s; x++)
+                {
+                    float dx = x - s / 2f + 0.5f, dy = y - s / 2f + 0.5f;
+                    px[y * s + x] = new Color(1, 1, 1, FeatLookShape.Veil(FeatLookShape.DiscDark * FeatLookShape.Disc(Mathf.Sqrt(dx * dx + dy * dy) / (s / 2f))));   // 0.9.1: its darkness baked in, as the game blends
+                }
+            t.SetPixels32(px); t.Apply(false, true);
+            return t;
+        }
+
         // a soft-edged disc for person markers
         static Texture2D CircleTexture()
         {
@@ -617,6 +673,66 @@ namespace Hearthwoven.Panel
             t.SetPixels32(px); t.Apply(false, true);
             return t;
         }
+    }
+
+    /// <summary>
+    /// 0.9 feat looks (Chapters/FeatLookUi.cs): the shapes of the family ground's fade, its wash, the soft disc behind an icon and the band under the
+    /// text, one place for the game's textures (PanelLook) and the mirror's gradients (panel-preview.html writes the same stops and alphas).
+    /// 0.9.1 (Joost: "I really did like all the cards when the pattern was on the background of the full card ... for some reason the legibility in game
+    /// sucked"): the ground spans the whole card again as board 9 drew it (ground2(): clear at the left, a quarter at 22 %, most at 58 %, the card's own
+    /// ground from 80 %). Why 0.8.93 read badly in game while the mirror passed: the book blends in linear colour space (PanelWash.cs). A dark veil at
+    /// alpha a leaves (1 - a)^(1/2.2) of the pattern under it in game, not 1 - a: the fade's 0.7 left 58 % of the hatch under the text instead of 30 %;
+    /// and the hatch's lines at 0.67 drew as bright as 0.83. Every alpha here is the mirror's; the game draws Veil(a) for a darkening layer and Ink(a)
+    /// for a light one, so both show the same. Under the text a soft band of the card's ground (Backing) and a dark underlay on the letters
+    /// (Feats.TextBacking), the pattern's strength a live setting (Feats.PatternStrength). FeatLookTests checks every ink at 4.5:1 or more on the
+    /// worst pixel under the text for every family, at the defaults.
+    /// </summary>
+    public static class FeatLookShape
+    {
+        /// <summary>The ground's fade over the card's width (board 9's ground2()); the detail area's ground fades down too (DownStops, over its zone).</summary>
+        public static readonly (float x, float a)[] GroundStops = { (0f, 0f), (0.22f, 0.25f), (0.58f, 0.85f), (0.8f, 1f), (1f, 1f) };
+        public static readonly (float x, float a)[] DownStops = { (0f, 0f), (0.45f, 0.2f), (0.8f, 0.85f), (1f, 1f) };
+        public static readonly (float x, float a)[] WashStops = { (0f, 1f), (0.6f, 0f), (1f, 0f) };
+        /// <summary>The band under the text: from nothing to Backing over PanelLayout.FeatLook.BackingIn px, then flat to the card's end.</summary>
+        public static readonly (float x, float a)[] BackingStops = { (0f, 0f), (1f, 1f) };
+        /// <summary>0.9.2 the More below cue's band over the grid's foot (PanelLayout.Feats.CueBand), from its top (0) to its bottom (1): nothing at the
+        /// top, the card's own ground at CueGround over the band's lower half, where the words lie (Joost: "more transparent and fade with a gradient
+        /// from bottom to transparent at the top").</summary>
+        public static readonly (float x, float a)[] CueStops = { (0f, 0f), (0.5f, CueGround), (1f, CueGround) };
+        public const float CueGround = 0.85f;
+        /// <summary>The family's wash at the card's left, the soft disc's darkness at its middle, the band's darkness under the text (the mirror's alphas).</summary>
+        public const float Wash = 0.14f, DiscDark = 0.5f, Backing = 0.7f;
+        /// <summary>The hatch tile's own line alpha and the layers it is laid in (0.9: three, Joost "a little bit clearer"): at strength 100 a line shows at
+        /// 1 - (1 - 0.31)^3 = 0.67 of the family's colour.</summary>
+        public const float TileAlpha = 0.31f; public const int HatchLayers = 3;
+        /// <summary>The live settings' defaults (Feats.PatternStrength, Feats.TextBacking): the pattern as the boards draw it, both the band and the shade.</summary>
+        public const int PatternDefault = 100;
+        public const FeatBacking BackingDefault = FeatBacking.Both;
+
+        /// <summary>The game's alpha for a dark layer the mirror draws at <paramref name="a"/> over a lighter one (linear blending: (1 - a) becomes (1 - a)^2.2).</summary>
+        public static float Veil(float a) => 1f - (float)Math.Pow(1f - Clamp01(a), 2.2);
+        /// <summary>The game's alpha for a light ink the mirror draws at <paramref name="a"/> over the dark ground (a becomes a^2.2).</summary>
+        public static float Ink(float a) => (float)Math.Pow(Clamp01(a), 2.2);
+        static float Clamp01(float a) => a < 0 ? 0 : a > 1 ? 1 : a;
+
+        /// <summary>A hatch line's alpha as the mirror shows it at <paramref name="strength"/> (0 to 100).</summary>
+        public static float HatchLine(int strength) => 1f - (float)Math.Pow(1f - TileAlpha * Clamp01(strength / 100f), HatchLayers);
+        /// <summary>The tint alpha of each of the game's hatch layers so the lines show as HatchLine does in the mirror (through Ink).</summary>
+        public static float HatchLayerTint(int strength) => Clamp01((1f - (float)Math.Pow(1f - Ink(HatchLine(strength)), 1.0 / HatchLayers)) / TileAlpha);
+        /// <summary>How much of a hatch line shows under text at <paramref name="x"/> (0..1 across the card): its alpha after the fade and the band.</summary>
+        public static float UnderText(int strength, bool band, float x) => HatchLine(strength) * (1f - Ramp(GroundStops, x)) * (band ? 1f - Backing : 1f);
+
+        /// <summary>The alpha at <paramref name="x"/> (0..1) along the stops, straight between them.</summary>
+        public static float Ramp((float x, float a)[] stops, float x)
+        {
+            if (x <= stops[0].x) return stops[0].a;
+            for (int k = 1; k < stops.Length; k++)
+                if (x <= stops[k].x) { var (x0, a0) = stops[k - 1]; var (x1, a1) = stops[k]; return a0 + (a1 - a0) * (x - x0) / (x1 - x0); }
+            return stops[stops.Length - 1].a;
+        }
+
+        /// <summary>The disc's alpha at <paramref name="r"/> (0 the middle, 1 the rim): a smooth step down, 1 - (3r² - 2r³), nothing beyond the rim.</summary>
+        public static float Disc(float r) => r >= 1f ? 0f : 1f - r * r * (3f - 2f * r);
     }
 
     /// <summary>The rounded sprites' shape (PanelLook.RoundedSprite): a rounded rectangle Size texels square, radius Radius, nine-sliced at Border;

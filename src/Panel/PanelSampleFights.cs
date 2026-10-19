@@ -25,7 +25,7 @@ namespace Hearthwoven.Panel
         {
             ["SeekerQueen"] = "The Queen", ["Seeker"] = "Seeker", ["SeekerBrood"] = "Seeker Brood", ["SeekerBrute"] = "Seeker Soldier", ["Tick"] = "Tick",
             ["Bonemass"] = "Bonemass", ["Blob"] = "Blob", ["BlobElite"] = "Oozer", ["Skeleton"] = "Skeleton",
-            ["Greydwarf"] = "Greydwarf", ["Greydwarf_Elite"] = "Greydwarf Brute", ["Greydwarf_Shaman"] = "Greydwarf Shaman",
+            ["Greydwarf"] = "Greydwarf", ["Greydwarf_Elite"] = "Greydwarf Brute", ["Greydwarf_Shaman"] = "Greydwarf Shaman", ["Dragon"] = "Moder", ["Fader"] = "Lord Reto",
             ["$item_mead_poisonres"] = "Poison Resistance Mead", ["$item_barleywine"] = "Fire Resistance Barley Wine", ["$item_mead_frostres"] = "Frost Resistance Mead",
         };
 
@@ -34,16 +34,117 @@ namespace Hearthwoven.Panel
         {
             ["SeekerQueen"] = "TrophySeekerQueen", ["Seeker"] = "TrophySeeker", ["SeekerBrute"] = "TrophySeekerBrute", ["Tick"] = "TrophyTick",
             ["Bonemass"] = "TrophyBonemass", ["Blob"] = "TrophyBlob", ["Skeleton"] = "TrophySkeleton",
-            ["Greydwarf"] = "TrophyGreydwarf", ["Greydwarf_Elite"] = "TrophyGreydwarfBrute", ["Greydwarf_Shaman"] = "TrophyGreydwarfShaman",
+            ["Greydwarf"] = "TrophyGreydwarf", ["Greydwarf_Elite"] = "TrophyGreydwarfBrute", ["Greydwarf_Shaman"] = "TrophyGreydwarfShaman", ["Dragon"] = "TrophyDragonQueen", ["Fader"] = "TrophyFader",
         };
+
+        /// <summary>
+        /// 0.9.4 draft (Chapters/FightWeakness.cs): SAMPLE damage modifiers for the fights' creatures, plausible, not the game's (in game they come
+        /// from each creature's prefab, BattleGame.Foe). vw VeryWeak, w Weak, sw SlightlyWeak, sr SlightlyResistant, r Resistant, vr VeryResistant,
+        /// i Immune; every other type Normal.
+        /// </summary>
+        public static readonly Dictionary<string, string> Mods = new Dictionary<string, string>
+        {
+            ["SeekerQueen"] = "fire:w pierce:r poison:i", ["Seeker"] = "fire:w poison:r", ["SeekerBrood"] = "fire:w poison:i", ["SeekerBrute"] = "frost:w pierce:r poison:r",
+            ["Tick"] = "fire:w", ["Bonemass"] = "blunt:vw spirit:w slash:r pierce:r poison:i", ["Blob"] = "blunt:w frost:w lightning:w slash:r pierce:r fire:r poison:i",
+            ["BlobElite"] = "blunt:w frost:w lightning:w slash:r pierce:r fire:r poison:i", ["Skeleton"] = "blunt:w spirit:w pierce:r poison:i",
+            ["Greydwarf"] = "fire:w poison:r spirit:i", ["Greydwarf_Elite"] = "fire:w poison:r spirit:i", ["Greydwarf_Shaman"] = "fire:w poison:r spirit:i",
+            ["Dragon"] = "pierce:w fire:w blunt:r frost:i",
+            ["Fader"] = "frost:w spirit:w poison:r fire:i",   // SAMPLE, for the Lord Reto draft (WithReto), not the game's
+        };
+
+        /// <summary>A fight creature's sample data: its trophy and (0.9.4) its sample modifiers.</summary>
+        public static PanelModel.FoeData FoeOf(string prefab)
+        {
+            if (prefab == null) return null;
+            var hasTrophy = Trophies.TryGetValue(prefab, out var trophy);
+            if (!hasTrophy && !Mods.ContainsKey(prefab)) return null;
+            var d = new PanelModel.FoeData { Trophy = trophy };   // a creature without a trophy (Seeker Brood): the foe mark, its modifiers all the same
+            if (!Mods.TryGetValue(prefab, out var mods)) return d;
+            foreach (var t in PanelModel.BattleTypes) d.Modifiers[t] = "Normal";
+            foreach (var m in mods.Split(' '))
+            {
+                var p = m.Split(':');
+                d.Modifiers[p[0]] = p[1] == "vw" ? "VeryWeak" : p[1] == "w" ? "Weak" : p[1] == "sw" ? "SlightlyWeak" : p[1] == "sr" ? "SlightlyResistant" : p[1] == "r" ? "Resistant" : p[1] == "vr" ? "VeryResistant" : "Immune";
+            }
+            return d;
+        }
 
         /// <summary>A book with the fights attached: the game's names and trophies for them, the rest of the book as it was.</summary>
         public static PanelInput With(PanelInput book, bool live)
         {
             var names = book.DisplayName; var foe = book.Foe;
             book.DisplayName = t => t != null && Names.TryGetValue(t, out var n) ? n : names?.Invoke(t);
-            book.Foe = p => p != null && Trophies.TryGetValue(p, out var t) ? new PanelModel.FoeData { Trophy = t } : foe?.Invoke(p);
+            book.Foe = p => FoeOf(p) ?? foe?.Invoke(p);   // 0.9.4: with their sample modifiers
             book.Fights = Book(book.NowUtc, live, book.ToLocal);
+            return book;
+        }
+
+        /// <summary>
+        /// 0.9.4 draft (weaknesses, Chapters/FightWeakness.cs): a newer fight on a book With the fights (not live): Moder alone, won 4 minutes ago
+        /// after 3 min 10 s by Rowan, Edda and Tor, one kind of foe: her line under the foe rows, all three forms (weak to pierce and fire,
+        /// resists blunt, immune to frost).
+        /// </summary>
+        public static PanelInput WithSoloBoss(PanelInput book)
+        {
+            var now = book.NowUtc;
+            var f = new FightView { Id = "moder-1", Kind = FightKind.Boss, Outcome = FightOutcome.Won, Boss = "Dragon", Biome = "Mountain", StartUtc = now.AddSeconds(-430), EndUtc = now.AddSeconds(-240), Health = 0f, SwingSeconds = 160 };
+            var you = Player(f, Rowan, true); you.Blocks = 3; you.Stopped = 120; you.HitsReceived = 11;
+            var edda = Player(f, Edda); edda.Blocks = 1; edda.Stopped = 40;
+            var tor = Player(f, Tor); tor.Blocks = 6; tor.Parries = 2; tor.Stopped = 310;
+            var m = Foe(f, "Dragon", defeated: 1, boss: true);
+            Hit(m, Rowan, "pierce 1840 frost 260", "frost 220 pierce 60");
+            Hit(m, Edda, "pierce 1210 poison 300", "frost 180");
+            Hit(m, Tor, "blunt 980", "frost 260 slash 90");
+            book.Fights.Fights.Insert(0, f);
+            return book;
+        }
+
+        /// <summary>
+        /// 0.9.4 draft (weaknesses): a newer group fight in the Swamp with two kinds of foe the game treats differently, Draugr (resists fire,
+        /// immune to poison) and Blob (weak to blunt, frost and lightning; resists the rest; immune to poison): a weakness line each, named.
+        /// </summary>
+        public static PanelInput WithTwoKinds(PanelInput book)
+        {
+            var now = book.NowUtc;
+            var f = new FightView { Id = "swamp-1", Kind = FightKind.Group, Outcome = FightOutcome.Ended, Biome = "Swamp", StartUtc = now.AddSeconds(-280), EndUtc = now.AddSeconds(-170) };
+            var you = Player(f, Rowan, true); you.SwingSeconds = 38; you.SwingDamage = 690; you.Blocks = 4; you.Stopped = 90; you.HitsReceived = 10;
+            var edda = Player(f, Edda); edda.NearSeconds = 8; edda.Blocks = 1; edda.Stopped = 20;
+            var tor = Player(f, Tor); tor.NearSeconds = 14; tor.Blocks = 5; tor.Parries = 1; tor.Stopped = 150;
+            var d = Foe(f, "Draugr", 4, 4);
+            Hit(d, Rowan, "slash 420 fire 60", "slash 90 pierce 40"); Hit(d, Edda, "pierce 330 fire 90", "slash 60"); Hit(d, Tor, "blunt 280", "slash 110");
+            var b = Foe(f, "Blob", 3, 3);
+            Hit(b, Rowan, "slash 120", "poison 70"); Hit(b, Edda, "frost 140", "poison 40"); Hit(b, Tor, "blunt 210", "poison 90");
+            book.Fights.Fights.Insert(0, f);
+            return book;
+        }
+
+        /// <summary>
+        /// 0.9.4 draft (weaknesses; Joost's screenshot, retold with the sample cast): a group fight in the Ashlands on now, 2 min 38 s in, against one
+        /// Lord Reto (prefab Fader here, SAMPLE modifiers in Mods), already down: Rowan (you) 4 133 (blunt, lightning, a little spirit and pierce),
+        /// Edda 3 568 (blunt, lightning), Tor 5 331 (blunt, poison), 13 032 together; only Edda was hit (337 pierce) and fell once; no blocks or
+        /// parries; your DPS 107. The halves keep the group's types whole (lightning 3 162, pierce 306) with your 4 133.
+        /// </summary>
+        public static PanelInput WithReto(PanelInput book)
+        {
+            var now = book.NowUtc;
+            var f = new FightView { Id = "reto-1", Kind = FightKind.Group, Outcome = FightOutcome.Live, Biome = "AshLands", StartUtc = now.AddSeconds(-158), EndUtc = now };
+            var you = Player(f, Rowan, true); you.Live = true; you.SwingSeconds = 38.6f; you.SwingDamage = 4133; you.HitsReceived = 0; you.Stopped = 0;
+            var edda = Player(f, Edda); edda.Live = true; edda.AsOfUtc = now.AddSeconds(-2); edda.NearSeconds = 6; edda.Stopped = 0;
+            var tor = Player(f, Tor); tor.Live = true; tor.AsOfUtc = now.AddSeconds(-3); tor.NearSeconds = 4; tor.Stopped = 0;
+            var r = Foe(f, "Fader", 1, 1);
+            Hit(r, Rowan, "blunt 2122 lightning 1691.5 spirit 14 pierce 305.5");
+            Hit(r, Edda, "blunt 2098 lightning 1470", "pierce 337");
+            Hit(r, Tor, "blunt 4536 poison 795");
+            Died(edda, now.AddSeconds(-40), "Fader", "pierce 120");
+            book.Fights.Fights.Insert(0, f);
+            return book;
+        }
+
+        /// <summary>0.9.4 draft (weaknesses): a book whose foe data carries no modifiers (the trophies only): the fight pages show no weakness at all.</summary>
+        public static PanelInput WithoutModifiers(PanelInput book)
+        {
+            var foe = book.Foe;
+            book.Foe = p => { var d = foe?.Invoke(p); return d == null ? null : new PanelModel.FoeData { Trophy = d.Trophy }; };
             return book;
         }
 

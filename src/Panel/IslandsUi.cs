@@ -20,6 +20,8 @@ namespace Hearthwoven.Panel
         static readonly float NarrowColumn = PanelLayout.Island.Narrow;
         /// <summary>A fellow's book: whose copy and when, at the strip's right end (PanelView.StripNote, set by Fill while the plate is drawn).</summary>
         static string stripNote;
+        /// <summary>0.9: the plate's links that ride in the strip (PanelModel.StripLinks): a Deeds page's Feed and Sets.</summary>
+        static List<Block> stripLinks = new List<Block>();
         /// <summary>0.8.5: the page whose Compare legend (CompareNow, CompareThen) or greyed chip's reason (CompareNote) leads the strip; null: none.</summary>
         static PanelView stripCompare;
         /// <summary>0.8.6: the Back button's press at the strip's left end (PanelView.Back: what Backspace does); null: the page has no back step.</summary>
@@ -62,13 +64,16 @@ namespace Hearthwoven.Panel
         {
             var hero = island.Parts.Any(p => p.Block.Kind == "hero" || p.Block.Kind == PanelModel.FightHeadKind);   // 0.9: a fight's head is its hero
             var box = VStack(parent, IslandInner);
-            box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset((int)IslandPad, (int)IslandPad, (int)(hero ? IslandHeroTop : IslandPad), (int)(hero ? IslandHeroBottom : IslandPad));
+            // 0.9.6 Meal plan's pinned meal (Island.Pin): the book's least island padding above and below it (the hero's top), so the pinned row takes little height
+            var pinned = island.Pin;
+            box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset((int)IslandPad, (int)IslandPad, (int)(hero || pinned ? IslandHeroTop : IslandPad), (int)(pinned ? IslandHeroTop : hero ? IslandHeroBottom : IslandPad));
             IslandGround(box.gameObject);
             Size(box, width, -1);
             var outer = Column; var was = islanded;
             Column = width - 2 * IslandPad; islanded = true;
             try { foreach (var p in island.Parts) DrawPart(box, p); }
             finally { Column = outer; islanded = was; }
+            if (island.Pin && !pinIslandDrawn) pinIslandDrawn = box;   // 0.9.5: Meal plan's meal, pinned with the strip (StickyHeadUi.PinStrip)
         }
 
         /// <summary>An island's ground on <paramref name="on"/>: PanelLook.Island sliced, tinted PanelLook.IslandGround.</summary>

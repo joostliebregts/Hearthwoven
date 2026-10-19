@@ -38,7 +38,7 @@ static class FellowWindowsTests
               inTen > 0 && inTen < all && Math.Abs(shown - inTen) < 0.5 && Says(damage, "Edda", "live") &&
               guard != null && (guard.Blocks == 0 ? defense == null : defense != null && Lead(defense.Value) + Lead(defense.Value2) == guard.Blocks) &&
               !damage.Windows.Any(c => c.Disabled) &&   // 0.9: her Damage opens her days too (DayTypesPanelTests)
-              defenseView.Windows.Where(c => c.Disabled).Select(c => c.Id).SequenceEqual(new[] { "Today", "SevenDays", "ThirtyDays" }) && Says(defenseView, "Edda", "only for damage dealt"),
+              defenseView.Windows.Where(c => c.Disabled).Select(c => c.Id).SequenceEqual(new[] { "Today", "Yesterday", "ThreeDays", "SevenDays", "ThirtyDays" }) && Says(defenseView, "Edda", "only for damage dealt"),
               "FW live: Edda's copy is live, so her 10 min is open and cut from her minute log counted back from now (" + shown + " of her " + all +
               " dealt this session); Defense's blocks from her minutes too (" + guard?.Blocks + "); Damage greys nothing, Defense only the days: " + defenseView.WindowWhy);
 

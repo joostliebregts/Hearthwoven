@@ -62,11 +62,16 @@ namespace Hearthwoven
     ///
     /// Schema 7 (0.8.5): top-level "dealtAfter" (ArmourBook, the dealt ledger): your hits on foes before and after the foe's resistances and armor,
     /// per foe, skill and type, with its own start date and day rows, the way "armour" keeps the hits on you (an older reader keeps it as an unknown key).
+    ///
+    /// Schema 8 (0.9, work/hearthwoven-0.9/DESIGN.md section 1): top-level "upgrades" (UpgradeLog: your upgrades, the newest 2 000 whole, older ones
+    /// folded per item), "firsts" (FirstsBook: the first day you made or placed each thing, from 0.9 on) and "featsSeen" (FeatsLedger.SeenTiers: the
+    /// earned feat tiers you opened, "id:tier"); at top level, so an older reader keeps them (Extra). Also "mealCombos" (MealCombos: the foods you had
+    /// on together at each meal, from 0.9 on), added within schema 8 the same way.
     /// </summary>
     public class LocalTotals
     {
         public const int Version = 1;      // breaking-format number: a reader refuses a higher one
-        public const int Schema = 7;       // additive revision of this writer (2: name, schema, unknown keys kept; 3: history; 4: armour and starts; 5: 0.8, feast families and foes; 6: 0.9, boss attempts; 7: 0.8.5, damage dealt after the foe's armor)
+        public const int Schema = 8;       // additive revision of this writer (2: name, schema, unknown keys kept; 3: history; 4: armour and starts; 5: 0.8, feast families and foes; 6: 0.9, boss attempts; 7: 0.8.5, damage dealt after the foe's armor; 8: 0.9, upgrades, firsts, feats seen)
         public long PlayerId;
         /// <summary>The character's name as the file was last saved for (JSON "name"); "" in a file from before 0.6.1.</summary>
         public string Name = "";
@@ -76,7 +81,7 @@ namespace Hearthwoven
         public readonly Dictionary<string, object> Extra = new Dictionary<string, object>();
         static readonly HashSet<string> KnownKeys = new HashSet<string>
             { "version", "schema", "playerId", "name", "saved", "firstRun", "biomeFrom", "totals", "baseline", "exactAtBaseline", "baselineAt", "feats", "history", "armour", "starts", "foes", "bossFights", "dungeonRuns", "dealtAfter",
-              "historyBegan", "historySaved", "chestFed", "seenGroup" };   // 0.7's own fields at top level, where an older reader keeps them (REVIEW-07 #4)
+              "historyBegan", "historySaved", "chestFed", "seenGroup", "upgrades", "firsts", "featsSeen", "mealCombos" };   // 0.7's own fields at top level, where an older reader keeps them (REVIEW-07 #4)
         public int Sessions;                                     // sessions folded into Previous
         /// <summary>When Hearthwoven first counted for this character on this PC (the zones' "since you installed Hearthwoven on
         /// 8 Oct"): set when the file is first made; a file from before this field takes the file's own creation time once.
@@ -120,7 +125,13 @@ namespace Hearthwoven
         /// <summary>A counter group added after 0.6 (0.8: materials recovered from pieces, SessionEvents.Recovered): it begins on the first load
         /// of the version that counts it, never on the 0.6 first run the groups above take.</summary>
         public const string StartRecovered = "recovered";
-        public static readonly string[] LaterStartGroups = { StartRecovered };
+        /// <summary>0.9 more feats: the new hooks' counters (FeatsCounters: Steady at the Grill, Whole Crew, Held the Line, Before the Altar, Mender of
+        /// Others, Raid Breaker) begin on the first load of the version that counts them.</summary>
+        public const string StartFeats09 = "feats09";
+        /// <summary>0.9.1 feats, batch 2: the new look's counters (FeatsCounters: Through the Storm, One Long Road, Far Horizon, Saddled) begin on the first
+        /// load of the version that counts them.</summary>
+        public const string StartFeats091 = "feats091";
+        public static readonly string[] LaterStartGroups = { StartRecovered, StartFeats09, StartFeats091 };
         /// <summary>When each counter group began on this PC for this character (UTC): the panel's "Recorded from 8 October" for that group.
         /// JSON: top-level "starts", group -> ISO time (schema 4), left out while empty; filled once by FillStarts.</summary>
         public Dictionary<string, DateTime> Starts = new Dictionary<string, DateTime>();
@@ -163,6 +174,14 @@ namespace Hearthwoven
         public BossLog Bosses = new BossLog();
         /// <summary>The dungeon runs you were in (RunLog, 0.9). JSON: top-level "dungeonRuns" (schema 6), left out while empty.</summary>
         public RunLog Runs = new RunLog();
+        /// <summary>0.9: your upgrades (UpgradeLog, record 1). JSON: top-level "upgrades" (schema 8), left out while empty; its FromUtc is set on the
+        /// first load of a version that records them (Plugin.LoadLocal).</summary>
+        public UpgradeLog Upgrades = new UpgradeLog();
+        /// <summary>0.9: the first day you made or placed each thing (FirstsBook, record 3). JSON: top-level "firsts" (schema 8), left out while empty.</summary>
+        public FirstsBook Firsts = new FirstsBook();
+        /// <summary>0.9: the foods you had on together at each meal (MealCombos, Meals' Your combinations). JSON: top-level "mealCombos" (schema 8,
+        /// additive), left out while empty; its FromUtc is set on the first load of a version that records them (Plugin.LoadLocal).</summary>
+        public MealCombos Combos = new MealCombos();
 
         /// <summary>The baseline kind of the game's battle counters (Plugin.LoadLocal), tokens = the game's stat names, the
         /// same keys as SessionEvents.Battle.</summary>
@@ -333,6 +352,10 @@ namespace Hearthwoven
             if (!Foes.IsEmpty) Foes.WriteTo(j);
             if (!Bosses.IsEmpty) Bosses.WriteTo(j);
             if (!Runs.IsEmpty) Runs.WriteTo(j);
+            if (!Upgrades.IsEmpty) Upgrades.WriteTo(j);
+            if (!Firsts.IsEmpty) Firsts.WriteTo(j);
+            if (!Combos.IsEmpty) Combos.WriteTo(j);
+            Feats.WriteSeenTiers(j);   // 0.9: at top level, so an older reader keeps it (it rewrites "feats"); nothing while not recorded
             foreach (var kv in Extra) if (!KnownKeys.Contains(kv.Key)) j.Raw(kv.Key, MiniJson.Write(kv.Value));   // a newer version's data, kept as read
             return j.Close().ToString();
         }
@@ -396,6 +419,10 @@ namespace Hearthwoven
             t.Foes = FoeBook.ReadFrom(MiniJson.Obj(root, "foes"));
             t.Bosses = BossLog.ReadFrom(root.TryGetValue("bossFights", out var bfs) ? bfs : null);
             t.Runs = RunLog.ReadFrom(root.TryGetValue("dungeonRuns", out var drs) ? drs : null);
+            t.Upgrades = UpgradeLog.ReadFrom(MiniJson.Obj(root, "upgrades"));
+            t.Firsts = FirstsBook.ReadFrom(MiniJson.Obj(root, "firsts"));
+            t.Combos = MealCombos.ReadFrom(MiniJson.Obj(root, "mealCombos"));
+            t.Feats.ReadSeenTiers(root.TryGetValue("featsSeen", out var fs) ? fs : null);
             foreach (var kv in root) if (!KnownKeys.Contains(kv.Key)) t.Extra[kv.Key] = kv.Value;
             return t;
         }

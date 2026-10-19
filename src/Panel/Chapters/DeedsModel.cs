@@ -80,8 +80,9 @@ namespace Hearthwoven.Panel
         public static bool ShowingAll(PanelState s) => s?.ShowAll != null && s.ShowAll == ShowAllKey(s);
 
         // what a page's tiles are, for its Show all tile ("Show all 365 pieces")
-        static string TilesNoun(PanelView view) =>
-            view.Active == Chapter.Deeds ? (view.Page == "building" ? "pieces" : view.Page == "cooking" ? "dishes" : view.Page == "crafting" ? "items" : view.Page == "farming" ? "crops" : view.Page == "fishing" ? "fish" : "kinds") : view.Active == Chapter.Stores || view.Active == Chapter.Voyages ? "items" : "kinds";
+        static string TilesNoun(PanelView view) => TilesNoun(view.Active, DeedSubParent(view.Page) ?? view.Page);   // 0.9: one day of a deed (Chapters/DeedHistory.cs) names its deed's tiles
+        static string TilesNoun(Chapter active, string page) =>
+            active == Chapter.Deeds ? (page == "building" ? "pieces" : page == "cooking" ? "dishes" : page == "crafting" ? "items" : page == "farming" ? "crops" : page == "fishing" ? "fish" : "kinds") : active == Chapter.Stores || active == Chapter.Voyages ? "items" : "kinds";
 
         /// <summary>Folds every item grid of a built page (FoldTiles), in the order the page's sort control left it: the last step of Build,
         /// so every chapter's grids, your own book's and a fellow's, Unity's and the preview's, hold the same tiles. Show all pressed: none.</summary>
@@ -89,7 +90,7 @@ namespace Hearthwoven.Panel
         {
             if (ShowingAll(state)) return view;
             var noun = TilesNoun(view);
-            var drawn = Content(view).Where(b => b.Kind == "itemgrid" && b.Items != null).ToList();
+            var drawn = Content(view).Where(b => b.Kind == "itemgrid" && b.Items != null && b.Tone != SetBandTone && b.Tone != MealPlanTone).ToList();   // 0.9: an armor set's band holds its few pieces whole
             int left = ItemPageMax, grids = drawn.Count;
             foreach (var g in drawn.OrderBy(g => g.Items.Count))   // the shortest first: each takes what it needs up to its share of what is left
             {
@@ -98,7 +99,7 @@ namespace Hearthwoven.Panel
                 FoldTiles(g, cap, noun);
                 left -= g.Items.Count;
             }
-            void Rest(IEnumerable<Block> bs) { foreach (var b in bs ?? Enumerable.Empty<Block>()) { if (b == null) continue; if (b.Kind == "itemgrid") FoldTiles(b, ItemGridMax, noun); else Rest(b.Items); } }
+            void Rest(IEnumerable<Block> bs) { foreach (var b in bs ?? Enumerable.Empty<Block>()) { if (b == null) continue; if (b.Kind == "itemgrid") { if (b.Tone != SetBandTone && b.Tone != MealPlanTone) FoldTiles(b, ItemGridMax, noun); } else Rest(b.Items); } }
             Rest(view.Blocks);   // a switch's other views too
             return view;
         }
@@ -728,6 +729,7 @@ namespace Hearthwoven.Panel
                 view.Blocks.AddRange(Sorted(state, SortKey(state, "crafting"), grid, gearMade.Count, GroupsOfFacet(filter, "kind")));
                 if (grid == null) view.Blocks.Add(new Block { Kind = "empty", Title = "Nothing for this choice" });
             }
+            view.Blocks.AddRange(UpgradesIsland(input));   // 0.9: the upgrades recorded per item, the level meter (Chapters/CraftingHistory.cs); your own book in All
             if (input.Window == null) Under(view.Blocks, Section("Put to good use by"), GearPutToGoodUse(input));   // a day window: fellows' records have no days (DeedsDayLines)
             // About these numbers (own book, all time, with the game's stats baseline): the game's own count before the split, what it counted after;
             // when the per-item baseline has another date, each date says its own sentence (hard case 4)
@@ -746,6 +748,7 @@ namespace Hearthwoven.Panel
                     "A batch (a stack of arrows) counts once, as the game books it.");
             }
             Plate(view, "title:smith", RecordedScope(input));
+            if (input.IsSelf && input.ArmorPieces != null && PlateOf(view) is Block craftPlate) craftPlate.Items.Insert(0, SetsLink());   // 0.9: the heading row's chip to the Armor sets (Chapters/ArmorSets.cs)
         }
 
         /// <summary>Gear this player made that fellow players equipped (recorded on their PCs): one line per fellow,

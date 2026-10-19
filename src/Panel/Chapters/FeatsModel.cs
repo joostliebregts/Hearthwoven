@@ -73,6 +73,8 @@ namespace Hearthwoven.Panel
     {
         // ---------- the table: every feat and every threshold (tune here) ----------
 
+        /// <summary>0.9: the armor-sets feat and its detail's link to Deeds > Crafting > Armor sets (FeatDetail; drawn as a chip ending in the opens mark).</summary>
+        public const string ArmorSetsFeatId = "armorsets", OpenSetsLabel = "Open " + SetsLabel;
         public const string FeatsPageId = "earned", FeatsUnsungId = "unsung", FeatsTogetherId = "together", FeatsLink = "Feats/earned";
         public const string FeatsIcon = "vocab:list-feats", FeatsUnsungIcon = "vocab:list-unsung", FeatTone = "earned", FeatUnsung = "unsung";
         public const string FeatsTogetherWord = "Together", FeatsTogetherHeading = "Feats of the group";
@@ -98,7 +100,7 @@ namespace Hearthwoven.Panel
                             NeedsServerCaveat = "Needs the server on Hearthwoven 0.6: its cargo book counts this. A server before 0.6 sends nothing.";
         /// <summary>One line on the Feats page (in the switch's caption row) saying what a feat is and what Unsung means: plain, no ranking.</summary>
         public const string FeatsDefinition = "A feat is a moment worth telling, earned by doing it.", UnsungDefinition = "Not earned yet. Each one says what earns it.",
-                            TogetherDefinition = "Earned by the whole group. Everyone who shares adds to them.";
+                            TogetherDefinition = "Earned by the whole group, from all who share.";   // 0.9.1: shorter, so the line rides beside the Look chips as on Earned
         /// <summary>The strip's title part may say each title's reason when the line stays about this wide (px, an estimate on the safe side: 15 px names,
         /// 14 px italic reasons); wider, the names stand alone and still open the Titles page.</summary>
         public const float StripTitleRoom = 780;
@@ -157,9 +159,9 @@ namespace Hearthwoven.Panel
         /// <summary>The crew's height: the bar's line when it has one, then one row per row of the legend (without a bar the first row sits on the label's line).</summary>
         public static float CrewHeight(int rows, bool bar) => (bar ? CrewRowH : 0) + Math.Max(1, rows) * CrewRowH;
 
-        /// <summary>Where the crew's line starts in the detail's right column: under the rules (20 each, from 12), the progress line, Counted by and the
-        /// caveat (none, one line or two). FeatsUi.FeatDetailFill draws in this order; the mirror's featdetail() too.</summary>
-        public static float FeatCrewTop(int rules, int caveatLines) => 12 + rules * 20 + 4 + 24 + 20 + (caveatLines <= 0 ? 0 : caveatLines == 1 ? 20 : 38);
+        /// <summary>Where the crew's line starts in the detail's right column: under the rules, the progress line, Counted by and the caveat (none, one
+        /// line or two), as PanelLayout.FeatDetail measures them (0.9.1 compact). FeatsUi.FeatDetailFill draws in this order; the mirror's featdetail() too.</summary>
+        public static float FeatCrewTop(int rules, int caveatLines) => PanelLayout.FeatDetail.CaveatTop(rules) + PanelLayout.FeatDetail.CaveatRoom(caveatLines);
 
         // a fellow player's cooking, gear and voyages are the only things a feat is worked out from besides your own counts
         static double Hours(double seconds) => seconds / 3600.0;
@@ -194,11 +196,12 @@ namespace Hearthwoven.Panel
                 case "born": return "vocab:young-creature";
                 case "drover": case "longlead": return "vocab:lead-rope";
                 case "ironforge": return "vocab:cargo-mark";
-                default: return "title:" + d.Family;
+                default: return d.Family == "delver" ? "vocab:find-dungeon" : d.Family == "archer" ? "item:$item_bow_finewood|vocab:dmg-pierce"
+                              : d.Family == "mage" ? "item:$item_stafffireball|vocab:dmg-fire" : d.Family == "melee" ? "vocab:weapon-melee" : "title:" + d.Family;   // 0.9: the families with no title of their own
             }
         }
 
-        public static readonly FeatDef[] FeatDefs = new FeatDef[]
+        public static readonly FeatDef[] FeatDefs = InFamilyOrder(new FeatDef[]
         {
             // ----- Hearth Cook -----
             new FeatDef("fulltable", "Full Table", "cook", Chapter.Deeds, "cooking", "A table the whole group sat at.", new[] { 3.0 },
@@ -217,6 +220,12 @@ namespace Hearthwoven.Panel
                 i => DistinctFellows(i, e => e.EquippedGearMadeBy.Any(kv => kv.Value > 0 && SameName(Split2(kv.Key)[0], i.PlayerName))),
                 CountedFellows, "Only fellow players who share are seen. It counts putting gear on, not wearing it.", exact: false, derived: true,
                 brief: t => N(t) + " fellows wear it", unit: "fellow players"),
+            // 0.9 (Armor sets, Chapters/ArmorSets.cs; Joost, 18 Oct: "One feat with tiers yeah"): I the sets of one land, II half the lands, III every land
+            new FeatDef("armorsets", "Clad for Every Land", "smith", Chapter.Deeds, SetsPageId, "Every armor set of a land, made in full.", ArmorFeatTiers,
+                t => t <= 1 ? "Make every armor set of one land." : t >= ArmorLands.Length ? "Make every armor set of every land." : "Make every armor set of " + N(t) + " lands, half of them.",
+                LandsArmored,
+                CountedCharacter, "Sets as the book groups them, a mod's armor too. A piece counts once {you} made it.", retro: true,
+                brief: t => t <= 1 ? "every set of 1 land" : t >= ArmorLands.Length ? "every set, every land" : "every set of " + N(t) + " lands", unit: "land|lands"),
             new FeatDef("keptfires", "Kept the Fires", "smith", Chapter.Stores, "smelters", "The smelters never went cold.", new[] { 1000.0, 5000.0, 20000.0 },
                 t => "Put " + N(t) + " ore and fuel into smelters, kilns and furnaces.",
                 i => M(i, e => e.SmelterAdded),
@@ -296,7 +305,7 @@ namespace Hearthwoven.Panel
                         Rule = t => "Together, move " + N(t) + " item-km of ore and metal by ship or cart.", Brief = t => N(t) + " item-km moved", Unit = "item-km",
                     },
                 },
-        }.Concat(GroupFeatDefs()).ToArray();   // the group's eight (FeatsGroup.cs)
+        }.Concat(MoreFeatDefs()).Concat(MoreFeatDefs2())).Concat(GroupFeatDefs()).Concat(MoreGroupFeatDefs()).Concat(MoreGroupFeatDefs2()).Concat(GroupFeatDefs3()).ToArray();   // 0.9.2 Together, batch 3 (FeatsGroup3.cs)   // 0.9.1 batch 2 (FeatsMore2.cs)   // 0.9 more feats (FeatsMore.cs), the group's (FeatsGroup.cs, FeatsMore.cs)
 
         /// <summary>The group's ore and metal moved by ship or cart (item-km): what the server's book booked as unloaded, summed over you and every fellow player who shares
         /// (each haul once: from where it was loaded to where it came off). null when no one's book is there (a server before 0.6): the feat waits.</summary>
@@ -317,15 +326,91 @@ namespace Hearthwoven.Panel
         /// <summary>True for a group feat's id (Together's): its gold dot sits on Together, never on Earned (FeatsLedger.UnseenOf).</summary>
         public static bool IsGroupFeat(string id) => FeatById(id)?.Group == true;
 
-        /// <summary>The panel's feats seen once their page is on screen in your own book: Earned marks your own tiers seen, Together the group's
-        /// (each page answers its own dot; opening Earned leaves a group tier's dot on Together).</summary>
+        /// <summary>
+        /// The panel's feats seen, in your own book, after each build (PanelUi.DrawPage). 0.9 New feats (DESIGN.md section 2; Joost 18 Oct: the New mark
+        /// goes "When you open its card"): the card opened (a click or A/D) is seen, so every earned tier of that feat is marked seen (FeatsLedger.MarkTierSeen);
+        /// the other New cards keep their mark. Only inside a visit Build began (PanelState.FeatsVisit). 0.9.2: a visit no longer opens a card by itself
+        /// (the page opens with none chosen), so a New mark goes only when its card is chosen.
+        /// A ledger without the per-tier record (SeenTiers null: not loaded by 0.9 yet) keeps the 0.8.6 rule: the page on screen marks its whole side seen
+        /// (Earned your own tiers, Together the group's; each page answers its own dot).
+        /// </summary>
         public static void FeatsSeen(PanelInput self, PanelState state)
         {
             if (self?.Feats == null || !self.IsSelf || state == null || state.ShowAbout || state.Chapter != Chapter.Feats) return;
             var page = state.PageOf(Chapter.Feats) ?? FeatsPageId;
-            if (page == FeatsPageId) self.Feats.MarkSeenOf(IsGroupFeat, false);
-            else if (page == FeatsTogetherId) self.Feats.MarkSeenOf(IsGroupFeat, true);
+            if (page != FeatsPageId && page != FeatsTogetherId) return;
+            var group = page == FeatsTogetherId;
+            if (self.Feats.SeenTiers == null) { self.Feats.MarkSeenOf(IsGroupFeat, group); return; }
+            if (state.FeatsVisit != page) return;
+            FeatOpened(self.Feats, state.FeatOpen, group);   // the card opened (click, A/D), never one only hovered
         }
+
+        /// <summary>A feat card opened (selected: the page opened on it, a hover, a click, A/D): every earned tier of it marked seen. group: only a feat of
+        /// that side (Earned opens your own, Together the group's). True when a tier was New.</summary>
+        public static bool FeatOpened(FeatsLedger ledger, string id, bool? group = null)
+        {
+            if (ledger?.SeenTiers == null || string.IsNullOrEmpty(id) || FeatById(id) == null) return false;
+            if (group.HasValue && IsGroupFeat(id) != group.Value) return false;
+            var any = false;
+            for (int t = 1; t <= ledger.Tier(id); t++) any |= ledger.MarkTierSeen(id, t, IsGroupFeat);
+            return any;
+        }
+
+        // ---------- 0.9 New feats: the New mark, its order, its count ----------
+
+        /// <summary>A click on a card (FeatsUi): it is chosen and opened (0.9 New feats: its tiers are marked seen after the build; a hover chooses nothing).
+        /// The choice belongs to the page on screen (PanelState.FeatSelAt).</summary>
+        public static void OpenFeat(PanelState s, string id) { if (s == null || string.IsNullOrEmpty(id)) return; s.FeatSel = id; s.FeatOpen = id; s.FeatSelAt = FeatSelKey(s); }
+
+        /// <summary>0.9.2 (Joost: "show me the full list before I select anything"): the chosen card of Earned, Unsung or Together closed (a click on it
+        /// again, Backspace): no card chosen, no detail area, the full grid. False when the page on screen is none of them or has no card chosen (Backspace
+        /// then goes back as before). The Titles page always keeps one chosen.</summary>
+        public static bool CloseFeat(PanelState s, PanelView v)
+        {
+            if (s == null || !OnFeatsPage(v) || !FeatsChoosable(v.Page) || !VisibleFeats(v).Any(c => c.Selected)) return false;
+            s.FeatSel = ""; s.FeatSelAt = FeatSelKey(s);
+            return true;
+        }
+        /// <summary>Earned, Unsung and Together: a page whose cards open on a click (none chosen when it opens). Not Titles, which keeps one chosen.</summary>
+        public static bool FeatsChoosable(string page) => page == FeatsPageId || page == FeatsUnsungId || page == FeatsTogetherId;
+        /// <summary>Whose page a choice was made on: the Feats page and the book ("earned|" your own, "earned|Tor" a fellow's).</summary>
+        static string FeatSelKey(PanelState s) => (s.PageOf(Chapter.Feats) ?? FeatsPageId) + "|" + (s.Player ?? "");
+
+        /// <summary>0.9 (Joost in game, 18 Oct: "clicked really is selected, and then hovering over the other ones shouldn't auto-select those anymore"; the
+        /// pointer could not reach Clad for Every Land's "Open Armor sets" link past the cards under it): the pointer on a card of any Feats page (Earned,
+        /// Unsung, Together, Titles). A click chooses and opens it (true: the detail area shows it); a hover changes nothing (false): it only lights the
+        /// card's hover line. A/D still step the choice (StepFeat). 0.9.2 (Joost: "Only show when I click to select something"): on Earned, Unsung and
+        /// Together a click on the chosen card closes it again (CloseFeat's state: no card chosen, the full grid); on Titles it changes nothing (false).</summary>
+        public static bool FeatPointer(PanelState s, string id, bool click)
+        {
+            if (!click || s == null || string.IsNullOrEmpty(id)) return false;
+            if (s.FeatSel == id)
+            {
+                if (!FeatsChoosable(s.PageOf(Chapter.Feats) ?? FeatsPageId)) return false;
+                s.FeatSel = ""; s.FeatSelAt = FeatSelKey(s);
+                return true;
+            }
+            OpenFeat(s, id);
+            return true;
+        }
+
+        /// <summary>Ends the visit of a Feats page (PanelUi.Open, FeatsFinish on another page): the next build of Earned or Together begins a new one.</summary>
+        public static void EndFeatsVisit(PanelState state) { if (state == null) return; state.FeatsVisit = null; state.FeatsVisitNew.Clear(); state.FeatOpen = null; }
+
+        /// <summary>The New mark's word, beside the gold dot on a card.</summary>
+        public const string FeatNewWord = "New";
+        /// <summary>The intro line's count of New cards: "8 of 16 earned · 1 new" (Joost 18 Oct, "Like that too"; the page has no chip row, so the intro line).</summary>
+        public static string FeatsNewCount(int n) => N(n) + " new";
+
+        /// <summary>The side a page's New marks belong to: Earned your own feats (false), Together the group's (true); null where no card is New: Unsung,
+        /// Titles, a fellow's book, a ledger without the per-tier record (nothing is called New without a record).</summary>
+        static bool? NewSide(PanelInput input, string page) =>
+            input == null || !input.IsSelf || input.Feats?.SeenTiers == null ? (bool?)null : page == FeatsPageId ? false : page == FeatsTogetherId ? true : (bool?)null;
+
+        /// <summary>The feats of one side with an earned tier not opened yet, newest first (by the newest such tier; undated last). Empty without the record.</summary>
+        public static List<string> NewFeats(PanelInput input, bool group) =>
+            input?.Feats?.SeenTiers == null || !input.IsSelf ? new List<string>()
+                : input.Feats.UnseenTiers(IsGroupFeat, group).Select(x => x.id).Where(id => FeatById(id) != null).Distinct().ToList();
 
         // ---------- the numbers ----------
 
@@ -491,7 +576,17 @@ namespace Hearthwoven.Panel
         static readonly HashSet<string> SinceV06 = new HashSet<string> { "shieldwall", "stoodfast", "unbroken", "forsaken", "oreroad", "heavykeel", "drover", "longlead", "born" };
 
         /// <summary>When a feat's count on this PC began (0.7 hard case 15): the 0.6 feats from the feats group's start, the others from the install; null for a fellow's book.</summary>
-        public static DateTime? CountFrom(PanelInput i, string featId) => StartOf(i, featId != null && SinceV06.Contains(featId) ? LocalTotals.StartFeats : null);
+        public static DateTime? CountFrom(PanelInput i, string featId)
+        {
+            // 0.9 more feats: the upgrade record and the foes' record began on their own day; the new hooks' counters with the version that brought them
+            if (featId == "honed" && i != null && i.IsSelf && (i.UpgradesFrom ?? i.Upgrades?.FromUtc) is DateTime u && u > DateTime.MinValue) return u;
+            if (featId == "shoulder" && i != null && i.IsSelf && i.FoesFromUtc.HasValue) return i.FoesFromUtc;
+            // 0.9.1 batch 2: one weapon's damage counts from the day this PC began recording weapons, a day of firsts from the firsts record's own day
+            if (featId == "oldcompanion" && i != null && i.IsSelf && i.SwingFromUtc is DateTime w && w > DateTime.MinValue) return w;
+            if (featId == "dayfirsts" && i != null && i.IsSelf && i.FirstsFrom is DateTime f && f > DateTime.MinValue) return f;
+            return StartOf(i, featId != null && SinceV06.Contains(featId) ? LocalTotals.StartFeats : featId != null && SinceV09.Contains(featId) ? LocalTotals.StartFeats09
+                            : featId != null && SinceV091.Contains(featId) ? LocalTotals.StartFeats091 : null);
+        }
 
         /// <summary>The block kinds of the Feats system (they carry no number of their own beyond what their items tag).</summary>
         public static bool IsFeatKind(string kind) => kind == "feats" || kind == "featdetail" || kind == "knownfor" || kind == "featband";
@@ -524,7 +619,7 @@ namespace Hearthwoven.Panel
             if (d.Source == CountedServer) return waiting ? NeedsServer : null;
             if (waiting) return null;
             var value = FeatValue(d, i);
-            if (d.Source == CountedGroup) return value > 0 ? FeatHave(d, value) + " so far" : "none yet";   // the group's number, the same on every book
+            if (d.Source == CountedGroup) return value > 0 ? FeatHave(d, value) + " so far" : NeedsTwo.Contains(d.Id) && GroupMembers(i).Count < 2 ? NeedsFellows : "none yet";   // 0.9.2 batch 3: needs two who share   // the group's number, the same on every book
             if (d.Source == CountedFellows)
                 return !i.IsSelf ? null : !FellowsOf(i).Any() ? NeedsFellows : value > 0 ? FeatHave(d, value) + " so far" : "none yet from fellows";
             var have = i.IsSelf && d.Exact && value > 0 ? FeatHave(d, value) + " so far" : null;
@@ -624,6 +719,8 @@ namespace Hearthwoven.Panel
                 if (many && text.StartsWith("Earned", StringComparison.Ordinal)) text = "Tier " + Numeral(of) + " earned" + text.Substring("Earned".Length);
                 detail.Items.Add(new Block { Kind = "moment", Text = text, Note = note });
             }
+            // 0.9 (Joost, 18 Oct): Clad for Every Land opens the page that shows its sets, Deeds > Crafting > Armor sets (the page's own headlink target)
+            if (d.Id == ArmorSetsFeatId) detail.Items.Add(new Block { Kind = "link", Id = Chapter.Deeds + "/" + SetsPageId, Title = OpenSetsLabel });
             return detail;
         }
 
@@ -645,13 +742,36 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>The cards of one page, each feat once, in the table's order (the title families' order, never by size or rarity): your earned feats, your unsung
-        /// ones, or the group's (earned or not).</summary>
-        static List<Block> FeatCards(PanelInput input, string page, string selected)
+        /// ones, or the group's (earned or not). 0.9 New feats (DESIGN.md section 2): on Earned and Together in your own book the New ones come first, newest first
+        /// (PanelState.FeatsVisit); a New card carries the mark until it is opened (a click or A/D: FeatsSeen marks it seen after the build). 0.9.2 (Joost:
+        /// "show me the full list before I select anything. Only show when I click to select something"): a page opens with no card chosen (no detail area,
+        /// the grid over the whole room), never on the newest New feat; a choice made on this page in this book stays while the page is on screen (and one a
+        /// link brought along, Jump), any other is let go when the page is opened again (PanelState.FeatSelAt).</summary>
+        static List<Block> FeatCards(PanelInput input, string page, PanelState state)
         {
+            // a choice made elsewhere (another page or book), or one left behind on this page before it was opened again, is let go; one a link just
+            // brought along (Jump: Opening) or made on this page while it is on screen stays
+            var key = page + "|" + (state.Player ?? "");
+            var again = state.Here != null && !state.Here.About && state.Here.Chapter == Chapter.Feats && state.Here.Page == page && state.Here.Player == (state.Player ?? "");
+            if (state.FeatSelAt != null && (state.FeatSelAt != key || (state.Here != null && !again && !state.Opening))) { state.FeatSel = ""; state.FeatSelAt = null; }
+            var selected = state.FeatSel;
             var defs = page == FeatsTogetherId ? TogetherFeats(input, out _)
-                     : FeatDefs.Where(d => !d.Group && (FeatTier(d, input) > 0) == (page == FeatsPageId)).ToList();
-            var pick = defs.Any(d => d.Id == selected) ? selected : defs.FirstOrDefault()?.Id;   // the first card is selected on open: the detail is never empty
-            return defs.Select(d => FeatCard(input, d, pick)).ToList();
+                     : FeatDefs.Where(d => !d.Group && OwnVisible(d, input) && (FeatTier(d, input) > 0) == (page == FeatsPageId)).ToList();
+            var side = NewSide(input, page);
+            var fresh = side.HasValue ? NewFeats(input, side.Value).Where(id => defs.Any(d => d.Id == id)).ToList() : new List<string>();
+            if (side.HasValue)
+            {
+                if (state.FeatsVisit != page)   // a visit begins: the New ones, newest first (0.9.2: none opened by itself)
+                {
+                    state.FeatsVisit = page; state.FeatsVisitNew.Clear(); state.FeatsVisitNew.AddRange(fresh);
+                }
+                else state.FeatsVisitNew.InsertRange(0, fresh.Where(id => !state.FeatsVisitNew.Contains(id)).ToList());   // earned during the visit: first too
+                var first = state.FeatsVisitNew.Select(id => defs.FirstOrDefault(d => d.Id == id)).Where(d => d != null).ToList();
+                defs = first.Concat(defs.Where(d => !first.Contains(d))).ToList();
+            }
+            var pick = defs.Any(d => d.Id == selected) ? selected : null;   // 0.9.2: no card chosen unless one was (a click, A/D, a link)
+            state.FeatSel = pick ?? "";
+            return defs.Select(d => { var c = FeatCard(input, d, pick); c.New = d.Id != state.FeatOpen && fresh.Contains(d.Id); return c; }).ToList();
         }
 
         /// <summary>Your own feats (not the group's): how many there are to earn.</summary>
@@ -666,18 +786,28 @@ namespace Hearthwoven.Panel
             if (page == TitlesPageId) { TitlesPage(input, view, state); return; }
             var together = page == FeatsTogetherId; var earnedPage = page == FeatsPageId;
             view.Heading = together ? FeatsTogetherHeading : earnedPage ? "Earned feats" : "Unsung feats";
-            var cards = FeatCards(input, page, state.FeatSel);
+            var cards = FeatSearching(state, page) ? FeatSearchCards(input, state) : FeatCards(input, page, state);   // 0.9.2 feat search: one grid across the three pages while a query is on (FeatSearch.cs)
             if (cards.Count == 0) view.Blocks.Add(new Block { Kind = "note", Text = earnedPage ? FeatsNone : FeatsAllEarned });
             else
             {
-                view.Blocks.Add(new Block { Kind = "feats", Items = cards, Tone = together ? FeatsTogetherWord.ToLowerInvariant() : earnedPage ? FeatTone : FeatUnsung });
-                view.Blocks.Add(cards.First(c => c.Selected).Items[0]);
+                // 0.9 feat look (FeatLook.cs): the cards dressed for it; 0.9.2: the detail area only under a chosen card
+                FeatLookDress(input, cards);
+                view.Blocks.Add(new Block { Kind = "feats", Items = cards, Look = FeatLookOn, Tone = together ? FeatsTogetherWord.ToLowerInvariant() : earnedPage ? FeatTone : FeatUnsung });
+                var chosen = cards.FirstOrDefault(c => c.Selected);
+                if (chosen != null) view.Blocks.Add(chosen.Items[0]);
             }
             var have = FeatDefs.Count(d => !d.Group && FeatTier(d, input) > 0);
+            var ownShown = FeatDefs.Count(d => !d.Group && OwnVisible(d, input));   // 0.9: a land's own feat waits, unnamed, until the group found the land
             var hidden = false; if (together) TogetherFeats(input, out hidden);
-            var line = together ? TogetherDefinition + (hidden ? " " + LandsNotFound : "") : (earnedPage ? FeatsDefinition : UnsungDefinition) + " " + N(have) + " of " + N(OwnFeatCount) + " earned.";
+            var fresh = cards.Count(c => c.New);   // 0.9: the New cards still waiting ("8 of 16 earned · 1 new")
+            var read = FeatsReadOffered(input, page, state, fresh);   // 0.9.5 Mark read: the count moves into the action ("Mark 34 read"), so the line and the field fit (FeatsReadAll.cs)
+            var line = together ? TogetherDefinition + (hidden ? " " + LandsNotFound : "") + (fresh > 0 && !read ? " " + Plural(fresh, "new feat", "new feats") + "." : "")
+                     : (earnedPage ? FeatsDefinition : UnsungDefinition) + " " + N(have) + " of " + N(ownShown) + " earned" + (earnedPage && fresh > 0 && !read ? " · " + FeatsNewCount(fresh) : "") + ".";
             Plate(view, together ? "vocab:list-together" : earnedPage ? FeatsIcon : FeatsUnsungIcon, RecordedScope(input) ?? line);   // a fellow's book: "Tor, as of 8 Oct" (rule E), never "since install"
             PlateOf(view).Tone = PlateFull;
+            if (cards.Count > 0) FeatsIntroInStrip(PlateOf(view));   // 0.9 feat look: the line rides in the strip (no row of its own)
+            FeatSearchFinish(input, page, view, state);   // 0.9.2 feat search: the field's row, and the count line while a query is on (FeatSearch.cs)
+            FeatsReadFinish(input, page, view, state, read);   // 0.9.5 Mark read, on the field's block (FeatsReadAll.cs)
         }
         /// <summary>A plate that keeps the whole room even when its blocks are shorter (the Feats chapter: the grid grows into it, the detail area sits at the foot).</summary>
         public const string PlateFull = "full";
@@ -688,14 +818,16 @@ namespace Hearthwoven.Panel
         /// <summary>The cards of the view on screen (the Feats page's grid), in order.</summary>
         public static List<Block> VisibleFeats(PanelView v) => Content(v).FirstOrDefault(b => b.Kind == "feats")?.Items ?? new List<Block>();
 
-        /// <summary>A/D and the D-pad on the Feats page: the selection moves to the next card (wraps from the last to the first).
-        /// false when the page has no cards.</summary>
+        /// <summary>A/D and the D-pad on the Feats page: the selection moves to the next card (wraps from the last to the first). 0.9.2: with none chosen
+        /// (the page just opened, or the chosen card closed) the first press chooses the first card (D) or the last (A). false when the page has no cards.</summary>
         public static bool StepFeat(PanelState s, PanelView v, int d)
         {
             var cards = VisibleFeats(v);
             if (cards.Count == 0) return false;
-            var at = Math.Max(0, cards.FindIndex(c => c.Selected));
-            s.FeatSel = cards[((at + d) % cards.Count + cards.Count) % cards.Count].Id;
+            var at = cards.FindIndex(c => c.Selected);
+            var to = at < 0 ? (d > 0 ? 0 : cards.Count - 1) : ((at + d) % cards.Count + cards.Count) % cards.Count;
+            s.FeatSel = s.FeatOpen = cards[to].Id;   // 0.9: A/D opens the card (a hover only shows it)
+            s.FeatSelAt = FeatSelKey(s);
             return true;
         }
 
@@ -737,6 +869,8 @@ namespace Hearthwoven.Panel
         // Build's last steps: the band at the top of the page's plate (outside the zones), the gold dots, the keys of the Feats page
         static void FeatsFinish(PanelInput input, PanelState state, PanelView view)
         {
+            // 0.9 New feats: a visit of Earned or Together in your own book ends when another page (or book, or About) is drawn; the next one opens on the newest New
+            if (state != null && state.FeatsVisit != null && !(OnFeatsPage(view) && input != null && input.IsSelf && view.Page == state.FeatsVisit)) EndFeatsVisit(state);
             if (view.ShowAbout) return;
             if (view.Active != Chapter.Feats && !view.EveryoneOn)   // 0.8: the group's page carries no one player's feats or titles (EveryoneModel.cs)
             {
@@ -774,7 +908,9 @@ namespace Hearthwoven.Panel
                 var at = view.Keys.IndexOf("[Q/E·A/D] Chapter");
                 if (at >= 0) view.Keys[at] = "[Q/E] Chapter";
                 var page = view.Keys.IndexOf("[W/S] Page");
-                view.Keys.Insert(page >= 0 ? page + 1 : view.Keys.Count, view.Page == TitlesPageId ? "[A/D] Title" : "[A/D] Feat");
+                var featKey = page >= 0 ? page + 1 : view.Keys.Count;
+                view.Keys.Insert(featKey, view.Page == TitlesPageId ? "[A/D] Title" : "[A/D] Feat");
+                if (FeatsReadKeyLine(view, state) is string readKey) view.Keys.Insert(featKey + 1, readKey);   // 0.9.5 Mark read's key, only while it is offered
                 FeatsLabelPc(input, view.Blocks);
             }
         }

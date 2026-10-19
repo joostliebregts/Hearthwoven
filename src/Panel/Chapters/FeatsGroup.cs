@@ -51,7 +51,10 @@ namespace Hearthwoven.Panel
         public const string WhoHelped = "Who helped";
 
         /// <summary>The Together page's order: journey order (Black Forest, Swamp), the cross-cutting ones after, the variety feat last; never by size.</summary>
-        static readonly string[] TogetherOrder = { "copperwed", "bogiron", "ironforge", "charcoal", "workshop", "wellfed", "meadhall", "clad", "manycrafts" };
+        static readonly string[] TogetherOrder = { "copperwed", "bogiron", "ironforge", "silvervein", "blackmetal", "eitr", "flametal", "charcoal", "workshop", "wellfed", "meadhall",
+                                                   "onehearth", "onecrew", "herdgrows", "clad",
+                                                   "quarry", "woodpile", "fleet", "doorways", "garden", "everyland", "oldpowers", "felledtogether", "sharedtable", "longtable", "handtohand", "onemap",   // 0.9.2 batch 3
+                                                   "manycrafts" };
 
         /// <summary>The crafting stations' own extensions (reference/item-names.json: workbench 4, forge 6, cauldron 6, black forge 5, galdr table 4, artisan table 1).
         /// A mod's own pieces (kiln vents, bellows of a smelter mod) are no crafting-station extension and stay out.</summary>
@@ -173,14 +176,22 @@ namespace Hearthwoven.Panel
         static double GroupSum(PanelInput i, Func<PanelInput, double> part) => GroupMembers(i).Sum(p => { try { return Math.Max(0, part(p)); } catch { return 0; } });
         static double GroupUnion(PanelInput i, Func<PanelInput, IEnumerable<string>> keys) =>
             GroupMembers(i).SelectMany(p => { try { return keys(p) ?? Enumerable.Empty<string>(); } catch { return Enumerable.Empty<string>(); } }).Distinct(StringComparer.Ordinal).Count();
-        /// <summary>Everyone who added to a group feat with their own part and its share of all the parts, largest first (B37, Joost 2026-10-10: "Who helped"
-        /// with each one's share, as the group view does), then by name.</summary>
+        /// <summary>Everyone who added to a group feat with their own part and its share of all the parts (B37, Joost 2026-10-10: "Who helped" with each
+        /// one's share, as the group view does), in the group's order: you first, then by name, as the player row above the page (PanelModel.AddPlayers).
+        /// 0.9.2 (data-design-system: people are parts of a whole in a stable order, never sorted by size): it was largest first, so the bar and the
+        /// legend reordered as the parts grew.</summary>
         public static List<(string name, double part, double share)> GroupShares(PanelInput i, Func<PanelInput, double> part)
         {
             var parts = GroupMembers(i).Select(p => (name: p.PlayerName ?? "", part: Safe(() => Math.Max(0, part(p))))).Where(x => x.name.Length > 0 && x.part > 0).ToList();
             var all = parts.Sum(x => x.part);
-            return parts.Select(x => (x.name, x.part, share: all > 0 ? x.part / all : 0)).OrderByDescending(x => x.part).ThenBy(x => x.name, StringComparer.OrdinalIgnoreCase).ToList();
+            var you = GroupViewer(i);
+            return parts.Select(x => (x.name, x.part, share: all > 0 ? x.part / all : 0))
+                        .OrderBy(x => SameName(x.name, you) ? 0 : 1).ThenBy(x => x.name, StringComparer.OrdinalIgnoreCase).ToList();
         }
+        /// <summary>Who looks at the book (the player row's first chip): your own book's player, else your copy among the group (a fellow's book), else the
+        /// book's viewer name.</summary>
+        static string GroupViewer(PanelInput i) =>
+            i == null ? "" : i.IsSelf ? i.PlayerName ?? "" : (i.Fellows ?? new List<PanelInput>()).FirstOrDefault(f => f != null && f.IsSelf)?.PlayerName ?? i.ViewerName ?? "";
         static double Safe(Func<double> f) { try { return f(); } catch { return 0; } }
 
         /// <summary>

@@ -573,6 +573,21 @@ Check(new[] { "CookingStation.OnInteract/1", "CookingStation.IsItemDone/1", "Coo
       "G1 the game methods the cooking hooks attach to exist (OnInteract, IsItemDone, SpawnItem, RPC_RemoveDoneItem(sender, point, amount), InvokeRPC, IncrementStatItemCraft)");
 Check(new[] { "Piece.DropResources/1", "ItemDrop.Awake/0", "ZDOMan.HandleDestroyedZDO/1", "Humanoid.Pickup/3", "WearNTear.RPC_Remove/2" }.All(gameMethods.Contains),
       "G2 the game methods salvage attaches to exist (Piece.DropResources, ItemDrop.Awake, ZDOMan.HandleDestroyedZDO, Humanoid.Pickup; WearNTear.RPC_Remove, why the drops are made on the host)");
+// 0.9, record 1 (UpgradeHooks): the game methods and fields the upgrade hook reads exist (DoCrafting, the station and its level, the slot, the upgraded item)
+var gameFields = new System.Collections.Generic.HashSet<string>();
+using (var gameFile2 = System.IO.File.OpenRead(typeof(CookingStation).Assembly.Location))
+using (var pe2 = new System.Reflection.PortableExecutable.PEReader(gameFile2))
+{
+    var md2 = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(pe2);
+    foreach (var th in md2.TypeDefinitions)
+    {
+        var td = md2.GetTypeDefinition(th); var tn = md2.GetString(td.Name);
+        foreach (var fh in td.GetFields()) gameFields.Add(tn + "." + md2.GetString(md2.GetFieldDefinition(fh).Name));
+    }
+}
+Check(new[] { "InventoryGui.DoCrafting/1", "Player.GetCurrentCraftingStation/0", "CraftingStation.GetLevel/1", "Inventory.GetItemAt/2", "Inventory.ContainsItem/1" }.All(gameMethods.Contains) &&
+      new[] { "InventoryGui.m_craftUpgradeItem", "InventoryGui.m_craftRecipe", "ItemData.m_quality", "ItemData.m_gridPos" }.All(gameFields.Contains),
+      "U0 the game methods and fields the upgrade hook reads exist (InventoryGui.DoCrafting, m_craftUpgradeItem, m_craftRecipe; the station and its level; the slot and its item)");
 
 // ---------- trees you felled, counted on your own PC (TreeFalls: the felling blow, then the tree destroyed) ----------
 var tf = new TreeFalls<int>();
@@ -943,6 +958,10 @@ fails += HookGuardTests.Run();   // RESILIENCE-06 item 6: one guard for every Ha
 fails += KeptMinutesTests.Run();   // 0.8.2: your minutes kept across a restart: the file, world and character, the 3 h bound, the shared copy, its size and live updates (test/KeptMinutesTests.cs)
 fails += FeedBlockTests.Run();   // 0.8.6: a friend's older feed as blocks: what a block holds, the server's store and bounds, the list tag, the upload plan, the cache (test/FeedBlockTests.cs)
 fails += KeptFightsTests.Run();   // 0.8.5: your fights kept across a restart: Last fight with its "ago", world and character, the bounds, a busy week's file and load time (test/KeptFightsTests.cs)
+fails += ArmorShareTests.Run();   // 0.9 armor-share: the armour ledger in the shared copy (totals per type, minutes in the log): round trip, bounds, cut and join, an older copy, size, live update (test/ArmorShareTests.cs)
+fails += RecordTests.Run();   // 0.9, the record track: upgrade moments, firsts, deed stretches and their 30-day store, feats seen per tier, a busy evening's size (test/RecordTests.cs)
+fails += LandMinutesTests.Run();   // 0.9, the arrows track: the land per minute beside the deed log, its fold, bounds, pickups by land, kept across a restart, never shared (test/LandMinutesTests.cs)
+fails += DeedBlockTests.Run();   // 0.9 deed feeds: a friend's deed stretches in their session blocks: round trip, what the server keeps, bounds, the deeds tag, the upload plan, size, the friend's rows (test/DeedBlockTests.cs)
 
 System.Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
 return fails;

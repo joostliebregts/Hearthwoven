@@ -41,7 +41,7 @@ namespace Hearthwoven.Panel
             order == SortMost ? SortLeast : order == SortLeast ? SortMost : order == SortAz ? SortZa : order == SortZa ? SortAz : order;
 
         /// <summary>A pill's click (a view link): another pill picks its order, the chosen one flips (SortFlip).</summary>
-        public static string SortLink(Block control, Block pill) => ViewLink(control, pill.Selected ? new Block { Id = SortFlip(pill.Id) } : pill);
+        public static string SortLink(Block control, Block pill) => pill.Link ?? ViewLink(control, pill.Selected ? new Block { Id = SortFlip(pill.Id) } : pill);   // 0.9.3: a pill may carry its own click (Plan a meal's Best for: the chosen one back to Any)
 
         /// <summary>A grouping for the sort control: the word on its pill ("By category"), and each item's group (null = "Other"),
         /// with the group's label, its colour (or null) and its place among equal totals.</summary>

@@ -41,7 +41,7 @@ namespace Hearthwoven.Panel
         /// Damage's Biome row, BattleFacets.cs) and the window it last showed (FeedWindowChips), kept between sessions as its view is.</summary>
         public const string FeedFilter = "Battle/feed", FeedWindowKey = "Battle/feed/window";
         /// <summary>The views kept between sessions (PanelPrefs): the feed's view and window (Joost); every other switch starts at its first view, as before.</summary>
-        public static readonly string[] RememberedViews = { FeedViewKey, FeedWindowKey, RunsWindowKey };
+        public static readonly string[] RememberedViews = { FeedViewKey, FeedWindowKey, RunsWindowKey, KindShutKey };   // 0.9.5: the weapon kinds shut on By weapon (Chapters/WeaponRows.cs); Meals' Plan a meal open or shut went with its own page (Chapters/MealPlanModel.cs)
         /// <summary>At most this many foes drawn in the feed (the newest that pass the window and the filter; whole fights while they fit): a page
         /// of 200 would cost seconds to lay out. The recorder keeps BattleRecorder.MaxFeed, so a filter reaches further back than this.</summary>
         public const int FeedTop = 40;
@@ -344,7 +344,9 @@ namespace Hearthwoven.Panel
             public FeedServer Server;
             /// <summary>0.8.6: what FeedBlock drew: the foes shown, the foes held on this PC that pass, and the presses that drew foes (FeedFetch reads them).</summary>
             public int Drawn, Total, Used;
-            public bool InWindow(FoeEncounter e) => !From.HasValue || e.EndUtc >= From.Value;
+            /// <summary>0.9.1: where the window ends (Yesterday: this morning's midnight); null: now.</summary>
+            public DateTime? To;
+            public bool InWindow(FoeEncounter e) => (!From.HasValue || e.EndUtc >= From.Value) && (!To.HasValue || e.StartUtc < To.Value);
             public bool Shows(FoeEncounter e) => InWindow(e) && (Pass == null || Pass(e));
         }
 
@@ -367,7 +369,7 @@ namespace Hearthwoven.Panel
         public static Block FeedBlock(PanelInput input, List<FoeFight> fights, string view, FeedPick pick = null)
         {
             if (fights == null || fights.Count == 0) return null;
-            var narrowed = pick != null && (pick.From.HasValue || pick.Filtered);
+            var narrowed = pick != null && (pick.From.HasValue || pick.To.HasValue || pick.Filtered);
             var matched = new List<(FoeFight f, List<FoeEncounter> e)>();
             foreach (var f in fights) { var e = pick == null ? f.Entries : f.Entries.Where(pick.Shows).ToList(); if (e.Count > 0) matched.Add((f, e)); }
             if (matched.Count == 0) return null;
@@ -470,20 +472,20 @@ namespace Hearthwoven.Panel
         public static string FetchWaited(string text, int seconds) => seconds < 0 ? text : text + " · " + N(seconds) + " s";
 
         /// <summary>0.8.5: the feed's button at its end, a press adds the next page (PanelState.FeedMore; Enter, Space or the pad's A too).</summary>
-        public const string FeedMoreTarget = "feed:more", FeedMoreKeyLine = "[Enter] Older foes";
+        public const string FeedMoreTarget = "feed:more", FeedMoreKeyLine = "[Enter] Older foes", DeedMoreKeyLine = "[Enter] Older stretches";
         /// <summary>The button's words: what one press adds ("Show 52 older foes").</summary>
         public static string FeedMoreWords(int foes) => "Show " + N(foes) + " older " + (foes == 1 ? "foe" : "foes");
 
         /// <summary>The feed's Show older foes line on this page, or null (none left, or another page).</summary>
         public static Block FeedMoreLine(PanelView view) =>
-            view == null || view.ShowAbout || view.Active != Chapter.Battle || view.Page != FeedPage ? null : Content(view).FirstOrDefault(b => b.Kind == FeedLineKind && b.Tone == FeedMoreTone);
+            !IsFeedView(view) ? null : Content(view).FirstOrDefault(b => b.Kind == FeedLineKind && b.Tone == FeedMoreTone);   // 0.9: and a deed's feed (Chapters/DeedFeedModel.cs)
 
         /// <summary>The key line: Enter (or Space, the pad's A) shows older foes while the button is on the page, after the page keys.</summary>
         static void FeedFinish(PanelState state, PanelView view)
         {
             if (state.FilterRow >= 0 || FeedMoreLine(view) == null) return;   // the filter focus has Enter (FacetModel.cs)
             var page = view.Keys.IndexOf("[W/S] Page");
-            view.Keys.Insert(page >= 0 ? page + 1 : view.Keys.Count, FeedMoreKeyLine);
+            view.Keys.Insert(page >= 0 ? page + 1 : view.Keys.Count, view.Active == Chapter.Battle ? FeedMoreKeyLine : DeedMoreKeyLine);   // 0.9: a deed's feed shows older stretches
         }
 
         /// <summary>The feed's blocks on a page (the chosen view of its switch, or the blocks themselves when it has one view), or null.</summary>
@@ -508,7 +510,7 @@ namespace Hearthwoven.Panel
         /// </summary>
         public static int FeedAppendAt(PanelView before, string beforeJson, PanelView after)
         {
-            if (before == null || after == null || beforeJson == null || after.ShowAbout || after.Active != Chapter.Battle || after.Page != FeedPage || before.Page != FeedPage) return -1;
+            if (before == null || after == null || beforeJson == null || !IsFeedView(after) || before.Page != after.Page || before.Active != after.Active) return -1;   // 0.9: a deed's feed too
             var was = FeedListOf(before); var now = FeedListOf(after);
             if (was == null || now == null || was.Count == 0 || now.Count < was.Count || was[was.Count - 1].Kind != FeedLineKind || was[was.Count - 1].Tone != FeedMoreTone) return -1;
             var kept = was.Count - 1;
@@ -627,7 +629,7 @@ namespace Hearthwoven.Panel
         /// <summary>The feed's empty title for a window, the window said in words: "No fight today", "No fight this session", "No fight in the last 30 min" (0.8.6:
         /// "No fight in the today" read oddly); All has no window to name.</summary>
         public static string NoFightTitle(TimeWindow w) =>
-            w == TimeWindow.SinceInstall ? "No fight recorded" : w == TimeWindow.Today || w == TimeWindow.Session ? "No fight " + RunsWindowWords(w) : "No fight in " + RunsWindowWords(w);
+            w == TimeWindow.SinceInstall ? "No fight recorded" : IsOneDay(w) || w == TimeWindow.Session ? "No fight " + RunsWindowWords(w) : "No fight in " + RunsWindowWords(w);
         public const string FeedFilterAboutTitle = "Window and filter";
         public static readonly string FeedFilterAbout = "The window, Biome and Foe show only the foes that pass them: a fight then says how many of its foes show, and its damage is theirs. The newest fights that pass are drawn whole, up to " +
                                                         FeedTop + " foes. At the end of the feed, Show older foes draws the next fights, about " + FeedTop + " foes for each press, and the line beside it says how many are shown and how many are left.";
@@ -646,7 +648,7 @@ namespace Hearthwoven.Panel
         static TimeWindow FeedWindowHolding(PanelInput input, DateTime endUtc, TimeWindow from)
         {
             foreach (var w in AllWindows.SkipWhile(x => x != from))
-                if (w != TimeWindow.Session && (!(FeedFrom(input, w) is DateTime start) || endUtc >= start)) return w;
+                if (w != TimeWindow.Session && (!(FeedFrom(input, w) is DateTime start) || endUtc >= start) && BeforeEnd(input, w, endUtc)) return w;
             return TimeWindow.SinceInstall;
         }
 
@@ -740,13 +742,13 @@ namespace Hearthwoven.Panel
             view.Scope = WindowLabel(w) + " · " + (input.IsSelf ? "your fights" : Name(input) + "'s fights");
             // Session is this session's fights (0.8.2: yours with no cut); the other windows reach back into the earlier sessions' (0.8.5). B33: a
             // fellow's Session counts from when you came in (SessionFrom), as their Deaths and Received from do; the short windows are their own times
-            var from = FeedFrom(input, w);
+            var from = FeedFrom(input, w); var to = WindowEndUtc(input, w);   // 0.9.1: Yesterday ends at this morning's midnight
             var fights = w == TimeWindow.Session ? live : live.Concat(earlier).ToList();
             List<BlockRow> missing = null;
-            if (blocks && (IsDayWindow(w) || w == TimeWindow.SinceInstall)) fights = live.Concat(FriendFights(input, from, out missing)).ToList();   // their sessions that are here, newest first; the first one that is not stops the list
-            var inWindow = fights.SelectMany(f => f.Entries).Where(e => !from.HasValue || e.EndUtc >= from.Value).ToList();
+            if (blocks && (IsDayWindow(w) || w == TimeWindow.SinceInstall)) fights = live.Concat(FriendFights(input, from, out missing, to)).ToList();   // their sessions that are here, newest first; the first one that is not stops the list
+            var inWindow = fights.SelectMany(f => f.Entries).Where(e => (!from.HasValue || e.EndUtc >= from.Value) && (!to.HasValue || e.StartUtc < to.Value)).ToList();
             var (bar, narrowed, pass) = FeedFilterBar(input, state, inWindow);
-            var feedPick = new FeedPick { From = from, Pass = narrowed ? pass : null, Filtered = narrowed };
+            var feedPick = new FeedPick { From = from, To = to, Pass = narrowed ? pass : null, Filtered = narrowed };
             var choice = narrowed ? string.Join(",", Chosen(state, FeedFilter, "biome").ToArray()) + "|" + string.Join(",", Chosen(state, FeedFilter, "foe").ToArray()) : "";
             feedPick.Key = w + "|" + inWindow.Count + "|" + choice;
             // 0.8.5: Show older foes holds while the window and the filter stay (a new page or book resets it: PanelModel.Visited)
@@ -757,7 +759,7 @@ namespace Hearthwoven.Panel
             if (missing != null && missing.Count > 0)
             {
                 string st = null; input.BlockStates?.TryGetValue(missing[0].Id, out st);
-                var of = input.BlockRows.Count(r => !from.HasValue || r.ToUtc >= from.Value);   // her sessions on the server in the window: "1 of 2" while one comes
+                var of = input.BlockRows.Count(r => (!from.HasValue || r.ToUtc >= from.Value) && (!to.HasValue || r.FromUtc < to.Value));   // her sessions on the server in the window: "1 of 2" while one comes
                 if (input.BlockWaited == null || !input.BlockWaited.TryGetValue(missing[0].Id, out var waited)) waited = -1;
                 feedPick.Server = new FeedServer { Missing = missing, Next = missing[0], State = st, UpTo = narrowed || (from.HasValue && missing[0].FromUtc < from.Value), Of = of, Index = of - missing.Count + 1, Waited = waited };
             }
@@ -802,10 +804,10 @@ namespace Hearthwoven.Panel
         /// <summary>0.8.6: a friend's sessions that are here, newest first, as feed fights (each tied to its session, so its first fight carries the session line), for
         /// the window starting at <paramref name="from"/> (null: all); stops at the first session that is not here yet: <paramref name="missing"/> is it and every
         /// one after it in the window (a page never skips a session).</summary>
-        static List<FoeFight> FriendFights(PanelInput input, DateTime? from, out List<BlockRow> missing)
+        static List<FoeFight> FriendFights(PanelInput input, DateTime? from, out List<BlockRow> missing, DateTime? to = null)
         {
             missing = new List<BlockRow>(); var fights = new List<FoeFight>();
-            var rows = input.BlockRows.Where(r => !from.HasValue || r.ToUtc >= from.Value).ToList();
+            var rows = input.BlockRows.Where(r => (!from.HasValue || r.ToUtc >= from.Value) && (!to.HasValue || r.FromUtc < to.Value)).ToList();
             for (int i = 0; i < rows.Count; i++)
             {
                 if (input.BlockSessions != null && input.BlockSessions.TryGetValue(rows[i].Id, out var s)) fights.AddRange(s.Fights);
@@ -951,6 +953,9 @@ namespace Hearthwoven.Panel
                 if (key != null) items.Insert(0, key);
                 view.Blocks.Add(new Block { Kind = "fightfoes", Title = "Foes " + Subject(input) + " fought", Value = N(fought.Count), Text = together ? (input.IsSelf ? YourDamageToEach : Name(input) + "'s damage to each") : null, Items = items });
                 if (most > 0) AboutLines(view, (DamageBarsAboutTitle, DamageBarsAbout));
+                // 0.9 (Chapters/WhatToUse.cs): What to use, over this fight's foes, your damage to each
+                var use = state == null ? null : WhatToUse(input, state, LastFightPage, kinds.Select(x => (x.kind, x.dealt)), GatheredForFight(input, f.StartUtc, f.EndUtc));
+                if (use != null) { view.Blocks.Add(new Block { Kind = "section", Title = UseLabel }); view.Blocks.AddRange(use); AboutLines(view, (UseAboutTitle, UseAbout)); }
             }
             // what the group received, after each one's own armour
             var received = counted.Where(p => p.Received > 0).ToList();

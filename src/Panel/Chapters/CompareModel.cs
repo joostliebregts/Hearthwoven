@@ -56,6 +56,8 @@ namespace Hearthwoven.Panel
         /// <summary>The greyed chip's reason on All, Session and the short windows (Joost, 0.8.1: "needs a day window" confused; plain words now).
         /// 0.8.5: one short line, so its tag under the chip covers little.</summary>
         public const string CompareNeedsDay = "Compare works on Today and 7 days.";
+        /// <summary>0.9.1: Yesterday has no pair of its own; Today against yesterday is the pair.</summary>
+        public const string CompareYesterday = "Choose Today to compare it with yesterday.";
         public const string CompareOwnBook = "Compare works in your own book.";
         public const string CompareArmourLine = "What your armor stopped is shown for this period only.";
         /// <summary>0.8, with the Everyone chip (PICKS.md section 3: only Battle > Damage By player compares the group, from the fellows' damage
@@ -89,7 +91,7 @@ namespace Hearthwoven.Panel
         /// <summary>The pages that offer Compare: the day-window pages with addable numbers (Deeds' pages but Overview and Recent, Battle Damage and
         /// Defence, Voyages Sailing and Cargo). Company > Together offers it under Damage dealt (its own window chips; TogetherCompared).</summary>
         public static bool CompareOffered(Chapter c, string page) =>
-            c == Chapter.Deeds ? page != null && page != "overview" && page != RecentPageId && WindowsOf(c, page) != null
+            c == Chapter.Deeds ? page != null && page != "overview" && page != RecentPageId && !IsDeedFeedPage(page) && WindowsOf(c, page) != null   // 0.9: a deed feed lists, it adds nothing up
             : c == Chapter.Battle ? page == "damage" || page == "defense"
             : c == Chapter.Voyages && (page == "sailing" || page == "cargo");
 
@@ -142,7 +144,9 @@ namespace Hearthwoven.Panel
         static string Against(TimeWindow w) => w == TimeWindow.Today ? "today against yesterday" : DaysOf(w) + " days against the " + DaysOf(w) + " before";
 
         /// <summary>0.8.5: the pair in the page's title, after the page's name and window: "today against yesterday", "last 7 days against your best 7 days".</summary>
-        public static string ComparePair(string window, ComparePeriods p) => window + " against " + CompareWords(p.Window, p.With).title;
+        // 0.9.1: the same stretch earlier says its short head in the title ("today against last week", "last 7 days against last month"): with eleven
+        // window chips the full words did not fit beside them; the strip's legend still names it in full with its dates (CompareThenWords).
+        public static string ComparePair(string window, ComparePeriods p) => window + " against " + (p.With == CompareSameId ? CompareWords(p.Window, p.With).head : CompareWords(p.Window, p.With).title);
 
         /// <summary>A day range, short: "4 to 10 Oct", "27 Sep to 3 Oct"; one day: "10 Oct".</summary>
         public static string DayRange(DateTime from, DateTime to, DateTime today)
@@ -317,6 +321,7 @@ namespace Hearthwoven.Panel
             var group = ShowsEveryone(input, state, view.Page) || view.EveryoneOn;   // Meals draws its own group view (MealsModel.cs)
             if (group && !(view.Active == Chapter.Battle && view.Page == "damage")) return Greyed(p, CompareEveryoneOff, "With Everyone on, only Battle > Damage compares.");
             if (!w.HasValue || !IsDayWindow(w.Value)) return Greyed(p, CompareNeedsDay);
+            if (w == TimeWindow.Yesterday) return Greyed(p, CompareYesterday, CompareYesterday);   // 0.9.1
             var n = DaysOf(w.Value);
             var today = LocalToday(input);
             p.To = today; p.From = today.AddDays(1 - n); p.BeforeTo = p.From.AddDays(-1); p.BeforeFrom = p.From.AddDays(-n);

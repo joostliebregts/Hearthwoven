@@ -55,6 +55,85 @@ namespace Hearthwoven
         /// <summary>Whether a bucket was capped (a few small kinds sit in OtherToken).</summary>
         public bool Clipped;
 
+        /// <summary>
+        /// 0.9 (Best arrows, "From what you gathered here"): the land you were in per minute, beside the buckets and never in them (their keys and
+        /// families stay as they are): "2026-10-09T20:14Z|Swamp" -> minutes, 1 per land per minute you were in it (two lands when you crossed over in
+        /// that minute). Folded like the buckets (ten-minute keys sum their minutes), at most MaxKeys keys, this session only, never shared; its
+        /// last minutes are kept on this PC with the buckets (KeptMinutes "lands", EarlierLands). The land of a pickup is the land of its minute
+        /// (PickedUpIn). Booked by NoteLand from Plugin.Update: one comparison per frame.
+        /// </summary>
+        public readonly Dictionary<string, float> Lands = new Dictionary<string, float>();
+        /// <summary>0.9: your earlier connections' land minutes in this world, kept like Earlier (KeptMinutes "lands"); never booked into.</summary>
+        public readonly Dictionary<string, float> EarlierLands = new Dictionary<string, float>();
+        string landBucket, landLast;
+
+        /// <summary>Notes that you are in <paramref name="land"/> (the game's biome name, "Swamp") at <paramref name="utc"/>: the minute holds
+        /// that land once. Nothing for no land ("None", empty) or past MaxKeys. Same minute and land as the last call: one comparison.</summary>
+        public void NoteLand(DateTime utc, string land)
+        {
+            if (string.IsNullOrEmpty(land) || land == "None") return;
+            var bucket = EventLog.Bucket(utc);
+            if (bucket == landBucket && land == landLast) return;
+            landBucket = bucket; landLast = land;
+            var key = bucket + "|" + land;
+            if (Lands.ContainsKey(key) || Lands.Count >= MaxKeys) return;
+            Lands[key] = 1f;
+        }
+
+        /// <summary>The minutes you were in each land from <paramref name="fromUtc"/> on (null: the whole session), as Grew reads a window:
+        /// a ten-minute key counts when any part of it lies after fromUtc; from a time on, the kept minutes too. <paramref name="toUtc"/>: only keys
+        /// that begin before it (a fight's span).</summary>
+        public Dictionary<string, float> LandMinutes(DateTime? fromUtc, DateTime? toUtc = null)
+        {
+            var d = new Dictionary<string, float>();
+            void Sum(Dictionary<string, float> lands, bool earlier)
+            {
+                foreach (var kv in lands)
+                {
+                    var bar = kv.Key.IndexOf('|'); if (bar < 0) continue;
+                    if (fromUtc.HasValue && !InWindow(kv.Key, fromUtc.Value, earlier)) continue;
+                    if (toUtc.HasValue && (!KeyOf(kv.Key).HasTime || KeyOf(kv.Key).Time >= toUtc.Value)) continue;
+                    var land = kv.Key.Substring(bar + 1);
+                    d.TryGetValue(land, out var o); d[land] = o + kv.Value;
+                }
+            }
+            Sum(Lands, false);
+            if (fromUtc.HasValue) Sum(EarlierLands, true);
+            return d;
+        }
+
+        /// <summary>
+        /// What you picked up (PickedUp) from <paramref name="fromUtc"/> on (null: the whole session) in minutes you were in <paramref name="land"/>:
+        /// token -> amount. A minute counts for every land noted in it, a ten-minute key for every land of its ten minutes (so a crossing counts on
+        /// both sides). Only what grew (a sum above 0).
+        /// </summary>
+        public Dictionary<string, float> PickedUpIn(DateTime? fromUtc, string land)
+        {
+            var d = new Dictionary<string, float>();
+            void Sum(Dictionary<string, float> buckets, Dictionary<string, float> lands, bool earlier)
+            {
+                foreach (var kv in buckets)
+                {
+                    var p = KeyOf(kv.Key);
+                    if (!p.HasTime || p.Family != PickedUp) continue;
+                    if (fromUtc.HasValue && !InWindow(kv.Key, fromUtc.Value, earlier)) continue;
+                    if (!lands.ContainsKey(kv.Key.Substring(0, 17) + "|" + land)) continue;
+                    d.TryGetValue(p.Token, out var o); d[p.Token] = o + kv.Value;
+                }
+            }
+            Sum(Buckets, Lands, false);
+            if (fromUtc.HasValue) Sum(Earlier, EarlierLands, true);
+            foreach (var t in new List<string>(d.Keys)) if (d[t] <= 0f) d.Remove(t);
+            return d;
+        }
+
+        // a key's minute ("2026-10-09T20:14Z|...") reaches past fromUtc: as Grew reads it (a folded key covers ten minutes; kept minutes are never folded)
+        bool InWindow(string key, DateTime fromUtc, bool earlier)
+        {
+            var p = KeyOf(key);
+            return p.HasTime && p.Time.AddMinutes(earlier ? EventLog.BucketMinutes : SpanOf(key)) > fromUtc;
+        }
+
         // what was booked so far: SessionEvents per "family|token" (from zero), the game's counters as they stood at the last flush
         readonly Dictionary<string, float> markEvents = new Dictionary<string, float>();
         Dictionary<string, float> markGame, startGame;
@@ -142,6 +221,7 @@ namespace Hearthwoven
             lastFold = now;
             foldCut = EventLog.Bucket(utc.AddMinutes(-EventLog.FoldAfterMinutes));
             EventLog.FoldKeys(Buckets, foldCut);
+            EventLog.FoldKeys(Lands, foldCut);   // 0.9: the land minutes fold with them, so a folded pickup key finds its lands under the same ten minutes
             countedBucket = null;
         }
 

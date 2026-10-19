@@ -40,8 +40,8 @@ namespace Hearthwoven.Panel
             if (w == TimeWindow.SinceInstall) return input.DealtArmourSince ?? input.DealtArmourSession;
             if (w == TimeWindow.Session) return input.DealtArmourSession;
             if (!IsDayWindow(w)) return null;
-            var t = input.DealtArmourBook != null ? input.DealtArmourBook.Sum(DayFrom(input, w), LocalToday(input)) : new ArmourTally();
-            t.AddAll(input.DealtArmourBook != null ? input.DealtArmourPending : input.DealtArmourSession);
+            var t = input.DealtArmourBook != null ? input.DealtArmourBook.Sum(DayFrom(input, w), DayTo(input, w)) : new ArmourTally();
+            if (HoldsToday(w)) t.AddAll(input.DealtArmourBook != null ? input.DealtArmourPending : input.DealtArmourSession);   // 0.9.1: never in Yesterday
             return t;
         }
 
@@ -148,7 +148,7 @@ namespace Hearthwoven.Panel
             if (from.HasValue)
             {
                 var day = Local(input, from.Value).Date;
-                foreach (var c in new[] { TimeWindow.ThirtyDays, TimeWindow.SevenDays, TimeWindow.Today, TimeWindow.Session })
+                foreach (var c in new[] { TimeWindow.ThirtyDays, TimeWindow.SevenDays, TimeWindow.ThreeDays, TimeWindow.Today, TimeWindow.Session })
                 {
                     if (Array.IndexOf(AllWindows, c) >= Array.IndexOf(AllWindows, w)) continue;   // a chip shorter than the one shown
                     if (open != null && !open(c) || open == null && !WindowOpen(input, c)) continue;

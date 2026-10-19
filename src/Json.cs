@@ -71,6 +71,8 @@ namespace Hearthwoven
         public Json Str(string k, string v) { Key(k); AppendQ(b, v); needComma = true; return this; }
         public Json Num(string k, double v) { Key(k); AppendF(b, v); needComma = true; return this; }
         public Json Raw(string k, string raw) { Key(k); b.Append(raw); needComma = true; return this; }
+        /// <summary>0.9: one string as an array element (between OpenArr and CloseArr).</summary>
+        public Json Val(string v) { Sep(); AppendQ(b, v); return this; }
         public Json Dict(string k, IEnumerable<KeyValuePair<string, float>> d)
         {
             Key(k); b.Append('{'); var first = true;

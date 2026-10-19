@@ -82,10 +82,12 @@ static class PanelTextTests
                 if (b.Kind != "cards") continue;
                 // cards (PanelUi.Cards): four across the plate; title 16 px after a 24 px icon, label 15 px, second line 14 + 13 px
                 var w = (float)Math.Floor((PlateColumn - CardGap * 3) / 4) - 24;
+                var say = (b.Items ?? new List<Block>()).All(c => c.Tone == PanelModel.SayTone);   // 0.9 What to use: as many across as there are (PanelUi.Cards)
+                if (say) { var per = Math.Min(4, Math.Max(1, b.Items.Count)); w = (float)Math.Floor((PlateColumn - CardGap * (per - 1)) / per) - 24; }
                 foreach (var c in b.Items ?? new List<Block>())
                 {
                     Fit(where, "card title", c.Title, Max(w - (string.IsNullOrEmpty(c.Icon) ? 0 : 32), 16));
-                    if (c.Tone == "unsung") Fit(where, "card description (three lines)", c.Text, 3 * Max(w, 15, SmallEm) - 6);   // wraps; a word break loses about two characters a line
+                    if (c.Tone == "unsung" || c.Tone == PanelModel.SayTone) Fit(where, "card description (three lines)", c.Text, 3 * Max(w, 15, SmallEm) - 6);   // wraps; a word break loses about two characters a line
                     else Fit(where, "card label", c.Text, Max(w - (!string.IsNullOrEmpty(c.RecordedFrom) ? Since : 0), 15, SmallEm));
                     var sub = (c.Items ?? new List<Block>()).FirstOrDefault();
                     if (sub != null)

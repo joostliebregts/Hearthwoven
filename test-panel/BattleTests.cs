@@ -96,8 +96,8 @@ static partial class Program
         // ---------- Foes ----------
         var foes = PageAll(rich, "foes");
         var table = Of(foes, "foetable");
-        Check(foes.Heading == "Foes" && PanelModel.Content(foes).Any(b => b.Kind == "hero" && b.Value == "214" && b.Title == "foes defeated") && foes.HasFilters && Of(foes, "switch").Items.Select(v => v.Title).SequenceEqual(new[] { "By foe", "By damage type" }),
-              "B foes on All: the lifetime count in the heading, the window chips (HISTORY-06), the view switch By foe (default) / By damage type");
+        Check(foes.Heading == "Foes" && PanelModel.Content(foes).Any(b => b.Kind == "hero" && b.Value == "214" && b.Title == "foes defeated") && foes.HasFilters && Of(foes, "switch").Items.Select(v => v.Title).SequenceEqual(new[] { "By foe", "By damage type", "What to use" }),
+              "B foes on All: the lifetime count in the heading, the window chips (HISTORY-06), the view switch By foe (default) / By damage type / What to use (0.9)");
         Check(table.Items.Select(r => r.Title + "=" + r.Value).SequenceEqual(new[] { "Troll=520", "Greydwarf=450", "Draugr=440", "Greydwarf Brute=270", "Boar=220", "Neck=190", "Blob=160", "Leech=30" }) &&
               table.Items[0].Fraction == 1f && table.Items[0].Icon == "item:TrophyFrostTroll",
               "B by foe: one row per foe struck, most dealt first, its trophy from the game data");
@@ -262,7 +262,7 @@ static partial class Program
               PanelModel.DeathsCaption(3, 4).Contains("3 of 4") && PanelModel.DeathsCaption(3).Contains("3 falls") && !PanelModel.DeathsCaption(3).Contains(" of ") && PanelModel.DeathsCaption(3, 3) == PanelModel.DeathsCaption(3),
               "windows: Deaths on All lists this session's falls under a heading that says how many of the counted falls it lists (3 of 4), with no separate caveat line");
         var tenMin = Page(rich, "overview", s => s.Window = TimeWindow.LastTenMinutes);
-        Check(tenMin.Windows.Select(w => w.Id + (w.Selected ? "*" : "")).SequenceEqual(new[] { "LastTenMinutes*", "LastThirtyMinutes", "LastHour", "LastThreeHours", "Session", "Today", "SevenDays", "ThirtyDays", "SinceInstall" }) &&
+        Check(tenMin.Windows.Select(w => w.Id + (w.Selected ? "*" : "")).SequenceEqual(new[] { "LastTenMinutes*", "LastThirtyMinutes", "LastHour", "LastThreeHours", "Session", "Today", "Yesterday", "ThreeDays", "SevenDays", "ThirtyDays", "SinceInstall" }) &&
               Says(tenMin, PanelModel.WindowLabel(TimeWindow.LastTenMinutes).ToLowerInvariant()),
               "windows: Last 10 minutes on the overview: its chip lit, the page says the window in full");
         var keyPage = new PanelState { Chapter = Chapter.Battle }; keyPage.Page[Chapter.Battle] = "overview";

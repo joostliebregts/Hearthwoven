@@ -25,7 +25,7 @@
   --frame-list-w: 190px;
   --frame-head-top: 144px;
   --frame-list-top: 180px;
-  --frame-foot: 72px;
+  --frame-foot: 52px;
   --frame-tab-top: 77px;
   --frame-tab-h: 52px;
   --frame-tab-inset: 70px;
@@ -81,6 +81,36 @@
   --plate-column: 840px;
   --plate-fade: 40px;
   --plate-strip-shade: 10px;
+  /* Sets */
+  --sets-band-pad-x: 12px;
+  --sets-band-pad-top: 10px;
+  --sets-band-pad-bottom: 12px;
+  --sets-band-gap: 8px;
+  --sets-cost-gap: 6px;
+  --sets-cost-pic-gap: 2px;
+  --sets-cost-pic: 16px;
+  /* Tile */
+  --tile-pad: 3px;
+  --tile-base: 46px;
+  --tile-line: 14px;
+  --tile-least: 50px;
+  /* Level */
+  --level-part-w: 28px;
+  --level-h: 12px;
+  --level-gap: 2px;
+  --level-words: 132px;
+  --level-row: 34px;
+  --level-row-gap: 10px;
+  --level-meter-w: 118px;
+  /* History */
+  --history-chart-h: 150px;
+  --history-column-gap: 5px;
+  --history-max-column: 30px;
+  --history-least: 2px;
+  --history-flat: 2px;
+  --history-tick: 6px;
+  --history-tick-gap: 3px;
+  --history-axis: 20px;
   /* Island */
   --island-pad: 14px;
   --island-inner: 6px;
@@ -124,7 +154,9 @@
   --chip-icon: 18px;
   --chip-icon-left: 9px;
   --chip-icon-room: 32px;
-  --chip-window-pad: 8px;
+  --chip-window-pad: 4px;
+  --chip-swatch: 10px;
+  --chip-swatch-gap: 7px;
   --chip-text: 14px;
   /* Section */
   --section-text: 14px;
@@ -134,8 +166,8 @@
   --columns-stack: 12px;
   /* Keys */
   --keys-side: 64px;
-  --keys-bottom: 22px;
-  --keys-height: 30px;
+  --keys-bottom: 18px;
+  --keys-height: 24px;
   --keys-text: 15px;
   /* Focus */
   --focus-inset: 8px;
@@ -179,6 +211,15 @@
   --sum-caption: 14px;
   --sum-name: 17px;
   --sum-total: 20px;
+  /* FeatSearch */
+  --feat-search-w: 200px;
+  --feat-search-h: 28px;
+  --feat-search-pad: 8px;
+  --feat-search-cap: 20px;
+  --feat-search-tag-h: 16px;
+  --feat-search-tag-top: 3px;
+  --feat-search-tag-pad: 6px;
+  --feat-search-tag-gap: 6px;
   /* Ledger */
   --ledger-name-line: 23px;
   --ledger-source-line: 19px;
@@ -186,5 +227,56 @@
   --feats-card: 52px;
   --feats-row-gap: 6px;
   --feats-column-gap: 8px;
+  --feats-title-card: 58px;
+  --feats-new-dot: 9px;
+  --feats-new-gap: 5px;
+  --feats-new-inset: 6px;
+  --feats-chosen-rim: 2px;
+  --feats-chosen-round: 5px;
+  --feats-link-inset: 16px;
+  --feats-link-bottom: 12px;
+  --feats-link-mark-gap: 6px;
+  --feats-cue-band: 44px;
+  --feats-cue-text-bottom: 4px;
   --feats-grid-room: 226px;
+  /* FeatLook */
+  --feat-look-card-min: 68px;
+  --feat-look-card-max: 84px;
+  --feat-look-icon-large: 56px;
+  --feat-look-icon-left-large: 8px;
+  --feat-look-icon-gap: 12px;
+  --feat-look-halo: 22px;
+  --feat-look-text-right: 8px;
+  --feat-look-rim-thin: 1px;
+  --feat-look-bar-h: 6px;
+  --feat-look-bar-w: 156px;
+  --feat-look-bar-gap: 2px;
+  --feat-look-bar-top: 4px;
+  --feat-look-edge: 4px;
+  --feat-look-detail-family-top: 3px;
+  --feat-look-detail-name-top: 17px;
+  --feat-look-detail-tier-top: 45px;
+  --feat-look-detail-ground-w: 420px;
+  --feat-look-detail-ground-h: 96px;
+  --feat-look-backing-in: 20px;
+  /* FeatDetail */
+  --feat-detail-least: 116px;
+  --feat-detail-top: 8px;
+  --feat-detail-pad: 6px;
+  --feat-detail-emblem-top: 8px;
+  --feat-detail-name-top: 6px;
+  --feat-detail-tier-top: 38px;
+  --feat-detail-honours-top: 68px;
+  --feat-detail-honours-line: 19px;
+  --feat-detail-honours-most: 60px;
+  --feat-detail-moment-gap: 3px;
+  --feat-detail-moment-line: 20px;
+  --feat-detail-moment-most: 40px;
+  --feat-detail-rule-h: 19px;
+  --feat-detail-progress-gap: 2px;
+  --feat-detail-progress-row: 22px;
+  --feat-detail-counted-row: 20px;
+  --feat-detail-caveat-one: 20px;
+  --feat-detail-caveat-two: 38px;
+  --feat-detail-link-row: 30px;
 }

@@ -53,7 +53,7 @@ static class LayoutTests
         ["Chapters/DamageRowsUi.cs"] = 21,
         ["Chapters/DeedsUi.cs"] = 136,
         ["Chapters/EveryoneUi.cs"] = 67,
-        ["Chapters/FeatsUi.cs"] = 173,
+        ["Chapters/FeatsUi.cs"] = 149,
         ["Chapters/FightUi.cs"] = 154,
         ["Chapters/FireLayout.cs"] = 88,
         ["Chapters/FoesKeysUi.cs"] = 4,
@@ -67,7 +67,7 @@ static class LayoutTests
         ["PanelUi.cs"] = 478,
         ["RecordedUi.cs"] = 26,
         ["SortUi.cs"] = 1,
-        ["preview/panel-preview.html"] = 1097,
+        ["preview/panel-preview.html"] = 1091,
     };
 
     static readonly Regex Number = new Regex(@"(?<![\w.])(\d+(?:\.\d+)?)f?\b(?!\.\d)");
@@ -134,7 +134,7 @@ static class LayoutTests
         (".chip", "height"), (".chip", "padding"), (".chip", "font-size"), (".chip.icon", "padding-left"), (".hr .chip.win", "padding"), (".sortrow", "gap"), (".sortrow", "height"),
         (".plate .section, .plate .cmp-h", "font-size"), (".plate .section .tot, .plate .cmp-h .tot", "font-size"),
         (".fb-lab", "width"), (".fb-chips", "gap"), (".fb-chip", "height"), (".cols", "gap"), (".cols > .col", "gap"),
-        (".fcard.sel::after, .fb-chip.cur::after, .b2-col.cur .b2-tile::after", "inset"), (".bt-foerow.cur::after, .bf.dr.wl.cur::after", "inset"),
+        (".fb-chip.cur::after, .b2-col.cur .b2-tile::after", "inset"), (".bt-foerow.cur::after, .bf.dr.wl.cur::after", "inset"),
         (".feats", "gap"), (".fgrid", "max-height"), (".fcard", "height"), (".plate.full .fgrid", "min-height"),
         // 0.8.5 the top row, the tab's inside, the page without a plate, the kitchen ledger's line boxes, the cargo sum
         (".logo", "left"), (".logo", "top"), (".logo", "height"), (".owner", "left"), (".owner", "top"), (".owner", "height"),

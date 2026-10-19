@@ -196,7 +196,8 @@ namespace Hearthwoven.Panel
             var head = Line(box, 8); Size(head, -1, 20);
             Sect(head, bar.Title, bar.Value);
             if (!string.IsNullOrEmpty(bar.Note)) { var n = Label(head, bar.Note, FacetText, PanelLook.Faint); n.textWrappingMode = TextWrappingModes.NoWrap; }
-            BarWithList(box, bar.Items ?? new List<Block>(), false, new BarLook { Click = PartClick(bar, link) });   // the folded part has no click: its kinds are chosen by their chips
+            // 0.9: one part with a share (Tone FacetSingleTone) is its one legend row under the heading, no bar of one colour without a name (Chapters/CraftingHistory.cs)
+            BarWithList(box, bar.Items ?? new List<Block>(), false, new BarLook { Click = PartClick(bar, link), NoBar = bar.Tone == PanelModel.FacetSingleTone });   // the folded part has no click: its kinds are chosen by their chips
         }
 
         /// <summary>The click of a bar's parts and legend items (0.8.2: one rule for the whole book): the target PanelModel.PartTarget gives;

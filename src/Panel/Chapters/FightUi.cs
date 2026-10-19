@@ -288,7 +288,78 @@ namespace Hearthwoven.Panel
                 }
             }
             FtKeys(col, FtItems(b, "dkey").FirstOrDefault(), FtItems(b, "rkey").FirstOrDefault(), g.XR - g.NumR - FtColGap);
+            var weak = FtItems(b, PanelModel.WeakLineKind);
+            if (weak.Count > 0)   // 0.9.4 draft (A): the named lines' groups start at one x, after the widest name
+            {
+                var m = Label(col, "", PanelLook.MinText, PanelLook.Text, style: FontStyles.Bold); m.textWrappingMode = TextWrappingModes.NoWrap; float names = 0;
+                foreach (var line in weak) if (!string.IsNullOrEmpty(line.Title)) { m.text = line.Title; names = Mathf.Max(names, Mathf.Min(FtWidth(m), Column * FtWeakNameMax)); }
+                m.gameObject.SetActive(false); Destroy(m.gameObject);
+                foreach (var line in weak) FtWeakLine(col, line, names);
+            }
         }
+
+        // 0.9.4 draft (A, Chapters/FightWeakness.cs): a kind's weaknesses under the keys: the kinds' names when the fight has more than one (the groups
+        // of every named line from one x, after the widest name), or the boss's ring; then per group its caption in small capitals (the keys' own)
+        // and its types, on as many lines as it takes, a group never split, a next line under the first group. Each group its own form (Joost: "make
+        // each resist, weakness, immune more visually distinct"; by shape, the type colours stay the types'): weak to a solid chip (the track's
+        // ground, the swatch filled, the name bright, the multiplier in gold); resists an open one (no ground, the swatch an outline, quiet words);
+        // immune a struck one (the outline crossed, the name struck through, faint)
+        const float FtWeakGap = 16, FtWeakName = 12, FtWeakRing = 18, FtWeakNameMax = 0.4f, FtCaptionGap = 8, FtChipH = 18, FtChipPad = 4, FtChipIn = 3, FtChipGap = 4, FtCapSpacing = 8,
+                    FtCross = 14, FtCrossLine = 2, FtCrossTurn = 45;
+        static void FtWeakLine(RectTransform col, Block line, float names)
+        {
+            var r = BtRow(col, FtKeyLineH); float x = 0, start = 0;
+            if (line.Tone == "boss") { FtBossRing(r, line.Icon, 0, (FtKeyLineH - FtWeakRing) / 2, FtWeakRing); x = start = FtWeakRing + FtWeakName; }   // a boss with foes around: its ring
+            else if (!string.IsNullOrEmpty(line.Title))
+            {
+                var t = BtText(r, line.Title, 0, 0, Column, FtKeyLineH, PanelLook.MinText, PanelLook.Text, style: FontStyles.Bold);
+                var tw = Mathf.Min(FtWidth(t), Column * FtWeakNameMax); t.rectTransform.sizeDelta = new Vector2(tw, t.rectTransform.sizeDelta.y);
+                x = start = Mathf.Max(tw, names) + FtWeakName;
+            }
+            foreach (var g in FtItems(line, PanelModel.WeakKeyKind))
+            {
+                var probe = Node("Probe", r); var gw = FtWeakGroup(probe, g, 0); probe.gameObject.SetActive(false); Destroy(probe.gameObject);
+                if (x > start && x + gw > Column) { r = BtRow(col, FtKeyLineH); x = start; }
+                x = FtWeakGroup(r, g, x) + FtWeakGap;
+            }
+        }
+
+        // one group: its caption, then a chip per type in the group's form; returns where it ends
+        static float FtWeakGroup(RectTransform r, Block g, float x)
+        {
+            var cap = BtText(r, (g.Title ?? "").ToUpperInvariant(), x, 0, Column, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); cap.characterSpacing = FtCapSpacing;
+            var cw = FtWidth(cap); cap.rectTransform.sizeDelta = new Vector2(cw, cap.rectTransform.sizeDelta.y); x += cw + FtCaptionGap;
+            bool weak = g.Tone == PanelModel.WeakTone, immune = g.Tone == PanelModel.ImmuneTone;
+            float chipTop = (FtKeyLineH - FtChipH) / 2, swTop = (FtKeyLineH - FtSwatch) / 2;
+            var entries = FtItems(g, "key");
+            for (int k = 0; k < entries.Count; k++)
+            {
+                var e = entries[k]; var c = Hex(e.Colour, PanelLook.Muted); var x0 = x;
+                var ground = weak ? RoundedPart(r, "Chip", DrTrack) : null;   // drawn first: under the swatch and words
+                x += FtChipPad;
+                if (weak) RoundedPart(r, "Swatch", c).rectTransform.Box(x, swTop, FtSwatch, FtSwatch);
+                else BtHollow(r, c, x, swTop, FtSwatch, FtSwatch);
+                if (immune) FtCrossMark(r, x, swTop);
+                x += FtSwatch + FtChipIn;
+                var n = BtText(r, e.Title, x, 0, Column, FtKeyLineH, PanelLook.MinText, weak ? PanelLook.Text : immune ? PanelLook.Faint : PanelLook.Muted, style: immune ? FontStyles.Strikethrough : FontStyles.Normal);
+                var nw = FtWidth(n); n.rectTransform.sizeDelta = new Vector2(nw, n.rectTransform.sizeDelta.y); x += nw + FtChipIn;
+                var m = BtText(r, e.Value, x, 0, Column, FtKeyLineH, PanelLook.MinText, weak ? PanelLook.Gold : PanelLook.Faint, style: weak ? FontStyles.Bold : FontStyles.Normal);
+                var mw = FtWidth(m); m.rectTransform.sizeDelta = new Vector2(mw, m.rectTransform.sizeDelta.y); x += mw + FtChipPad;
+                if (ground) { ground.pixelsPerUnitMultiplier = DrRadiusScale; ground.rectTransform.Box(x0, chipTop, x - x0, FtChipH); }
+                if (k < entries.Count - 1) x += FtChipGap;
+            }
+            return x;
+        }
+
+        // immune: a line across the type's outline, corner to corner
+        static void FtCrossMark(RectTransform r, float x, float top)
+        {
+            var holder = Node("Cross", r); holder.Box(x + (FtSwatch - FtCross) / 2, top + (FtSwatch - FtCross) / 2, FtCross, FtCross);
+            var line = Img(holder, "Slash", null, PanelLook.Faint).rectTransform;
+            line.anchorMin = line.anchorMax = line.pivot = Vector2.one / 2; line.anchoredPosition = Vector2.zero; line.sizeDelta = new Vector2(FtCross, FtCrossLine);
+            line.localRotation = Quaternion.Euler(0, 0, FtCrossTurn);
+        }
+
 
         // a row's two bars: what was dealt (gold number, its parts: the players, or a player's types), what was received (its parts: the types)
         static void FtRowBars(RectTransform r, Block row, FtCols g)
@@ -320,7 +391,7 @@ namespace Hearthwoven.Panel
         {
             if (!string.IsNullOrEmpty(key.Title))
             {
-                var cap = BtText(r, key.Title.ToUpperInvariant(), x, 0, 200, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); cap.characterSpacing = 8;
+                var cap = BtText(r, key.Title.ToUpperInvariant(), x, 0, 200, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); cap.characterSpacing = FtCapSpacing;
                 var cw = FtWidth(cap); cap.rectTransform.sizeDelta = new Vector2(cw, cap.rectTransform.sizeDelta.y); x += cw + 10;
             }
             foreach (var e in FtItems(key, "key"))
@@ -354,7 +425,7 @@ namespace Hearthwoven.Panel
             var xs = new List<float>(); var x = nameW; foreach (var w in widths) { x += FtCellGap; xs.Add(x); x += w; }
             // the head: the caption and the dealt split's key, each column's word right-aligned over its number (an icon before it)
             var h = BtRow(col, FtKeyLineH);
-            var cap = BtText(h, (b.Title ?? "").ToUpperInvariant(), 0, 0, nameW, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); cap.characterSpacing = 8;
+            var cap = BtText(h, (b.Title ?? "").ToUpperInvariant(), 0, 0, nameW, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); cap.characterSpacing = FtCapSpacing;
             float firstHead = Column;
             for (int k = 0; k < cols.Count; k++)
             {
@@ -419,7 +490,7 @@ namespace Hearthwoven.Panel
             var rows = FtItems(b, "fight");
             // the caption: NOW or EARLIER, the total and its words, where the fight on now is; the players' key at the right
             var h = BtRow(col, FtKeyLineH);
-            var cap = BtText(h, (b.Title ?? "").ToUpperInvariant(), 0, 0, 200, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); cap.characterSpacing = 8;
+            var cap = BtText(h, (b.Title ?? "").ToUpperInvariant(), 0, 0, 200, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); cap.characterSpacing = FtCapSpacing;
             float x = FtWidth(cap) + 10;
             if (!string.IsNullOrEmpty(b.Value)) { var v = BtText(h, b.Value, x, 0, 120, FtKeyLineH, PanelLayout.Text.Small, PanelLook.Text, style: FontStyles.Bold); x += FtWidth(v) + 8; }
             if (!string.IsNullOrEmpty(b.Text)) { var t = BtText(h, b.Text, x, 0, 300, FtKeyLineH, PanelLook.MinText, PanelLook.Muted); x += FtWidth(t) + 12; }

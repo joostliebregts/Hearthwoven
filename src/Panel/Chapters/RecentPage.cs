@@ -35,17 +35,26 @@ namespace Hearthwoven.Panel
         public const string RecentNothingNew = "Nothing new yet";
         /// <summary>A row of The group whose window grew nothing (true: the window was recorded and is empty).</summary>
         public const string RecentRowNothing = "nothing new";
+        /// <summary>0.9.1: the row of a player who did nothing in a day window, said as the day ("nothing that day"): distinct from not shared.</summary>
+        public static string RecentRowNothingIn(TimeWindow w) =>
+            w == TimeWindow.Yesterday ? "nothing that day" : w == TimeWindow.Today ? "nothing today" : IsDayWindow(w) ? "nothing in these " + DaysOf(w) + " days" : RecentRowNothing;
         /// <summary>Said once under The group's rows on your own book: what a fellow's row is (B33: only what they did while you played; All: their shared totals).</summary>
         public const string RecentFellowsLine = "Other players: what they did while you were playing too.", RecentFellowsAllLine = "Other players: their totals as they last shared them.";
+        /// <summary>0.9.1: under The group in a day window: a fellow's day is their whole day, as their copy shares it per day (not every kind).</summary>
+        public const string RecentFellowsDaysLine = "Other players: their whole days as their copy shares them: wood and ore, pieces per category, groundwork, dishes, crops, trees, gear and foes defeated, not every kind.";
         /// <summary>Why a fellow's Recent greys some chips, on the plate (as DeedsWindowsLine on the other Deeds pages; B33).</summary>
-        public static string RecentWindowsLine(PanelInput input) =>
-            (input.Timed && !FellowLive(input) ? FellowShortWhy(input) + " " : "") +   // 0.8.5: 10 min to 3 h only while they play (Battle's rule)
-            Name(input) + (input.Timed ? "'s " : "'s numbers arrive only every few minutes, and their ") +
-            (input.DayDeeds != null ? "days are shared for the other Deeds pages, not for Recent" : "days are not shared");   // 0.8.5: a copy shares a few numbers per day
+        public static string RecentWindowsLine(PanelInput input)
+        {
+            var parts = new List<string>();
+            if (input.Timed && !FellowLive(input)) parts.Add(FellowShortWhy(input));   // 0.8.5: 10 min to 3 h only while they play (Battle's rule)
+            else if (!input.Timed) parts.Add(Name(input) + "'s numbers arrive only every few minutes.");
+            if (input.DayDeeds == null) parts.Add(OlderThan(input, NeedsDayDeeds) ? OlderLine(input, "their days fill in") : Name(input) + "'s days are not shared.");   // 0.9.1: their days show when shared
+            return string.Join(" ", parts.Where(p => !string.IsNullOrEmpty(p)).ToArray());
+        }
         /// <summary>About these numbers on Recent (B29, Joost 2026-10-10: the old lines were not understood): labels and lines for a player.</summary>
         public const string AboutYouLabel = "You", AboutOthersLabel = "Other players",
                             AboutYou = "10 min to Session: what you did since you started playing this time. Today to 30 days: the days saved on this computer. All: everything since you installed Hearthwoven.",
-                            AboutOthers = "Only what they did while you were playing too, as it reached you. 10 min to 3 h need a server that sends live updates. Recent does not show their days; All shows their totals.";
+                            AboutOthers = "10 min to Session: only what they did while you were playing too, as it reached you (10 min to 3 h need a server that sends live updates). Today to 30 days: their whole days as their copy shares them, a few numbers per kind of deed. All: their totals.";
         public const string RecentFoesNoDays = "Which foes is kept for this session only: 7 days counts them.";
 
         /// <summary>The families of the You view, in reading order: (id, heading). The ids are RecentModel's families or a part of one
@@ -114,6 +123,8 @@ namespace Hearthwoven.Panel
                 if (kind == "ground") Put("ground", kv.Key, kv.Value);
                 else if (kind != "planted") Put("built", kv.Key, kv.Value);   // plants: DeedLog.Planted below (the same plants, counted once)
             }
+            foreach (var kv in Of(RecentTabs)) Put("built", SharedTabToken + kv.Key, kv.Value);   // 0.9.1: a fellow's shared days: the pieces per hammer tab
+            foreach (var kv in Of(RecentGear)) Put("made", SharedGearToken + kv.Key, kv.Value);   // and the gear made per kind
             foreach (var kv in Of(DeedLog.Planted)) Put("planted", kv.Key, kv.Value);
             foreach (var kv in Of(DeedLog.Felled)) Put("felled", TreeKind(input, kv.Key), kv.Value);
             foreach (var kv in Of(DeedLog.Kills)) Put("foes", kv.Key, kv.Value);
@@ -126,6 +137,9 @@ namespace Hearthwoven.Panel
         // the picture of one part
         static string RecentIconOf(PanelInput input, string fam, string key)
         {
+            if (key.StartsWith(SharedTabToken, StringComparison.Ordinal)) return "vocab:away-hero-built";
+            if (key.StartsWith(SharedGearToken, StringComparison.Ordinal)) { var g = GearKinds.FirstOrDefault(k => SharedGearToken + k.stat == key); return g.fallback ?? "vocab:list-gear-shared"; }
+            if (key == SharedTreesToken) return "vocab:tree-oak";
             switch (fam)
             {
                 case "built": case "ground": case "planted": return "piece:" + key;
@@ -139,7 +153,9 @@ namespace Hearthwoven.Panel
             }
         }
         static string RecentNameOf(PanelInput input, string fam, string key) =>
-            fam == "felled" ? key : fam == "foes" && key == KillsTotal ? "foes" : Who(input, key);
+            key.StartsWith(SharedTabToken, StringComparison.Ordinal) ? key.Substring(SharedTabToken.Length).ToLowerInvariant() + " pieces"
+            : key.StartsWith(SharedGearToken, StringComparison.Ordinal) ? (GearKinds.FirstOrDefault(k => SharedGearToken + k.stat == key).title ?? "gear").ToLowerInvariant()
+            : key == SharedTreesToken ? "trees" : fam == "felled" ? key : fam == "foes" && key == KillsTotal ? "foes" : Who(input, key);
 
         /// <summary>The You view: the families that grew, each a section with its sum and a strip of its largest kinds.</summary>
         static void RecentYouBlocks(PanelInput input, TimeWindow w, PanelView v, bool all = false)
@@ -147,6 +163,7 @@ namespace Hearthwoven.Panel
             var top = all ? int.MaxValue : RecentTop;   // Show all pressed on this visit: every kind
             var r = RecentOf(input, w);
             if (!r.Shown) { v.Blocks.Add(Empty(r.Why)); return; }
+            if (!input.IsSelf && IsDayWindow(w)) v.Blocks.Add(new Block { Kind = "note", Text = RecentFellowDayLine(input, w) });   // 0.9.1: what a fellow's day holds, once above
             var parts = RecentParts(input, r);
             var skills = r.Grew.TryGetValue(DeedLog.Skills, out var sk) ? sk.Where(kv => kv.Value > 0 && kv.Key != DeedLog.OtherToken).OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).ToList() : new List<KeyValuePair<string, float>>();
             if (parts.Values.All(d => d.Count == 0) && skills.Count == 0)
@@ -182,6 +199,10 @@ namespace Hearthwoven.Panel
         }
 
         public const string RecentLonger = "Choose a longer window to look further back.";
+        /// <summary>0.9.1: a fellow's own Recent in a day window: their whole days as shared, not every kind.</summary>
+        public static string RecentFellowDayLine(PanelInput f, TimeWindow w) =>
+            (w == TimeWindow.Today ? "Today counts " + Name(f) + "'s whole day" : w == TimeWindow.Yesterday ? "Yesterday counts " + Name(f) + "'s whole day" : WindowShort(w) + " counts " + Name(f) + "'s whole days") +
+            " as their copy shares it: a few numbers per kind of deed, not every kind.";
         public const string RecentClippedLine = "A very busy stretch kept only its largest kinds: a few small ones are left out here.";
         public static string RecentMore(int n) => "+" + n + " more";
 
@@ -200,7 +221,9 @@ namespace Hearthwoven.Panel
             if (r.NotRecorded.Contains(DeedLog.Placed)) words.Add("pieces built");
             if (r.NotRecorded.Contains(DeedLog.Counters) || (r.NotRecorded.Contains(DeedLog.Kills) && !r.Grew.ContainsKey(DeedLog.Counters) && !IsDayWindow(r.Window ?? TimeWindow.Session))) words.Add("foes defeated");
             if (words.Count == 0) return;
-            v.Blocks.Add(new Block { Kind = "note", Text = NotRecorded + " in " + (input.IsSelf ? "this window" : Name(input) + "'s shared totals") + ": " + string.Join(" and ", words) + "." });
+            var dayOfFellow = !input.IsSelf && IsDayWindow(r.Window ?? TimeWindow.Session);   // 0.9.1: a fellow's days before 0.9.1 hold no foes defeated
+            v.Blocks.Add(new Block { Kind = "note", Text = dayOfFellow && OlderThan(input, NeedsDayKills) ? OlderLine(input, "foes defeated on their days fill in")
+                                                         : NotRecorded + " in " + (input.IsSelf ? "this window" : Name(input) + (dayOfFellow ? "'s shared days" : "'s shared totals")) + ": " + string.Join(" and ", words) + "." });
         }
 
         /// <summary>
@@ -210,15 +233,15 @@ namespace Hearthwoven.Panel
         /// </summary>
         static void RecentGroupBlocks(PanelInput input, List<PanelInput> group, TimeWindow w, PanelView v, bool all = false)
         {
-            var rows = new List<Block>(); var why = new List<string>(); var fellowsShown = false;
+            var rows = new List<Block>(); var why = new List<string>(); var fellowsShown = false; var noKills = new List<string>();
             foreach (var p in group)
             {
-                var r = RecentOf(p, w);
+                var r = RecentOf(p, w, input);   // a fellow's day in your calendar (0.9.1)
                 var row = new Block { Kind = "person", Id = Name(p), Title = p.IsSelf ? "You" : Name(p), Icon = "person:" + Name(p), Items = new List<Block>() };
                 if (!r.Shown)
                 {
                     row.Items.Add(new Block { Kind = "item", Title = r.Row ?? NotRecorded, Unrecorded = true });
-                    if (r.Row == null && !string.IsNullOrEmpty(r.Why) && !why.Contains(r.Why)) why.Add(r.Why);   // a row that says it itself needs no line
+                    if ((r.Row == null || IsDayWindow(w)) && !string.IsNullOrEmpty(r.Why) && !why.Contains(r.Why)) why.Add(r.Why);   // a row that says it itself needs no line (0.9.1: a day's row is short, its line says why)
                 }
                 else
                 {
@@ -228,13 +251,15 @@ namespace Hearthwoven.Panel
                     foreach (var (id, key, amount) in gains)
                         row.Items.Add(new Block { Kind = "item", Id = key, Icon = RecentIconOf(p, id, key), Title = RecentNameOf(p, id, key), Value = Plus(amount), Src = src, Source = TagOfSrc(src) });
                     if (more > 0) { row.Note = RecentMore(more); row.NoteLink = ShowAllTarget; }   // a click shows every gain (Show all, this visit)
-                    if (row.Items.Count == 0) row.Items.Add(new Block { Kind = "item", Title = RecentRowNothing, Tone = "quiet" });
+                    if (row.Items.Count == 0) row.Items.Add(new Block { Kind = "item", Title = RecentRowNothingIn(w), Tone = "quiet" });   // 0.9.1: "nothing that day", never "not recorded"
+                    if (!p.IsSelf && IsDayWindow(w) && r.NotRecorded.Contains(DeedLog.Counters)) noKills.Add(Name(p));
                 }
                 rows.Add(row);
             }
             v.Blocks.Add(new Block { Kind = "people", Tone = RecentGroupTone, Items = rows });
             foreach (var line in why) v.Blocks.Add(new Block { Kind = "note", Text = line });
-            if (fellowsShown && input.IsSelf) v.Blocks.Add(new Block { Kind = "note", Text = w == TimeWindow.SinceInstall ? RecentFellowsAllLine : RecentFellowsLine });
+            if (noKills.Count > 0) v.Blocks.Add(new Block { Kind = "note", Text = JoinNames(noKills) + (noKills.Count == 1 ? "'s copy shares" : "'s copies share") + " no foes defeated per day yet (Hearthwoven " + NeedsDayKills + ")." });
+            if (fellowsShown && input.IsSelf) v.Blocks.Add(new Block { Kind = "note", Text = w == TimeWindow.SinceInstall ? RecentFellowsAllLine : IsDayWindow(w) ? RecentFellowsDaysLine : RecentFellowsLine });
         }
 
         /// <summary>

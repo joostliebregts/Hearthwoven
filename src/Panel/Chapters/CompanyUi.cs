@@ -30,6 +30,51 @@ namespace Hearthwoven.Panel
 
         const float FireH = 400, FireR = 140, ShieldD = 40, GiftRowH = 40, GiftPerson = 88, LegendH = 30, CountPx = 19, CountCompactPx = 16, BeadSpread = 68;
         static float FireW => Mathf.Min(360f, Column * 0.49f);   // the fire on the left, the list beside it
+        /// <summary>The hearth's middle from the drawing's top: under the legend, in the middle of the fire's room.</summary>
+        const float FireCy = LegendH + FireH / 2 + 2;
+        /// <summary>The wait line under the hearth: its gap below the hearth, its inset from the fire's sides, its room (two lines).</summary>
+        const float FireWaitGap = 10, FireWaitInset = 8, FireWaitH = 44;
+
+        // ----- 0.9: the drawing on its way (Joost in game on 0.8.91: "when I open the company tab for the first time ... it sort of freezes the game") -----
+
+        // the plan the page waits for and its line under the hearth (the step it shows); the drawing ahead, once per opening, from your own book
+        static FireLayout.Pending fireWait; static TextMeshProUGUI fireWaitLine; static int fireWaitShown;
+        static bool fireAheadWanted; PanelInput fireAheadSelf;
+
+        static void FireWaitLine(RectTransform root, FireLayout.Pending wait, float cx, float top)
+        {
+            var step = wait?.Stage ?? 1;
+            var line = Label(root, PanelModel.FireWaitWords(step), PanelLook.MinText, PanelLook.Muted, style: FontStyles.Italic, align: TextAlignmentOptions.Top);
+            line.rectTransform.Box(cx - FireW / 2 + FireWaitInset, top, FireW - 2 * FireWaitInset, FireWaitH);
+            fireWait = wait; fireWaitLine = line; fireWaitShown = step;
+        }
+
+        /// <summary>Every frame while the book is open: the drawing ahead once per opening; the wait line's step when it changes, and the page drawn
+        /// again (forced: its model did not change) once the plan is kept. Nothing else is drawn again.</summary>
+        void FireTick()
+        {
+            if (fireAheadWanted && fireAheadSelf != null) { fireAheadWanted = false; FireAhead(fireAheadSelf); }
+            if (fireWait == null) return;
+            if (!fireWaitLine) { fireWait = null; fireWaitLine = null; return; }   // its page was drawn away
+            if (fireWait.Done) { fireWait = null; fireWaitLine = null; Render(true); return; }
+            var step = fireWait.Stage;
+            if (step == fireWaitShown) return;
+            fireWaitShown = step; fireWaitLine.text = PanelModel.FireWaitWords(step);
+        }
+
+        /// <summary>Fireside's plan for your own book, asked of the worker the frame after the book opens (on another chapter: Company's own drawing
+        /// asks for itself), so that a later turn to Company finds it ready. One model build on this frame (about a millisecond); the geometry off it.</summary>
+        void FireAhead(PanelInput self)
+        {
+            if (view == null || view.Active == Chapter.Company || self.Fellows == null || self.Fellows.Count == 0) return;
+            try
+            {
+                var st = new PanelState { Chapter = Chapter.Company, Player = "" }; st.Page[Chapter.Company] = "fireside";
+                var giving = PanelModel.Content(PanelModel.Build(self, st)).FirstOrDefault(x => x.Kind == "giving");
+                if (giving != null) FireLayout.Request(giving, FireW / 2, FireCy, out _);
+            }
+            catch (Exception e) { Failed("Fireside ahead", e); }
+        }
         static float ListX => FireW + 22;
 
         internal static void Giving(RectTransform col, Block b)
@@ -57,24 +102,32 @@ namespace Hearthwoven.Panel
             Size(root, -1, LegendH + Mathf.Max(FireH, listH));
 
             // the circle: players at even angles from the top (the owner first), the fire in the middle (FireLayout.cs: y up, origin top left)
-            float cx = FireW / 2, cy = LegendH + FireH / 2 + 2;
-            var plan = FireLayout.Build(b, cx, cy);
-            var pos = plan.Pos.ToDictionary(kv => kv.Key, kv => new Vector2((float)kv.Value.x, (float)kv.Value.y), StringComparer.OrdinalIgnoreCase);
+            float cx = FireW / 2, cy = FireCy;
+            // 0.9: the drawing's geometry is worked out on a worker the first time (FireLayout.Request); until then the hearth stands with the wait
+            // line under it and the list beside it, and FireTick draws the page again once the plan is kept
+            var plan = FireLayout.Request(b, cx, cy, out var wait);
             var hearthPx = (float)FireLayout.Hearth;   // the threads keep FireLayout.Keep from its middle
             var fire = VocabImg(root, "Hearth", "hearth-fire", Color.white).rectTransform; fire.Box(cx - hearthPx / 2, cy - hearthPx / 2, hearthPx, hearthPx);
-            var layer = Node("Threads", root); layer.Stretch();
-            var beads = Node("Beads", root); beads.Stretch();
-            foreach (var kv in plan.Geos) Thread(layer, kv.Key, kv.Value);
-            var pills = plan.Pills;   // the counts of your gifts: a pill on each thread, put where it touches nothing else (FireLayout.PlacePills); none left off in the sample world
-            foreach (var p in pills) if (!p.Dropped) CountPill(beads, p);
-            foreach (var p in players)
+            if (plan == null) FireWaitLine(root, wait, cx, cy + hearthPx / 2 + FireWaitGap);
+            else FireDrawing();
+            // the fire's threads, counts, shields and names from its worked-out plan
+            void FireDrawing()
             {
-                var at = pos[p.Id];
-                var shield = Marker(root, p.Icon, ShieldD, layout: false); shield.Box(at.x - ShieldD / 2, -at.y - ShieldD / 2, ShieldD, ShieldD);
-                var below = -at.y > cy + 10;
-                var nr = plan.NameRect[p.Id]; var nx = (float)((nr.X0 + nr.X1) / 2);   // pushed outward for a player on the side (FireLayout: the threads leave inward)
-                var name = Label(root, p.Title, PanelLayout.Text.Body, p.Selected ? PanelLook.Gold : PanelLook.Text, style: FontStyles.Bold, align: below ? TextAlignmentOptions.Top : TextAlignmentOptions.Bottom);
-                name.textWrappingMode = TextWrappingModes.NoWrap; name.rectTransform.Box(nx - 70, below ? -at.y + ShieldD / 2 + 2 : -at.y - ShieldD / 2 - 24, 140, 22);
+                var pos = plan.Pos.ToDictionary(kv => kv.Key, kv => new Vector2((float)kv.Value.x, (float)kv.Value.y), StringComparer.OrdinalIgnoreCase);
+                var layer = Node("Threads", root); layer.Stretch();
+                var beads = Node("Beads", root); beads.Stretch();
+                foreach (var kv in plan.Geos) Thread(layer, kv.Key, kv.Value);
+                var pills = plan.Pills;   // the counts of your gifts: a pill on each thread, put where it touches nothing else (FireLayout.PlacePills); none left off in the sample world
+                foreach (var p in pills) if (!p.Dropped) CountPill(beads, p);
+                foreach (var p in players)
+                {
+                    var at = pos[p.Id];
+                    var shield = Marker(root, p.Icon, ShieldD, layout: false); shield.Box(at.x - ShieldD / 2, -at.y - ShieldD / 2, ShieldD, ShieldD);
+                    var below = -at.y > cy + 10;
+                    var nr = plan.NameRect[p.Id]; var nx = (float)((nr.X0 + nr.X1) / 2);   // pushed outward for a player on the side (FireLayout: the threads leave inward)
+                    var name = Label(root, p.Title, PanelLayout.Text.Body, p.Selected ? PanelLook.Gold : PanelLook.Text, style: FontStyles.Bold, align: below ? TextAlignmentOptions.Top : TextAlignmentOptions.Bottom);
+                    name.textWrappingMode = TextWrappingModes.NoWrap; name.rectTransform.Box(nx - 70, below ? -at.y + ShieldD / 2 + 2 : -at.y - ShieldD / 2 - 24, 140, 22);
+                }
             }
 
             // the list beside the fire: between the owner and the others, then around the fire; each list says its scope once in its caption (fix4-rest)

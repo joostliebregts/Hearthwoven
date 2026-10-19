@@ -22,6 +22,8 @@ namespace Hearthwoven
         public string Id = "";
         public DateTime FromUtc, ToUtc;
         public int Foes;
+        /// <summary>0.9 (deed feeds): the deed stretches the block holds (its head's "deeds"); 0 for a block of fights only.</summary>
+        public int Stretches;
     }
 
     /// <summary>One closed session's feed: <c>{"v":1,"id":"3f9a0c1e2b7d","from":"ISO","to":"ISO","battleFeed":{FeedShare, no hits, no ids}}</c>.</summary>
@@ -38,32 +40,61 @@ namespace Hearthwoven
         public KeptSession Session;
         /// <summary>The foes read (the entries), not a number the sender claims.</summary>
         public int Foes => Feed == null ? 0 : Feed.Fights.Sum(f => f.Entries.Count);
+        /// <summary>0.9 (deed feeds, work/hearthwoven-0.9/TRACK-feeds.md): the same closed session's deed stretches (KeptDeeds), cleaned and bounded as
+        /// DeedBlockPart reads them; null when the block carries none (a block of fights only, as 0.8.6 wrote them).</summary>
+        public DeedSession Deeds;
+        /// <summary>The deed stretches read, not a number the sender claims.</summary>
+        public int Stretches => Deeds?.Stretches.Count ?? 0;
 
         /// <summary>A closed session as the block JSON (your side only: your fights and falls); null when it holds none or its id is not one.</summary>
-        public static string Write(KeptSession s)
+        public static string Write(KeptSession s) => Write(s, null);
+
+        /// <summary>
+        /// 0.9: a closed session as one block: its fights (your side only, as 0.8.6) and its deed stretches (<paramref name="deeds"/>, the same session id,
+        /// at most <paramref name="maxStretches"/> newest ones, cleaned as DeedBlockPart reads them). Either part may be missing; null when both are
+        /// empty or the id is not one. A block with fights only is written exactly as 0.8.6 wrote it.
+        /// </summary>
+        public static string Write(KeptSession s, DeedSession deeds, int maxStretches = DeedBlockPart.MaxStretches)
         {
             var mine = s?.Mine;
-            if (mine == null || mine.Fights.Count == 0 || !IdPattern.IsMatch(s.Id ?? "")) return null;
-            var feed = new FeedShare();
-            feed.Fights.AddRange(mine.Fights);
-            feed.Falls.AddRange(mine.Falls ?? new List<Fall>());
-            feed.T0 = mine.Fights.Select(f => f.StartUtc).Concat(feed.Falls.Select(f => f.Utc)).Min();   // every time in it is whole seconds from here
-            return Compose(s.Id, s.FromUtc, s.ToUtc, feed);
+            var hasFights = mine != null && mine.Fights.Count > 0;
+            var part = DeedBlockPart.Clean(deeds, maxStretches);
+            var hasDeeds = part != null && part.Stretches.Count > 0;
+            if (hasFights && hasDeeds && deeds.Id != s.Id) hasDeeds = false;   // never another session's stretches under this id
+            var id = hasFights ? s.Id : deeds?.Id;
+            if ((!hasFights && !hasDeeds) || !IdPattern.IsMatch(id ?? "")) return null;
+            FeedShare feed = null;
+            if (hasFights)
+            {
+                feed = new FeedShare();
+                feed.Fights.AddRange(mine.Fights);
+                feed.Falls.AddRange(mine.Falls ?? new List<Fall>());
+                feed.T0 = mine.Fights.Select(f => f.StartUtc).Concat(feed.Falls.Select(f => f.Utc)).Min();   // every time in it is whole seconds from here
+            }
+            DateTime from = hasFights ? s.FromUtc : part.FromUtc, to = hasFights ? s.ToUtc : part.ToUtc;
+            if (hasDeeds && hasFights) { if (part.FromUtc < from) from = part.FromUtc; if (part.ToUtc > to) to = part.ToUtc; }
+            if (hasDeeds) part.Id = id;
+            return Compose(id, from, to, feed, hasDeeds ? part : null);
         }
 
         /// <summary>What the server stores and serves: the block as it was read, written again. An unknown key, a position or a hit count is gone.</summary>
-        public static string Canonical(FeedBlock b) => Compose(b.Id, b.FromUtc, b.ToUtc, b.Feed);
+        public static string Canonical(FeedBlock b) => Compose(b.Id, b.FromUtc, b.ToUtc, b.Feed != null && b.Feed.Fights.Count > 0 ? b.Feed : null, b.Stretches > 0 ? b.Deeds : null);
 
-        static string Compose(string id, DateTime from, DateTime to, FeedShare feed)
+        static string Compose(string id, DateTime from, DateTime to, FeedShare feed, DeedSession deeds = null)
         {
             var j = new Json().Open().Num("v", Version).Str("id", id).Str("from", from.ToUniversalTime().ToString("o", Inv)).Str("to", to.ToUniversalTime().ToString("o", Inv));
-            feed.WriteTo(j, "battleFeed", hits: false, ids: false);
+            feed?.WriteTo(j, "battleFeed", hits: false, ids: false);
+            if (deeds != null) { j.Key(DeedBlockPart.Key); deeds.WriteTo(j); }   // 0.9: after the fights; a 0.8.6 reader takes what it knows and leaves the rest
             return j.Close().ToString();
         }
 
-        /// <summary>The first line of a stored block: what the index needs without reading the block.</summary>
-        public static string Head(FeedBlock b) =>
-            new Json().Open().Num("v", Version).Str("id", b.Id).Str("from", b.FromUtc.ToString("o", Inv)).Str("to", b.ToUtc.ToString("o", Inv)).Num("foes", b.Foes).Close().ToString();
+        /// <summary>The first line of a stored block: what the index needs without reading the block (0.9: "deeds", its stretches, when it has any).</summary>
+        public static string Head(FeedBlock b)
+        {
+            var j = new Json().Open().Num("v", Version).Str("id", b.Id).Str("from", b.FromUtc.ToString("o", Inv)).Str("to", b.ToUtc.ToString("o", Inv)).Num("foes", b.Foes);
+            if (b.Stretches > 0) j.Num("deeds", b.Stretches);
+            return j.Close().ToString();
+        }
 
         /// <summary>Reads block JSON; null when it is not one: version 1, an id of 12 hex characters, <c>to</c> not before <c>from</c>, a feed with fights.
         /// Bounded as FeedShare.ReadFrom (200 foes, names capped); boss fights and runs are dropped. Every fight comes back closed (KeptFights.CloseFights).</summary>
@@ -75,16 +106,19 @@ namespace Hearthwoven
             if (!DateTime.TryParse(MiniJson.Str(root, "from"), Inv, DateTimeStyles.RoundtripKind, out var from) || !DateTime.TryParse(MiniJson.Str(root, "to"), Inv, DateTimeStyles.RoundtripKind, out var to)) return null;
             from = from.ToUniversalTime(); to = to.ToUniversalTime();
             if (to < from) return null;
-            var feed = FeedShare.ReadFrom(MiniJson.Obj(root, "battleFeed"));
-            if (feed == null || feed.Fights.Count == 0) return null;
+            var battle = MiniJson.Obj(root, "battleFeed");
+            var feed = battle == null ? null : FeedShare.ReadFrom(battle);
+            var deeds = DeedBlockPart.Read(MiniJson.Obj(root, DeedBlockPart.Key), id);   // 0.9: the session's deed stretches, cleaned and bounded
+            if ((feed == null || feed.Fights.Count == 0) && deeds == null) return null;
+            if (feed == null) feed = new FeedShare();
             feed.Bosses.Clear(); feed.Runs.Clear();
             var session = new KeptSession { Id = id, FromUtc = from, ToUtc = to };
             session.Sides.Add(new FightSide { Name = "", Self = true, Fights = feed.Fights, Falls = feed.Falls });
             KeptFights.CloseFights(session);
-            return new FeedBlock { Id = id, FromUtc = from, ToUtc = to, Feed = feed, Session = session };
+            return new FeedBlock { Id = id, FromUtc = from, ToUtc = to, Feed = feed, Session = session, Deeds = deeds };
         }
 
-        public BlockRow Row => new BlockRow { Id = Id, FromUtc = FromUtc, ToUtc = ToUtc, Foes = Foes };
+        public BlockRow Row => new BlockRow { Id = Id, FromUtc = FromUtc, ToUtc = ToUtc, Foes = Foes, Stretches = Stretches };
     }
 
     /// <summary>
@@ -96,6 +130,8 @@ namespace Hearthwoven
     /// </summary>
     public sealed class BlockStore
     {
+        /// <summary>0.9: the deed stretches one owner's blocks of a world hold together at most (picked: a month of busy evenings is about 400).</summary>
+        public const int MaxStretches = 2000;
         public const int MaxBlocks = 60, MaxFoes = KeptFights.MaxFoes, MaxBlockPacked = Uploads.MaxParts * Fragments.Size, MaxBlockJson = 128 * 1024, MaxFutureMinutes = 5, ShareDays = GroupShare.MaxAgeDays;
         public static readonly TimeSpan MaxAge = KeptFights.MaxAge;
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -156,7 +192,8 @@ namespace Hearthwoven
                 if (!FeedBlock.IdPattern.IsMatch(id)) return null;
                 if (!DateTime.TryParse(MiniJson.Str(h, "from"), Inv, DateTimeStyles.RoundtripKind, out var from) || !DateTime.TryParse(MiniJson.Str(h, "to"), Inv, DateTimeStyles.RoundtripKind, out var to)) return null;
                 var foes = (int)Math.Max(0, Math.Min(FeedShare.MaxRead, MiniJson.Num(h, "foes")));
-                return new BlockRow { Id = id, FromUtc = from.ToUniversalTime(), ToUtc = to.ToUniversalTime(), Foes = foes };
+                var stretches = (int)Math.Max(0, Math.Min(DeedBlockPart.MaxStretches, MiniJson.Num(h, "deeds")));   // 0.9; a 0.8.6 head has none
+                return new BlockRow { Id = id, FromUtc = from.ToUniversalTime(), ToUtc = to.ToUniversalTime(), Foes = foes, Stretches = stretches };
             }
             catch { return null; }
         }
@@ -173,12 +210,12 @@ namespace Hearthwoven
             var gone = new List<string>();
             if (!rows.TryGetValue(owner, out var list)) return gone;
             list.Sort((a, b) => b.ToUtc.CompareTo(a.ToUtc));
-            var cut = now - MaxAge; int foes = 0; var keep = new List<BlockRow>(); var full = false;
+            var cut = now - MaxAge; int foes = 0, stretches = 0; var keep = new List<BlockRow>(); var full = false;
             foreach (var r in list)
             {
-                full = full || r.ToUtc < cut || keep.Count >= MaxBlocks || foes + r.Foes > MaxFoes;   // the newest while they fit, then none older (no gap)
+                full = full || r.ToUtc < cut || keep.Count >= MaxBlocks || foes + r.Foes > MaxFoes || stretches + r.Stretches > MaxStretches;   // the newest while they fit, then none older (no gap)
                 if (full) { gone.Add(r.Id); continue; }
-                keep.Add(r); foes += r.Foes;
+                keep.Add(r); foes += r.Foes; stretches += r.Stretches;
             }
             foreach (var id in gone) { Delete(FileOf(owner, id)); ownerOf.Remove(id); }
             if (keep.Count == 0) rows.Remove(owner); else rows[owner] = keep;
@@ -213,7 +250,7 @@ namespace Hearthwoven
             if (!string.IsNullOrEmpty(currentSession) && block.Id == currentSession) return "the running session";
             if (block.ToUtc < now - MaxAge) return "older than 30 days";
             if (block.ToUtc > now.AddMinutes(MaxFutureMinutes)) return "in the future";
-            if (block.Foes == 0) return "empty";
+            if (block.Foes == 0 && block.Stretches == 0) return "empty";   // 0.9: a session of deeds without a fight is a block too
             Load(now);
             if (ownerOf.ContainsKey(block.Id)) return "held";
             var text = FeedBlock.Head(block) + "\n" + FeedBlock.Canonical(block);
@@ -404,6 +441,29 @@ namespace Hearthwoven
             return ix;
         }
 
+        /// <summary>0.9: the rows one index lists: the fights index the sessions with foes (as 0.8.6: a reader of that version must never ask for a block of
+        /// deeds alone), the deeds index (<paramref name="deeds"/>) the sessions with deed stretches, each written with its stretches in the count's place.</summary>
+        public static List<BlockRow> Part(IEnumerable<BlockRow> rows, bool deeds) =>
+            (rows ?? Enumerable.Empty<BlockRow>()).Where(r => r != null && (deeds ? r.Stretches > 0 : r.Foes > 0))
+                .Select(r => deeds ? new BlockRow { Id = r.Id, FromUtc = r.FromUtc, ToUtc = r.ToUtc, Foes = r.Stretches, Stretches = r.Stretches } : r).ToList();
+
+        /// <summary>0.9: the deeds index's rows as read (the count is the stretches): Stretches set, Foes 0. Null in, null out.</summary>
+        public static Dictionary<string, List<BlockRow>> DeedRows(IDictionary<string, List<BlockRow>> of) =>
+            of?.ToDictionary(kv => kv.Key, kv => kv.Value.Select(r => new BlockRow { Id = r.Id, FromUtc = r.FromUtc, ToUtc = r.ToUtc, Stretches = Math.Min(DeedBlockPart.MaxStretches, r.Foes) }).ToList(), StringComparer.Ordinal);
+
+        /// <summary>Both indexes' rows per fellow, each session once: what the cache on this PC may keep (BlockCache.KeepOnly).</summary>
+        public static Dictionary<string, List<BlockRow>> Joined(IDictionary<string, List<BlockRow>> a, IDictionary<string, List<BlockRow>> b)
+        {
+            var all = new Dictionary<string, List<BlockRow>>(StringComparer.Ordinal);
+            foreach (var src in new[] { a, b })
+                foreach (var kv in src ?? new Dictionary<string, List<BlockRow>>())
+                {
+                    if (!all.TryGetValue(kv.Key, out var l)) all[kv.Key] = l = new List<BlockRow>();
+                    foreach (var r in kv.Value) if (!l.Any(x => x.Id == r.Id)) l.Add(r);
+                }
+            return all;
+        }
+
         static readonly DateTime Epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         static DateTime At(double secs) => Epoch.AddSeconds(Json.IsFinite(secs) ? Math.Max(0, Math.Min(4102444800.0, Math.Round(secs))) : 0);
     }
@@ -435,6 +495,126 @@ namespace Hearthwoven
             var packed = Transport.Pack(json);
             if (packed.Length > BlockStore.MaxBlockPacked) { problem = packed.Length + " bytes packed is over " + BlockStore.MaxBlockPacked; return null; }
             return packed;
+        }
+
+        /// <summary>0.9: one closed session as a block can carry it: its fights (KeptFights), its deed stretches (KeptDeeds), or both (the same session id).</summary>
+        public sealed class Source
+        {
+            public string Id = "";
+            public DateTime FromUtc, ToUtc;
+            public KeptSession Fights;
+            public DeedSession Deeds;
+            public bool HasFights => Fights?.Mine != null && Fights.Fights.Count > 0;
+            public bool HasDeeds => Deeds != null && Deeds.Stretches.Count > 0;
+        }
+
+        /// <summary>
+        /// 0.9 (deed feeds): the sessions to upload next, newest first, from your kept fights and (<paramref name="deeds"/>, only where the server keeps deed
+        /// feeds: null otherwise) your kept deed stretches, joined by session id: every closed session that holds either, ended within the last 30 days,
+        /// is not held by the server (<paramref name="mine"/>) and was not tried this connection (<paramref name="tried"/>).
+        /// </summary>
+        public static List<Source> Plan(IEnumerable<KeptSession> earlier, IEnumerable<DeedSession> deeds, ISet<string> mine, ISet<string> tried, DateTime now)
+        {
+            var byId = new Dictionary<string, Source>(StringComparer.Ordinal);
+            foreach (var s in earlier ?? Enumerable.Empty<KeptSession>())
+            {
+                if (s?.Id == null || byId.ContainsKey(s.Id)) continue;
+                byId[s.Id] = new Source { Id = s.Id, FromUtc = s.FromUtc, ToUtc = s.ToUtc, Fights = s };
+            }
+            foreach (var d in deeds ?? Enumerable.Empty<DeedSession>())
+            {
+                if (d?.Id == null || d.Live) continue;
+                if (!byId.TryGetValue(d.Id, out var src)) byId[d.Id] = src = new Source { Id = d.Id, FromUtc = d.FromUtc, ToUtc = d.ToUtc };
+                if (src.Deeds != null) continue;
+                src.Deeds = d;
+                if (d.FromUtc < src.FromUtc) src.FromUtc = d.FromUtc;
+                if (d.ToUtc > src.ToUtc) src.ToUtc = d.ToUtc;
+            }
+            return byId.Values.Where(s => (s.HasFights || s.HasDeeds) && FeedBlock.IdPattern.IsMatch(s.Id) && s.ToUtc >= now - BlockStore.MaxAge &&
+                                          (mine == null || !mine.Contains(s.Id)) && (tried == null || !tried.Contains(s.Id)))
+                              .OrderByDescending(s => s.ToUtc).ToList();
+        }
+
+        /// <summary>The steps a block's deed part shrinks by when the whole block would pack over the bounds: the newest stretches stay, and at the last step the
+        /// block goes without them (its fights alone, as 0.8.6).</summary>
+        public static readonly int[] DeedSteps = { DeedBlockPart.MaxStretches, 50, 25, 12, 0 };
+
+        /// <summary>0.9: the block of <paramref name="s"/> as it travels: its fights and as many of its newest deed stretches as fit BlockStore.MaxBlockJson and
+        /// MaxBlockPacked (DeedSteps); null when it holds nothing to send or does not fit even without its deeds.</summary>
+        public static byte[] Pack(Source s, out string problem)
+        {
+            problem = null;
+            if (s == null) { problem = "nothing to send"; return null; }
+            foreach (var max in DeedSteps)
+            {
+                var json = FeedBlock.Write(s.Fights, max > 0 ? s.Deeds : null, Math.Max(1, max));
+                if (json == null) { if (max > 0 && !s.HasFights) continue; problem = problem ?? "nothing to send"; return null; }
+                if (json.Length > BlockStore.MaxBlockJson) { problem = json.Length + " bytes is over " + BlockStore.MaxBlockJson; continue; }
+                var packed = Transport.Pack(json);
+                if (packed.Length > BlockStore.MaxBlockPacked) { problem = packed.Length + " bytes packed is over " + BlockStore.MaxBlockPacked; continue; }
+                problem = null;
+                return packed;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 0.9 (deed feeds, work/hearthwoven-0.9/TRACK-feeds.md): the deed stretches of one closed session as a block carries them, under "deedFeed" after the
+    /// fights. Written by the owner's PC from its KeptDeeds (DeedSession.WriteTo), read by the server and by a friend's PC through Read, which keeps only
+    /// what the feed draws: the deed families (the eight with a page feed, and 0.9 all-feed's taming, practice, brought in and sailing), DeedLog's kinds, the four moment kinds, names of a sane length, at most MaxStretches stretches (the
+    /// newest), counts and moments as DeedSession reads them. No world name, no position, no other player. The server stores what Read gave, written again.
+    /// </summary>
+    public static class DeedBlockPart
+    {
+        public const string Key = "deedFeed";
+        /// <summary>The stretches one block carries at most (the newest; a busy evening is about 13).</summary>
+        public const int MaxStretches = 100;
+        /// <summary>The longest "kind|token" key, token or station name kept.</summary>
+        public const int MaxName = 120;
+        static readonly HashSet<string> Families = new HashSet<string>(StringComparer.Ordinal)
+        {
+            DeedStretches.Crafting, DeedStretches.Cooking, DeedStretches.Building, DeedStretches.Groundwork, DeedStretches.Farming,
+            DeedStretches.Fishing, DeedStretches.Woodcutting, DeedStretches.Mining,
+            DeedStretches.Taming, DeedStretches.Practice, DeedStretches.BroughtIn, DeedStretches.Sailing,   // 0.9 all-feed: the mixed feed's other deeds
+        };
+        static readonly HashSet<string> Kinds = new HashSet<string>(DeedLog.AllFamilies, StringComparer.Ordinal);
+        static readonly HashSet<string> MomentKinds = new HashSet<string>(StringComparer.Ordinal) { DeedMoment.Made, DeedMoment.Upgraded, DeedMoment.Feast, DeedMoment.First };
+
+        /// <summary>A clean copy for a block: no world, never live, the newest <paramref name="max"/> stretches of the known families, every count and moment
+        /// whose names pass; null when <paramref name="s"/> is null.</summary>
+        public static DeedSession Clean(DeedSession s, int max = MaxStretches)
+        {
+            if (s == null) return null;
+            var c = new DeedSession { World = "", Id = s.Id ?? "", FromUtc = s.FromUtc, ToUtc = s.ToUtc };
+            foreach (var st in s.Stretches.Where(x => x != null && Families.Contains(x.Family ?? "") && x.ToUtc >= x.FromUtc).OrderByDescending(x => x.ToUtc).Take(Math.Max(0, Math.Min(MaxStretches, max))))
+            {
+                var n = new DeedStretch { Family = st.Family, FromUtc = st.FromUtc, ToUtc = st.ToUtc, MomentsLeft = Math.Max(0, Math.Min(100000, st.MomentsLeft)) };
+                foreach (var kv in st.Counts)
+                    if (kv.Key != null && kv.Key.Length <= MaxName && Kinds.Contains(DeedStretch.KindOf(kv.Key)) && DeedStretch.TokenOf(kv.Key).Length > 0 && kv.Value > 0 && Json.IsFinite(kv.Value))
+                        n.Counts[kv.Key] = kv.Value;
+                foreach (var m in st.Moments)
+                    if (m != null && MomentKinds.Contains(m.Kind ?? "") && !string.IsNullOrEmpty(m.Token) && m.Token.Length <= MaxName && m.Count > 0 && !(m.Kind == DeedMoment.First && m.Known))   // a first from before-0.9 knowledge is never shared
+                        n.Moments.Add(new DeedMoment { Kind = m.Kind, Token = m.Token, Utc = m.Utc, Count = m.Count, From = Math.Max(0, Math.Min(99, m.From)), To = Math.Max(0, Math.Min(99, m.To)),
+                                                       Station = m.Station != null && m.Station.Length <= MaxName ? m.Station : null, StationLevel = Math.Max(0, Math.Min(99, m.StationLevel)) });
+                c.Stretches.Add(n);
+            }
+            if (s.FromUtc > DateTime.MinValue && c.Stretches.Count > 0)
+            {
+                var first = c.Stretches.Min(x => x.FromUtc);
+                if (first < c.FromUtc) c.FromUtc = first;   // every time is written from the session's start (DeedSession.WriteTo): none before it
+            }
+            return c;
+        }
+
+        /// <summary>The deed part of a block as this reader keeps it (Clean of DeedSession.ReadFrom, its id the block's); null when there is none or it holds no stretch.</summary>
+        public static DeedSession Read(Dictionary<string, object> o, string id)
+        {
+            if (o == null) return null;
+            var s = Clean(DeedSession.ReadFrom(o));
+            if (s == null || s.Stretches.Count == 0) return null;
+            s.Id = id ?? s.Id;
+            return s;
         }
     }
     /// <summary>
@@ -535,6 +715,8 @@ namespace Hearthwoven
 
         sealed class Entry { public State State; public FeedBlock Block; public double AskedAt, WantedAt; public long Used; }
         readonly Dictionary<string, List<BlockRow>> rows = new Dictionary<string, List<BlockRow>>(StringComparer.Ordinal);
+        /// <summary>0.9: the friends' sessions with deed stretches (the list's deeds index, BlockRow.Stretches set), by fellow key, newest first.</summary>
+        readonly Dictionary<string, List<BlockRow>> deedRows = new Dictionary<string, List<BlockRow>>(StringComparer.Ordinal);
         readonly Dictionary<string, string> fellowOf = new Dictionary<string, string>(StringComparer.Ordinal);
         readonly Dictionary<string, Entry> entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         readonly System.Collections.Concurrent.ConcurrentQueue<KeyValuePair<string, string>> cached = new System.Collections.Concurrent.ConcurrentQueue<KeyValuePair<string, string>>();
@@ -553,8 +735,21 @@ namespace Hearthwoven
         void Bump() { Version++; Changed?.Invoke(); }
 
         /// <summary>The friend's rows, newest first, without the ones the server said are gone and <paramref name="except"/> (the session their running copy is).</summary>
-        public List<BlockRow> RowsOf(string fellowKey, string except = null) =>
-            fellowKey != null && rows.TryGetValue(fellowKey, out var l) ? l.Where(r => r.Id != except && !(entries.TryGetValue(r.Id, out var e) && e.State == State.Gone)).ToList() : new List<BlockRow>();
+        public List<BlockRow> RowsOf(string fellowKey, string except = null) => RowsIn(rows, fellowKey, except);
+
+        /// <summary>0.9: the friend's sessions with deed stretches, newest first, as RowsOf (Stretches set).</summary>
+        public List<BlockRow> DeedRowsOf(string fellowKey, string except = null) => RowsIn(deedRows, fellowKey, except);
+
+        List<BlockRow> RowsIn(Dictionary<string, List<BlockRow>> from, string fellowKey, string except) =>
+            fellowKey != null && from.TryGetValue(fellowKey, out var l) ? l.Where(r => r.Id != except && !(entries.TryGetValue(r.Id, out var e) && e.State == State.Gone)).ToList() : new List<BlockRow>();
+
+        /// <summary>0.9: the block's deed stretches (a session of that friend), or null while it is not Ready or holds none.</summary>
+        public DeedSession DeedsOf(string id)
+        {
+            if (!entries.TryGetValue(id ?? "", out var e) || e.State != State.Ready || e.Block?.Deeds == null) return null;
+            e.Used = ++used;
+            return e.Block.Deeds;
+        }
 
         /// <summary>The whole seconds block <paramref name="id"/> has been on its way, from when the feed wanted it (a held ask and the cache read included); -1 when it is
         /// not on its way. The feed's "Getting ..." line counts them (PanelModel.FetchWaited). No allocation: read every frame while that line shows.</summary>
@@ -576,20 +771,27 @@ namespace Hearthwoven
         }
 
         /// <summary>The server's latest index (BlockIndex.Of, by fellow key). Blocks no row names leave memory; a row the server had called gone is shown again.</summary>
-        public void TakeRows(IDictionary<string, List<BlockRow>> byFellow)
+        public void TakeRows(IDictionary<string, List<BlockRow>> byFellow, IDictionary<string, List<BlockRow>> deedsByFellow = null)
         {
-            var was = string.Join("|", rows.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + ":" + string.Join(",", k.Value.Select(r => r.Id))));
-            rows.Clear(); fellowOf.Clear();
+            string Sig() => string.Join("|", rows.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + ":" + string.Join(",", k.Value.Select(r => r.Id))))
+                            + "#" + string.Join("|", deedRows.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + ":" + string.Join(",", k.Value.Select(r => r.Id))));
+            var was = Sig();
+            rows.Clear(); deedRows.Clear(); fellowOf.Clear();
             foreach (var kv in byFellow ?? new Dictionary<string, List<BlockRow>>())
             {
                 rows[kv.Key] = kv.Value.OrderByDescending(r => r.ToUtc).ToList();
                 foreach (var r in kv.Value) fellowOf[r.Id] = kv.Key;
             }
+            foreach (var kv in deedsByFellow ?? new Dictionary<string, List<BlockRow>>())   // 0.9: the deeds index; a session may be in both (one block)
+            {
+                deedRows[kv.Key] = kv.Value.OrderByDescending(r => r.ToUtc).ToList();
+                foreach (var r in kv.Value) if (!fellowOf.ContainsKey(r.Id)) fellowOf[r.Id] = kv.Key;
+            }
             foreach (var id in entries.Keys.Where(i => !fellowOf.ContainsKey(i)).ToList()) entries.Remove(id);
             if (inFlight != null && !entries.ContainsKey(inFlight)) inFlight = null;
             var gone = entries.Where(kv => kv.Value.State == State.Gone).Select(kv => kv.Key).ToList();
             foreach (var id in gone) entries.Remove(id);
-            var now = string.Join("|", rows.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + ":" + string.Join(",", k.Value.Select(r => r.Id))));
+            var now = Sig();
             if (now != was || gone.Count > 0) Bump();
         }
 
@@ -684,7 +886,7 @@ namespace Hearthwoven
         /// <summary>Everything forgotten (a new connection, sharing off).</summary>
         public void Clear()
         {
-            rows.Clear(); fellowOf.Clear(); entries.Clear(); inFlight = null; held = null;
+            rows.Clear(); deedRows.Clear(); fellowOf.Clear(); entries.Clear(); inFlight = null; held = null;
             while (cached.TryDequeue(out _)) { }
             Version++;
         }

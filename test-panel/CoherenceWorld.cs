@@ -435,7 +435,7 @@ static partial class CoherenceTests
                 var earnedPage = PanelModel.VisibleFeats(Show(own, Chapter.Feats, "earned")).Select(c => c.Id).ToList();
                 var unsungPage = PanelModel.VisibleFeats(Show(own, Chapter.Feats, "unsung")).Select(c => c.Id).ToList();
                 Is(earnedPage.SequenceEqual(earnedIds), n + ": the Earned view lists " + string.Join(",", earnedPage) + ", the rules earn " + string.Join(",", earnedIds));
-                Is(earnedPage.Concat(unsungPage).Distinct().Count() == PanelModel.OwnFeatCount && !earnedPage.Intersect(unsungPage).Any(), n + ": a feat is on both Earned and Unsung, or on neither");
+                Is(earnedPage.Concat(unsungPage).Distinct().Count() == PanelModel.FeatDefs.Count(d => !d.Group && PanelModel.OwnVisible(d, own)) && !earnedPage.Intersect(unsungPage).Any(), n + ": a feat is on both Earned and Unsung, or on neither (0.9: a land's own feat waits until the land is found)");
                 // Known for names only earned feats; each owner page's band holds exactly the earned feats of that page
                 var known = First(Show(own, Chapter.Deeds, "overview"), x => x.Kind == "knownfor");
                 Is((known?.Items ?? new List<Block>()).All(i => earnedIds.Contains(i.Id)) && (known != null) == earnedIds.Any(), n + ": Known for is not a subset of the earned feats");

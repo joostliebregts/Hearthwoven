@@ -65,6 +65,9 @@ namespace Hearthwoven.Panel
             public readonly Dictionary<string, float> Damage = new Dictionary<string, float>();
             /// <summary>0.8.2: a recipe in the game makes it (ObjectDB's recipes; a creature's copy of a weapon has none). False in the sample.</summary>
             public bool Recipe;
+            /// <summary>0.9 (Best arrows, "From what you gathered here"): what its recipe asks (the first enabled recipe that makes it, quality 1),
+            /// in the armor sets' ingredient form; empty when no recipe makes it or not read (a fellow's copy, an older sample).</summary>
+            public List<ArmorCost> Cost = new List<ArmorCost>();
         }
 
         /// <summary>The eight damage types in the palette's order (VOCABULARY.md); tool damage (chop, pickaxe) is never shown in Battle.</summary>
@@ -430,7 +433,7 @@ namespace Hearthwoven.Panel
                 if (countedLine != null) { byType.Insert(1, CountedNote(countedLine)); byWeapon.Add(CountedNote(countedLine)); }
                 // 0.8.6 (DPS per named weapon): under each kind its weapons, a weapon of several upgrade levels folded to its newest, with the DPS and the skill level then (WeaponRows.cs); a biome choice and a compare have none
                 var lists = state != null && state.Compare || biomeRf != null && biomeRf.Narrowed ? null : WeaponLists(input, WeaponCellsIn(input, w), mixes.Select(m => m.Id), WeaponOpenIn(state, w), KindTotals(rows));
-                foreach (var m in mixes) { byWeapon.Add(m); if (lists != null && lists.TryGetValue(m.Id, out var list)) byWeapon.Add(list); }
+                KindRows(state, mixes, lists, byWeapon);   // each kind's row, and its weapon lines while it is open (0.9.5 the kind toggle, WeaponRows.cs)
                 if (lists == null && !input.IsSelf && !(state != null && state.Compare) && !(biomeRf != null && biomeRf.Narrowed) && WeaponsNotShared(input, w) is string theirNote) byWeapon.Add(new Block { Kind = "note", Text = theirNote });
                 // 0.8 (Joost's A + C): By foe, a damage row per foe kind with its "×N" and the marks of what became of them (Chapters/BattleFeedModel.cs).
                 // A biome choice narrows the damage, but the counts are not kept per biome: then no counts, one line says why
@@ -638,7 +641,8 @@ namespace Hearthwoven.Panel
         public static readonly (string title, string text)[] FoesAbout =
         {
             ("The meter", "Under each damage type: how much of it the foe takes. Half full is normal (\u00D71), full is twice as much (\u00D72), empty with a cross is none. Each of its four parts is \u00D70.5. Point at a meter for the exact factor."),
-            ("Best arrow", "The arrow you know that does the most damage to this foe: the game's arrow damage times the foe's multipliers."),
+            ("Best arrow", "The arrow you know that does the most damage to this foe: the game's arrow damage times the foe's multipliers. Arrows that do the same damage to it are all named."),
+            (UseAboutTitle, UseAbout),   // 0.9 (Chapters/WhatToUse.cs)
             ("What to use", "Click a foe to rank arrows, bolts and weapons against it, with what you own, made or can craft: the best on one row, the worst on the row under it. All bars there share one scale, and each starts a quarter of the way along. Base damage only: upgrades and skill are not counted."),
         };
 
@@ -673,8 +677,8 @@ namespace Hearthwoven.Panel
             {
                 var foe = FoeOf(input, key);
                 var cells = new List<Block>();
-                var best = BestArrow(foe, arrows);
-                if (best != null) cells.Add(new Block { Kind = "arrow", Id = best.Prefab, Icon = "item:" + best.Prefab, Title = Who(input, best.Prefab) });
+                var best = ArrowCell(input, foe, arrows);   // 0.9 (Best arrow tie, Chapters/BestArrows.cs): a tie at the top is named, never none
+                if (best != null) cells.Add(best);
                 if (foe != null)
                     foreach (var t in BattleTypes)
                     {
@@ -752,7 +756,7 @@ namespace Hearthwoven.Panel
 
         /// <summary>The window as Who hit it says it: "in the last hour", "this session", "today", "all recorded".</summary>
         public static string WhoHitWhen(TimeWindow w) =>
-            w == TimeWindow.SinceInstall ? "all recorded" : w == TimeWindow.Session ? "this session" : w == TimeWindow.Today ? "today" : "in the " + WindowLabel(w).ToLowerInvariant();
+            w == TimeWindow.SinceInstall ? "all recorded" : w == TimeWindow.Session ? "this session" : InWindowWords(w);
 
         // a foe's Dealt bar with Everyone: a part per player who hit it, in the group's order, each their share of the foe's total
         static IEnumerable<Block> DealtSplit(PanelInput input, List<FoeHitter> group, string foe, double total) =>
@@ -885,7 +889,9 @@ namespace Hearthwoven.Panel
                 if (split) AboutLines(view, (AfterAboutTitle, AfterAbout(input, w)));
                 var types = FoeTypes(input, rows);
                 var countedLine = CountedLine(input, w, rows);   // 0.8.6: plain Dealt bars, and the one line where the split is known (under the By foe view's table's top)
-                Switch(view, state, page, "view", split ? DealtAfterCaption : DealtCaption, ("foe", ByFoe, countedLine == null ? new List<Block> { table } : new List<Block> { CountedNote(countedLine), table }), ("type", ByDamageType, types == null ? null : new List<Block> { types }));
+                var byFoe = countedLine == null ? new List<Block> { table } : new List<Block> { CountedNote(countedLine), table };
+                var use = state == null ? null : WhatToUseForFoes(input, src, state, page, rows, w);   // 0.9 (Chapters/WhatToUse.cs): the third view, the foes as columns
+                Switch(view, state, page, "view", split ? DealtAfterCaption : DealtCaption, ("foe", ByFoe, byFoe), ("type", ByDamageType, types == null ? null : new List<Block> { types }), (UseView, UseLabel, use));
             }
             if (src.Window != null && src.Window.Clipped) view.Blocks.Add(new Block { Kind = "note", Text = ClippedLine });
             Plate(view, "ui:chapter-battle", PlateText(input, w == TimeWindow.SinceInstall && input.DamageSinceInstall != null, windowed: true, w: w));

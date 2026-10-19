@@ -140,6 +140,50 @@ namespace Hearthwoven
 
         public void WriteTo(Json j, string key) { j.Key(key).Open(); WriteFields(j); j.Close(); }
 
+        /// <summary>0.9 (armor-share): the shared copy's key of the armour ledger since it began, per damage type only (WriteShared).</summary>
+        public const string SharedKey = "armorSince";
+
+        /// <summary>0.9 (armor-share): the ledger as your shared copy carries it (Snapshot, SharedKey): when it began and, per damage type only, what
+        /// reached your armor ("before") and what got through ("after"), to tenths, and the hits. No foe, no cause, no place: at most 17 numbers.
+        /// Written whenever the ledger is loaded, also empty, so a reader can tell "nothing reached their armor" from an older Hearthwoven.</summary>
+        public void WriteShared(Json j, DateTime? fromUtc)
+        {
+            j.Key(SharedKey).Open();
+            if (fromUtc.HasValue) j.Str("from", fromUtc.Value.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture));
+            if (Hits > 0) j.Num("hits", Hits);
+            j.Dict("before", PerType(Before)).Dict("after", PerType(After));
+            j.Close();
+        }
+
+        // a stage summed per damage type, Types order, to tenths, nothing that rounds to 0
+        static IEnumerable<KeyValuePair<string, float>> PerType(Dictionary<string, float> d)
+        {
+            foreach (var ty in Types)
+            {
+                double s = 0; foreach (var kv in d) if (kv.Value > 0 && kv.Key.EndsWith("|" + ty, StringComparison.Ordinal)) s += kv.Value;
+                var v = (float)Math.Round(s, 1);
+                if (v > 0 && Json.IsFinite(v)) yield return new KeyValuePair<string, float>(ty, v);
+            }
+        }
+
+        /// <summary>0.9 (armor-share): a fellow's shared ledger (WriteShared) as a tally keyed "||type" (no foe, no cause), with its start; null when
+        /// the copy has none (a Hearthwoven before 0.9). Only the eight battle types, finite amounts above 0: anything else in the copy is left out.</summary>
+        public static ArmourTally ReadShared(Dictionary<string, object> o, out DateTime? fromUtc)
+        {
+            fromUtc = null;
+            if (o == null) return null;
+            if (DateTime.TryParse(MiniJson.Str(o, "from"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var from)) fromUtc = from.ToUniversalTime();
+            var hits = MiniJson.Num(o, "hits");
+            var t = new ArmourTally { Hits = hits > 0 && hits < int.MaxValue ? (int)hits : 0 };
+            void Read(string key, Dictionary<string, float> into)
+            {
+                var d = new Dictionary<string, float>(); MiniJson.Into(MiniJson.Obj(o, key), d);
+                foreach (var ty in Types) if (d.TryGetValue(ty, out var v) && v > 0 && Json.IsFinite(v)) into["||" + ty] = v;
+            }
+            Read("before", t.Before); Read("after", t.After);
+            return t;
+        }
+
         public ArmourTally ReadFrom(Dictionary<string, object> o)
         {
             if (o == null) return this;

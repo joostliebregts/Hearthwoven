@@ -66,6 +66,7 @@ namespace Hearthwoven
                         Plugin.Log.AddDamage(utc, biome, true, target, skill, hit.m_damage);
                         BattleHooks.Dealt(__instance, target, hit);   // 0.8: this foe as its own creature (count per kind, battle feed)
                         if (!(__instance is Player)) Swung(utc, hit.m_skill, skill, hit.m_damage);
+                        if (!(__instance is Player)) FeatsHooks.RaidHit(__instance);   // 0.9 Raid Breaker (its own guard)
                         if (!(__instance is Player)) d = new DealtHit { Utc = utc, Biome = biome, Target = target, Skill = skill, Before = hit.m_damage };   // its after in the postfix
                     }
                 });
@@ -150,6 +151,7 @@ namespace Hearthwoven
                 Plugin.Log.AddDeath(DateTime.UtcNow, Biome(), pos.x, pos.z);
                 SessionEvents.Add(Plugin.Events.Battle, "Deaths");   // since install (LocalTotals), under the game's count at first run
                 BattleHooks.Died();   // 0.9: in the running fight, boss fight and dungeon run
+                FeatsCounters.OnFell();   // 0.9 Held the Line: this fight does not hold
             });
         }
 
@@ -289,6 +291,7 @@ namespace Hearthwoven
                     if (takingOff == null || method != "RPC_RemoveDoneItem") return;
                     var dish = takingOff; takingOff = null;
                     SessionEvents.CountTakenOff(Plugin.Events.Made, dish, takingBurnt, parameters);
+                    FeatsCounters.OnTakenOff(Plugin.FeatsLedger, takingBurnt);   // 0.9 Steady at the Grill: a burnt one ends the run
                 }
                 catch (Exception e) { HookGuard.Fail(e, "ClientHooks.TakeOffAmount.Prefix"); }
             }
@@ -331,7 +334,7 @@ namespace Hearthwoven
         {
             static void Postfix(WearNTear __instance, bool __result) => Safe(() =>
             {
-                if (__result && repairing) SessionEvents.Add(Plugin.Events.Repairs, Prefab(__instance));
+                if (__result && repairing) { SessionEvents.Add(Plugin.Events.Repairs, Prefab(__instance)); FeatsHooks.Repaired(__instance); }   // 0.9 Mender of Others
             });
         }
 
@@ -372,11 +375,32 @@ namespace Hearthwoven
         {
             static void Postfix(Player __instance, ItemDrop.ItemData item, bool __result) => Safe(() =>
             {
-                if (!__result || !Local(__instance) || item == null || feasting) return;   // a feast bite is counted as a feast only
+                if (!__result || !Local(__instance) || item == null) return;
+                Combination(__instance);   // 0.9: the foods you now have on, a feast's serving among them (Meals' Your combinations)
+                if (feasting) return;   // a feast bite is counted as a feast only
                 var food = item.m_dropPrefab ? item.m_dropPrefab.name : item.m_shared.m_name;
                 var maker = string.IsNullOrEmpty(item.m_crafterName) ? "unknown" : item.m_crafterName;
                 SessionEvents.Add(Plugin.Events.AteFoodMadeBy, maker + "|" + food);
             });
+        }
+
+        /// <summary>0.9 (Meals' Your combinations, MealCombos): after the game took a food, the foods you have on (Player.GetFoods, one to three, each
+        /// by its item prefab as the game names it, Food.m_name) and the game's food values of those items summed (m_food, m_foodStamina,
+        /// m_foodEitr). Read only; guarded by the hook's Safe.</summary>
+        static void Combination(Player p)
+        {
+            var foods = p.GetFoods();
+            if (foods == null || foods.Count == 0) return;
+            var names = new System.Collections.Generic.List<string>(foods.Count);
+            float h = 0, st = 0, e = 0;
+            foreach (var f in foods)
+            {
+                if (f == null || string.IsNullOrEmpty(f.m_name)) continue;
+                names.Add(f.m_name);
+                var shared = f.m_item?.m_shared;
+                if (shared != null) { h += shared.m_food; st += shared.m_foodStamina; e += shared.m_foodEitr; }
+            }
+            Plugin.AteCombination(names, h, st, e);
         }
 
         // Feasts: who ate from whose placed feast (the piece's creator: the one who SET IT OUT), and from which feast (its ZDO id, the same on
@@ -461,11 +485,22 @@ namespace Hearthwoven
             var me = Player.m_localPlayer; var ship = Ship.GetLocalShip();
             CargoHooks.SampleShip(me, ship);   // cargo carried: at the helm, what lies in the ship times the metres it moved
             SampleLed(me);                     // animals led: tamed animals that follow you, the metres they moved
+            SampleCrew(me, ship, seconds);     // 0.9 Whole Crew: at the helm with a full crew
+            FeatsHooks.SampleWorld(me, ship, seconds);   // 0.9.1: storm at the helm, lands this session, how far out, the saddle (its own guard)
             if (me == null || ship == null || !ship.IsPlayerInBoat(me)) return;
             foreach (var p in shipPlayers.Of(ship)) if (p != null && p != me) SessionEvents.Add(Plugin.Events.SailedWith, p.GetPlayerName(), seconds);
             var helm = ship.m_shipControlls ? ship.m_shipControlls.GetUser() : 0L;
             if (helm != 0L && helm != me.GetPlayerID())
                 foreach (var p in Player.GetAllPlayers()) if (p.GetPlayerID() == helm) { SessionEvents.Add(Plugin.Events.SailedUnderHelmOf, p.GetPlayerName(), seconds); break; }
+        });
+
+        static void SampleCrew(Player me, Ship ship, float seconds) => Safe(() =>
+        {
+            var aboard = me != null && ship != null && ship.IsPlayerInBoat(me);
+            var helm = aboard && ship.m_shipControlls ? ship.m_shipControlls.GetUser() : 0L;
+            int others = 0;
+            if (aboard) foreach (var p in shipPlayers.Of(ship)) if (p != null && p != me) others++;
+            FeatsCounters.OnCrewSample(Plugin.FeatsLedger, aboard && helm != 0L && helm == me.GetPlayerID(), others, seconds);
         });
 
         // Animals led (Drover, Long Lead): tamed animals that follow YOU and that this PC owns (the game runs an animal's AI only on its

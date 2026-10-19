@@ -354,6 +354,7 @@ namespace Hearthwoven.Panel
             {
                 var a = new PanelModel.ArrowData { Prefab = prefab, Token = token, Kind = kind };
                 foreach (var (t, v) in dmg) a.Damage[t] = v;
+                a.Cost = ArrowsSample.CostOf(token);   // 0.9 What to use: what its recipe asks (PanelSampleArrows.cs)
                 return a;
             }
             return new List<PanelModel.ArrowData>
@@ -377,6 +378,7 @@ namespace Hearthwoven.Panel
             {
                 var a = new PanelModel.ArrowData { Prefab = prefab, Token = token };
                 foreach (var (t, v) in dmg) a.Damage[t] = v;
+                a.Cost = ArrowsSample.CostOf(token);   // 0.9 Best arrows: what its recipe asks (PanelSampleArrows.cs)
                 return a;
             }
             return new List<PanelModel.ArrowData>

@@ -28,7 +28,9 @@ static class AfterArmourPanelTests
         Check(split.Count >= 10 && resisted.All(p => Math.Abs(N(p.Value) + N(p.Value2) - N(p.Whole)) < 1.01 && Math.Abs(p.Fraction2 - N(p.Value) / N(p.Whole)) < 0.02) &&
               weak.Count > 0 && weak.All(p => p.Value2 == null && p.Fraction2 >= 0.999f) &&
               poison?.Value == "0" && poison.Value2 == poison.Whole && poison.Fraction2 == 0 && fire != null && N(fire.Value2) > 0 && N(fire.Value) < N(fire.Whole) &&
-              draugr.Text != null && draugr.Text.EndsWith(PanelModel.ThroughWords) && PanelModel.SwitchOf(session)?.Title == PanelModel.DealtAfterCaption,
+              draugr.Text != null && draugr.Text.EndsWith(PanelModel.ThroughWords) &&
+              // 0.9 more feats: with a feat earned on Damage the strip carries it, and the caption moves to About these numbers (PageHead.SettleHead)
+              (PanelModel.SwitchOf(session)?.Title == PanelModel.DealtAfterCaption || PanelModel.AllText(session).Any(t => t.IndexOf(PanelModel.DealtAfterCaption, StringComparison.OrdinalIgnoreCase) >= 0)),
               "after: the outlined piece is what you swung minus what got through (" + resisted.Count + " parts), a weakness all filled (" + weak.Count + "), Draugr's poison (immune) 0 got through and " +
               poison?.Value2 + " stopped; the line ends \"" + draugr?.Text + "\"; the caption says before and after");
 

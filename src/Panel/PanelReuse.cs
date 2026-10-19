@@ -260,6 +260,7 @@ namespace Hearthwoven.Panel
                 t.margin = margin; t.overflowMode = overflow; t.characterSpacing = characterSpacing; t.wordSpacing = wordSpacing; t.lineSpacing = lineSpacing;
                 t.paragraphSpacing = paragraphSpacing; t.enableAutoSizing = autoSize; t.fontSizeMin = sizeMin; t.fontSizeMax = sizeMax;
                 t.maxVisibleLines = maxLines; t.maxVisibleCharacters = maxCharacters; t.isRightToLeftText = rightToLeft;
+                if (t.font && t.fontSharedMaterial != t.font.material) t.fontSharedMaterial = t.font.material;   // 0.9.1: a feat look's shaded copy (FeatLookShade) never carries over
             }
         }
 

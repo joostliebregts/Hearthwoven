@@ -25,9 +25,9 @@ namespace Hearthwoven.Panel
             Sprite sprite; Color c;
             switch (tone)
             {
-                case PanelModel.PipOn: case "you": sprite = PanelLook.Circle; c = PanelLook.Gold; break;
+                case PanelModel.PipOn: case "you": case "made": sprite = PanelLook.Circle; c = PanelLook.Gold; break;   // 0.9: a deed made (Chapters/DeedFeedUi.cs)
                 case "with": sprite = PanelLook.HalfRing; c = PanelLook.Gold; break;
-                case PanelModel.PipOpen: sprite = PanelLook.Ring; c = PanelLook.Gold; break;   // "fighting", the feed's tone too
+                case PanelModel.PipOpen: case "upgraded": sprite = PanelLook.Ring; c = PanelLook.Gold; break;   // "fighting", the feed's tone too; 0.9: an upgrade
                 default: sprite = PanelLook.Ring; c = PipAway; break;   // got away, survived
             }
             var i = Img(parent, "Mark", sprite, c); i.preserveAspect = false; i.rectTransform.Box(x, top, size, size);
@@ -89,28 +89,8 @@ namespace Hearthwoven.Panel
 
         // ----- the battle feed: fights newest first, Log · Cards · Timeline -----
 
-        const float FdHead = 34, FdTime = 78, FdName = 150, FdOut = 196, FdRow = 36, FdText = 15, FdAxis = 88, FdCardGap = 14, FdGapRow = 30;
-
-        /// <summary>One entry's damage both ways on one line (Joost: "dealt fire 26 · blunt 18 · received blunt 12"): the type in its colour (lifted
-        /// to read on the plate), the amount bold; received after your armour. A line breaks only between items, at their " · ": the word, the
-        /// type and the amount are held together by no-break spaces (0.8.1: in game "received blunt less than 1" wrapped as "less than" / "1").</summary>
-        static Rich FeedLine(Block entry)
-        {
-            Rich Side(string word, string kind)
-            {
-                var parts = (entry.Items ?? new List<Block>()).Where(p => p.Kind == kind).ToList();
-                if (parts.Count == 0) return Rich.Empty;
-                var r = Rich.Plain(PanelModel.NoBreak(word + " ")).Ink(Html(PanelLook.Muted));
-                for (int k = 0; k < parts.Count; k++)
-                {
-                    if (k > 0) r += Rich.Plain(" · ").Ink(Html(PanelLook.Faint));
-                    r += Rich.Plain(PanelModel.NoBreak(parts[k].Title + " ")).Ink(Html(Legible(BtColour(parts[k])))) + Rich.Plain(PanelModel.NoBreak(parts[k].Value)).Bold();
-                }
-                return r;
-            }
-            var dealt = Side(PanelModel.FeedDealt, PanelModel.FeedDealt); var received = Side(PanelModel.FeedReceived, PanelModel.FeedReceived);
-            return dealt.IsEmpty ? received : received.IsEmpty ? dealt : dealt + Rich.Plain("  ·  ").Ink(Html(PanelLook.Faint)) + received;
-        }
+        // 0.9.1 FdOut 196 -> 212: a fellow's "defeated with Rowan (you)" whole (the slimmer key line showed its cut row)
+        const float FdHead = 34, FdTime = 78, FdName = 150, FdOut = 212, FdRow = 36, FdText = 15, FdAxis = 88, FdCardGap = 14, FdGapRow = 30;
 
         static string Html(Color c) => "#" + ColorUtility.ToHtmlStringRGB(c);
 
@@ -121,34 +101,40 @@ namespace Hearthwoven.Panel
             return Mathf.Ceil(t.GetPreferredValues(t.text, width, 0).y);
         }
 
-        static void FightHead(RectTransform col, Block f)
+        static void FightHead(RectTransform col, Block f, Func<string, Action> link = null)
         {
             var h = BtRow(col, FdHead);
             var title = BtText(h, f.Title, 0, 4, Column * 0.6f, 26, PanelLayout.Text.Name, PanelLook.Gold, style: FontStyles.Bold);
             var tw = Mathf.Ceil(title.preferredWidth) + 2; title.rectTransform.sizeDelta = new Vector2(tw, title.rectTransform.sizeDelta.y);
-            var rest = "· " + f.Text + (string.IsNullOrEmpty(f.Note) ? "" : " · " + f.Note);
-            var right = string.Join(" · ", new[] { string.IsNullOrEmpty(f.Value) ? null : PanelModel.FeedDealt + " " + f.Value, string.IsNullOrEmpty(f.Value2) ? null : PanelModel.FeedReceived + " " + f.Value2, string.IsNullOrEmpty(f.Rate) ? null : f.Rate }.Where(x => x != null).ToArray());   // 0.8.6: your pace beside dealt and received
+            var opens = !string.IsNullOrEmpty(f.NoteLink);   // 0.9 all-feed: a fight line of the mixed deed feed: its Note is the link that opens the Battle feed, in dealt's place
+            var rest = "· " + f.Text + (string.IsNullOrEmpty(f.Note) || opens ? "" : " · " + f.Note);
+            var right = opens ? f.Note : string.Join(" · ", new[] { string.IsNullOrEmpty(f.Value) ? null : PanelModel.FeedDealt + " " + f.Value, string.IsNullOrEmpty(f.Value2) ? null : PanelModel.FeedReceived + " " + f.Value2, string.IsNullOrEmpty(f.Rate) ? null : f.Rate }.Where(x => x != null).ToArray());   // 0.8.6: your pace beside dealt and received
+            var room = opens ? OpensRight + OpensRoom : 0;   // the link ends in the opens mark (ClickTarget's opens flag): its words keep clear of it
             var r = BtText(h, right, Column - 260, 4, 260, 26, FdText, PanelLook.Muted, TextAlignmentOptions.MidlineRight);
-            var rw = Mathf.Ceil(r.preferredWidth) + 4;
+            if (opens) r.margin = new Vector4(0, 0, room, 0);
+            var rw = Mathf.Ceil(r.preferredWidth) + 4 + room;
+            var click = opens ? link?.Invoke(f.NoteLink) : null;
+            if (click != null) { r.raycastTarget = true; ClickTarget(r, click, opens: true); }
             BtText(h, rest, tw + 6, 4, Mathf.Max(40, Column - tw - 6 - rw - 12), 26, FdText, PanelLook.Muted);
             if (!islanded) BtRect(h, "Rule", PanelLook.Rule, 0, FdHead - 2, Column, 1);   // 0.8.1: in its own island no rule (the island's edge sets the fight apart)
         }
 
-        static void BattleFeed(RectTransform col, Block b)
+        static void BattleFeed(RectTransform col, Block b, Func<string, Action> link = null)
         {
             var fights = (b.Items ?? new List<Block>()).Where(i => i.Kind == "fight").ToList();
             if (fights.Count == 0) return;
             col = VStack(col, 0);   // the feed's own rhythm: its rows touch, the gaps are its own (the plate's 12 px stays between blocks)
-            var logCols = b.Tone == PanelModel.FeedCards || b.Tone == PanelModel.FeedTimeline ? (FdName, FdOut, 0f) : FeedPageColumns(col, fights);
+            var logCols = b.Tone == PanelModel.FeedCards ? (FdName, FdOut, 0f) : FeedPageColumns(col, fights);   // the Timeline's bars take the Log's track
             for (int i = 0; i < fights.Count; i++)
             {
                 if (i > 0) Spacer(col, b.Tone == PanelModel.FeedTimeline ? 6 : 22);
                 var f = fights[i];
-                FightHead(col, f);
+                FightHead(col, f, link);
                 var entries = (f.Items ?? new List<Block>()).Where(x => x.Kind == "entry").ToList();
                 if (b.Tone == PanelModel.FeedCards) FeedCards(col, entries);
-                else if (b.Tone == PanelModel.FeedTimeline) FeedTimeline(col, entries, i + 1 < fights.Count ? (f.Items ?? new List<Block>()).FirstOrDefault(x => x.Kind == "gap") : null);
+                else if (b.Tone == PanelModel.FeedTimeline) FeedTimeline(col, entries, i + 1 < fights.Count ? (f.Items ?? new List<Block>()).FirstOrDefault(x => x.Kind == "gap") : null, FeedTrackW(logCols));
                 else FeedLog(col, entries, logCols);
+                DeedCounts(col, f);   // 0.9: a deed stretch's counts by kind under its lines (Chapters/DeedFeedUi.cs)
             }
         }
 
@@ -243,7 +229,7 @@ namespace Hearthwoven.Panel
         // Enter, Space or the pad's A on the feed: Show older foes, as its button (only while it is on the page)
         bool FeedKeys()
         {
-            if (view == null || view.Active != Chapter.Battle || view.Page != PanelModel.FeedPage || view.ShowAbout) return false;
+            if (!PanelModel.IsFeedView(view)) return false;   // 0.9: a deed's feed too
             if (!(Key(KeyCode.Return) || Key(KeyCode.KeypadEnter) || Key(KeyCode.Space) || Button("JoyButtonA"))) return false;
             var more = PanelModel.FeedMoreLine(view);
             if (more != null) LinkTo(more.NoteLink)();
@@ -254,7 +240,9 @@ namespace Hearthwoven.Panel
         // (DamageRowsUi.cs: the types' colours, one scale for the feed's page with its zero at a quarter of the track, the true-length line, the
         // numbers inside the parts, no share line: one line a hit), and what you received after it as quiet words, in a column as wide as the page's
         // widest (FdRecvMax at most, then it wraps). Gold and the types' colours mean dealt in Battle; received stays words
-        const float FdRecvMax = 150, FdRecvGap = 12;
+        const float FdRecvMax = 150, FdRecvGap = 12, FdRecvLeast = 14;
+        // the Timeline's row: its name line, its least height, and the room its received words keep beside the bar
+        const float FdTlLine = 26, FdTlRow = 52, FdTlRecvRoom = 120;
         /// <summary>The Log's outcome column at least holds the commonest outcome's words: "defeated by you".</summary>
         const string FdOutLeast = "defeated by you";
 
@@ -295,15 +283,20 @@ namespace Hearthwoven.Panel
             measure.fontSize = PanelLayout.Text.Floor;
             float recv = 0; foreach (var t in entries.Select(FeedReceived).Where(t => t != null)) { measure.text = t; recv = Mathf.Max(recv, Mathf.Ceil(measure.preferredWidth) + 2); }
             measure.gameObject.SetActive(false); measure.transform.SetParent(null, false); Destroy(measure.gameObject);   // out of the page at once (0.8.5: AppendFeed measures on the page itself)
-            return (Mathf.Min(name, FdNameMax), Mathf.Min(outcome, FdOut), Mathf.Min(recv, FdRecvMax));
+            return (Mathf.Min(name, entries.Count > 0 && entries.All(IsDeedEntry) ? DfNameMax : FdNameMax), Mathf.Min(outcome, FdOut), Mathf.Min(recv, FdRecvMax));   // 0.9: a deed feed's names have the room its lines leave (no damage bar)
         }
+
+        // the Log's track: what the row leaves after time, name and outcome, less the received column (80 at least). The Timeline draws its
+        // bars on this same width, so a foe's bar is as long in both views
+        static float FeedTrackW((float name, float outcome, float recv) cols) =>
+            Mathf.Max(80f, Column - (FdTime + cols.name + 8 + cols.outcome + 8) - (cols.recv > 0 ? cols.recv + FdRecvGap : 0));
 
         static void FeedLog(RectTransform col, List<Block> entries, (float name, float outcome, float recv) cols)
         {
             var recvW = cols.recv;
             float xName = FdTime, xOut = xName + cols.name + 8, xDmg = xOut + cols.outcome + 8, wDmg = Column - xDmg;
             var recv = entries.Select(FeedReceived).ToList();
-            var trackW = Mathf.Max(80f, wDmg - (recvW > 0 ? recvW + FdRecvGap : 0));
+            var trackW = FeedTrackW(cols);
             for (int i = 0; i < entries.Count; i++)
             {
                 var e = entries[i];
@@ -311,7 +304,7 @@ namespace Hearthwoven.Panel
                 if (recv[i] != null)
                 {
                     var t = Label(r, recv[i], PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
-                    var th = Mathf.Max(LineBox(14), Wrapped(t, recvW)); h = Mathf.Max(FdRow, th + 14);
+                    var th = Mathf.Max(LineBox(FdRecvLeast), Wrapped(t, recvW)); h = Mathf.Max(FdRow, th + 14);
                     t.rectTransform.Box(xDmg + trackW + FdRecvGap, (h - th) / 2, recvW, th);
                 }
                 if (h > FdRow) Size(r, -1, h);
@@ -327,6 +320,7 @@ namespace Hearthwoven.Panel
                     var bar = Node("Dealt", r); bar.Box(xDmg, (FdRow - FdBarH) / 2, trackW, FdBarH);
                     DamageBar(bar, form, null, e.Fraction, true, 0, trackW, shares: false);
                 }
+                else if (IsDeedEntry(e)) DeedValue(r, e, xDmg, 0, FdRow, wDmg);   // 0.9: an upgrade's level meter, or the count made
                 if (!islanded) BtRect(r, "Rule", BtLine, 0, h - 1, Column, 1);   // 0.8.1: in a fight's island the rows' spacing parts them, no lines
             }
         }
@@ -366,6 +360,7 @@ namespace Hearthwoven.Panel
                         DamageBar(bar, PanelModel.BarFormOf(dealt, true), null, e.Fraction, true, 0, inner, shares: false);
                         y += FdBarH + 6;
                     }
+                    else if (IsDeedEntry(e)) { DeedValue(card, e, pad, y, FdBarH, inner); y += FdBarH + DfCardGap; }   // 0.9: an upgrade's level meter, or the count made
                     var recv = FeedReceived(e);
                     if (recv != null)
                     {
@@ -381,17 +376,38 @@ namespace Hearthwoven.Panel
         }
 
         // Timeline (prototype C): a time axis down the left, each foe a mark on it with the time before it, name and outcome, its damage under them;
-        // the quiet time to the fight before as a line on the axis (even spacing, not to scale)
-        static void FeedTimeline(RectTransform col, List<Block> entries, Block gap)
+        // the quiet time to the fight before as a line on the axis (even spacing, not to scale). 0.9 (Joost: "the same kind of little damage bar
+        // graph as we do on the log card"): the dealt damage is the Log's and the Cards' damage bar, on the Log's track width (trackW, so a foe's
+        // bar is as long as in the Log), and what you received the quiet words to its right, wrapping in the room left. A foe you never hit: no
+        // bar, the received words alone where the bar starts
+        static void FeedTimeline(RectTransform col, List<Block> entries, Block gap, float trackW)
         {
             float x = FdAxis + 16, w = Column - x;
+            trackW = Mathf.Min(trackW, w - FdTlRecvRoom);   // the received words keep some room beside it
             for (int k = 0; k < entries.Count; k++)
             {
                 var e = entries[k];
-                var r = BtRow(col, 52);
-                var dmg = BtRich(r, "feed", FeedLine(e), x, 26, w, 22, FdText, PanelLook.Text);
-                var dh = Wrapped(dmg, w); dmg.rectTransform.Box(x, 26, w, dh);
-                var h = 26 + dh + 12; Size(r, -1, h);
+                var r = BtRow(col, FdTlRow);
+                var dealt = (e.Items ?? new List<Block>()).Where(p => p.Kind == PanelModel.FeedDealt).ToList();
+                var recv = FeedReceived(e);
+                float dh = 0;
+                if (dealt.Count > 0)
+                {
+                    float rx = x + trackW + FdRecvGap, rw = Column - rx, th = 0;
+                    TextMeshProUGUI t = null;
+                    if (recv != null) { t = Label(r, recv, PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft); th = Mathf.Max(LineBox(FdRecvLeast), Wrapped(t, rw)); }
+                    dh = Mathf.Max(FdBarH, th);
+                    var bar = Node("Dealt", r); bar.Box(x, FdTlLine + (dh - FdBarH) / 2, trackW, FdBarH);
+                    DamageBar(bar, PanelModel.BarFormOf(dealt, true), null, e.Fraction, true, 0, trackW, shares: false);
+                    if (t != null) t.rectTransform.Box(rx, FdTlLine + (dh - th) / 2, rw, th);
+                }
+                else if (IsDeedEntry(e)) { DeedValue(r, e, x, DfLineTop, DfLineH, w); dh = DfLineH; }   // 0.9: an upgrade's level meter, or the count made, under the name
+                else if (recv != null)
+                {
+                    var t = Label(r, recv, PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft);
+                    dh = Mathf.Max(LineBox(FdRecvLeast), Wrapped(t, w)); t.rectTransform.Box(x, FdTlLine, w, dh);
+                }
+                var h = Mathf.Max(FdTlRow, FdTlLine + dh + 12); Size(r, -1, h);
                 float axTop = k == 0 ? 8 : 0, axH = k == entries.Count - 1 && gap == null ? 14 - axTop : h - axTop;   // from the first mark down to the last one (or on to the quiet time)
                 BtRect(r, "Axis", PanelLook.Rule, FdAxis - 1, axTop, 2, axH);
                 BtText(r, e.Text, 0, 0, FdAxis - 14, 26, PanelLayout.Text.Floor, PanelLook.Faint, TextAlignmentOptions.MidlineRight);

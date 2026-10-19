@@ -1,6 +1,6 @@
 // Battle > Defence's armour switch (0.7, Chapters/ArmourModel.cs): a visible switch Received (default, the page as it was) / Your armour on
 // your own book; Received from never changes because armour data is there; the Your armour view's numbers (before and after armour) are both
-// the ledger's, with its own "Recorded from" date, its About box in every window, and an empty window says so instead of 0; a fellow's book has no switch.
+// the ledger's, with its own "Recorded from" date, its About box in every window, and an empty window says so instead of 0; a fellow's book (0.9 armor-share) has the switch in their words, test-panel/FellowArmourTests.cs.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -86,10 +86,14 @@ static class ArmourPanelTests
               !PanelModel.AllText(PanelModel.Build(none, Defence(TimeWindow.Session, PanelModel.ArmourId))).Any(t => t == "0" || (t != null && t.Contains("\u2014"))),
               "armour (B27): an empty window says what it is (nothing, this session), why (counted from " + countedFrom + ") and when it fills (a hit) (\"" + empty?.Title + "\", \"" + empty?.Text + "\"), never 0");
 
-        // a fellow's book: no switch, Received from as before
+        // a fellow's book whose copy shares no armour (0.9 armor-share: a Hearthwoven before 0.9): the switch in their words, Received from as before,
+        // and their armour view one plain line, never a bar (test-panel/FellowArmourTests.cs has the friend who shares)
         var fellow = PanelModel.Build(bare, Defence(TimeWindow.Session));
-        Check(PanelModel.Content(fellow).All(b => b.Kind != "switch" && b.Kind != "armour") && Sources(fellow) != null,
-              "armour: a fellow's book has no Your armour (they share no armour numbers); its Received from stays");
+        var fellowArmour = PanelModel.Build(bare, Defence(TimeWindow.Session, PanelModel.ArmourId));
+        Check(PanelModel.SwitchOf(fellow)?.Items.Select(i => i.Title).SequenceEqual(new[] { PanelModel.FellowReceivedView, PanelModel.FellowArmourViewLabel }) == true &&
+              PanelModel.Content(fellow).All(b => b.Kind != "armour") && Sources(fellow) != null &&
+              PanelModel.Content(fellowArmour).All(b => b.Kind != "armour" && b.Kind != "armorbar") && Says(fellowArmour, PanelModel.FellowArmourOlder),
+              "armour: a fellow's book whose copy shares no armour shows the switch in their words, Received from as before, and one line in the armor view (\"" + PanelModel.FellowArmourOlder + "\")");
         return fails;
     }
 }

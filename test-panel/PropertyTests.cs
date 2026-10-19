@@ -101,7 +101,8 @@ static class PropertyTests
     {
         foreach (var b in Every(p.View.Blocks).Where(b => b.Items != null && b.Items.Count > 1))
         {
-            if (Summed.Contains(b.Kind) && !string.IsNullOrEmpty(b.Value) && Plain.IsMatch(b.Value.Trim()) && (b.Kind != "row" || b.Items.All(i => i.Kind == "chip")))
+            if (Summed.Contains(b.Kind) && !string.IsNullOrEmpty(b.Value) && Plain.IsMatch(b.Value.Trim()) && (b.Kind != "row" || b.Items.All(i => i.Kind == "chip"))
+                && b.Tone != PanelModel.ComboTone)   // 0.9.2 Meals' Your combinations: the parts are food values, the row's number its meals
             {
                 // 0.8.5: a damage part by the after rule holds what got through; what it adds to its whole is what was swung (Whole)
                 string Of(Block i) => i.Whole ?? i.Value;

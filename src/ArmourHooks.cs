@@ -14,7 +14,8 @@ namespace Hearthwoven
     ///      shield's own modifiers in BlockAttack call it first on the same hit, the main call comes later and wins);
     ///   C. prefix on Player.DamageArmorDurability, which the game calls right after ApplyArmor: after armour.
     /// HitData.ApplyArmor itself is a one-line forwarder Mono may inline (a patch that never fires); B and C are not inlining candidates.
-    /// Only reads; records into Plugin.Armour and Plugin.ArmourMinutes, never into the damage tally, the event log or what is shared.
+    /// Only reads; records into Plugin.Armour and Plugin.ArmourMinutes, never into the damage tally. 0.9 (armor-share): and the same hit's two numbers
+    /// per damage type into the event log's own Armor map (EventLog.AddArmor), which is shared so a friend's Defense can cut their short windows.
     /// </summary>
     static class ArmourHooks
     {
@@ -61,7 +62,7 @@ namespace Hearthwoven
                     p.Resisted = false;   // one record per hit
                     var source = ClientHooks.Source(hit); var cause = hit.m_hitType.ToString();
                     var kept = Plugin.Armour.Add(source, cause, p.Incoming, p.Before, hit.m_damage);
-                    if (kept) Plugin.ArmourMinutes.Add(DateTime.UtcNow, p.Incoming, p.Before, hit.m_damage);
+                    if (kept) { var now = DateTime.UtcNow; Plugin.ArmourMinutes.Add(now, p.Incoming, p.Before, hit.m_damage); Plugin.Log.AddArmor(now, p.Before, hit.m_damage); }   // 0.9: shared per minute (armor-share)
                     if (DevCheck.On) ArmourCheck.Record(source, cause, p.Incoming, p.Before, hit.m_damage, __instance.GetBodyArmor(), __instance.IsBlocking(), kept);   // Dev.SelfCheck
                 }
                 catch (Exception e) { HookGuard.Fail(e, "ArmourHooks.AfterArmour.Prefix"); }

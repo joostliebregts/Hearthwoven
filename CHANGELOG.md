@@ -1,7 +1,97 @@
 # Changelog
 
-Every tweak that reaches a PC or the server gets its own patch version (Joost, 2026-10-08), so the version in the
+Every tweak that reaches a PC or the server gets its own patch version, so the version in the
 log line and in Gale always says which build runs.
+
+## 0.9.9 (2026-10-20, client release)
+- **Damage history** (Battle > Damage > By weapon, the History link): your damage per day split by Melee, Bow and Magic, and one weapon kind's damage and DPS per day. Days before recording started show no column; a friend's last 30 days come from their copy.
+- **Meal plan:** the key under Best for shows the real marks (the gold dot, the ring, a faded food), the marks are round, and Health, Stamina and Eitr carry their color swatch.
+
+## 0.9.8 (2026-10-20, client release)
+Fix: on Meal plan, the gold "made or owned" mark on a food was drawn as a large gold block over the tiles. Now it is the small dot it
+should be.
+
+## 0.9.7 (2026-10-20, client release)
+Many more feats, each with its own picture, plus Yesterday and 3 days, a Meal plan, and a foe's weak spots on Last fight. 0.9.7 is
+for your PC; the server needs nothing new. A friend's days on Recent need them on 0.8.5 or later, their foes defeated per day 0.9.1.
+
+**In short**
+- **118 feats, 28 of them Together**, each with its own drawn picture: role feats for the bow, the staff and the shield, every weapon style, and new group feats. Seven count from new tracking, from the day you install this.
+- **Feats pages:** one look; the full list until you choose a card (the chosen card has a gold frame); "More below" fades over the cards; search with "/" across Earned, Unsung and Together; Mark read (R) clears every New feat.
+- **Yesterday and 3 days** next to Today and 7 days, and your friends' days on Recent instead of "Not recorded".
+- **Meals:** your combinations in real numbers, what one serving of each dish gives, and **Meal plan**, its own page: pick three foods from the lands you explore, the total stays at the top.
+- **Last fight:** what the foe is weak to, resists and is immune to, from the game's own values.
+- **By weapon:** Melee, Bow and Magic rows open and close (the mark after the name, remembered).
+- **Settings:** Feats > PatternStrength and TextBacking tune the card pattern if the text is hard to read.
+
+## 0.9.6 (2026-10-19, test build, not released)
+Meal plan is its own Deeds page with the meal pinned at the top while you scroll; Meals opens it with a chip. By weapon's Melee,
+Bow and Magic rows shut and open (the mark after the name, remembered). Mark read (R) clears every New feat at once.
+
+## 0.9.5 (2026-10-19, test build, not released)
+Last fight shows what the foe is weak to, resists and is immune to, read from the game's own damage modifiers: weak as solid
+chips, resists as open chips, immune struck through. A group fight's head says "foe defeated".
+
+## 0.9.4 (2026-10-19, test build, not released)
+The chosen feat card has a gold frame, a warm lift and a gold name (a mouse click showed nothing before). Plan a meal: shut by
+default, denser tiles with damage-style bars, Best for Health / Stamina / Eitr, and only food you can eat.
+
+## 0.9.3 (2026-10-19, test build, not released)
+Feats in one look (Look 2), the full list until you choose a card, "More below" as a fade over the cards, and search with "/" across
+Earned, Unsung and Together. Meals: your combinations in real numbers, what one serving gives per dish, and Plan a meal.
+
+## 0.9.2 (2026-10-19, test build, not released)
+118 feats (28 on Together), each with its own drawn picture; the family pattern spans the whole card again, with a backing under the
+text (Feats > PatternStrength and TextBacking in the config); more room for the list; New marks on Together. Windows Yesterday and
+3 days, and friends' days on Recent.
+
+## 0.9.1 (2026-10-18, test build, not released)
+More feats: 50 new ones (76 in all), with role feats for the bow, the staff and the shield. Seven count from new tracking on your PC,
+from the day this version first runs.
+
+## 0.9.0 (2026-10-18, client release)
+This release adds a Feed and a History for every deed, Armor sets, your food combinations, What to use against your foes, new feats with a New mark, and a friend's armor view on their Defense page. 0.9.0 is for your PC; your own book works on any server. On the server it is optional and adds only a friend's deed feeds (the server keeps their finished sessions), and a friend's armor view and armor sets need 0.9.0 on their PC: with a server on 0.8.6 or a friend still on 0.8.6, those parts show less and say why in one line. What 0.9 records (upgrades, firsts, food combinations, deed feeds) counts from the day you install it: earlier is not recorded, not zero.
+
+**In short**
+- **New feats, marked New.** Feats you have not opened yet come first, with a gold dot and "New". Clad for Every Land: every armor set of 1 land, of 4 lands, of all 8.
+- **Two looks for the feat cards.** Switch with Look 1 / Look 2 on the Feats pages. Each card leads with the feat's name. A card is selected by a click or A/D, never by hovering.
+- **A Feed for every deed.** Crafting, Cooking, Building, Groundwork, Farming, Fishing, Woodcutting and Mining each have a Feed, and Deeds > Recent has one feed with every recorded deed and your fights. A friend's deed feeds come from the server, once it runs 0.9.
+- **History for every deed.** Click the growth line on a Deeds page: every kept day, split by kind, with a gold tick on a day with a first or a feat. Firsts lists the things you made or placed for the first time.
+- **Crafting: upgrades per item.** Each item you upgraded, with its level, such as "now level 3 of 4". Earlier upgrades are one line: the game counts them, not which item.
+- **Armor sets.** Deeds > Crafting > Sets: the sets of each land, made pieces and missing ones with their materials. With Everyone on, who made each set in full. The console command `hearthwoven_armorsets` writes every armor item to `BepInEx/Hearthwoven/local/armor-sets.tsv`.
+- **Meals: your combinations.** The foods you have on together, most eaten first, with big dish icons and what they lean on (health, stamina or eitr).
+- **What to use.** Battle > Foes and Last fight: arrows, bolts and weapons against the foes you hit, with You know / You can make / All. A tie for Best arrow names both arrows. The Timeline in the Battle feed draws damage as bars.
+- **A friend's armor.** On a friend's Battle > Defense: What hurt them and What their armor stopped, recorded on their PC.
+- **Fixes.** Company no longer freezes the game when you first open it. Crafting tiles keep their names, and a By kind bar of one kind says which kind. Things your character already knew are not marked as firsts.
+
+## 0.8.96 (2026-10-18, test build, not released)
+0.9 test build 6: every feat card leads with the feat's own name (the family shows in its color, pattern and icon, and is named in the
+detail); Look 1 names no longer vanish on a full Unsung page (each card line keeps its height).
+
+## 0.8.95 (2026-10-18, test build, not released)
+0.9 test build 5: the Battle feed Timeline draws each foe's damage as the same bar as the Log and Cards, received in words beside it;
+Meals > Your combinations shows the dish icons at 40 px so the dishes are easy to recognize.
+
+## 0.8.94 (2026-10-18, test build, not released)
+0.9 test build 4: Feats Look 2 reads clearly: the pattern stays behind the icon and never under the text, and the intro line shows
+once.
+
+## 0.8.93 (2026-10-18, test build, not released)
+0.9 test build 3: Feats in two looks to compare (Look 1 / Look 2 on the Feats pages; family colour and pattern on every card), a card
+is selected by a click or A/D only, never by hovering; What to use drawn as agreed (a thin gold edge on the best, rounded, damage
+bars under every number, bigger foe pictures, whole names); Meals shows your food combinations and what they lean on; the feed on
+Deeds > Recent shows every deed that is recorded.
+
+## 0.8.92 (2026-10-18, test build, not released)
+0.9 test build 2: Company no longer freezes the game on first open (its drawing is worked out off the frame, with a "Reading the
+group's books" line meanwhile); the armor-sets feat opens Armor sets; firsts no longer mark things your character already knew;
+a friend's short armor windows wait for a full record; the upgrade overflow line survives a save; About on Armor sets no longer fails.
+
+## 0.8.91 (2026-10-18, test build, not released)
+0.9 test build 1, everything designed tonight: new feats marked New; Crafting's Upgrades per item and the fixed tiles and By kind bar;
+a Feed for every deed and one mixed feed on Recent, a friend's too; History for every deed (opened from the small bar graph);
+Armor sets (Deeds > Crafting > Sets, console command `hearthwoven_armorsets`); Battle > Foes > What to use (arrows, bolts and weapons
+against the foes you hit), Best arrow ties named; a friend's armor view on their Defense page. Not for the server or friends yet.
 
 ## 0.8.6 (2026-10-15, client and server release)
 This book now has a new name on Thunderstore: **Hearthwoven Stats Book**. The plugin, your settings and your saved book are the same. This release adds damage per second (DPS) for each weapon, a Feed that reaches 30 days back, and a friend's older fights, which your PC fetches from the server. Put 0.8.6 on the server and on your friends' PCs too: a friend's older Feed, and the faster fetching of it, need it. With an older server or an older PC, those parts stay as they were. Your own book works on any server.
@@ -311,7 +401,7 @@ The first build of the 0.6 branch, made to run on the server; it also carries ev
 - Input limits for snapshots: parts and messages are bounded, half-sent messages are dropped after 2 minutes (no slow memory leak), at most one snapshot per player per 20 seconds, at most 4 MB unpacked (a gzip bomb stops there), only one well-formed JSON object is stored. Each problem is logged once per player.
 - The cargo book is rebuilt per world: the chest log markers name the world, so a new world never starts with the old one's cargo.
 - Old daily logs are compressed in place after 30 days (`Server.CompressLogsAfterDays`), never deleted; the server and the companion read the compressed days too.
-- Routed damage logging (`Server.LogRoutedDamage`) is off by default (Joost). A server config that already has it on keeps it on until changed.
+- Routed damage logging (`Server.LogRoutedDamage`) is off by default. A server config that already has it on keeps it on until changed.
 
 ## Unreleased (feats)
 Feats: a few notable things done, each with a rule, a number and a moment.

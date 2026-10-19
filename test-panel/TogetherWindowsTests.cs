@@ -171,7 +171,7 @@ static class TogetherWindowsTests
         var torRow = (PanelModel.Content(evSail).FirstOrDefault(b => b.Kind == PanelModel.GroupRowsKind)?.Items ?? new List<Block>()).FirstOrDefault(r => r.Id == SampleWorld.Tor);
         // and his own Sailing (his book, Everyone off) keeps Today, 7 days and 30 days greyed with the older-copy reason, the page his All
         PanelView TorSailing(TimeWindow w) { var s = new PanelState { Chapter = Chapter.Voyages, Window = w, WindowPicked = true, Player = SampleWorld.Tor }; s.Page[Chapter.Voyages] = "sailing"; return PanelModel.Build(torTest, s); }
-        var torPage = TorSailing(TimeWindow.Today); var torWhy = PanelModel.OlderLine(torTest, "Today, 7 days and 30 days fill in");
+        var torPage = TorSailing(TimeWindow.Today); var torWhy = PanelModel.OlderLine(torTest, "their days fill in");
         var torGreyed = torPage.ShownWindow == TimeWindow.SinceInstall && HeroOf(torPage)?.Value is string torAll && torAll == HeroOf(TorSailing(TimeWindow.SinceInstall))?.Value &&
                         PanelModel.DayWindows.All(d => torPage.Windows.FirstOrDefault(x => x.Id == d.ToString()) is Choice ch && ch.Disabled && ch.Why == torWhy);
         Check(voyOff.Count == 0 && eddaRest && voyParts >= 3 && minutesOk && sailSession.Count >= 2 && world.Fellows.All(f => f.DayVoyages) &&

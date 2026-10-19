@@ -23,9 +23,12 @@ namespace Hearthwoven.Panel
         /// " against " and after it ("Woodcutting, today" / "against yesterday"), else the page's name and its window ("Woodcutting," / "last 7
         /// days"). second is null when the heading has no window to put on a line of its own.
         /// </summary>
+        /// <summary>0.9.1: how Yesterday's heading window begins (YesterdayWords); its two lines break after it.</summary>
+        public const string YesterdayHead = "yesterday, ";
         public static (string first, string second) HeadingLines(string heading, string window)
         {
             if (string.IsNullOrEmpty(window)) return (heading ?? "", null);
+            if (window.StartsWith(YesterdayHead, StringComparison.Ordinal)) return ((heading ?? "") + ", " + YesterdayHead.TrimEnd(), window.Substring(YesterdayHead.Length));   // 0.9.1: "Recent, yesterday," over "Wednesday 7 Oct"
             var at = window.IndexOf(" against ", StringComparison.Ordinal);
             return at > 0 ? ((heading ?? "") + ", " + window.Substring(0, at), window.Substring(at + 1)) : ((heading ?? "") + ",", window);
         }
@@ -73,7 +76,7 @@ namespace Hearthwoven.Panel
             var band = items.FirstOrDefault(b => b.Kind == "featband");
             var about = items.FirstOrDefault(b => b.Kind == "aboutnumbers");
             if (about != null && HeadAbout(plate) != null) about = null;   // 0.8.5: While away's head line carries it: no strip for it, its box stays under the totals
-            if (band != null || about != null || TopSwitch(plate) != null || !string.IsNullOrEmpty(view.StripNote) || view.CompareNow != null || view.CompareNote != null || view.Back != null)   // 0.8.5: Compare's legend or reason rides in it; 0.8.6: the Back button
+            if (band != null || about != null || TopSwitch(plate) != null || !string.IsNullOrEmpty(view.StripNote) || view.CompareNow != null || view.CompareNote != null || view.Back != null || StripLinks(plate).Count > 0)   // 0.8.5: Compare's legend or reason rides in it; 0.8.6: the Back button; 0.9: a Deeds page's links (Feed, Sets)
             {
                 if (band == null) band = new Block { Kind = "featband", Items = new List<Block>() };
                 items.Remove(band); items.Insert(0, band);

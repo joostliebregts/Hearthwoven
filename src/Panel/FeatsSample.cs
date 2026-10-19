@@ -15,6 +15,28 @@ namespace Hearthwoven.Panel
     {
         static FeatMoment At(DateTime now, double daysAgo, string biome, string place = null) => new FeatMoment { Utc = now.AddDays(-daysAgo), Biome = biome, Place = place };
 
+        /// <summary>
+        /// 0.9 New feats (previews and tests): a copy of a book whose ledger has the per-tier record (FeatsLedger.SeenTiers): every earned tier opened but
+        /// the <paramref name="fresh"/> most recently earned of one side (your own feats, or the group's) with an exact date (a group feat is always "noticed": its day counts), as they stand after a first 0.9 start and some evenings of play when the old
+        /// count said that many were not seen. The book itself is not changed.
+        /// </summary>
+        public static PanelInput WithNew(PanelInput book, bool group, int fresh)
+        {
+            var copy = book.ShallowCopy();
+            var from = book.Feats ?? new FeatsLedger();
+            var l = new FeatsLedger { Primed = from.Primed, BestsShared = from.BestsShared };
+            foreach (var kv in from.Earned) l.Earned[kv.Key] = kv.Value.ToList();
+            foreach (var kv in from.Counts) l.Counts[kv.Key] = kv.Value;
+            foreach (var kv in from.Bests) l.Bests[kv.Key] = kv.Value;
+            l.SeenTiers = new HashSet<string>(StringComparer.Ordinal);
+            var tiers = l.Earned.SelectMany(kv => kv.Value.Select((m, k) => (key: FeatsLedger.TierKey(kv.Key, k + 1), id: kv.Key, m))).ToList();
+            var left = new HashSet<string>(tiers.Where(t => PanelModel.IsGroupFeat(t.id) == group && t.m.Utc > DateTime.MinValue && !t.m.Before && (group || !t.m.Noticed)).OrderByDescending(t => t.m.Utc).ThenBy(t => t.key, StringComparer.Ordinal).Take(fresh).Select(t => t.key));
+            foreach (var t in tiers) if (!left.Contains(t.key)) l.SeenTiers.Add(t.key);
+            l.Seen = tiers.Count(t => !PanelModel.IsGroupFeat(t.id) && l.SeenTiers.Contains(t.key)); l.SeenGroup = tiers.Count(t => PanelModel.IsGroupFeat(t.id) && l.SeenTiers.Contains(t.key));
+            copy.Feats = l; copy.FeatsSeen = l.SeenTiers;
+            return copy;
+        }
+
         /// <summary>Adds the sample's feats to <paramref name="full"/> (PanelSample.Full) and to its fellows.</summary>
         public static void Apply(PanelInput full, DateTime now)
         {

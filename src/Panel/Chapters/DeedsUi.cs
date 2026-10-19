@@ -70,6 +70,7 @@ namespace Hearthwoven.Panel
             Head(col, b);
             var items = b.Items ?? new List<Block>();
             if (items.Count == 0) return;
+            if (b.Tone == PanelModel.LevelTone) { LevelRows(col, items); return; }   // 0.9 Crafting's Upgrades per item: the level meter in the bar's place
             var columns = Column < NarrowColumn ? 1 : Math.Max(1, Math.Min(b.Columns, items.Count));   // 0.8 layout D+: a half island holds one column
             var pictures = items.Any(i => !string.IsNullOrEmpty(i.Icon));
             var since = items.Any(Labelled);
@@ -110,6 +111,46 @@ namespace Hearthwoven.Panel
         }
 
         const float RankBarSide = 120;   // a bar beside its name and number when rows stand side by side (the HTML bridge: .rk.two)
+
+        // ----- 0.9 level rows (Crafting's Upgrades per item, Chapters/CraftingHistory.cs): picture, name, the weakness meter of Battle > Foes as a level
+        // meter (four parts, only the outer corners rounded, filled to the level out of the item's max quality), "now level 3 of 4", the count right.
+        // One column, Woodcutting's per-tree row form. Mirrored by levelRows() in preview/panel-preview.html -----
+
+        static readonly float LevelNameMax = 220, LevelNameMin = 120, LevelNameShare = 0.32f, LevelPerChar = 10.5f;
+        static void LevelRows(RectTransform col, List<Block> items)
+        {
+            var pictures = items.Any(i => !string.IsNullOrEmpty(i.Icon));
+            var valueW = NumberWidth(items.Select(i => i.Value), LevelPerChar, RankValueW);
+            var nameW = Mathf.Clamp(Column * LevelNameShare, LevelNameMin, LevelNameMax);
+            var stack = VStack(col, PanelLayout.Level.Gap);
+            foreach (var i in items)
+            {
+                var row = Line(stack, PanelLayout.Level.RowGap); Size(row, -1, PanelLayout.Level.Row);
+                if (pictures) Pic(row, i.Icon, RankPic);
+                var nm = OneLine(Label(row, i.Title, PanelLayout.Text.Name, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft)); Size(nm, nameW, -1);
+                var meter = Node("Level", row); Size(meter, PanelLayout.Level.MeterW, PanelLayout.Level.H);
+                if (!string.IsNullOrEmpty(i.Text)) LevelMeter(meter, 0, 0, PanelLayout.Level.MeterW, PanelLayout.Level.H, PanelLayout.Level.Gap, (int)Math.Round(i.Level), i.Count);   // the rest of the items (past the fold's cap) have no level: no meter
+                var words = OneLine(Label(row, i.Text ?? "", PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.MidlineLeft)); Size(words, PanelLayout.Level.Words, -1);
+                Node("Rest", row).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                var v = Label(row, i.Value, PanelLayout.Text.Name, PanelLook.Text, align: TextAlignmentOptions.MidlineRight, style: FontStyles.Bold); v.textWrappingMode = TextWrappingModes.NoWrap; Size(v, valueW, -1);
+            }
+        }
+
+        /// <summary>The level meter (the weakness meter's parts, BattleUi.MeterPart: the track and the gold, only the outer corners rounded) in a box
+        /// <paramref name="w"/> wide at x, top: one part per level of the item's max quality, the level's filled (PanelModel.LevelMeterOf). Crafting's
+        /// Upgrades per item and the deed feed's upgrade lines (DeedFeedUi.DeedValue) both draw it.</summary>
+        static void LevelMeter(RectTransform parent, float x, float top, float w, float h, float gap, int level, int max)
+        {
+            var (parts, filled) = PanelModel.LevelMeterOf(level, max);
+            var pw = (w - gap * (parts - 1)) / parts;
+            for (int k = 0; k < parts; k++)
+            {
+                var px = x + k * (pw + gap); var first = k == 0; var last = k == parts - 1;
+                MeterPart(parent, BtMeterTrack, px, top, pw, h, first, last);
+                var part = Mathf.Clamp01(filled - k);
+                if (part > 0) MeterPart(parent, PanelLook.Gold, px, top, pw * part, h, first, last && part >= 1);
+            }
+        }
 
         // ----- counts: one tile per kind, and the kinds' proportional bar under them when they carry colours -----
 
@@ -182,10 +223,12 @@ namespace Hearthwoven.Panel
         // "..."), an optional quieter second number and "since install" under those. As many tiles per line as the column
         // holds at about 170 px: four across the plate, two in a half column. The full list, most first; the page scrolls. -----
 
-        const float GridTileW = PanelModel.ItemTileMinWidth, GridGap = PanelModel.ItemTileGap, GridPic = 32, GridTileH = 46, GridLine = 14;
+        const float GridTileW = PanelModel.ItemTileMinWidth, GridGap = PanelModel.ItemTileGap, GridPic = 32;   // 0.9: the tile's height from PanelLayout.Tile
 
         static void ItemGrid(RectTransform col, Block b, Func<string, Action> link = null)
         {
+            if (b.Tone == PanelModel.SetBandTone) { SetBand(col, b, link); return; }
+            if (b.Tone == PanelModel.MealPlanTone) { PlanGrid(col, b, link); return; }   // 0.9.2: Meals' Plan a meal, its foods (Chapters/MealPlanUi.cs)   // 0.9: an armor set, its tiles in the one-item band (Chapters/ArmorSets.cs)
             var items = b.Items ?? new List<Block>();
             if (items.Count == 0) return;
             var second = items.Any(i => !string.IsNullOrEmpty(i.Value2));
@@ -198,16 +241,34 @@ namespace Hearthwoven.Panel
             g.spacing = new Vector2(GridGap, GridGap);
             g.constraint = GridLayoutGroup.Constraint.FixedColumnCount; g.constraintCount = per;
             var wraps = false;
+            var dashed = new List<RectTransform>();   // 0.9: the tiles of pieces not made yet get their dashed edge once the cell's height is known
             foreach (var i in items)
             {
+                var notMade = i.Tone == PanelModel.NotMadeTone;
                 var tile = Kit(grid, i.Title, "meter-track").rectTransform;   // the dark ground and edge of the overview cards, smaller
+                if (notMade) { tile.GetComponent<Image>().color = Color.clear; dashed.Add(tile); }   // not made (0.9 Armor sets): no ground, a dashed edge, the picture grayed
                 var p = Pic(tile, i.Icon, GridPic); p.anchorMin = p.anchorMax = p.pivot = new Vector2(0, 0.5f); p.anchoredPosition = new Vector2(8, 0);
+                if (notMade) foreach (var img in p.GetComponentsInChildren<Image>()) img.color = new Color(img.color.r * NotMadeDim, img.color.g * NotMadeDim, img.color.b * NotMadeDim, img.color.a * NotMadeFade);
                 var box = VStack(tile, 0);
                 box.anchorMin = Vector2.zero; box.anchorMax = Vector2.one; box.offsetMin = new Vector2(8 + GridPic + 8, 3); box.offsetMax = new Vector2(-6, -3);
                 box.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
-                var n = Label(box, i.Value, PanelLayout.Text.Count, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap;
-                var name = Label(box, i.Title, PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.TopLeft);
+                if (notMade)   // its name, then what its recipe asks under it: the materials' pictures and amounts
+                {
+                    var title = Label(box, i.Title, PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.TopLeft);
+                    title.maxVisibleLines = 1; title.overflowMode = TextOverflowModes.Ellipsis;
+                    var mats = Line(box, PanelLayout.Sets.CostGap);
+                    foreach (var c in i.Items ?? new List<Block>())
+                    {
+                        var m = Line(mats, PanelLayout.Sets.CostPicGap); Pic(m, c.Icon, PanelLayout.Sets.CostPic);
+                        Label(m, c.Value, PanelLayout.Text.Floor, PanelLook.Text).textWrappingMode = TextWrappingModes.NoWrap;
+                    }
+                    continue;
+                }
+                var person = i.Tone == PanelModel.PersonTileTone;   // 0.9 Armor sets with Everyone: who made the set in full, their name and how fresh
+                var n = Label(box, i.Value, person ? PanelLayout.Text.Name : PanelLayout.Text.Count, PanelLook.Text, align: TextAlignmentOptions.MidlineLeft, style: FontStyles.Bold); n.textWrappingMode = TextWrappingModes.NoWrap;
+                var name = Label(box, i.Title, PanelLayout.Text.Floor, PanelLook.Muted, align: TextAlignmentOptions.TopLeft, style: person ? FontStyles.Italic : FontStyles.Normal);
                 name.lineSpacing = -12; name.maxVisibleLines = 2; name.overflowMode = TextOverflowModes.Ellipsis;   // two short lines at most
+                name.gameObject.AddComponent<LayoutElement>().minHeight = LineBox(PanelLayout.Text.Floor);   // 0.9 fault (three tiles without names): never squeezed below one line, where the ellipsis drops it whole (PanelLayout.Tile)
                 if (name.preferredWidth > textW) wraps = true;
                 if (i.Tone == PanelModel.FuelTone) FuelMark(name, i.Title);   // Hall: a fuel item says so (fix2 7)
                 if (i.Id == PanelModel.ShowAllTarget && link?.Invoke(i.Id) is Action all)   // 0.8.1: a folded grid's last tile shows every tile where it stands
@@ -222,8 +283,31 @@ namespace Hearthwoven.Panel
                 }
                 if (Labelled(i)) Since(box, PanelLayout.Text.Floor, i);
             }
-            g.cellSize = new Vector2(w, GridTileH + (wraps ? GridLine : 0) + (second ? GridLine : 0) + (since ? GridLine : 0));
+            g.cellSize = new Vector2(w, PanelLayout.Tile.Height(wraps, (second ? 1 : 0) + (since ? 1 : 0)));   // 0.9: at least the count's and a name line's line boxes (PanelLayout.Tile)
+            foreach (var t in dashed) DashEdge(t, w, g.cellSize.y, NotMadeEdge);
             if (Labelled(b)) Since(col, PanelLayout.Text.Floor, b);
+        }
+
+        // ----- 0.9 Armor sets: a set as the one-item band (BattleUi's BtBand tint, no border): its name, the material small beside a name the book
+        // gave, "2 of 3 made" or "made in full" in gold on the right, then its pieces as item tiles (a piece not made: the dashed tile) -----
+
+        static readonly Color NotMadeEdge = PanelWash.NotMadeEdge.Game;
+        const float NotMadeDim = 0.6f, NotMadeFade = 0.35f;   // a piece not made: its picture darker and faint, as the mirror's grayscale(1) opacity(.35)
+
+        static void SetBand(RectTransform col, Block b, Func<string, Action> link)
+        {
+            var band = VStack(col, PanelLayout.Sets.BandGap);
+            band.GetComponent<VerticalLayoutGroup>().padding = new RectOffset((int)PanelLayout.Sets.BandPadX, (int)PanelLayout.Sets.BandPadX, (int)PanelLayout.Sets.BandPadTop, (int)PanelLayout.Sets.BandPadBottom);
+            var fill = RoundedPart(band, "Band", BtBand); fill.gameObject.AddComponent<LayoutElement>().ignoreLayout = true; fill.rectTransform.Stretch();
+            var head = Line(band, PanelLayout.Sets.BandGap, TextAnchor.LowerLeft);
+            OneLine(Label(head, b.Title, PanelLayout.Text.Name, PanelLook.Text, style: FontStyles.Bold));
+            if (!string.IsNullOrEmpty(b.Text)) OneLine(Label(head, b.Text, PanelLayout.Text.Floor, PanelLook.Muted));
+            Node("Rest", head).gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            if (!string.IsNullOrEmpty(b.Value)) OneLine(Label(head, b.Value, PanelLayout.Text.Floor, b.Selected ? PanelLook.Gold : PanelLook.Muted, style: b.Selected ? FontStyles.Bold : FontStyles.Italic));
+            if ((b.Items?.Count ?? 0) == 0) return;
+            var outer = Column; Column = outer - 2 * PanelLayout.Sets.BandPadX;
+            try { ItemGrid(band, new Block { Kind = "itemgrid", Items = b.Items, Src = b.Src, Source = b.Source }, link); }
+            finally { Column = outer; }
         }
 
         // a thin edge in a colour down the left of a tile or chip (Hall: an item's trader, a smelted good's part of the bar)

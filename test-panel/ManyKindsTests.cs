@@ -96,7 +96,7 @@ static class ManyKindsTests
                 {
                     var n = Drawn(b);
                     if (n > worst) { worst = n; worstAt = name + " " + b.Kind; }
-                    if (n > ManyMax) over.Add(name + ": " + b.Kind + " '" + (b.Title ?? b.Id) + "' draws " + n);
+                    if (n > ManyMax && !(b.Kind == "feats" && n <= PanelModel.FeatDefs.Length)) over.Add(name + ": " + b.Kind + " '" + (b.Title ?? b.Id) + "' draws " + n);   // 0.9.1: a feats grid holds at most the feat table (it scrolls)
                 }
                 var tiles = PanelModel.Content(v).Where(b => b.Kind == "itemgrid").Sum(b => b.Items?.Count ?? 0);
                 if (tiles > PanelModel.ItemPageMax) tilesOver.Add(name + ": " + tiles + " tiles");

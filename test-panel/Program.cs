@@ -11,6 +11,7 @@ using Hearthwoven.Panel;
 
 int fails = 0;
 void Check(bool ok, string what) { System.Console.WriteLine((ok ? "PASS " : "FAIL ") + what); if (!ok) fails++; }
+PanelModel.SceneExists = FeatScenesTests.FromFiles();   // 0.9.1: the feats' drawn scenes, as the game finds them (its manifest), for the pages and the dump
 
 var now = new DateTime(2026, 10, 7, 22, 30, 0, DateTimeKind.Utc);
 if (Array.IndexOf(args, "--bench") >= 0) return PanelBenchOffline.Run(args, now);   // 0.8: the offline page bench instead of the tests (test-panel/Bench.cs)
@@ -60,11 +61,11 @@ double DealtIn(TimeWindow w) => PanelModel.Damage(fine, w, "", nowF).Where(r => 
 Check(DealtIn(TimeWindow.LastTenMinutes) == 57 && DealtIn(TimeWindow.LastThirtyMinutes) == 157 && DealtIn(TimeWindow.LastHour) == 1157 && DealtIn(TimeWindow.Session) == 1157 &&
       PanelModel.Cutoff(TimeWindow.LastTenMinutes, nowF) == nowF.AddMinutes(-10) && PanelModel.Cutoff(TimeWindow.SinceInstall, nowF) == null,
       "window: last 10 and 30 minutes count the minutes that reach into them (57, 157), the hour 1 157; since install has no cutoff");
-Check(Enum.GetNames(typeof(TimeWindow)).SequenceEqual(new[] { "LastTenMinutes", "LastThirtyMinutes", "LastHour", "LastThreeHours", "Session", "Today", "SevenDays", "ThirtyDays", "SinceInstall" }) &&
-      Enum.GetValues(typeof(TimeWindow)).Cast<TimeWindow>().Select(PanelModel.WindowLabel).SequenceEqual(new[] { "Last 10 minutes", "Last 30 minutes", "Last hour", "Last 3 hours", "This session", "Today", "Last 7 days", "Last 30 days", "All" }) &&
-      Enum.GetValues(typeof(TimeWindow)).Cast<TimeWindow>().Select(PanelModel.WindowShort).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "7 days", "30 days", "All" }) &&
+Check(Enum.GetNames(typeof(TimeWindow)).SequenceEqual(new[] { "LastTenMinutes", "LastThirtyMinutes", "LastHour", "LastThreeHours", "Session", "Today", "Yesterday", "ThreeDays", "SevenDays", "ThirtyDays", "SinceInstall" }) &&
+      Enum.GetValues(typeof(TimeWindow)).Cast<TimeWindow>().Select(PanelModel.WindowLabel).SequenceEqual(new[] { "Last 10 minutes", "Last 30 minutes", "Last hour", "Last 3 hours", "This session", "Today", "Yesterday", "Last 3 days", "Last 7 days", "Last 30 days", "All" }) &&
+      Enum.GetValues(typeof(TimeWindow)).Cast<TimeWindow>().Select(PanelModel.WindowShort).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "Yesterday", "3 days", "7 days", "30 days", "All" }) &&
       PanelModel.AllWindows.SequenceEqual(Enum.GetValues(typeof(TimeWindow)).Cast<TimeWindow>()),
-      "window: nine windows, shortest first (the log's, the days', All), each with its full name and its chip (0.7 rule W.2: All, not \"Since install\")");
+      "window: eleven windows, shortest first (the log's, the days' with Yesterday and 3 days between Today and 7 days (0.9.1), All), each with its full name and its chip (0.7 rule W.2: All, not \"Since install\")");
 // a copy from an older sender keeps ten-minute buckets (its JSON says so): a bucket reaches ten minutes on, not one
 var oldSender = PanelInput.FromSnapshot("{\"name\":\"Old\",\"measuredLog\":{\"bucketMinutes\":10,\"damage\":{\"2026-10-07T20:10Z|Swamp|dealt|Draugr|Axes|slash\":40},\"hits\":{}}}");
 var newSender = PanelInput.FromSnapshot("{\"name\":\"New\",\"measuredLog\":{\"bucketMinutes\":1,\"damage\":{\"2026-10-07T20:10Z|Swamp|dealt|Draugr|Axes|slash\":40},\"hits\":{}}}");
@@ -83,7 +84,7 @@ Check(!hints.Any(h => h.StartsWith("Black Forest")), "hint: no advice for a blun
 var deeds = Show(input, Chapter.Deeds);
 Check(deeds.Chapters.Select(c => c.Label).SequenceEqual(new[] { "Deeds", "Feats", "Company", "Hall", "Battle", "Voyages", "Skills" }) && deeds.Chapters[0].Selected,
       "menu: seven chapters in the agreed order, Deeds first, Feats its own chapter right after it (Joost 2026-10-09)");
-Check(deeds.List.Select(l => l.Label).SequenceEqual(new[] { "Recent", "Overview", "Cooking", "Meals", "Building", "Groundwork", "Crafting", "Woodcutting", "Mining", "Farming", "Fishing", "Taming" }) && deeds.Page == "overview",
+Check(deeds.List.Select(l => l.Label).SequenceEqual(new[] { "Recent", "Overview", "Cooking", "Meals", "Meal plan", "Building", "Groundwork", "Crafting", "Woodcutting", "Mining", "Farming", "Fishing", "Taming" }) && deeds.Page == "overview",
       "menu: Deeds left list per the menu tree, Recent first (0.7), the book still opens on the Overview");
 var grid = Find(deeds, "strip");   // the other chapters' names earned (Deeds overview A)
 Check(grid != null && grid.Items.Single(t => t.Title == "Shieldbearer").Id == "Battle/defense" && grid.Items.Single(t => t.Title == "Helmskeeper").Id == "Voyages/sailing" &&
@@ -390,6 +391,7 @@ Check(withYou["Rowan"] == 0 && withYou["Asa"] == 1 && withYou["Edda"] == 2 && wi
 // ---------- Company: Fireside, Together, Food shared, Gear shared (test-panel/CompanyTests.cs) ----------
 CompanyChecks(input, now, Check);
 FiresideChecks(now, Check);   // Fireside's threads never cross or run together where they need not; the counts on them touch nothing (test-panel/FiresideTests.cs)
+CompanyOpenChecks(now, Check);   // 0.9: the first Company opening never blocks a frame for long (Fireside on a worker); Armor sets: About and the feat link (test-panel/CompanyOpenTests.cs)
 var company = Show(input, Chapter.Company);
 Check(!company.Keys.Contains("[A/D] Direction") && !deeds.Keys.Contains("[A/D] Direction") && deeds.Keys.Contains("[W/S] Page") && deeds.Keys.Last() == "[H/Tab/Esc] Close",
       "keys: the footer lists only bindings that work on this screen");
@@ -547,7 +549,7 @@ Check(Says(eddaBattle, "Edda", "last shared", "8 Oct 00:05") && !Says(eddaBattle
 }
 var oldCopy = PanelInput.FromSnapshot(eddaJson); oldCopy.NowUtc = now.AddDays(3); oldCopy.ToLocal = t => t.AddHours(2);
 var stale = PanelModel.Build(oldCopy, new PanelState { Chapter = Chapter.Battle, Window = TimeWindow.LastHour });
-Check(stale.Windows.Where(w => !w.Disabled).Select(w => w.Id).SequenceEqual(new[] { "Session" }) && stale.Windows.Count == 9 && !Says(stale, PanelModel.WindowLabel(TimeWindow.LastHour).ToLowerInvariant()) && Says(stale, "8 Oct 00:05") && !Says(stale, "No damage received"),
+Check(stale.Windows.Where(w => !w.Disabled).Select(w => w.Id).SequenceEqual(new[] { "Session" }) && stale.Windows.Count == 11 && !Says(stale, PanelModel.WindowLabel(TimeWindow.LastHour).ToLowerInvariant()) && Says(stale, "8 Oct 00:05") && !Says(stale, "No damage received"),
       "snapshot: a fellow's book offers only the window it can show (their last shared session; the others greyed, not dropped) and says when the copy is from, not that nothing happened");
 var staleOv = PanelModel.Build(oldCopy, new PanelState { Chapter = Chapter.Battle });
 Check(Says(staleOv, PanelModel.SharedWindowsLine(oldCopy)) && Says(staleOv, oldCopy.ModVersion, "10 min to 3 h", "update") && Says(staleOv, "totals", "not shared") &&
@@ -783,7 +785,7 @@ Check(woodPlate.Pill == null && PanelModel.BandTitles(Find(plated[0], "featband"
       PanelModel.BandTitles(defBand).Select(t => t.Title + ": " + t.Text).SequenceEqual(new[] { "Shieldbearer: 28 blocks · 27 parries" }),   // B28: Wallwarden on Deeds > Building
       "L plate (B18): a page's titles ride in the strip at the top of its plate with their reason, never in a pill; on Battle > Defense (All) one strip with its feat; pages without a title have none: " +
       string.Join(", ", PanelModel.BandTitles(Find(Show(input, Chapter.Battle, "defense", s => s.Window = TimeWindow.SinceInstall), "featband")).Select(t => t.Title + ": " + t.Text)));
-Check(PanelModel.Content(plated[0]).Where(b => b.Kind != "plate" && b.Kind != "zone" && b.Kind != "featband" && b.Kind != "aboutnumbers").Select(b => b.Kind).OrderBy(k => k, StringComparer.Ordinal).SequenceEqual(new[] { "composition", "hero", "ranking", "section" }) &&   // 0.7: the axe hits ride in the hero, no skill strip
+Check(PanelModel.Content(plated[0]).Where(b => b.Kind != "plate" && b.Kind != "zone" && b.Kind != "featband" && b.Kind != "aboutnumbers" && b.Kind != "headlink").Select(b => b.Kind).OrderBy(k => k, StringComparer.Ordinal).SequenceEqual(new[] { "composition", "hero", "ranking", "section" }) &&   // 0.7: the axe hits ride in the hero, no skill strip; 0.9: the Feed chip rides in the heading row
       Find(plated[0], "section").Title == "Axe hits per tree" && Find(Show(input, Chapter.Deeds, "mining"), "section").Title == "Pickaxe hits per rock",   // zones: the axe hits lead the ember zone
       "L woodcutting holds its hero, the wood bar and the hits per tree, nothing else (no skill strip; the exact counts live in the bar now, K1); mining its hits per rock");
 var eddaWoodPage = Show(edda, Chapter.Deeds, "woodcutting");
@@ -912,6 +914,7 @@ fails += RecordedCompanyTests.Run(input, edda, now);    // G6 Company
 fails += RecordedHallTests.Run(input, edda, now);       // G7 Hall and Voyages
 fails += RecordedSkillsTests.Run(input, edda, now);     // G8 Skills and About
 fails += RecentPageTests.Run(now);                      // 0.7 Deeds > Recent (test-panel/RecentPageTests.cs)
+fails += YesterdayTests.Run(now);                        // 0.9.1: Yesterday and 3 days, a friend's days on Recent, the foes defeated per day (test-panel/YesterdayTests.cs)
 fails += ParseCountTests.Run(input, edda);   // RESILIENCE-06 item 1: counts read back culture-proof, Cooking from the numbers (test-panel/ParseCountTests.cs)
 fails += DeedsTwinTests.Run(input, edda);   // the Deeds twins: both zones on every page the game counts completely (test-panel/DeedsTwinTests.cs)
 fails += FacetTests.Run(input);   // the filter bar and Crafting's filter (test-panel/FacetTests.cs)
@@ -922,6 +925,14 @@ fails += BarFormTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc))
 fails += CookingFacetTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // the same bar on Deeds > Cooking (test-panel/CookingFacetTests.cs)
 fails += LegendFilterTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.8.2: a bar's legend items filter as its parts do, every bar of a filtered page filters or says why not (test-panel/LegendFilterTests.cs)
 fails += MealsTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.8.1 Deeds > Meals: what each player ate, split by who cooked it (test-panel/MealsTests.cs)
+fails += MealCombosTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));
+fails += MealPlanTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.9.2 Meals' Plan a meal: three foods of the lands you explore together (test-panel/MealPlanTests.cs)   // 0.9 Meals' Your combinations: the foods you had on together (test-panel/MealCombosTests.cs)
+fails += ArmorSetsTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.9 Deeds > Crafting > Armor sets: grouping, lands, names, the page's states, Everyone, the copy's yes/no, the feat, the dump (test-panel/ArmorSetsTests.cs)
+fails += ArrowsTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.9 arrows track: the Best arrow tie (Joost's Fallen Valkyrie), the Best arrows island on Foes and Last fight, its states (test-panel/ArrowsTests.cs)
+fails += WhatToUseTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.9 What to use: the third view on Foes and Last fight, tabs, sets, the table, the cards, a foe's detail (test-panel/WhatToUseTests.cs)
+fails += DamageHistoryTests.Run(now);   // 0.9.5 draft: Battle > Damage's History, the Deeds History form on damage per weapon kind (test-panel/DamageHistoryTests.cs)
+fails += CraftingHistoryTests.Run(now);   // 0.9 crafting-history: Crafting's Upgrades per item, the two Crafting faults, every deed's History and its days, the Firsts island (test-panel/CraftingHistoryTests.cs)
+fails += DeedFeedTests.Run(now);   // 0.9 deed feeds: the Feed chip, a deed's feed and the mixed one in the Battle feed's blocks, windows, filter, Show older, states, a friend's from the server (test-panel/DeedFeedTests.cs)
 fails += SortTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // the sort control over the item lists (test-panel/SortTests.cs)
 fails += ManyKindsTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.8.1: a long-played book with hundreds of kinds: every list folds (test-panel/ManyKindsTests.cs)
 fails += GatherTests.Run();   // B12: what counts as wood and mining (test-panel/GatherTests.cs)
@@ -933,12 +944,22 @@ fails += ReviewFixTests.Run();   // 0.6.5 review fixes, one test each (test-pane
 fails += NavTests.Run(input);   // Backspace: back to the page you came from (test-panel/NavTests.cs)
 fails += FeatsTests.Run();   // Feats: the table, noticing, the ledger, the page with its detail area, Known for, the band (test-panel/FeatsTests.cs)
 fails += GroupFeatsTests.Run();   // 0.7 group feats: the gate, the veil, one sum without double counting, tiers that stick, "knownBiomes" in the snapshot (test-panel/GroupFeatsTests.cs)
+fails += FeatLookTests.Run();   // 0.9 feat looks (test period): the families' colours, the Look switch and the config, the cards per look, a hover never chooses (test-panel/FeatLookTests.cs)
+fails += FeatScenesTests.Run();   // 0.9.1 a drawn picture for every feat: sources, both sprites and their entries, both looks and the detail, the mirror (test-panel/FeatScenesTests.cs)
+fails += MoreFeatsTests.Run();   // 0.9 more feats: each new feat from a hand-built record at its tier lines, the new hooks' counters, the families, a land's own feat (test-panel/MoreFeatsTests.cs)
+fails += TogetherBatch3Tests.Run();   // 0.9.2 Together, batch 3: each new group feat summed over everyone who shares, each once, tiers, alone, an older fellow, the ledger's room (test-panel/TogetherBatch3Tests.cs)
+fails += FeatsBatch2Tests.Run();   // 0.9.1 feats, batch 2: each new feat from a hand-built record at its tier lines, the batch's counters, the Armsman family, the ledger's room (test-panel/FeatsBatch2Tests.cs)
+fails += FeatSearchTests.Run();   // 0.9.2 feat search: the matching rules, one grid across the pages with page tags, the count line, the field as typing (test-panel/FeatSearchTests.cs)
+fails += FeatsReadAllTests.Run();   // 0.9.5 Mark read: the strip's action on Earned and Together, both pages cleared, kept, hidden, its key (test-panel/FeatsReadAllTests.cs)
+fails += FeatsNewTests.Run();   // 0.9 New feats: the New mark, its order and count, opening a card, the dot from the per-tier record, the first 0.9 start (test-panel/FeatsNewTests.cs)
 fails += EveryoneShownTests.Run(now);   // 0.8.2: no list of people says "+N more" or folds a person away; a fold of things is a click (test-panel/EveryoneShownTests.cs)
 var textGroup = Sample(); textGroup.PlayerId = 11; textGroup.Fellows = CompanyFellows(now);   // Company with three sharing
 var textSamples = new (string, PanelInput)[] { ("sample", input), ("voyager", voyager), ("battle", Program.BattleSample()), ("deeds", DeedsTests.Rich(input)), ("company", textGroup), ("edda", edda), ("edda-since", eddaNow), ("twin", DeedsTwinTests.Twin(input)) };   // edda-since (0.7): a copy with their since-install totals; twin: the baselines taken (DeedsTwinTests)
 fails += PanelTextTests.Run(textSamples);   // every label fits, no "at least" (test-panel/PanelTextTests.cs)
 fails += SourcesTests.Run(input, edda, voyager, Program.BattleSample());   // where each page's numbers come from, no zones (test-panel/SourcesTests.cs)
 fails += MarksTests.Run(voyager, textSamples);   // Codex's last sprites wired; every vocab picture a page asks for is shipped (test-panel/MarksTests.cs)
+fails += ShippedTextTests.Run();   // 0.9.8: no person named in the texts that ship (test-panel/ShippedTextTests.cs)
+fails += CommentedCallTests.Run();   // 0.9.8: no drawing call hidden in a trailing comment (test-panel/CommentedCallTests.cs)
 fails += CoherenceTests.Run();   // one story for every number: overview = detail pages, windows nest, fish and crops add up (test-panel/CoherenceTests.cs)
 fails += PropertyTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.8.5: the rules that hold on every page, each over every page of every book, proven by seeded breaks (test-panel/PropertyTests.cs)
 fails += SampleTests.Run();   // Dev.SampleData: the in-game sample fills every page and writes nothing (test-panel/SampleTests.cs)
@@ -946,8 +967,10 @@ fails += CargoTests.Run(voyager, input, now);
 fails += ServerBookPanelTests.Run(now);   // 0.6: the server book on Sailing and Taming (test-panel/ServerBookPanelTests.cs)   // 0.6: cargo carried and born in your care (test-panel/CargoTests.cs)
 fails += LedTests.Run(now);   // 0.6: Heavy Keel best load and the animals led, with their feats (test-panel/LedTests.cs)
 fails += ArmourPanelTests.Run(now);   // 0.7: Defence's Received / Your armour switch (test-panel/ArmourPanelTests.cs)
+fails += FellowArmourTests.Run(now);   // 0.9 armor-share: a friend's Defense: the armor view from their shared ledger and minutes, their words, the window cut, an older copy, Compare (test-panel/FellowArmourTests.cs)
 fails += AfterArmourPanelTests.Run(now);   // 0.8.5: Damage and Foes with your damage after the foe's armor (test-panel/AfterArmourPanelTests.cs)
-fails += PaceTests.Run(now);   // 0.8.6: damage per second in three spots, and none where players would be compared (test-panel/PaceTests.cs)
+fails += PaceTests.Run(now);
+fails += KindToggleTests.Run(now);   // 0.9.5: By weapon's kind rows shut and open their weapon lines (test-panel/KindToggleTests.cs)   // 0.8.6: damage per second in three spots, and none where players would be compared (test-panel/PaceTests.cs)
 fails += BattleRecPanelTests.Run(now);   // 0.8: the battle record as the Battle pages read it (test-panel/BattleRecPanelTests.cs)
 fails += BattleFeedTests.Run(now);   // 0.8: the battle pages: x N only where counted, the feed's view kept, the last fight's fellows (test-panel/BattleFeedTests.cs)
 fails += FellowFeedTests.Run(now);   // 0.8.2: a fellow's Feed and Last fight as their copy shares it, in their words; an older copy; their Session from yours (test-panel/FellowFeedTests.cs)
@@ -970,6 +993,7 @@ fails += EveryoneTests.Run(now);   // 0.8: the Everyone chip's group view adds u
 fails += UsSpellingTests.Run();   // 0.8.1: US spelling (armor, defense, color, gray): no British form in a string literal of src/ (test-panel/UsSpellingTests.cs)
 fails += RichTextTests.Run(textSamples);   // richtext-fix: no model string holds a tag; tags only via Rich, rich text only via the kind map (test-panel/RichTextTests.cs)
 fails += CompareTests.Run(now);   // 0.8: Compare periods, this period beside the one before (test-panel/CompareTests.cs)
+fails += FightWeaknessTests.Run(now);   // 0.9.4 draft: what the foe is weak to on a fight's page, A and B (test-panel/FightWeaknessTests.cs)
 fails += FightPagesTests.Run(now);   // 0.9: the fight pages add up every way, the outcome words, Runs and bosses nested, bring next time (test-panel/FightPagesTests.cs)
 fails += FoeNamesTests.Run(now);   // 0.8.5: one row per foe by the game's name, Hildir's minibosses as boss fights, no color tag in a label (test-panel/FoeNamesTests.cs)
 fails += LayoutTests.Run(Array.IndexOf(args, "--dump") is int ld && ld >= 0 && ld + 1 < args.Length ? args[ld + 1] : null);   // 0.8.5: the book's layout numbers in one table, PanelLayout.cs: --dump writes preview/layout.css from it; the ratchet over the numbers still written out (test-panel/LayoutTests.cs)
@@ -1066,12 +1090,34 @@ if (dump >= 0 && dump + 1 < args.Length)
     var mealsOutside = PanelSample.Full(now);   // Ylva, who does not share, cooked a bread and two fish wraps Rowan ate; a feast set out by someone not around the fire
     SessionEvents.Add(mealsOutside.Events.AteFoodMadeBy, "Ylva|Bread", 1); SessionEvents.Add(mealsOutside.Events.AteFoodMadeBy, "Ylva|FishWraps", 2); SessionEvents.Add(mealsOutside.Events.AteFromFeastOf, "999|FeastMeadows", 1);
     var mealsOutsideS = Scenario("everyone-meals-outside", "case: a cook outside the group (Ylva does not share) by name in gray, a feast whose maker is not known as Another player", mealsOutside);
+    // 0.9 Meals' Your combinations (Chapters/MealCombosModel.cs, PanelSampleMeals.cs): Rowan's combinations, then none yet and not recorded on this book
+    scenarios["deeds-meals-combos"] = "case (0.9 Meals): Rowan's food combinations, recorded from 3 Oct: Carrot Soup, Queen's Jam and Honey most, three of the top five lean on stamina";
+    scenarios["deeds-meals-combos-7days"] = "case (0.9 Meals): the combinations of the last 7 days; the record counts them from 3 Oct, one line says so";
+    var combosEmpty = PanelSample.Full(now); combosEmpty.MealCombos = MealCombosSample.For(combosEmpty, "empty");
+    var combosEmptyS = Scenario("deeds-meals-combos-empty", "case (0.9 Meals): combinations recorded from an hour ago, none yet: the island's empty state under the meals", combosEmpty);
+    var combosNone = PanelSample.Full(now); combosNone.MealCombos = MealCombosSample.For(combosNone, "notrecorded");
+    // 0.9.2 Plan a meal (Chapters/MealPlanModel.cs, PanelSampleMeals.cs MealPlanSample); 0.9.5 its own page, Deeds > Meal plan, the meal pinned under the strip
+    scenarios["deeds-mealplan"] = "case (0.9.5 Meal plan): nothing picked yet: three empty slots pinned under the strip, the foods of the Mountains, Swamp and Black Forest (Rowan's furthest lands) under them";
+    scenarios["deeds-mealplan-three"] = "case (0.9.5 Meal plan): Wolf Skewer, Eyescream and the Mountains feast: the summed bar on the planner's one scale, the first to wear off";
+    scenarios["deeds-mealplan-three-scrolled"] = "case (0.9.5 Meal plan): the same three, the page scrolled down to the Black Forest's foods: the slots and the summed bar stay pinned at the top";
+    scenarios["deeds-mealplan-combo"] = "case (0.9.5 Meal plan): opened from a row of Your combinations on Meals (Carrot Soup, Honey, Queen's Jam in the slots), the strip's Back leads to Meals";
+    var combosNoneS = Scenario("deeds-meals-combos-notrecorded", "case (0.9 Meals): no combination record on this book yet (the totals not loaded): Not recorded yet, never a 0", combosNone);
+    // 0.9.3: Rowan in the Ashlands with Best for: Eitr (sorted, filtered, the eitr part first)
+    var mealsAsh = PanelSample.Full(now); mealsAsh.KnownBiomes = new List<string> { "Meadows", "BlackForest", "Swamp", "Mountain", "Plains", "Mistlands", "AshLands", "Ocean" };
+    if (mealsAsh.Deeds == null) mealsAsh.Deeds = new DeedLog();
+    mealsAsh.Deeds.NoteLand(now.AddMinutes(-40), "Mistlands"); mealsAsh.Deeds.NoteLand(now.AddMinutes(-20), "AshLands");
+    var mealsAshS = Scenario("deeds-mealplan-eitr", "case (0.9.3 Meal plan): Rowan in the Ashlands, Best for: Eitr: only the foods that give most eitr, most first, the eitr part first in their bars", mealsAsh);
+    scenarios["deeds-mealplan-ash"] = "case (0.9.3 Meal plan): Rowan in the Ashlands, Best for: Any: the foods of the Ashlands, Mistlands and Plains, strongest first";
     // 0.8.1 review 1: a fellow with a longer name whose copy is not live, so their group row says "as of" beside it: the name gives way, never the date
     var finchAsOf = PanelSample.Full(now); foreach (var f in finchAsOf.Fellows.Where(f => f.PlayerName == "Finch")) f.Timed = false;
     var finchAsOfS = Scenario("everyone-woodcutting-asof", "case: Finch sends no live updates, so their row says when their copy is from beside a longer name", finchAsOf);
     // 0.8.1 review 5: Recent's group of three, so one player's island has no partner: it stays a half like the others
     var groupOfThree = PanelSample.Full(now); groupOfThree.Fellows.RemoveAll(f => f.PlayerName == "Finch");
     var threeS = Scenario("deeds-recent-group-three", "case: a group of three (Finch not sharing), so the last player's island stands alone", groupOfThree);
+    // 0.9.1 (Joost in game: "who was on yesterday and what happened yesterday"): Recent with Everyone on in Yesterday and 3 days. Edda shares her days, Finch did
+    // nothing yesterday (his copy holds no day for it, his other days stay), Tor's Hearthwoven is 0.8.3 (it shares no days)
+    var groupDaysS = Scenario("deeds-recent-group-yesterday", "case (0.9.1): Recent with Everyone on, Yesterday: Edda shares her days, Finch did nothing yesterday, Tor's Hearthwoven 0.8.3 shares no days", YesterdayTests.GroupDays(now));
+    scenarios["deeds-recent-group-3days"] = "case (0.9.1): the same group on 3 days: Finch's other days show, Tor's still are not shared";
     // 0.8.1 (Joost sailing, Battle > Feed): a hit that took <1 in the last fight, so a feed line carries "<1"
     var feedLess = PanelSample.Full(now);
     var draugrHit = feedLess.Log.Damage.Keys.Select(k => k.Split('|')).Where(k => k.Length >= 6 && k[2] == "taken" && k[3] == "Draugr").OrderBy(k => k[0], StringComparer.Ordinal).Last();
@@ -1171,6 +1217,11 @@ if (dump >= 0 && dump + 1 < args.Length)
     var kinS = Scenario("battle-damage-byfoe", "case (0.8.5): a few ranged Draugr in the Swamp this session: Damage by foe has one Draugr row, both kinds' damage and x N added up", FoeNamesTests.KinBook(now));
     // 0.8.6 (Joost's PC, 11 Oct: two runs listed as "A dungeon", one a 34 s look with nothing fought): saved runs shaped as the PC's, through the adapter
     var savedRunsS = Scenario("battle-runs-saved", "case (0.8.6): runs a restart kept, with the place's game name and no name token, as on Joost's PC: an Infested Mine (1 death), a Burial Chamber, and a 34 s look into another one (kept, not listed)", FightsSample.WithSavedRuns(PanelSample.Full(now)));
+    // 0.9.4 draft (h094-weakness, Chapters/FightWeakness.cs): what the foe is weak to on a fight's page, A (under the foe rows) and B (on By type, together)
+    var weakBossS = Scenario("battle-lastfight-weak-boss", "case (0.9.4 draft): Last fight is Moder alone, won 4 min ago: her line under the foe rows, each group in its own form (weak to pierce and fire: solid chips; resists blunt: open; immune to frost: struck). SAMPLE modifiers, not the game's", FightsSample.WithSoloBoss(FightsSample.With(PanelSample.Full(now), false)));
+    var weakTwoS = Scenario("battle-lastfight-weak-twokinds", "case (0.9.4 draft): Last fight is a Swamp fight with Draugr and Blob: each kind its own named line (Blob's wraps)", FightsSample.WithTwoKinds(FightsSample.With(PanelSample.Full(now), false)));
+    var weakNoneS = Scenario("edda-battle-lastfight-weak-none", "case (0.9.4 draft): Edda's Last fight on a PC whose foe data carries no modifiers: the Moder fight with no weakness line (nothing guessed)", FightsSample.WithoutModifiers(FightsSample.Friend(FightsSample.WithSoloBoss(FightsSample.With(PanelSample.Full(now), false)), "Edda")));
+    var weakRetoS = Scenario("battle-lastfight-weak-reto", "case (0.9.4 draft): Joost's Last fight retold with the sample cast: Lord Reto (prefab Fader, SAMPLE modifiers) in the Ashlands, fought now, 13 032 dealt, 337 received, your DPS 107", FightsSample.WithReto(FightsSample.With(PanelSample.Full(now), false)));
     var brennaS = Scenario("battle-bossfight-brenna", "case (0.8.5): Brenna, Hildir's miniboss the game does not flag a boss, won with her five Skeletons around her (three with a bow, two without: one row)", FightsSample.WithBrenna(PanelSample.Full(now), FoeNamesTests.TaggedBrenna));
     // 0.8.5 (Joost in game, after a restart: "last fight should show your last fight, but indicate that it was x hours/days ago. Same for the feed."):
     // the sample evening kept as an earlier session (KeptFights), Edda and Tor beside you in its last fight, two hours on
@@ -1197,6 +1248,11 @@ if (dump >= 0 && dump + 1 < args.Length)
     eddaOld.ServerLive = true; eddaOld.Timed = false; eddaOld.OnThisSession = eddaBook.OnThisSession; eddaOld.ViewerSessionStartUtc = eddaBook.ViewerSessionStartUtc; eddaOld.ReceivedUtc = eddaBook.ReceivedUtc;
     var eddaOldS = Scenario("edda-old-battle-defense", "case: Edda's copy as Hearthwoven 0.6.5 sends it: Defense says once what fills in when she updates", eddaOld);
     scenarios["edda-old-battle-feed"] = "case: Edda's copy as Hearthwoven 0.6.5 sends it: no feed, and the one line why";
+    // 0.9 armor-share (Joost, 18 Oct: "add friends' armour view ... to 0.9"): Edda's Defense with the view switch in her words, both views, and an older copy's one line
+    scenarios["edda-battle-defense-hurt"] = "case (0.9): Edda's Defense this session, What hurt them chosen: her Received from as before, the switch to What their armor stopped above it";
+    scenarios["edda-battle-defense-armor"] = "case (0.9): Edda's Defense this session, What their armor stopped: her shared armor minutes from your session's start, the same drawer, \"Recorded from <date> · their PC\", types only";
+    scenarios["edda-battle-defense-armor-numbers"] = "case (0.9): Edda's armor view with About these numbers open: a friend's lines (Windows, Shared), undated, never \"Complete for you\"";
+    scenarios["edda-old-battle-defense-armor"] = "case (0.9): Edda's copy from Hearthwoven 0.6.5 shares no armor: What their armor stopped says so in one line, never an empty or zero bar";
     // 0.8.2 (J): Edda on 0.6.5 reconnected after her fights, so her new connection's copy has an empty log; the trail joins her earlier
     // connection's under it, so her Session's Foes still show them (test-panel/RejoinTests.cs)
     var eddaNew = eddaOld.ShallowCopy(); eddaNew.SessionId = "s2"; eddaNew.Log = new EventLog { Span = eddaOld.Log.Span, GuardKept = false }; eddaNew.Session = new DamageTally(); eddaNew.RecordedFromLog();
@@ -1229,6 +1285,14 @@ if (dump >= 0 && dump + 1 < args.Length)
     PanelState CompareOn(PanelState s) { s.Compare = true; return s; }
     PanelState Compared(Chapter c, string page, Action<PanelState> more = null) => Page(c, page, s => { s.Window = TimeWindow.SevenDays; s.Compare = true; more?.Invoke(s); });   // 0.8: Compare on
     void Numbers(PanelState s) => s.ShowNumbers = true;   // 0.7: the About these numbers box open (the Y key)
+    // 0.9.5: Meal plan opened from a row of Your combinations on Meals (its click followed, as in game: the slots filled, Back to Meals)
+    PanelState FromCombo()
+    {
+        var s = Page(Chapter.Deeds, PanelModel.MealsPageId);
+        var from = PanelModel.Build(world, s); PanelModel.Visited(s, from.Active, from.Page);
+        var row = PanelModel.Content(from).First(b => b.Kind == "sources" && b.Tone == PanelModel.ComboTone).Items.First(r => r.Link != null);
+        PanelModel.Follow(s, row.Link); return s;
+    }
     PanelState Numbered(PanelState s) { s.ShowNumbers = true; return s; }
     PanelState Ev(PanelState s) { s.Everyone = true; return s; }   // 0.8: the Everyone chip on
     // 0.8.2: a part chosen from its legend item: that row's own target (BarFormOf, PartTarget) followed, as a press on it does in game
@@ -1241,9 +1305,148 @@ if (dump >= 0 && dump + 1 < args.Length)
     var longWeapons = Scenario("battle-damage-weapons", "case (0.8.6): a long evening (all damage dealt and fighting time 12 times as big, the kind rows with their weapon cells, so a pace and a change mark show and the lines add up to their row): By weapon with its most recent DPS and change marks; a weapon of several upgrade levels folded to its newest (the Iron Sword)", WeaponScenario.Longer(PanelSample.Full(now)));
     scenarios["battle-damage-weapons-open"] = "case (0.8.6): the same long evening with the Bronze Spear's skill levels open, one row each with a bar on one scale";
     scenarios["battle-damage-weapons-levels"] = "case (0.8.6 fold): the same long evening with the Iron Sword opened: its two upgrade levels in place under its folded line, the cursor of the keys on it";
+    scenarios["battle-damage-weapons-bowshut"] = "case (0.9.5 the kind toggle): the same long evening with Bow shut (its row, total, DPS chip, bar and legend; no weapon lines under it), the cursor of the keys on it";
+    scenarios["battle-damage-weapons-allshut"] = "case (0.9.5 the kind toggle): the same long evening with every weapon kind shut: the kind rows alone, as Everyone's By weapon, each with the opens mark";
     var longEdda = Scenario("edda-battle-damage-weapons-open", "case (0.8.6): Edda's By weapon on a long evening, one of her weapons opened to its levels and one level to its skill levels", WeaponScenario.Longer(SampleWorld.Make(now).copies["Edda"]));
+    // 0.9 Armor sets (Chapters/ArmorSets.cs, PanelSampleSets.cs): opened from Crafting's heading-row chip (so its Back button shows)
+    PanelState SetsFrom(PanelInput inp, bool everyone = false)
+    {
+        var from = Page(Chapter.Deeds, "crafting", s => s.Everyone = everyone);
+        var v0 = PanelModel.Build(inp, from); PanelModel.Visited(from, v0.Active, v0.Page);
+        PanelModel.Follow(from, "Deeds/" + PanelModel.SetsPageId);
+        return from;
+    }
+    var setsYours = Scenario("deeds-crafting-sets", "case (0.9 Armor sets): Rowan's sets: the leather in full, bronze and troll leather begun, iron known and not begun, the rest waiting", SetsSample.World(now, "yours"));
+    scenarios["deeds-crafting-sets-numbers"] = scenarios["deeds-crafting-sets"]; scenarios["deeds-crafting-sets-chip"] = scenarios["deeds-crafting-sets"];
+    var setsLand = Scenario("deeds-crafting-sets-land", "case (0.9 Armor sets): every set of the Meadows made in full", SetsSample.World(now, "land"));
+    var setsNew = Scenario("deeds-crafting-sets-new", "case (0.9 Armor sets): a new character: the Meadows' recipes known, nothing made yet", SetsSample.World(now, "new"));
+    // 0.9 deed feeds (Chapters/DeedFeedModel.cs, PanelSampleFeeds.cs): each opened from its page's Feed chip (so its Back button shows)
+    PanelState FeedOpen(PanelInput inp, string page, TimeWindow w, Action<PanelState> more = null, string who = null)
+    {
+        var from = Page(Chapter.Deeds, page, s => { s.Window = w; s.WindowPicked = true; s.Player = who; });
+        var v0 = PanelModel.Build(inp, from); PanelModel.Visited(from, v0.Active, v0.Page);
+        PanelModel.Follow(from, "Deeds/" + PanelModel.DeedFeedPageOf(page == PanelModel.RecentPageId ? null : page));
+        more?.Invoke(from);
+        return from;
+    }
+    var feedYours = Scenario("deeds-crafting-feed", "case (0.9 deed feeds): Rowan's crafting feed in 7 days: this session's stretch (two upgrades of the Iron Sword with the level meter, a first, gear made, the rest counted), then the morning before under its line, its first half hour said to the nearest 10 minutes", FeedSample.Yours(world));
+    foreach (var (n, what) in new[] { ("deeds-crafting-feed-cards", "the Cards"), ("deeds-crafting-feed-timeline", "the Timeline"), ("deeds-crafting-feed-session", "Session: this session's stretch only, and where the earlier ones show"),
+                                      ("deeds-crafting-feed-filter", "the filter on the Iron Sword: its two upgrades, the island says 1 of 5 kinds"), ("deeds-building-feed", "Building: the pieces counted by kind, a first, the materials recovered"),
+                                      ("deeds-recent-feed", "the mixed feed from Recent: every deed of the evening in time order"), ("deeds-crafting-chip", "Crafting with its Feed and Sets chips in the heading row") })
+        scenarios[n] = "case (0.9 deed feeds): " + what;
+    var feedBusy = Scenario("deeds-recent-feed-all", "case (0.9 all-feed): the mixed feed of a busy evening, every deed family the log records: crafting to mining, taming, skill practice, what was brought in, sailing, and each fight one line that opens the Battle feed", FeedSample.Yours(world, "busy"));
+    foreach (var (n, what) in new[] { ("deeds-recent-feed-all-cards", "the Cards"), ("deeds-recent-feed-all-timeline", "the Timeline"), ("deeds-recent-feed-all-filter", "the Deed filter open: every family present, Fights and Taming chosen"),
+                                      ("deeds-recent-feed-all-end", "Show older pressed, scrolled to the end: sailing and what was brought in, the count line and what no minute holds, said once"),
+                                      ("deeds-recent-feed-all-scrolled", "Show older pressed, part way down: skills practiced, a wolf tamed, crafting, between the fights") })
+        scenarios[n] = "case (0.9 all-feed): " + what;
+    var feedEmpty = Scenario("deeds-crafting-feed-empty", "case (0.9 deed feeds): no stretch recorded yet: the feed says what will show", FeedSample.Yours(world, "empty"));
+    var feedUnread = Scenario("deeds-crafting-feed-notrecorded", "case (0.9 deed feeds): the book has not read the records yet (not in a world): \"Not recorded\", never 0", FeedSample.Yours(world, "unread"));
+    var eddaFeed = Scenario("edda-deeds-crafting-feed", "case (0.9 deed feeds): Edda's crafting feed on All: her session of two days back from the server (an upgrade and gear made), her session of five days back on its way", FeedSample.Edda(books["Edda"], now));
+    scenarios["edda-deeds-recent-feed"] = "case (0.9 deed feeds): Edda's mixed feed on All: her farming, cooking and crafting of two days back, the next session on its way";
+    var eddaFeedFailed = Scenario("edda-deeds-crafting-feed-failed", "case (0.9 deed feeds): Edda's session of five days back did not arrive: Try again", FeedSample.Edda(books["Edda"], now, "failed"));
+    var eddaFeedNone = Scenario("edda-deeds-crafting-feed-none", "case (0.9 deed feeds): the server lists no session of Edda's yet: the feed says when hers come", FeedSample.Edda(books["Edda"], now, null, "none"));
+    var eddaFeedOld = Scenario("edda-deeds-crafting-feed-oldserver", "case (0.9 deed feeds): a server before 0.9 keeps no deed feeds: the feed says so", FeedSample.Edda(books["Edda"], now, null, "oldserver"));
+    var setsEveryone = Scenario("deeds-crafting-sets-everyone", "case (0.9 Armor sets): the Everyone chip: who made each set in full; Finch's copy from 0.8.6", SetsSample.World(now, "everyone"));
+    // 0.9 arrows track (Chapters/BestArrows.cs, PanelSampleArrows.cs): Rowan's Ashlands evening with the land per minute, Joost's Fallen Valkyrie tie
+    var arrowsAsh = Scenario("battle-foes-whattouse", "case (0.9 What to use): Rowan's Ashlands evening: the Fallen Valkyrie (Charred Arrow 82 = Silver Arrow 82, a tie named), an Asksvin, a Charred Warrior; Grausten, Flametal and Feathers brought in there, the Bloodgold Arrow not known yet", ArrowsSample.World(now));
+    var arrowsMany = Scenario("battle-foes-whattouse-many", "case (0.9 What to use): the same evening with two more foes and a third Charred kind: 9 foes, the 7 you hit most as columns", ArrowsSample.World(now, true));
+    foreach (var n in new[] { "battle-foes-whattouse-weapons", "battle-foes-whattouse-know", "battle-foes-whattouse-open", "battle-foes-whattouse-lastfight", "battle-foes-tie-table" }) scenarios[n] = scenarios["battle-foes-whattouse"];
+    PanelState UseView(Action<PanelState> more = null) { var s = Battle(TimeWindow.Session, "foes"); s.View["Battle/foes/view"] = PanelModel.UseView; more?.Invoke(s); return s; }
+    // 0.9 crafting-history (Chapters/CraftingHistory.cs, Chapters/DeedHistory.cs, PanelSampleCrafting.cs): Crafting's Upgrades per item, the one-kind
+    // By kind bar (Joost's in-game fault), every deed's History opened from its hero's growth line, one day of it, and History with no day history
+    PanelState HistoryFrom(PanelInput inp, string deed, Action<PanelState> more = null)
+    {
+        var from = Page(Chapter.Deeds, deed);
+        var v0 = PanelModel.Build(inp, from); PanelModel.Visited(from, v0.Active, v0.Page);
+        PanelModel.Follow(from, "Deeds/" + PanelModel.HistoryPageOf(deed));
+        more?.Invoke(from);
+        return from;
+    }
+    PanelState DayFrom(PanelInput inp, string deed, DateTime day)
+    {
+        var from = HistoryFrom(inp, deed);
+        var v0 = PanelModel.Build(inp, from); PanelModel.Visited(from, v0.Active, v0.Page);
+        PanelModel.Follow(from, "Deeds/" + PanelModel.DayPageOf(deed, day));
+        return from;
+    }
+    var upgradesS = Scenario("deeds-crafting-upgrades", "case (0.9 crafting-history): upgrades recorded from 2 Oct: the Iron Sword to level 3 of 4, the Bronze Axe and the Wood Shield; seven more before", CraftHistorySample.World(now, "upgrades"));
+    var upgradesEmptyS = Scenario("deeds-crafting-upgrades-empty", "case (0.9 crafting-history): upgrades are recorded from an hour ago, none yet: the island's empty state beside the game's eleven", CraftHistorySample.World(now, "upgrades-empty"));
+    var oneKindS = Scenario("deeds-crafting-onekind", "case (0.9 fault, Joost in game 18 Oct): a new character, six pieces of gear all armor, eleven upgrades: the By kind bar names its one kind", CraftHistorySample.World(now, "onekind"));
+    var historyS = Scenario("deeds-crafting-history", "case (0.9 History): a month of days (from 3 Sep), the firsts as ticks, the upgrades; opened from the hero's growth line", CraftHistorySample.World(now, "history"));
+    foreach (var deed in PanelModel.HistoryPages) if (deed != "crafting") scenarios["deeds-" + deed + "-history"] = scenarios["deeds-crafting-history"];
+    scenarios["deeds-crafting-history-upgrades"] = scenarios["deeds-crafting-history"]; scenarios["deeds-crafting-day"] = "case (0.9 History): a History column clicked: Crafting on Tue 6 Oct"; scenarios["deeds-crafting-history-firsts"] = "case (0.9 History): Crafting history scrolled to its Firsts island";
+    var noHistoryS = CraftHistorySample.World(now, "upgrades"); noHistoryS.History = null;
+    Scenario("deeds-crafting-history-none", "case (0.9 History): the day history not loaded yet: History says it is not recorded, never a 0", noHistoryS);
+    // 0.9.5 draft Damage history (Chapters/DamageHistory.cs, PanelSampleDamage.cs): Battle > Damage's History, opened from By weapon's growth line
+    var dmgMonth = Scenario("battle-damage-history-30days", "case (0.9.5 draft Damage history): thirty days of day history, fighting time from twelve days back, a staff picked up in the last ten days; opened from By weapon's growth line", DamageHistorySample.World(now, "month"));
+    scenarios["battle-damage-history-bow"] = "case (0.9.5 draft Damage history): the same month, Bow chosen: its damage per day and its DPS per day on the same columns, none before fighting time was recorded";
+    var dmgBooks = FullDump.Books(dmgMonth).ToDictionary(b => b.who, b => b.book);
+    var dmgEdda = Scenario("edda-battle-damage-history", "case (0.9.5 draft Damage history): Edda's copy on Rowan's PC: thirty shared days of damage by kind, her weapons' seconds for the last fourteen", dmgBooks["Edda"]);
+    PanelState DmgHistoryFrom(PanelInput inp, string who = null, Action<PanelState> more = null)
+    {
+        var from = Battle(TimeWindow.SevenDays, "damage"); from.WindowPicked = true; from.Player = who;
+        var v0 = PanelModel.Build(inp, from); PanelModel.Visited(from, v0.Active, v0.Page);
+        PanelModel.Follow(from, "Battle/" + PanelModel.DamageHistoryPage);
+        more?.Invoke(from);
+        return from;
+    }
     var shots = new (string name, PanelInput inp, PanelState st, bool sharing)[]
     {
+        ("deeds-crafting-sets", setsYours, SetsFrom(setsYours), true),
+        ("deeds-crafting-sets-numbers", setsYours, Numbered(SetsFrom(setsYours)), true),
+        ("deeds-crafting-sets-chip", setsYours, Page(Chapter.Deeds, "crafting"), true),   // Crafting with its Armor sets chip in the heading row
+        ("deeds-crafting-sets-land", setsLand, SetsFrom(setsLand), true),
+        ("deeds-crafting-sets-new", setsNew, SetsFrom(setsNew), true),
+        ("deeds-crafting-sets-everyone", setsEveryone, SetsFrom(setsEveryone, true), true),
+        // 0.9 arrows track, What to use (Chapters/WhatToUse.cs): the arrows (You can make), the weapons, You know, many foes, a foe's column open, Last fight;
+        // and the Best arrow tie in By foe's table
+        ("battle-foes-whattouse", arrowsAsh, UseView(), true),
+        ("battle-foes-whattouse-weapons", arrowsAsh, UseView(s => s.View["Battle/foes/usetab"] = "weapon"), true),
+        ("battle-foes-whattouse-know", arrowsAsh, UseView(s => s.View["Battle/foes/useset"] = PanelModel.UseKnown), true),
+        ("battle-foes-whattouse-many", arrowsMany, UseView(s => s.View["Battle/foes/useset"] = PanelModel.UseAll), true),
+        ("battle-foes-whattouse-open", arrowsAsh, UseView(s => s.View["Battle/foes/useopen"] = ArrowsSample.Volture), true),
+        ("battle-foes-whattouse-lastfight", arrowsAsh, Battle(TimeWindow.Session, PanelModel.LastFightPage), true),
+        ("battle-foes-tie-table", arrowsAsh, Battle(TimeWindow.Session, "foes"), true),   // By foe's table: the Fallen Valkyrie's Best arrow, "Charred or Silver Arrow"
+        ("deeds-crafting-upgrades", upgradesS, Page(Chapter.Deeds, "crafting"), true),
+        ("deeds-crafting-upgrades-empty", upgradesEmptyS, Page(Chapter.Deeds, "crafting"), true),
+        ("deeds-crafting-onekind", oneKindS, Page(Chapter.Deeds, "crafting"), true),
+        ("deeds-crafting-history", historyS, HistoryFrom(historyS, "crafting"), true),
+        ("deeds-crafting-history-upgrades", historyS, HistoryFrom(historyS, "crafting", s => s.View["Deeds/" + PanelModel.HistoryPageOf("crafting") + "/metric"] = "upgrades"), true),
+        ("deeds-woodcutting-history", historyS, HistoryFrom(historyS, "woodcutting"), true),
+        ("deeds-mining-history", historyS, HistoryFrom(historyS, "mining"), true),
+        ("deeds-cooking-history", historyS, HistoryFrom(historyS, "cooking"), true),
+        ("deeds-building-history", historyS, HistoryFrom(historyS, "building"), true),
+        ("deeds-groundwork-history", historyS, HistoryFrom(historyS, "groundwork"), true),
+        ("deeds-farming-history", historyS, HistoryFrom(historyS, "farming"), true),
+        ("deeds-fishing-history", historyS, HistoryFrom(historyS, "fishing"), true),
+        ("deeds-crafting-day", historyS, DayFrom(historyS, "crafting", new DateTime(2026, 10, 6)), true),
+        ("deeds-crafting-history-firsts", historyS, HistoryFrom(historyS, "crafting"), true),
+        ("deeds-crafting-history-none", noHistoryS, HistoryFrom(noHistoryS, "crafting"), true),
+        ("battle-damage-history-7days", world, DmgHistoryFrom(world), true),   // 0.9.5 draft Damage history: the sample's own week of days
+        ("battle-damage-history-30days", dmgMonth, DmgHistoryFrom(dmgMonth), true),
+        ("battle-damage-history-bow", dmgMonth, DmgHistoryFrom(dmgMonth, null, s => s.View["Battle/" + PanelModel.DamageHistoryPage + "/kind"] = "bow"), true),
+        ("edda-battle-damage-history", dmgEdda, DmgHistoryFrom(dmgEdda, "Edda"), true),
+        ("deeds-crafting-feed", feedYours, FeedOpen(feedYours, "crafting", TimeWindow.SevenDays), true),
+        ("deeds-crafting-feed-cards", feedYours, FeedOpen(feedYours, "crafting", TimeWindow.SevenDays, s => s.View["Deeds/feed-crafting/view"] = PanelModel.FeedCards), true),
+        ("deeds-crafting-feed-timeline", feedYours, FeedOpen(feedYours, "crafting", TimeWindow.SevenDays, s => s.View["Deeds/feed-crafting/view"] = PanelModel.FeedTimeline), true),
+        ("deeds-crafting-feed-session", feedYours, FeedOpen(feedYours, "crafting", TimeWindow.Session), true),
+        ("deeds-crafting-feed-filter", feedYours, FeedOpen(feedYours, "crafting", TimeWindow.SevenDays, s => { PanelModel.ToggleFacet(s, "Deeds/feed-crafting", "kind", "$item_sword_iron"); s.OpenFilters.Add("Deeds/feed-crafting"); }), true),
+        ("deeds-building-feed", feedYours, FeedOpen(feedYours, "building", TimeWindow.SevenDays), true),
+        ("deeds-recent-feed", feedYours, FeedOpen(feedYours, PanelModel.RecentPageId, TimeWindow.SevenDays), true),
+        ("deeds-recent-feed-all", feedBusy, FeedOpen(feedBusy, PanelModel.RecentPageId, TimeWindow.Session), true),
+        ("deeds-recent-feed-all-cards", feedBusy, FeedOpen(feedBusy, PanelModel.RecentPageId, TimeWindow.Session, s => s.View["Deeds/feed-all/view"] = PanelModel.FeedCards), true),
+        ("deeds-recent-feed-all-timeline", feedBusy, FeedOpen(feedBusy, PanelModel.RecentPageId, TimeWindow.Session, s => s.View["Deeds/feed-all/view"] = PanelModel.FeedTimeline), true),
+        ("deeds-recent-feed-all-filter", feedBusy, FeedOpen(feedBusy, PanelModel.RecentPageId, TimeWindow.Session, s => { PanelModel.ToggleFacet(s, "Deeds/feed-all", "deed", PanelModel.DeedFeedFights); PanelModel.ToggleFacet(s, "Deeds/feed-all", "deed", DeedStretches.Taming); s.OpenFilters.Add("Deeds/feed-all"); }), true),
+        ("deeds-recent-feed-all-end", feedBusy, FeedOpen(feedBusy, PanelModel.RecentPageId, TimeWindow.Session, s => s.FeedMore = 1), true),
+        ("deeds-recent-feed-all-scrolled", feedBusy, FeedOpen(feedBusy, PanelModel.RecentPageId, TimeWindow.Session, s => s.FeedMore = 1), true),
+        ("deeds-crafting-chip", feedYours, Page(Chapter.Deeds, "crafting"), true),
+        ("deeds-crafting-feed-empty", feedEmpty, FeedOpen(feedEmpty, "crafting", TimeWindow.Session), true),
+        ("deeds-crafting-feed-notrecorded", feedUnread, FeedOpen(feedUnread, "crafting", TimeWindow.Session), true),
+        ("edda-deeds-crafting-feed", eddaFeed, FeedOpen(eddaFeed, "crafting", TimeWindow.SinceInstall, null, "Edda"), true),
+        ("edda-deeds-recent-feed", eddaFeed, FeedOpen(eddaFeed, PanelModel.RecentPageId, TimeWindow.SinceInstall, null, "Edda"), true),
+        ("edda-deeds-crafting-feed-failed", eddaFeedFailed, FeedOpen(eddaFeedFailed, "crafting", TimeWindow.SinceInstall, null, "Edda"), true),
+        ("edda-deeds-crafting-feed-none", eddaFeedNone, FeedOpen(eddaFeedNone, "crafting", TimeWindow.SinceInstall, null, "Edda"), true),
+        ("edda-deeds-crafting-feed-oldserver", eddaFeedOld, FeedOpen(eddaFeedOld, "crafting", TimeWindow.SinceInstall, null, "Edda"), true),
         ("battle-10min", world, Battle(TimeWindow.LastTenMinutes), true),
         ("battle-30min", world, Battle(TimeWindow.LastThirtyMinutes), true),
         ("battle-all", world, Battle(TimeWindow.SinceInstall), true),
@@ -1262,6 +1465,12 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("deeds-recent-group", world, Ev(Page(Chapter.Deeds, "recent")), true),
         ("deeds-recent-group-10min", world, Ev(Page(Chapter.Deeds, "recent", s => s.Window = TimeWindow.LastTenMinutes)), true),
         ("deeds-recent-group-three", threeS, Ev(Page(Chapter.Deeds, "recent")), true),   // 0.8.1 review 5: three players, the third a half island
+        // 0.9.1: Yesterday and 3 days (Joost: "I want to know what happened yesterday"): yours, the group's with a friend on an older version and one with nothing that day
+        ("deeds-recent-yesterday", world, Page(Chapter.Deeds, "recent", s => s.Window = TimeWindow.Yesterday), true),
+        ("deeds-recent-group-7days", world, Ev(Page(Chapter.Deeds, "recent", s => s.Window = TimeWindow.SevenDays)), true),   // the screenshot's window: every friend's days
+        ("deeds-recent-group-yesterday", groupDaysS, Ev(Page(Chapter.Deeds, "recent", s => s.Window = TimeWindow.Yesterday)), true),
+        ("deeds-recent-group-3days", groupDaysS, Ev(Page(Chapter.Deeds, "recent", s => s.Window = TimeWindow.ThreeDays)), true),
+        ("edda-deeds-recent-yesterday", books["Edda"], As("Edda", Chapter.Deeds, "recent", s => s.Window = TimeWindow.Yesterday), true),
         ("deeds-recent-numbers", world, Page(Chapter.Deeds, "recent", Numbers), true),
         ("deeds-recent-empty", recentEmptyS, Page(Chapter.Deeds, "recent"), true),
         ("tor-recent", books["Tor"], As("Tor", Chapter.Deeds, "recent"), true),
@@ -1271,6 +1480,16 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("deeds-meals-7days", world, Page(Chapter.Deeds, "meals", s => { s.Window = TimeWindow.SevenDays; s.WindowPicked = true; }), true),
         ("deeds-meals-numbers", world, Page(Chapter.Deeds, "meals", Numbers), true),
         ("deeds-meals-empty", fresh, Page(Chapter.Deeds, "meals"), true),
+        ("deeds-meals-combos", world, Page(Chapter.Deeds, "meals"), true),   // 0.9: scrolled to Your combinations (PANEL_SCROLL)
+        ("deeds-meals-combos-7days", world, Page(Chapter.Deeds, "meals", s => { s.Window = TimeWindow.SevenDays; s.WindowPicked = true; }), true),
+        ("deeds-meals-combos-empty", combosEmptyS, Page(Chapter.Deeds, "meals"), true),
+        ("deeds-meals-combos-notrecorded", combosNoneS, Page(Chapter.Deeds, "meals"), true),
+        ("deeds-mealplan", world, Page(Chapter.Deeds, PanelModel.MealPlanPageId), true),   // 0.9.5: Meal plan, its own page (Chapters/MealPlanModel.cs)
+        ("deeds-mealplan-ash", mealsAshS, Page(Chapter.Deeds, PanelModel.MealPlanPageId), true),
+        ("deeds-mealplan-eitr", mealsAshS, Page(Chapter.Deeds, PanelModel.MealPlanPageId, s => s.View[PanelModel.MealPlanBestKey] = "eitr"), true),
+        ("deeds-mealplan-three", world, Page(Chapter.Deeds, PanelModel.MealPlanPageId, s => s.View[PanelModel.MealPlanKey] = "WolfMeatSkewer,Eyescream,FeastMountains"), true),
+        ("deeds-mealplan-three-scrolled", world, Page(Chapter.Deeds, PanelModel.MealPlanPageId, s => s.View[PanelModel.MealPlanKey] = "WolfMeatSkewer,Eyescream,FeastMountains"), true),   // scrolled 260 px down (PANEL_SCROLL): the meal stays pinned
+        ("deeds-mealplan-combo", world, FromCombo(), true),
         ("tor-meals", books["Tor"], As("Tor", Chapter.Deeds, "meals"), true),
         ("everyone-meals", world, Ev(Page(Chapter.Deeds, "meals")), true),
         ("everyone-meals-player", world, Ev(Page(Chapter.Deeds, "meals", s => s.View["Deeds/meals/group"] = PanelModel.MealsPlayerView)), true),
@@ -1345,7 +1564,11 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-fight-server", lastServerS, Page(Chapter.Battle, "fight:server-fight"), true),   // 0.8.6: that fight's own page, "You were not in this fight"
         ("battle-damage-byfoe", kinS, Page(Chapter.Battle, "damage", s => s.View["Battle/damage/view"] = "foe"), true),   // 0.8.5: Draugr and the ranged Draugr, one row
         ("battle-bossfight-low", fightsLowS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.8.6: the lane with little left: the time at this pace after its note
-        ("battle-bossfight-brenna", brennaS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.8.5: Hildir's miniboss, a boss fight
+        ("battle-bossfight-brenna", brennaS, Page(Chapter.Battle, PanelModel.LastFightPage), true),
+        ("battle-lastfight-weak-reto", weakRetoS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.9.4 draft: Joost's fight, sample cast
+        ("battle-lastfight-weak-boss", weakBossS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.9.4 draft: the three forms
+        ("battle-lastfight-weak-twokinds", weakTwoS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.9.4 draft: a line per kind
+        ("edda-battle-lastfight-weak-none", weakNoneS, As("Edda", Chapter.Battle, PanelModel.LastFightPage), true),   // 0.9.4 draft: no modifiers, nothing shown   // 0.8.5: Hildir's miniboss, a boss fight
         ("battle-lastfight-earlier", lastEarlierS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.8.5: Last fight from an earlier session, "2 hours ago"
         ("battle-feed-earlier", feedEarlierS, Page(Chapter.Battle, PanelModel.FeedPage, s => { s.Window = TimeWindow.SevenDays; s.WindowPicked = true; }), true),   // 0.8.5: the feed over a restart
         ("battle-runs", fightsLiveS, Page(Chapter.Battle, PanelModel.RunsPage), true),
@@ -1404,6 +1627,8 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-foes-7days", world, Battle(TimeWindow.SevenDays, "foes"), true),
         ("battle-foes-1h", world, Battle(TimeWindow.LastHour, "foes"), true),
         ("battle-7days", world, Battle(TimeWindow.SevenDays), true),
+        ("battle-damage-yesterday", world, Battle(TimeWindow.Yesterday, "damage"), true),   // 0.9.1: the new chips on Battle
+        ("battle-3days", world, Battle(TimeWindow.ThreeDays), true),
         ("battle-damage-7days", world, Battle(TimeWindow.SevenDays, "damage"), true),
         // 0.8.6 (DPS per named weapon): your By weapon with its weapons and upgrade levels under each kind (7 days has the seconds for a pace; Session the live evening), the About box
         // open, and a friend's By weapon (Edda, from the weapons her copy shares) in 7 days and Session
@@ -1416,6 +1641,8 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-damage-weapons", longWeapons, Battle(TimeWindow.SevenDays, "damage"), true),
         ("battle-damage-weapons-open", longWeapons, Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.SevenDays; s.View[PanelModel.WeaponOpenKey] = "SpearBronze|Spears"; }), true),
         ("battle-damage-weapons-levels", longWeapons, Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.SevenDays; s.View[PanelModel.WeaponOpenKey] = "SwordIron|Swords"; s.View[PanelModel.WeaponCursorKey] = "SwordIron|Swords"; }), true),
+        ("battle-damage-weapons-bowshut", longWeapons, Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.SevenDays; s.View[PanelModel.KindShutKey] = "bow"; s.View[PanelModel.WeaponCursorKey] = PanelModel.KindToggleLink("bow"); }), true),
+        ("battle-damage-weapons-allshut", longWeapons, Page(Chapter.Battle, "damage", s => { s.Window = TimeWindow.SevenDays; s.View[PanelModel.KindShutKey] = string.Join(";", PanelModel.WeaponKinds.OrderBy(k => k, StringComparer.Ordinal)); }), true),
         ("edda-battle-damage-weapons-open", longEdda, As("Edda", Chapter.Battle, "damage", s => { s.Window = TimeWindow.SevenDays; s.WindowPicked = true; s.View[PanelModel.WeaponOpenKey] = "AxeIron|Axes;AxeIron|Axes|2"; }), true),
         ("voyages-sailing-7days", world, Page(Chapter.Voyages, "sailing", s => s.Window = TimeWindow.SevenDays), true),
         ("voyages-sailing-today", world, Page(Chapter.Voyages, "sailing", s => s.Window = TimeWindow.Today), true),
@@ -1521,6 +1748,11 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("edda-battle-offline", eddaOffS, As("Edda", Chapter.Battle, "damage", s => { s.Window = TimeWindow.LastTenMinutes; s.WindowPicked = true; }), true),   // PANEL_HOVER: the pointer on 10 min
         // 0.8.2 (I): a friend on Hearthwoven 0.6.5: one line where a page misses something
         ("edda-old-battle-defense", eddaOldS, As("Edda", Chapter.Battle, "defense"), true),
+        // 0.9 armor-share: a friend's armor view, both views, and the older copy's one line
+        ("edda-battle-defense-hurt", books["Edda"], As("Edda", Chapter.Battle, "defense", s => s.View["Battle/defense/view"] = PanelModel.ReceivedId), true),
+        ("edda-battle-defense-armor", books["Edda"], As("Edda", Chapter.Battle, "defense", s => s.View["Battle/defense/view"] = PanelModel.ArmourId), true),
+        ("edda-battle-defense-armor-numbers", books["Edda"], Numbered(As("Edda", Chapter.Battle, "defense", s => s.View["Battle/defense/view"] = PanelModel.ArmourId)), true),   // her About box: a friend's lines, no "Complete for you"
+        ("edda-old-battle-defense-armor", eddaOldS, As("Edda", Chapter.Battle, "defense", s => s.View["Battle/defense/view"] = PanelModel.ArmourId), true),
         ("edda-old-battle-feed", eddaOldS, As("Edda", Chapter.Battle, PanelModel.FeedPage), true),
         // 0.8.2 (J; Joost, a friend's Foes empty in Session after the friend reconnected): her earlier connection's fights, joined
         ("edda-rejoined-battle-foes", eddaRejoinedS, As("Edda", Chapter.Battle, "foes", s => { s.Window = TimeWindow.Session; s.WindowPicked = true; }), true),
@@ -1696,7 +1928,7 @@ if (dump >= 0 && dump + 1 < args.Length)
                  if (give != null) firePlans.Add("  \"" + s.name + "\": " + FireLayout.ToJson(FireLayout.Build(give, 180, 232)));
                  PanelModel.AddPlayers(v, "Rowan", s.name == "joining-alone" ? new string[0] : group, s.st.Player, s.sharing, joining: s.name.StartsWith("joining", StringComparison.Ordinal) ? new[] { "Ylva" } : null, bookKey: s.st.BookKey);
                  return "  \"" + s.name + "\": " + PanelModel.ToJson(v, islands: true);
-             })) + ",\n" + FeatsTests.DumpShots(group, now) + "\n};\n" +
+             })) + ",\n" + FeatsTests.DumpShots(group, now) + ",\n" + FeatSearchTests.DumpShots(group, now) + "\n};\n" +
              "window.PANEL_SCENARIOS = {\n" + string.Join(",\n", scenarios.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => "  \"" + kv.Key + "\": \"" + kv.Value.Replace("\"", "'") + "\"")) + "\n};\n";   // FeatsTests: the Feats views (test-panel/FeatsTests.cs)
     js += "window.FIRE_PLANS = {" + string.Join(",", firePlans) + "};\n";
     // the header-space rule (FEEDBACK 13b, PageHead.cs): one page head with fixed slots; an explanation goes into About these numbers or a chip's hover
@@ -1710,7 +1942,8 @@ if (dump >= 0 && dump + 1 < args.Length)
     Check(islandsOff.Count == 0, "islands: every block of every preview page sits in exactly one island, none lost, none twice (" + islandsOff.Count + " off)");
     // 0.8 hover (BarHover, PICKS 4 B): a hovered-state shot names the bar (its place among the page's bars with a list) and the part the pointer is on
     js += "window.PANEL_HOVER = {\"edda-battle-offline\": {\"win\": \"LastTenMinutes\"}, \"deeds-woodcutting-hover\": {\"bar\": 0, \"part\": 1}, \"battle-damage-hover\": {\"bar\": 0, \"part\": 5}, \"battle-damage-foe-hover\": {\"bar\": 1, \"part\": 3}, \"company-away-3days-hover\": {\"bar\": 1, \"part\": 2}, \"everyone-battle-damage-weapon-hover\": {\"bar\": 0, \"part\": 0}, \"everyone-battle-foes-hover\": {\"bar\": 0, \"part\": 1}, \"battle-foes-open-hover\": {\"bar\": 0, \"part\": 1}, \"battle-damage-afterarmor\": {\"bar\": 0, \"part\": 2}, \"battle-foes-afterarmor\": {\"bar\": 0, \"part\": 0}};\n";
-    js += "window.PANEL_SCROLL = {\"deeds-cooking-today\": \"Who enjoyed your food\", \"battle-feed-100-end\": \"end\", \"battle-feed-100-scrolled\": 610, \"battle-feed-100-more\": \"end\", \"battle-feed-fellow-older\": \"end\"};\n";   // 0.8.5: the plate scrolled to a section, as the wheel does in game ("end": to its end; 0.8.6: a number, that many px)
+    js += "window.PANEL_SCROLL = {\"deeds-cooking-today\": \"Who enjoyed your food\", \"deeds-crafting-upgrades\": \"Upgrades per item\", \"deeds-crafting-upgrades-empty\": \"Upgrades per item\", \"deeds-meals-combos\": \"Your combinations\", \"deeds-meals-combos-7days\": \"Your combinations\", \"deeds-meals-combos-empty\": \"Your combinations\", \"deeds-meals-combos-notrecorded\": \"Your combinations\", \"deeds-mealplan-three-scrolled\": 260, \"deeds-crafting-history-firsts\": \"Firsts\", \"battle-feed-100-end\": \"end\", \"battle-feed-100-scrolled\": 610, \"battle-feed-100-more\": \"end\", \"battle-feed-fellow-older\": \"end\", \"deeds-recent-feed-all-end\": \"end\", \"deeds-recent-feed-all-scrolled\": 470, \"deeds-recent-feed-all-cards\": 470, \"deeds-recent-feed-all-timeline\": 470};\n";   // 0.8.5: the plate scrolled to a section, as the wheel does in game ("end": to its end; 0.8.6: a number, that many px)
+    js += "Object.assign(window.PANEL_SCROLL, {\"battle-foes-whattouse-lastfight\": 600, \"battle-foes-tie-table\": 330, \"battle-foes-whattouse-open\": 330});\n";   // 0.9 arrows track: Last fight's Best arrows island, at the page's end
     js += "window.PANEL_RICH = [" + string.Join(", ", PanelRich.Kinds.Select(k => "\"" + k + "\"")) + "];   // richtext-fix: the block kinds whose labels have rich text on (PanelRich.Kinds)\n";
     System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "preview-data.js"), js);
     System.Console.WriteLine("wrote " + System.IO.Path.Combine(dir, "preview-data.js"));

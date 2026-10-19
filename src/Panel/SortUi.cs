@@ -26,7 +26,7 @@ namespace Hearthwoven.Panel
             foreach (var o in orders)
             {
                 var back = orders[((chosen - 1) % orders.Count + orders.Count) % orders.Count];
-                Chip(row, o.Title, null, o.Selected, link?.Invoke(PanelModel.SortLink(b, o)), back: link?.Invoke(PanelModel.ViewLink(b, back)));   // the chosen one flips
+                Chip(row, o.Title, null, o.Selected, link?.Invoke(PanelModel.SortLink(b, o)), back: link?.Invoke(PanelModel.ViewLink(b, back)), swatch: o.Colour);   // the chosen one flips; a pill with a colour (Meal plan's Health, Stamina, Eitr) its swatch
             }
         }
     }

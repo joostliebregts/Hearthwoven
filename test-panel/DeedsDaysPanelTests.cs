@@ -113,7 +113,7 @@ static class DeedsDaysPanelTests
         torOld.ViewerSessionStartUtc = torNow.ViewerSessionStartUtc; torOld.ViewerName = torNow.ViewerName; torOld.PlayerNames = torNow.PlayerNames; torOld.Fellows = torNow.Fellows; torOld.NowUtc = torNow.NowUtc;
         var mixed = world.ShallowCopy(); mixed.Fellows = world.Fellows.Select(f => f == torNow ? torOld : f).ToList();
         var torPage = PanelModel.Build(torOld, Deeds("woodcutting", TimeWindow.Today, SampleWorld.Tor));
-        var olderLine = "Tor's Hearthwoven is 0.8.3: Today, 7 days and 30 days fill in once they update.";
+        var olderLine = "Tor's Hearthwoven is 0.8.3: their days fill in once they update.";
         var group = PanelModel.Build(mixed, Deeds("woodcutting", TimeWindow.Today, everyone: true));
         var groupText = PanelModel.AllText(group).ToList();
         var torRow = (PanelModel.Content(group).FirstOrDefault(b => b.Kind == PanelModel.GroupRowsKind)?.Items ?? new List<Block>()).FirstOrDefault(r => r.Id == SampleWorld.Tor);

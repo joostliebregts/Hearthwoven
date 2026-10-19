@@ -56,8 +56,12 @@ static class GroupFeatsTests
             // Edda finds the Swamp: her copy says so, and the gate opens on Rowan's book
             var edda = early.Fellows[0]; edda.KnownBiomes = new List<string> { "Meadows", "BlackForest", "Swamp" };
             var opened = Together(early);
-            Check(Cards(opened).Any(c => c.Id == "bogiron") && Cards(opened).Any(c => c.Id == "ironforge") && !Says(opened, PanelModel.LandsNotFound),
-                  "gate: a fellow who shares found the Swamp: its feats show on your book too, and the line is gone");
+            Check(Cards(opened).Any(c => c.Id == "bogiron") && Cards(opened).Any(c => c.Id == "ironforge") && !Cards(opened).Any(c => c.Id == "silvervein") && TimesSaid(opened, PanelModel.LandsNotFound) == 1,
+                  "gate: a fellow who shares found the Swamp: its feats show on your book too; the line stays while the later lands' wait (0.9: Silver Vein for the Mountain)");
+            edda.KnownBiomes = new List<string> { "Meadows", "BlackForest", "Swamp", "Mountain", "Plains", "Mistlands", "AshLands" };
+            Check(!Says(Together(early), PanelModel.LandsNotFound) && new[] { "silvervein", "blackmetal", "eitr", "flametal" }.All(id => Cards(Together(early)).Any(c => c.Id == id)),
+                  "gate: every land found: the Mountain's, the Plains', the Mistlands' and the Ashlands' metal feats show and the line is gone");
+            edda.KnownBiomes = new List<string> { "Meadows", "BlackForest", "Swamp" };
             // an older copy (0.6) carries no knownBiomes: the evidence it does carry opens the gate (damage there since install)
             edda.KnownBiomes = null; edda.BiomeSinceInstall = new BiomeTally(); edda.BiomeSinceInstall.AddDamage("Swamp", true, "slash", 40);
             Check(Cards(Together(early)).Any(c => c.Id == "bogiron"), "gate: a copy from before 0.7 (no lands in it): a fight in the Swamp it shares opens the gate");
@@ -76,11 +80,11 @@ static class GroupFeatsTests
             early.Fellows[0].ItemsPickedUp["$item_tinore"] = 3;   // Edda brings home a little tin
             var lifted = Cards(Together(early, "copperwed")).Single(c => c.Id == "copperwed");
             var liftedRule = lifted.Items[0].Items.First(x => x.Kind == "rule").Title;
-            Check(lifted.Title == PanelModel.FeatById("copperwed").Name && liftedRule.Contains("50") && liftedRule.Contains("bronze") && lifted.Icon.StartsWith("item:$item_bronze"),
-                  "veil: a fellow who shares held tin: the real name, line, rule and the game's own picture");
+            Check(lifted.Title == PanelModel.FeatById("copperwed").Name && liftedRule.Contains("50") && liftedRule.Contains("bronze") && lifted.Icon == PanelModel.FeatScene("copperwed", "item:$item_bronze|title:smith", PanelModel.SceneExists),
+                  "veil: a fellow who shares held tin: the real name, line, rule and the feat's own picture (its drawn scene; without one the game's bronze)");
             var veils = PanelModel.FeatDefs.Where(f => f.Veil != null).ToList();
-            Check(veils.Select(f => f.Id).OrderBy(x => x).SequenceEqual(new[] { "bogiron", "copperwed", "ironforge" }) &&
-                  veils.All(f => new[] { f.Veil.Name, f.Veil.Honours, f.Veil.Rule(f.Tiers[0]), f.Veil.Brief(f.Tiers[0]), f.Veil.Caveat ?? f.Caveat }.All(t => !new[] { "copper", "tin ", "bronze", "iron", "scrap" }.Any(w => t.ToLowerInvariant().Contains(w)))),
+            Check(veils.Select(f => f.Id).OrderBy(x => x).SequenceEqual(new[] { "blackmetal", "bogiron", "copperwed", "eitr", "flametal", "ironforge", "silvervein" }) &&
+                  veils.All(f => new[] { f.Veil.Name, f.Veil.Honours, f.Veil.Rule(f.Tiers[0]), f.Veil.Brief(f.Tiers[0]), f.Veil.Caveat ?? f.Caveat }.All(t => !new[] { "copper", "tin ", "bronze", "iron", "scrap", "silver", "black metal", "eitr", "flametal", "sap", "tissue" }.Any(w => t.ToLowerInvariant().Contains(w)))),
                   "veil: every riddle (name, line, rule, tile line, caveat) names no material");
         }
 
@@ -115,10 +119,10 @@ static class GroupFeatsTests
                   "sum (record and since install): Bog Iron is 40 + 120 (yours) + 100 (Tor) + 50 (Finch) = 310, Tor once, his own count not on top of his record; the same on Tor's book: " + PanelModel.FeatValue(iron, me));
             var ironDetail = Cards(Together(me, "bogiron")).Single(c => c.Id == "bogiron").Items[0];
             var helped = ironDetail.Items.Single(x => x.Kind == "crew");
-            Check(string.Join(", ", helped.Items.Select(x => x.Title + " " + x.Value + " · " + x.Note)) == "Rowan 160 · 52 %, Tor 100 · 32 %, Finch 50 · 16 %" && helped.Title == "Who smelted" && helped.Tone == "share" &&
+            Check(string.Join(", ", helped.Items.Select(x => x.Title + " " + x.Value + " · " + x.Note)) == "Rowan 160 · 52 %, Finch 50 · 16 %, Tor 100 · 32 %" && helped.Title == "Who smelted" && helped.Tone == "share" &&
                   ironDetail.Items.Single(x => x.Kind == "counted").Text == "Everyone who shares, in every world you play" && !ironDetail.Items.Single(x => x.Kind == "caveat").Text.Contains("every world") &&
                   ironDetail.Items.Single(x => x.Kind == "progress").Title == "310 of 600 iron bars",
-                  "sum (B37): the detail says who smelted, each with their part and share, largest first (the shares add up to 100), and the counting once, in one line: " +
+                  "sum (B37): the detail says who smelted, each with their part and share, you first then by name (0.9.2: the group's stable order, never by size; the shares add up to 100), and the counting once, in one line: " +
                   string.Join(", ", helped.Items.Select(x => x.Title + " " + x.Value + " · " + x.Note)));
             // The Charcoal Burners counts coal taken, as Bog Iron counts bars: what Stoker's Chests put in a kiln is no one's, the coal that comes out is
             SessionEvents.Add(me.Events.ChestFed, "charcoal_kiln|Wood", 500); SessionEvents.Add(finch.Events.PickedUp, "$item_coal", 25);
@@ -217,9 +221,18 @@ static class GroupFeatsTests
             me.ItemsCrafted["$item_meadbasehealth"] = 10;
             var crew = Cards(Together(me, "meadhall")).Single(c => c.Id == "meadhall").Items[0].Items.Single(x => x.Kind == "crew");
             var said = string.Join(", ", crew.Items.Select(x => x.Title + " " + x.Value + " · " + x.Note));
-            Check(crew.Title == "Who brewed" && crew.Items.Select(x => x.Title).SequenceEqual(new[] { "Rowan", "Edda", "Tor", "Finch", "Ylva", "Bryn" }) &&
+            Check(crew.Title == "Who brewed" && crew.Items.Select(x => x.Title).SequenceEqual(new[] { "Rowan", "Bryn", "Edda", "Finch", "Tor", "Ylva" }) &&
                   crew.Items.All(x => !string.IsNullOrEmpty(x.Value) && x.Note.EndsWith(" %")) && crew.Items.Sum(x => int.Parse(x.Note.Replace(" %", "").Replace("<1", "0"))) == 100 && PanelModel.CrewBar(crew),
-                  "everyone (0.8.2): The Mead Hall with six brewers names all six, largest first, each with their number and share, the shares adding up to 100 %: " + said);
+                  "everyone (0.8.2): The Mead Hall with six brewers names all six, you first then by name (0.9.2: never by size), each with their number and share, the shares adding up to 100 %: " + said);
+            // 0.9.2 (data-design-system: people are parts of a whole in a stable order, never sorted by size): the order is the player row's, so it
+            // stays when the parts change, and a fellow's book puts its viewer first too
+            Action<PlayerProfile.PlayerStats> Brewed2(float n) => s => s.m_itemCraftStats["$item_meadbasehealth"] = n;
+            var more = Self(Copy("Edda", 77, Brewed2(1)), Copy("Tor", 88, Brewed2(40)), Copy("Finch", 99, Brewed2(3)), Copy("Ylva", 101, Brewed2(2)), Copy("Bryn", 102, Brewed2(9)));
+            more.ItemsCrafted["$item_meadbasehealth"] = 1;
+            var moreCrew = Cards(Together(more, "meadhall")).Single(c => c.Id == "meadhall").Items[0].Items.Single(x => x.Kind == "crew");
+            var row = new PanelView(); PanelModel.AddPlayers(row, more.PlayerName, more.Fellows.Select(f => f.PlayerName), "", true);
+            Check(moreCrew.Items.Select(x => x.Title).SequenceEqual(crew.Items.Select(x => x.Title)) && moreCrew.Items.Select(x => x.Title).SequenceEqual(row.Players.Select(p => p.Label)),
+                  "order (0.9.2): with other parts (Tor now the most, you the least) the crew keeps the same order, the player row's: " + string.Join(", ", moreCrew.Items.Select(x => x.Title + " " + x.Value)));
             // the legend places every one of them however narrow the room: as many columns as fit (up to three), else one column of all of them
             var cells = crew.Items.Select(x => (name: 20f + 8 * x.Title.Length, number: 20f, share: 34f)).ToList();
             var wide = PanelModel.CrewFit(cells, 440); var half = PanelModel.CrewFit(cells, 300); var narrow = PanelModel.CrewFit(cells, 120);

@@ -169,6 +169,7 @@ namespace Hearthwoven
             try
             {
                 var rec = Plugin.Battle; Wire(rec); var utc = DateTime.UtcNow; rec.Tick(utc);
+                if (!rec.FightOn) FeatsCounters.OnFightOver(Plugin.FeatsLedger);   // 0.9 Held the Line: the fight's run counts once it is over
                 if (rec.FightOn && now >= nextNear) { nextNear = now + BattleRecorder.NearEvery; NearYou(rec, utc); }
                 if (!Panel.SampleMode.On) Watch(rec, utc);
             }

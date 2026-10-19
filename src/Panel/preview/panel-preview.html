@@ -118,46 +118,98 @@
   .tab { position:relative; } .dot { position:absolute; right:8px; top:8px; width:11px; height:11px; border-radius:50%; background:var(--accent); } .tab .dot { right:10px; top:8px; }
   .feats { display:grid; gap:var(--feats-row-gap) var(--feats-column-gap); }
   .fgrid { position:relative; flex:none; overflow:hidden; max-height:var(--feats-grid-room); }   /* PanelLayout.Feats.GridRoom: four whole rows; more rows scroll inside it with a fade and the cue, the detail area under it stays put */
-  .fgrid.scrolls { margin-bottom:26px; }   /* FeatsUi.FeatCueStrip (titles-grid): a grid that scrolls keeps a strip under its cards for the cue, which never covers a card */
-  .fcue { position:absolute; display:flex; justify-content:center; pointer-events:none; } .fcue span { height:22px; line-height:22px; padding:0 11px; font-size:var(--text-floor); color:var(--gold); background:rgba(9,7,5,.92); box-shadow:inset 0 0 0 1px rgba(232,194,122,.5); white-space:nowrap; }   /* PanelModel.FeatsMore, FeatsUi's MoreCue */
+  /* 0.9.2 FeatsUi.FeatMoreCue (Joost: "can we not make that a full horizontal bar that overlays the items? Make it more transparent and fade with a gradient
+     from bottom to transparent at the top"): a band over the grid's foot, the card's ground from FeatLookShape.CueGround at the bottom to nothing at the top
+     (CueStops), the words small and centred near its bottom edge with the cards' text shade; it catches no click and takes no row of its own */
+  .fcue { position:absolute; height:var(--feats-cue-band); display:flex; align-items:flex-end; justify-content:center; pointer-events:none; background:linear-gradient(to bottom, rgba(9,9,7,0) 0%, rgba(9,9,7,.85) 50%, rgba(9,9,7,.85) 100%); }
+  .fcue span { margin-bottom:var(--feats-cue-text-bottom); line-height:18px; font-size:var(--text-floor); color:var(--gold); white-space:nowrap; text-shadow:1px 1px 2px rgba(0,0,0,.85), 0 0 3px rgba(0,0,0,.6); }   /* PanelModel.FeatsMore */
   .fcard { position:relative; height:var(--fh, var(--feats-card)); } .fcard.waiting .m.mk, .fdet.waiting .m.mk { filter:grayscale(1) opacity(.28); } .fcard .m { position:absolute; left:9px; top:var(--mt, 5px); } .fcard:not(.waiting) .m img { filter:grayscale(1) opacity(.5); }
   .fcard.earned { box-shadow:inset 0 0 0 1px var(--tier), inset 3px 0 0 var(--tier); } .fcard.earned .m img { filter:none; }   /* the tier's colour (PanelModel.TierColour): rim and a left bar */
   .plate.full .fgrid { flex:1 1 auto; max-height:none; min-height:var(--feats-card); }   /* PanelModel.PlateFull: the grid takes the room the detail area leaves (FeatsUi.FeatsRoom) */
   .tierw { font-weight:700; }
   .fcard:not(.waiting) .m.mk, .fdet:not(.earned):not(.waiting) .m.mk { filter:grayscale(1) opacity(.5); } .fcard.earned .m.mk { filter:none; }
-  /* live-polish: the keyboard focus (feat card, filter chip, biome tile) is one soft gold glow with rounded corners (vocab/focus-ring.png,
+  /* live-polish: the keyboard focus (filter chip, biome tile) is one soft gold glow with rounded corners (vocab/focus-ring.png,
      sliced 14 px, the line 2 px outside the box), shown only after a key press: hidden while the mouse is used (focus-visible, PanelUi.FocusRing) */
-  .fcard.sel::after, .fb-chip.cur::after, .b2-col.cur .b2-tile::after { content:""; position:absolute; inset:calc(-1 * (var(--focus-inset) + var(--focus-gap))); pointer-events:none; display:none; background:rgba(232,194,122,.9);
+  /* 0.9.3 (Joost in game: "'currently selected' is way too subtle. or not even active"): the chosen feat card, by a click or A/D alike (FeatsUi.FeatChosen):
+     a solid gold frame over everything on the card (the 2 px rounded rim of a chosen bar part), its ground lifted by a warm wash over the pattern and the
+     band (under the icon and the text), its name in gold; a hover keeps its 1 px line at 45 % */
+  .fcard .fsel { position:absolute; inset:1px; pointer-events:none; background:rgba(232,194,122,.08); }
+  .fcard .fframe { position:absolute; inset:0; pointer-events:none; border:var(--feats-chosen-rim) solid var(--gold); border-radius:var(--feats-chosen-round); z-index:3; }
+  .fcard.sel .fn, .fcard.sel.earned .fn, .fcard.lk.sel .fn { color:var(--gold); }
+  .fb-chip.cur::after, .b2-col.cur .b2-tile::after { content:""; position:absolute; inset:calc(-1 * (var(--focus-inset) + var(--focus-gap))); pointer-events:none; display:none; background:rgba(232,194,122,.9);
     -webkit-mask-box-image:url(../vocab/focus-ring.png) 14 / 14px stretch; }
-  body.kbd .fcard.sel::after, body.kbd .fb-chip.cur::after, body.kbd .b2-col.cur .b2-tile::after { display:block; }
+  body.kbd .fb-chip.cur::after, body.kbd .b2-col.cur .b2-tile::after { display:block; }
   .fcard .ft { position:absolute; left:54px; right:8px; top:2px; bottom:2px; display:flex; flex-direction:column; justify-content:center; }   /* the name and its small line stacked, one size: a long name wraps (FeatsUi.FeatCard) */
   .fcard .fn { font-size:var(--text-small); line-height:17px; color:var(--muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .fcard.earned .fn { color:var(--text); } .fcard .fn.one { -webkit-line-clamp:1; }
   .fcard .fw { height:16px; line-height:16px; font-size:var(--text-floor); color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* feats-real: why an Unsung feat reads 0, or the next tier on an earned one (FeatsUi.FeatCard) */
+  /* 0.9 New feats (FeatsUi.FeatCard): an earned tier not opened yet: the Feats tab's gold dot and the word "New", top right (PanelLayout.Feats.New*); the name beside it keeps clear of it, the lines under it keep the card's width */
+  .fcard .fnew { position:absolute; top:var(--feats-new-inset); right:var(--feats-new-inset); display:flex; align-items:center; gap:var(--feats-new-gap); font-size:var(--text-floor); line-height:1.2; font-weight:700; color:var(--accent); white-space:nowrap; }
+  .fcard .fnew i { display:block; flex:none; width:var(--feats-new-dot); height:var(--feats-new-dot); border-radius:50%; background:var(--accent); }
+  .fcard.isnew .fn { margin-right:calc(var(--feats-new-inset) * 2 + var(--feats-new-dot) + var(--feats-new-gap) + 2.4em); }
+  /* 0.9.2 feat search (Chapters/FeatSearchUi.cs): the field at the Feats pages' top right (PanelLayout.FeatSearch), the query or its placeholder, the search key's cap inside it;
+     on the search's grid each card's page tag, top right, left of its New mark (FeatSearchTags; placed by the script below, as the game measures it) */
+  .fsearch { display:flex; justify-content:flex-end; align-items:center; height:var(--feat-search-h); flex:none; }
+  .fsf { position:relative; width:var(--feat-search-w); height:var(--feat-search-h); box-sizing:border-box; padding:0 calc(var(--feat-search-pad) * 2 + var(--feat-search-cap)) 0 var(--feat-search-pad); display:flex; align-items:center; font-size:var(--text-small); color:var(--text); white-space:nowrap; overflow:hidden; }
+  .fsf.empty { color:var(--faint); font-style:italic; }
+  .fsearch .fread { margin-right:var(--feat-search-pad); } .earned .ea-about .fread { margin-right:0; } .earned .ea-about .ea-sw:not(:has(.chip, .kc)) { display:none; }   /* 0.9.5 Mark read (Chapters/FeatsReadAll.cs): a chip left of the field, 8 px apart (FeatSearchUi.ReadGap) */
+  .earned .ea-about .fsf { flex:none; align-self:center; } .earned .ea-about .fsf .kc { position:absolute; }   /* in the strip's right end: its own size, the cap inside it */
+  .fsf .kc { right:var(--feat-search-pad); top:calc((var(--feat-search-h) - var(--feat-search-cap)) / 2); width:var(--feat-search-cap); height:var(--feat-search-cap); font-style:normal; }
+  .fcard.lk.tagged .lkt, .fcard.tagged.k-track .ft { top:calc(var(--feat-search-tag-top) + var(--feat-search-tag-h)); }   /* the card's text below its tag, centred in the rest */
+  .fcard .fstag { position:absolute; top:var(--feat-search-tag-top); right:var(--feats-new-inset); height:var(--feat-search-tag-h); line-height:var(--feat-search-tag-h); padding:0 var(--feat-search-tag-pad); border-radius:calc(var(--feat-search-tag-h) / 4); background:rgba(0,0,0,.5); color:var(--muted); font-size:var(--text-floor); white-space:nowrap; z-index:2; }
+  /* 0.9 feat look (Chapters/FeatLookUi.cs; 0.9.2: look 2 is the one design, look 1's frame and badges gone): the family's ground, a large icon, a flat
+     tier bar, the family's colour as the left edge. The ground: the hatch tile multiplied by the family's colour (an SVG filter, as the game's tint; a CSS
+     mask needs CORS), its wash from the left and the card's own ground over it toward the right (FeatLookShape's stops) */
+  .fcard.lk { --lx:calc(var(--feat-look-icon-left-large) + var(--feat-look-edge)); --ls:min(var(--feat-look-icon-large), calc(var(--fh, var(--feat-look-card-min)) - 2 * var(--feat-look-icon-left-large))); }
+  .fcard.lk.earned { box-shadow:none; } .fdet.lk.earned { box-shadow:inset 0 0 0 1px var(--tier); }
+  .lk .lkg { position:absolute; left:1px; top:1px; bottom:1px; right:1px; pointer-events:none; }   /* 0.9.1: the family's ground over the whole card again (board 9; 0.8.93 kept it behind the icon) */
+  .fdet.lk .lkg { right:auto; width:min(calc(100% - 2px), var(--feat-look-detail-ground-w)); height:var(--feat-look-detail-ground-h); bottom:auto; } .lk .lkg .lkfd2 { background:linear-gradient(180deg, rgba(12,12,10,0) 0%, rgba(12,12,10,.2) 45%, rgba(12,12,10,.85) 80%, rgb(12,12,10) 100%); }   /* FeatLookShape.DownStops */
+  /* 0.9.1 Feats.TextBacking (default Both): a soft band of the card's ground under the text, rising over --feat-look-backing-in before it (FeatLookShape.Backing),
+     and a dark shade on the letters (the game's TMP underlay, FeatLookUi.FeatLookShade) */
+  .lk .lkbk { position:absolute; top:1px; bottom:1px; right:1px; pointer-events:none; background:linear-gradient(90deg, rgba(12,12,10,0) 0, rgba(12,12,10,.7) var(--feat-look-backing-in), rgba(12,12,10,.7) 100%); }
+  .fcard.lk .lkbk { left:calc(var(--lx) + var(--ls) + var(--feat-look-icon-gap) - var(--feat-look-backing-in)); }
+  .fdet.lk .lkbk { left:calc(84px - var(--feat-look-backing-in)); right:auto; width:calc(min(100%, var(--feat-look-detail-ground-w)) - 84px + var(--feat-look-backing-in)); bottom:auto; height:var(--feat-look-detail-ground-h); }
+  .lk .fn, .lk .lkl, .fdet.lk .dn, .fdet.lk .dt, .fdet.lk .lkfam, .fdet.lk .dh, .fdet.lk .mo { text-shadow:1px 1px 2px rgba(0,0,0,.85), 0 0 3px rgba(0,0,0,.6); }
+  .lk .lkg i { position:absolute; inset:0; display:block; } .lk .lkg .lkw { background:linear-gradient(90deg, var(--wash), transparent 60%); }
+  .lk .lkg .lkh { background-repeat:repeat; } .lk .lkg .lkfd { background:linear-gradient(90deg, rgba(12,12,10,0) 0%, rgba(12,12,10,.25) 22%, rgba(12,12,10,.85) 58%, rgb(12,12,10) 80%, rgb(12,12,10) 100%); }   /* FeatLookShape.GroundStops (board 9's ground2()), to the mirror's card ground */
+  .lk .lkdisc { position:absolute; border-radius:50%; pointer-events:none; background:radial-gradient(closest-side, rgba(0,0,0,.5) 0%, rgba(0,0,0,.422) 25%, rgba(0,0,0,.25) 50%, rgba(0,0,0,.078) 75%, rgba(0,0,0,0) 100%); }
+  .fcard.lk .lkdisc { left:calc(var(--lx) - var(--feat-look-halo) / 2); top:calc((var(--fh, var(--feat-look-card-min)) - var(--ls) - var(--feat-look-halo)) / 2); width:calc(var(--ls) + var(--feat-look-halo)); height:calc(var(--ls) + var(--feat-look-halo)); }
+  .fcard.lk .m { left:var(--lx) !important; top:calc((var(--fh, var(--feat-look-card-min)) - var(--ls)) / 2) !important; width:var(--ls) !important; height:var(--ls) !important; }
+  .lk .lke { position:absolute; left:0; top:0; bottom:0; width:var(--feat-look-edge); background:var(--fam); opacity:.95; }
+  .fcard.lk .lkt { position:absolute; left:calc(var(--lx) + var(--ls) + var(--feat-look-icon-gap)); right:var(--feat-look-text-right); top:0; bottom:0; display:flex; flex-direction:column; justify-content:center; min-width:0; }
+  .lk .lkfam { font-size:var(--text-floor); line-height:1.2; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--fam); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fcard.lk .fn { display:block; -webkit-line-clamp:unset; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fcard.lk.isnew .fn { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; white-space:normal; }   /* 0.9.2 FeatLookUi.FeatLookCard: a New card's name may take a second line beside the mark */
+  .lk .lkl { font-size:var(--text-floor); line-height:1.2; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lk .lkbar { display:flex; gap:var(--feat-look-bar-gap); margin-top:var(--feat-look-bar-top); height:var(--feat-look-bar-h); width:min(100%, var(--feat-look-bar-w)); flex:none; }
+  .lk .lkbar i { position:relative; flex:1 1 0; display:block; border-radius:calc(var(--feat-look-bar-h) / 2); background:rgba(107,82,51,.35); } .lk .lkbar i.on { background:var(--bc); } .lk .lkbar i b { position:absolute; left:0; top:0; bottom:0; border-radius:inherit; background:var(--bc); opacity:.6; min-width:var(--feat-look-bar-h); }
+  .fdet.lk .dn { top:var(--feat-look-detail-name-top); } .fdet.lk .dt { top:var(--feat-look-detail-tier-top); } .fdet.lk .lkfam { position:absolute; top:var(--feat-look-detail-family-top); }
   .fcard .nt.nx { background:none; box-shadow:inset 0 0 0 1px rgba(158,140,102,.9); }   /* a tier not reached yet, as an outline (FeatsUi.FeatNotches) */
   .fcard .fm { height:17px; line-height:17px; font-size:var(--text-floor); font-style:italic; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .feats.ti .fcard .fm { height:auto; white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; } .feats.ti .fcard .fn { -webkit-line-clamp:1; }   /* 0.9.1: a title's reason on two lines (PanelLayout.Feats.TitleCard) */
   .fcard.waiting, .fdet.waiting { outline:1px dashed rgba(185,166,136,.7); outline-offset:-2px; } .fcard.waiting .m img, .fdet.waiting .m img { filter:grayscale(1) opacity(.28); }   /* not counted yet: a dashed rim, a fainter emblem */
   .fcard .nt { position:absolute; top:var(--nt, 39px); width:10px; height:10px; border-radius:2px; background:#76643f; } .fcard.waiting .nt.nx { box-shadow:inset 0 0 0 1px rgba(185,166,136,.7); } .fnotch { position:absolute; left:9px; top:44px; display:flex; gap:3px; } .fnotch i { display:block; width:12px; height:5px; background:#76643f; } .fnotch i.on { background:var(--gold); }   /* each reached notch in its tier's colour (inline) */
-  .fdet { position:relative; height:184px; flex:none; } .fdet.earned { box-shadow:inset 0 0 0 1px var(--tier), inset 3px 0 0 var(--tier); }
+  .fdet { position:relative; height:var(--feat-detail-least); flex:none; }   /* 0.9.1: as high as the page's details need (placed below, FeatsUi.FeatDetailPage) */ .fdet.earned { box-shadow:inset 0 0 0 1px var(--tier), inset 3px 0 0 var(--tier); }
   .fdet > .fcrew { position:absolute; left:292px; right:16px; } .fdet .fcrew { height:22px; font-size:var(--text-floor); white-space:nowrap; }   /* B37 + 0.8.2: Who helped, the parts as one bar, under it everyone in the legend grammar (FeatsUi.FeatCrew); placed by crewLay() */
   .fdet .fcrew > *, .fdet .fcrew .ce > * { position:absolute; top:0; height:22px; line-height:22px; white-space:nowrap; } .fdet .fcrew .ce { position:static; }
   .fdet .fcrew .fcl { left:0; font-size:var(--text-floor); color:var(--faint); } .fdet .fcrew .cbar { display:flex; gap:2px; top:7px; height:8px; right:0; } .fdet .fcrew .cbar i { display:block; height:8px; border-radius:3px; flex:var(--f) 0 0; min-width:2px; }
   .fdet .fcrew .sw { width:12px; height:12px; top:5px; border-radius:2px; } .fdet .fcrew .cmk { width:20px; height:20px; top:1px; } .fdet .fcrew .cmk .m { position:static; }
   .fdet .fcrew .cn { font-size:var(--text-floor); color:var(--text); } .fdet .fcrew .cnum { font-size:var(--text-small); font-weight:700; color:var(--text); text-align:right; } .fdet .fcrew .csh { font-size:var(--text-floor); color:var(--faint); text-align:right; }
-  .fdet .fghost { position:absolute; left:292px; right:16px; top:0; visibility:hidden; pointer-events:none; } .fdet .fghost .fcrew, .fdet .fghost .cv { position:absolute; left:0; right:0; top:0; }   /* the page's other crews, measured for the area's height (FeatsUi.FeatDetailPage) */
-  .fdet .mo i { color:var(--muted); }
-  .fdet .m { position:absolute; left:16px; top:14px; } .fdet:not(.earned):not(.waiting) .m img { filter:grayscale(1) opacity(.5); }
-  .fdet .dn { position:absolute; left:84px; top:12px; width:204px; height:30px; line-height:30px; font-size:var(--text-title); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fdet.earned .dn { color:var(--text); }
-  .fdet .dt { position:absolute; left:84px; top:44px; width:200px; height:22px; line-height:22px; font-size:var(--text-floor); color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fdet.earned .dt { color:var(--tier); font-weight:700; }
-  .fdet .dl { position:absolute; left:16px; top:74px; width:262px; height:106px; display:flex; flex-direction:column; gap:5px; }   /* FeatsUi.FeatDetailFill: the line, two or three lines, the moment under it */
-  .fdet .dh { width:260px; min-height:40px; max-height:60px; flex:none; font-size:var(--text-small); line-height:19px; font-style:italic; color:var(--muted); overflow:hidden; }
-  .fdet .rl { position:absolute; left:292px; right:16px; height:20px; line-height:20px; font-size:var(--text-small); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fdet .rl.on { color:var(--text); }
+  .fdet .fghost { position:absolute; left:292px; right:16px; top:0; visibility:hidden; pointer-events:none; } .fdet .fghost .fcrew, .fdet .fghost .cv { position:absolute; left:0; right:0; top:0; }   /* the page's other details, measured for the area's height (FeatsUi.FeatDetailPage) */
+  .fdet .fghost .gl { position:absolute; left:-276px; top:0; width:262px; display:flex; flex-direction:column; gap:var(--feat-detail-moment-gap); }   /* their left column: what each honours and its moment */
+  .fdet .mo i { color:var(--muted); } .fdet .fdlink .fdlink-mk { margin-left:var(--feats-link-mark-gap); }
+  .fdet .m { position:absolute; left:16px; top:var(--feat-detail-emblem-top); } .fdet:not(.earned):not(.waiting) .m img { filter:grayscale(1) opacity(.5); }
+  .fdet .dn { position:absolute; left:84px; top:var(--feat-detail-name-top); width:204px; height:30px; line-height:30px; font-size:var(--text-title); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fdet.earned .dn { color:var(--text); }
+  .fdet .dt { position:absolute; left:84px; top:var(--feat-detail-tier-top); width:200px; height:22px; line-height:22px; font-size:var(--text-floor); color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fdet.earned .dt { color:var(--tier); font-weight:700; }
+  .fdet .dl { position:absolute; left:16px; top:var(--feat-detail-honours-top); width:262px; display:flex; flex-direction:column; gap:var(--feat-detail-moment-gap); }   /* FeatsUi.FeatDetailFill: the line, one to three lines, the moment under it */
+  .fdet .dh { width:260px; min-height:var(--feat-detail-honours-line); max-height:var(--feat-detail-honours-most); flex:none; font-size:var(--text-small); line-height:19px; font-style:italic; color:var(--muted); overflow:hidden; }
+  .fdet .rl { position:absolute; left:292px; right:16px; height:var(--feat-detail-rule-h); line-height:var(--feat-detail-rule-h); font-size:var(--text-small); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fdet .rl.on { color:var(--text); }
   .fdet .rl b { display:inline-block; width:32px; color:var(--faint); } .fdet .rl.on b { color:var(--rc, var(--gold)); }
   .fdet .pg { position:absolute; left:292px; right:16px; height:22px; } .fdet .pg .tr { position:absolute; left:0; right:196px; top:6px; height:10px; } .fdet .pg .fl { position:absolute; left:2px; top:2px; bottom:2px; background:var(--accent); }
   .fdet .pg .pt { position:absolute; right:0; top:0; width:186px; line-height:22px; font-size:var(--text-floor); white-space:nowrap; }
   .fdet .cb { position:absolute; left:292px; right:16px; height:18px; line-height:18px; font-size:var(--text-floor); color:var(--muted); white-space:nowrap; } .fdet .cb span { display:inline-block; margin-right:8px; color:var(--faint); }
   .fdet .cv { position:absolute; left:292px; right:16px; height:36px; font-size:var(--text-floor); font-style:italic; color:var(--muted); overflow:hidden; }
-  .fdet .mo { width:262px; flex:1 1 0; min-height:0; line-height:19px; font-size:var(--text-small); color:var(--text); overflow:hidden; }
+  .fdet .mo { width:262px; flex:none; min-height:var(--feat-detail-moment-line); max-height:var(--feat-detail-moment-most); line-height:19px; font-size:var(--text-small); color:var(--text); overflow:hidden; }
   .kfor { display:flex; gap:10px; align-items:center; height:36px; } .kfor .kfh { font-size:var(--text-small); font-weight:700; color:var(--gold); white-space:nowrap; }
   .kfor .kfc { display:flex; align-items:center; gap:6px; padding:4px 12px 4px 8px; box-shadow:inset 0 0 0 1px var(--tier, rgba(232,194,122,.85)); font-size:var(--text-small); color:var(--text); white-space:nowrap; } .kfor .kfc b { color:var(--tier); }
   /* fix4: the page's feat and its titles in ONE flat strip (FeatsUi.FeatBandBlock): a dark ground, a gold edge at its left, no raised border */
@@ -176,7 +228,8 @@
      padding taken back: a sticky box keeps clear of its scroller's padding, and the holder starts at the plate's top edge. Only while the plate
      is scrolled down (.under, pinHead): at rest every page is drawn exactly as before */
   .pinhead { margin:calc(-1 * var(--plate-pad-top)) calc(-1 * var(--plate-pad-x)) 0; padding:var(--plate-pad-top) var(--plate-pad-x) 0; }
-  .plate.under > .pinhead { position:sticky; top:calc(-1 * var(--plate-pad-top)); z-index:3; background:rgb(10,9,7); }
+  .pinhead.pinisl { display:flex; flex-direction:column; gap:var(--plate-gap); }   /* 0.9.5 Meal plan: its meal's island pinned under the strip with it (Island.Pin, StickyHeadUi.PinStrip) */
+  .plate.under > .pinhead { position:sticky; top:calc(-1 * var(--plate-pad-top)); z-index:6; background:rgb(10,9,7); }   /* 0.9.1: over a row's keycap (.kc, 5), as the game's scroll mask clips it */
   .earned { position:relative; } .earned .ea-about { position:absolute; right:var(--island-pad); top:4px; height:26px; gap:8px; }
   .earned .ea-cap { flex:0 1 auto; min-width:0; height:34px; line-height:34px; font-size:var(--text-small); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* 0.8 layout D+: the view switch's caption in the strip (FeatsUi.StripCaption) */
   .earned .ea-note { font-size:var(--text-floor); font-style:italic; color:var(--muted); white-space:nowrap; }   /* a fellow's book: whose copy and when (PanelView.StripNote) */   /* 0.7 compact tops: the About button at the strip's end (FeatsUi.FeatBandBlock, PanelModel.StripReserve) */
@@ -214,7 +267,8 @@
   .awt { position:absolute; top:0; } .awt > * { position:absolute; } .awt .n { font-size:var(--hero-second); font-weight:700; white-space:nowrap; display:flex; align-items:center; }
   .awt .l { font-size:var(--text-small); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; } .awt.hov .n { color:#f6d896; }
   .aw-cap { position:relative; height:var(--bar-head-line); border-bottom:1px solid var(--rule); } .aw-cap > span { position:absolute; top:0; height:var(--bar-head-line); display:flex; align-items:center; font-size:var(--text-floor); letter-spacing:.04em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }
-  .dr-you { height:20px; display:flex; justify-content:flex-end; align-items:center; gap:12px; } .dr-you > span { display:flex; align-items:center; gap:4px; } .dr-you b { font-size:var(--text-name); white-space:nowrap; }
+  .dr-you { height:20px; display:flex; justify-content:flex-end; align-items:center; gap:12px; } .dr-you:has(> .dr-serv) { justify-content:flex-start; }
+  .dr-serv { display:flex; align-items:center; } .dr-serv .sb { display:flex; flex:none; } .dr-serv .sb i { display:block; flex:none; } .dr-serv .st { font-size:var(--text-floor); color:var(--muted); white-space:nowrap; }   /* 0.9.2 Meals by dish, what one serving gives (PanelUi.ServingCell: DrServBar 90, DrServH 10, DrServPartGap 2, DrServGap 8) */ .dr-you > span { display:flex; align-items:center; gap:4px; } .dr-you b { font-size:var(--text-name); white-space:nowrap; }
   .bs-legend, .b2-key { display:flex; align-items:center; gap:6px; font-size:var(--text-small); white-space:nowrap; }
   .b2-key { font-size:var(--text-floor); color:var(--muted); margin-top:2px; } .b2-key img { width:16px; height:16px; }
   .bs-legend .sp, .b2-key .sp { width:22px; } .bs-legend b { font-weight:700; }
@@ -254,6 +308,14 @@
   .rk { display:flex; flex-direction:column; gap:4px; } .rk.two { flex-direction:row; gap:28px; } .rk-col { flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:4px; }
   .rk-row { display:flex; align-items:center; gap:8px; height:34px; } .rk-nm { flex:none; font-size:var(--text-name); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .rk-tr { flex:1; height:16px; position:relative; } .rk-v { width:56px; flex:none; text-align:right; font-size:var(--text-name); font-weight:700; }
+  /* 0.9 crafting-history: the level rows (DeedsUi.LevelRows), History's chart (GrowthLinesUi.SparkLarge), the hero line's History word (RecordedUi.HeroRight) */
+  .lv { display:flex; flex-direction:column; gap:var(--level-gap); } .lv-row { display:flex; align-items:center; gap:var(--level-row-gap); height:var(--level-row); }
+  .lv-nm { flex:none; font-size:var(--text-name); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .lv-w { flex:none; font-size:var(--text-floor); color:var(--muted); white-space:nowrap; }
+  .lv-v { flex:none; text-align:right; font-size:var(--text-name); font-weight:700; }
+  .lv-meter { display:flex; flex:none; width:var(--level-meter-w); gap:var(--level-gap); border-radius:calc(var(--level-h) / 4); overflow:hidden; } .lv-meter i { position:relative; display:block; flex:1; height:var(--level-h); background:#33281d; } .lv-meter i b { position:absolute; left:0; top:0; bottom:0; background:var(--gold); }
+  .hist { position:relative; height:calc(var(--history-tick) + var(--history-tick-gap) + var(--history-chart-h) + var(--history-axis)); } .hist i { position:absolute; display:block; background:rgba(232,194,122,.85); }
+  .hist i.z { background:rgba(232,194,122,.35); } .hist i.t { background:var(--gold); } .hist .ax { position:absolute; font-size:var(--text-floor); color:var(--muted); white-space:nowrap; line-height:var(--history-axis); } .hist .hit { position:absolute; cursor:pointer; }
+  .hlink { font-size:var(--text-floor); line-height:var(--text-floor); color:var(--gold); white-space:nowrap; align-self:flex-end; }   /* as tall as the columns: the hero keeps its height */
   .rk-col.side { display:grid; column-gap:6px; row-gap:2px; align-content:start; align-items:center; flex:none; } .rk-col.side .rk-row { display:contents; } .rk-col.side .rk-nm, .rk-col.side .rk-v { width:auto !important; text-align:left; } .rk-col.side .rk-tr { width:auto; }
   .cnt { display:flex; gap:10px; } .ct-t { flex:1 1 0; min-width:0; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:10px 6px; }
   .ct-n { font-weight:700; line-height:1.05; } .ct-l { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
@@ -266,6 +328,25 @@
   .ig-p { flex:none; width:32px; height:32px; display:flex; } .ig-x { display:flex; flex-direction:column; justify-content:center; min-width:0; }
   .ig-n { font-size:var(--text-count); font-weight:700; line-height:22px; } .ig-l { font-size:var(--text-floor); line-height:13px; color:var(--muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .ig-s { font-size:var(--text-floor); line-height:14px; color:var(--faint); white-space:nowrap; overflow:hidden; }
+  /* 0.9 Armor sets (DeedsUi.SetBand): a set as the one-item band, its head line, and the item tile's "not made" state: no ground, a dashed edge, the picture grayed, the materials under the name */
+  .sbw > .sb { display:flex; flex-direction:column; gap:var(--sets-band-gap); padding:var(--sets-band-pad-top) var(--sets-band-pad-x) var(--sets-band-pad-bottom); }
+  .sb-h { display:flex; align-items:baseline; gap:var(--sets-band-gap); white-space:nowrap; } .sb-h b { font-size:var(--text-name); color:var(--text); } .sb-m { font-size:var(--text-floor); color:var(--muted); }
+  .sb-r { margin-left:auto; font-size:var(--text-floor); color:var(--muted); font-style:italic; } .sb-r.full { color:var(--gold); font-weight:700; font-style:normal; }
+  .ig-t.notmade { background:none; border-color:transparent; outline:1px dashed rgba(185,166,136,.6); outline-offset:-1px; }
+  .ig-t.notmade .ig-p { filter:grayscale(1) opacity(.35); } .ig-t.notmade .ig-l { -webkit-line-clamp:1; }
+  .ig-m { display:flex; gap:var(--sets-cost-gap); margin-top:var(--sets-cost-pic-gap); } .ig-m i { font-style:normal; display:inline-flex; align-items:center; gap:var(--sets-cost-pic-gap); font-size:var(--text-floor); color:var(--text); white-space:nowrap; }
+  .ig-t.person .ig-n { font-size:var(--text-name); } .ig-t.person .ig-l { font-style:italic; }
+  /* 0.9.2 Meals' Plan a meal (MealPlanUi.PlanGrid): its food tiles; a slot of its meal's row (DamageRowsUi: an empty slot dashed as .ig-t.notmade) */
+  .mp-t { cursor:pointer; display:block; padding:0; } .mp-t.unk { opacity:.5; } .mp-t.on { outline:1px solid var(--gold); outline-offset:-1px; } .mp-t.on .mp-n { color:var(--gold); }
+  .mp-t > .mp-p, .mp-t > .mp-n, .mp-t > .mp-b, .mp-t > .mp-s, .mp-t > .mp-mk { position:absolute; } .mp-p { display:flex; }
+  .mp-n { font-size:var(--text-floor); color:var(--text); }   /* 0.9.3: one line across the tile; a grid with a longer name: two (never cut) */
+  .mp-s { font-size:var(--text-floor); color:var(--muted); white-space:nowrap; text-align:right; }
+  .mp-key { display:flex; align-items:center; font-size:var(--text-floor); color:var(--muted); white-space:nowrap; } .mp-ke { display:inline-flex; align-items:center; } .mp-ke .mp-mk { flex:none; }   /* 0.9.8 MealPlanUi.PlanMarksKey (its gaps: KEY_APART, KEY_MARK_GAP) */
+  .chip-sw { display:block; flex:none; width:var(--chip-swatch); height:var(--chip-swatch); }   /* PanelUi.Chip's swatch (PanelLayout.Chip.Swatch; SwatchGap: the chip's own gap) */
+  .mp-mk { display:block; border-radius:50%; background:var(--gold); } .mp-mk.ring { background:none; box-shadow:inset 0 0 0 1px var(--gold); }   /* What to use's status: a gold dot made or owned, a ring can make */
+  .mp-t .mp-ring, .sec-open .mp-ring, .bf.dr.kind .kr-ring { position:absolute; inset:calc(-1 * var(--focus-inset)); pointer-events:none; display:none; background:rgba(232,194,122,.9); } body.kbd .mp-t .mp-ring, body.kbd .sec-open .mp-ring, body.kbd .bf.dr.kind .kr-ring { display:block; }   /* the keys' cursor, as Foes' (its slice: MP.ring) */
+  .plate .section.sec-open { position:relative; cursor:pointer; }   /* 0.9.3 a heading that opens what is under it (Plan a meal): the opens mark at its end */
+  .dr-slot { display:block; outline:1px dashed rgba(185,166,136,.6); outline-offset:-1px; } .dr-combo .pic[data-link] { cursor:pointer; }
   .edge { position:absolute; left:2px; top:3px; bottom:3px; width:3px; } .fuel { font-size:var(--text-floor); font-style:italic; color:var(--faint); margin-left:4px; }
   /* ledger (fix2 7, VoyagesHallUi.Ledger): a row per station or trader, its items as inline chips flowing right */
   .lg-r { display:flex; gap:12px; padding:4px 0; } .lg-h { flex:none; width:150px; height:30px; display:flex; align-items:center; gap:7px; font-size:var(--text-body); white-space:nowrap; overflow:hidden; }
@@ -324,7 +405,7 @@
   .chip.icon { padding-left:var(--chip-icon-left); } .chip.off { opacity:.45; }
   .sortrow { display:flex; align-items:center; gap:var(--sort-gap); height:var(--sort-height); } .sortrow .cap { font-size:var(--text-floor); color:var(--muted); margin-right:4px; }   /* SortUi.SortRow */
   .section .swatch { display:inline-block; width:12px; height:12px; flex:none; }   /* a sort group heading: its category colour */
-  .hr .chip.win { padding:0 var(--chip-window-pad); }   /* the nine window chips (HISTORY-06): tighter, so the heading keeps its full window name (PanelUi.WindowPad) */
+  .hr .chip.win { padding:0 var(--chip-window-pad); }   /* the eleven window chips (HISTORY-06; 0.9.1 Yesterday and 3 days): tighter, so the heading keeps its full window name (PanelUi.WindowPad) */
   /* 0.8.2 (Joost in game, Mining: the second number sat lower than the first): every number group, its label and its date on the hero number's
      baseline (PanelUi.HeroNumber lifts the smaller ones); the rules and the skill stand on the bottom as before */
   .hero { display:flex; align-items:baseline; }
@@ -426,12 +507,24 @@
   .bt-foerow.opens { cursor:pointer; border-radius:5px; } .bt-foerow.opens:hover { background:rgba(242,232,214,.035); }
   /* 0.8 (Chapters/FoesKeys.cs): the keys' cursor row wears the focus ring and shows every cell's factor, as pointing at a cell does */
   /* 0.8.6: By weapon's cursor line (Chapters/WeaponRows.cs) wears the same ring */
+  .bf.dr.kind { cursor:pointer; } .bf.dr.kind.shut:hover { background:rgba(242,232,214,.035); } .dr-name > .opens-mk { position:static; margin-top:0; flex:none; }   /* 0.9.5 a weapon kind's row that toggles (DamageRowsUi.KindOpens): its opens mark right after the name, before the DPS chip */
   .bt-foerow.cur, .bf.dr.wl.cur { position:relative; overflow:visible; } .bt-foerow.cur::after, .bf.dr.wl.cur::after { content:""; position:absolute; inset:calc(-1 * var(--focus-inset)); pointer-events:none; display:none; background:rgba(232,194,122,.9);
     -webkit-mask-box-image:url(../vocab/focus-ring.png) 14 / 14px stretch; }
   body.kbd .bt-foerow.cur::after, body.kbd .bf.dr.wl.cur::after { display:block; } body.kbd .bt-foerow.cur .bt-mc .ic { visibility:hidden; } body.kbd .bt-foerow.cur .bt-mc .fx { display:block; }
   .bt-open { background:rgba(242,232,214,.045); border-radius:5px; } .bt-open .bt-row { border-bottom:0; }
   /* 0.8.2 (BattleUi.BattleRanking, Joost: Best compares with Best): a caption, then a row of islands (Arrows, Bolts, Weapons), for Best and for Worst */
-  .bt-rank { display:flex; flex-direction:column; gap:6px; padding:4px 12px 12px; } .bt-rrow { display:grid; gap:14px; } .bt-rank .isl { gap:0; }
+  .bt-rank { display:flex; flex-direction:column; gap:6px; padding:4px 12px 12px; } .bt-rank.own { padding:0; } .bt-rank.own .small { font-style:italic; }
+  /* 0.9 What to use (WhatToUseUi.UseTable): every place from the script's UT constants */
+  .ut-row { position:relative; } .ut-row > span, .ut-foe > span, .ut-foe > i, .ut-cell > b, .ut-cell > .ut-bar, .ut-bar > i { position:absolute; } .ut-item { border-bottom:1px solid var(--rule); } .ut-item.unk { opacity:.5; }
+  .ut-h { font-size:var(--text-floor); color:var(--muted); white-space:nowrap; overflow:hidden; } .ut-foe { cursor:pointer; } .ut-foe .bt-slot { display:block; }
+  .ut-fn { font-size:var(--text-floor); color:var(--text); text-align:center; line-height:1.15; } .ut-fn.open { color:var(--gold); } .ut-open { background:var(--gold); }
+  .ut-nm { font-size:var(--text-small); } .ut-st { font-size:var(--text-floor); font-style:italic; color:var(--faint); white-space:nowrap; }
+  .ut-ty { font-size:var(--text-floor); white-space:nowrap; overflow:hidden; } .ut-mt { font-size:var(--text-floor); color:var(--muted); white-space:nowrap; }
+  /* a cell (board 7's .cv; WhatToUseUi): no box but the best one's thin gold edge and faint gold ground, rounded like the bands; a resisted one quiet */
+  .ut-cell > b { left:0; right:0; text-align:center; font-size:var(--text-small); font-weight:400; color:var(--text); }
+  .ut-cell.best { background:rgba(232,194,122,.08); } .ut-cell.best > b { color:var(--gold); font-weight:700; }
+  .ut-cell.low > b { color:var(--faint); } .ut-cell.low .ut-bar { opacity:.45; } .ut-bar > i { top:0; }
+  .ut-say { font-size:var(--text-floor); font-style:italic; color:var(--muted); }   /* 0.9 Best arrows: the ranking on its own */ .bt-rrow { display:grid; gap:14px; } .bt-rank .isl { gap:0; }
   .bt-rank .gh { display:flex; justify-content:space-between; align-items:center; gap:8px; height:22px; margin-bottom:6px; font-size:var(--text-small); font-weight:700; white-space:nowrap; }
   .bt-rank .gh small { font-size:var(--text-floor); font-weight:400; color:var(--faint); } .bt-rank .sh { height:22px; line-height:22px; font-size:var(--text-floor); font-style:italic; color:var(--muted); }
   /* a line is a damage row (BattleUi.RankIsland): its name and status, then its number before its bar (feedBar: parts, numbers inside, the true line) */
@@ -452,6 +545,9 @@
      fighting), the "×N" badge, the feed's three views, Last fight's group rows, foes and received line */
   .bt-mark { display:inline-block; flex:none; border-radius:50%; box-sizing:border-box; border:1.5px solid #8f8270; }
   .bt-mark.defeated, .bt-mark.you { background:#e8c27a; border-color:#e8c27a; } .bt-mark.with { background:linear-gradient(90deg, #e8c27a 50%, transparent 50%); border-color:#e8c27a; } .bt-mark.fighting { border-color:#e8c27a; }
+  .bt-mark.made { background:#e8c27a; border-color:#e8c27a; } .bt-mark.upgraded { border-color:#e8c27a; }   /* 0.9 deed feeds (BattleFeedUi.MarkImg): filled = made, ring = upgraded */
+  .df-v { display:flex; align-items:center; white-space:nowrap; color:var(--text); font-size:var(--text-small); } .df-v.up { color:var(--muted); } .df-v .bt-meter { position:static; flex:none; }   /* 0.9 (DeedFeedUi.DeedValue): the level meter or the count in the dealt bar's place */
+  .df-ch { display:flex; gap:var(--feed-session-gap); color:var(--muted); font-size:var(--text-floor); white-space:nowrap; } .df-ch span { color:var(--faint); }   /* 0.9 (DeedFeedUi.DeedCounts): a kind's words over its strip */
   .bt-badge { flex:none; height:20px; line-height:18px; box-sizing:border-box; padding:0 7px; border:1px solid #6b5233; border-radius:10px; font-size:var(--text-floor); font-weight:700; color:var(--muted); white-space:nowrap; letter-spacing:0; text-transform:none; }
   .bt-whocol { width:250px; flex:none; } .bt-whocol .bt-pips, .bt-whocol .bt-pipw { margin:6px 0 0 2px; }
   .bt-pips { display:flex; flex-wrap:wrap; gap:5px; } .bt-pipw { font-size:var(--text-floor); color:var(--muted); white-space:nowrap; }
@@ -461,7 +557,7 @@
   .bt-fl { display:flex; align-items:center; min-height:36px; padding:7px 0; box-sizing:border-box; border-bottom:1px solid rgba(107,82,51,.28); font-size:var(--text-small); }
   .isl .bt-fh, .isl .bt-fl { border-bottom:0; }   /* 0.8.1: a fight in its own island has no rules (BattleFeedUi: the island's edge sets it apart, the rows' spacing parts them) */
   .bt-fl .t { width:78px; flex:none; font-size:var(--text-floor); color:var(--faint); } .bt-fl .n { width:150px; flex:none; margin-right:8px; display:flex; align-items:center; gap:6px; font-size:var(--text-body); white-space:nowrap; overflow:hidden; } .bt-fl .n b { overflow:hidden; text-overflow:ellipsis; min-width:0; }
-  .bt-fl .o { width:196px; flex:none; margin-right:8px; display:flex; align-items:center; gap:8px; color:var(--muted); white-space:nowrap; overflow:hidden; } .bt-fl .o span { overflow:hidden; text-overflow:ellipsis; } .bt-fl .d { flex:1; min-width:0; }
+  .bt-fl .o { width:212px; flex:none; margin-right:8px; display:flex; align-items:center; gap:8px; color:var(--muted); white-space:nowrap; overflow:hidden; } .bt-fl .o span { overflow:hidden; text-overflow:ellipsis; } .bt-fl .d { flex:1; min-width:0; }
   .bt-cards { display:grid; gap:14px; margin-top:10px; } .bt-card { background:rgba(242,232,214,.045); border-radius:5px; padding:10px 12px 12px; box-sizing:border-box; min-width:0; }
   .bt-card .h { display:flex; align-items:center; gap:6px; height:22px; white-space:nowrap; } .bt-card .h b { font-size:var(--text-body); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; } .bt-card .h span { font-size:var(--text-floor); color:var(--faint); }
   .bt-card .o { display:flex; align-items:center; gap:8px; height:22px; margin-top:2px; font-size:var(--text-small); color:var(--muted); white-space:nowrap; overflow:hidden; } .bt-card .o span { overflow:hidden; text-overflow:ellipsis; }
@@ -504,9 +600,10 @@
   .dr-e .w { display:inline-flex; flex-direction:column; } .dr-e .w[data-on]::after { content:attr(data-on); height:0; overflow:hidden; visibility:hidden; }
   .dr-e.hov .w[data-off]::after { content:attr(data-off); }
   .dr-e.hov { background:rgba(232,194,122,.15); box-shadow:5px 0 0 rgba(232,194,122,.15), -5px 0 0 rgba(232,194,122,.15); } .dr-e.hov .w { color:#f6d896; }
-  .bt-fl .d.fl { display:flex; align-items:center; gap:12px; } .drl { position:relative; flex:none; margin:-1px 0; } .bt-fl .rcv { flex:none; font-size:var(--text-floor); line-height:18px; color:var(--muted); }
+  .bt-fl .d.fl, .bt-tl .d.fl { display:flex; align-items:center; gap:12px; } .drl { position:relative; flex:none; margin:-1px 0; } .bt-fl .rcv, .bt-tl .rcv { flex:none; font-size:var(--text-floor); line-height:18px; color:var(--muted); }
   .dr-tip { position:absolute; left:0; top:0; height:20px; line-height:20px; padding:0 6px; box-sizing:border-box; border-radius:2px; background:#0f0b08; color:#f6d896; font-size:var(--text-floor); font-weight:700; white-space:nowrap; display:none; z-index:3; pointer-events:none; }
   .dr-tip.on { display:block; }   /* the page's one hover tag (PanelUi.PageTag): beside the bar of a part no share entry keys (no share line, a player's line, Foes' Dealt, the armor bar) */
+  .bt-tl .drl { margin:0; } .bt-tl .rcv { flex:1; min-width:0; }   /* 0.9 the Timeline's damage bar and its received words (BattleFeedUi.FeedTimeline), on the Log's rules */
   .bt-card .drl { margin:6px 0 0; } .bt-card .rcv { margin-top:6px; font-size:var(--text-floor); line-height:18px; color:var(--muted); }   /* 0.8.1 the card's damage bar and its received words (PanelUi.FeedCards) */
   .bt-card .tl { height:3px; margin-top:3px; border-radius:2px; background:rgba(232,194,122,.8); }
   .dr-run + .dr-run { margin-top:0; } .dr-run:has(+ .dr-run) > .since { display:none; } .dr-run > .since { margin-top:6px; }   /* By weapon: the weapons as one list in one island (PanelUi.DamageRunRow: 6 px apart, the island's own gap) */
@@ -523,6 +620,8 @@
   .ft-row { position:absolute; left:0; right:0; border-radius:4px; } .ft-row.opens:hover { background:rgba(242,232,214,.035); }
   .ft-band { position:absolute; left:-6px; right:-6px; border-radius:6px; background:rgba(242,232,214,.045); }
   .dr-note { margin:2px 0 0 30px; height:18px; line-height:18px; font-size:var(--text-floor); font-style:italic; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* a player's "live", "this PC" */
+  .dr-name.dr-combo { gap:4px; height:auto; } .dr-name.dr-combo > .pic { width:auto; height:auto; } .dr-note.dr-combo-n { margin-left:0; font-style:normal; color:var(--muted); height:auto; white-space:normal; overflow:visible; }   /* 0.9 Meals' Your combinations (DamageRowsUi: DrComboIcon = What to use's UtIcon 40, DrComboGap; the names muted, upright, wrapping onto a second line, never cut) */
+  .bf.dr.plan { align-items:center; } .dr-plan-hint { color:var(--muted); }   /* 0.9.6 Meal plan's pinned meal (DamageRowsUi.PlanMealBar): one row, the bar and its legend centred on the slots; nothing picked, the hint under the empty track */
   .dr-quiet { height:20px; line-height:20px; font-size:var(--text-body); font-style:italic; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bt-stack { display:flex; height:14px; }
   /* 0.8.5 Where you fell, the tiles grow (BattleUi.BattleDeathStrip): a column per land, its falls at the top (or the count over the name), the name at its foot */
@@ -584,6 +683,7 @@
      no outline: Joost on the board, 11:55), its measures PanelLayout.Island; two half islands side by side; no divider lines ---------- */
   .isl { position:relative; display:flex; flex-direction:column; gap:var(--island-inner); min-width:0; padding:var(--island-pad); background:rgba(255,240,210,.04); border-radius:var(--island-radius); }
   .isl.hero-isl { padding:var(--island-hero-top) var(--island-pad) var(--island-hero-bottom); }   /* the hero: little space above its number */
+  .isl.pin-isl { padding:var(--island-hero-top) var(--island-pad); }   /* 0.9.6 Meal plan's pinned meal (IslandsUi.IslandBox, Island.Pin): the book's least island padding above and below */
   .isl-pair { display:grid; grid-template-columns:1fr 1fr; gap:var(--island-pair-gap); align-items:stretch; }
   .isl-plain { display:flex; flex-direction:column; gap:var(--island-inner); }
   .plate.full { padding-top:var(--plate-full-pad-top); gap:var(--plate-full-gap); } .plate.full > .isl-plain { display:contents; }   /* the Feats chapter's full plate keeps its own layout (FeatsUi.FeatsRoom) */
@@ -603,7 +703,7 @@
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="goldline" color-interpolation-filters="sRGB"><feFlood flood-color="#e8c27a"/><feComposite in2="SourceAlpha" operator="in"/></filter></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="goldline" color-interpolation-filters="sRGB"><feFlood flood-color="#e8c27a"/><feComposite in2="SourceAlpha" operator="in"/></filter><filter id="goldmul" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.9098 0 0 0 0 0 0.7608 0 0 0 0 0 0.4784 0 0 0 0 0 1 0"/></filter></svg>
 <div class="world"></div>
 <div id="app"></div>
 <p class="caption" id="caption"></p>
@@ -644,19 +744,21 @@ function marker(icon, size) {
   if (kind === "person") return `<span class="m shield" style="${s};background:url(../ui/shield.png) center/contain no-repeat, ${personColor(key)}"></span>`;
   if (kind === "title") return `<span class="m" style="${s}"><img src="${NEW_TITLES.includes(key) ? `../ui/title-${key}.png` : `../icons/${key}.png`}" alt=""></span>`;
   if (kind === "ui") return `<span class="m" style="${s}"><img src="../ui/${key}.png" alt=""></span>`;
+  if (kind === "vocab" && FEATSCENE.test(icon)) return `<span class="m mk" style="${s}"><img src="../vocab/${key}.png" alt="" style="filter:url(#goldmul)"></span>`;   // a feat's drawn scene (PanelModel.FeatScene): white line and grey fills multiplied by the gold, as UGUI's Image colour
   if (kind === "vocab" && GOLDLINE.test(icon)) return `<span class="m mk" style="${s}"><img src="../vocab/${key}.png" alt="" style="filter:url(#goldline)"></span>`;   // Codex's white line masks, multiplied by the gold (PanelLook.GoldLine); an SVG filter, because a CSS mask needs CORS and a file:// page has none
   if (kind === "vocab") return `<span class="m" style="${s}"><img src="../vocab/${key}.png" alt=""></span>`;   // PanelLook.Icon resolves vocab sprites too
   if (kind === "status") return `<span class="m" style="${s}"><i style="width:${size * 0.6}px;height:${size * 0.6}px;border-radius:50%;background:${TONE[key]}"></i></span>`;
   return `<span class="m" style="${s}"></span>`;   // item / piece / skill: the game's sprite, only in game
 }
 const GOLDLINE = /^vocab:(list-feats|feat-waymate|young-creature|lead-rope|cargo-mark)$/;
+const FEATSCENE = /^vocab:feat-scene-[a-z]+$/;   // PanelLook.GoldLine's feat scenes (FeatScenesTests reads this line)
 // 0.8.5 the cargo sums (VoyagesHallUi.SumLine): "[crate] 100 × [ship] 4.1 km = 410", the unit when given; both pictures in the gold line ink,
 // the ship's white mask too; without terms the result alone. A: under the bar, its caption above it. C: Usually aboard as a row per item, a
 // hairline, "together 640 item-km"
 const sumLine = (terms, value, unit) => `<span class="eqn">${(terms || []).map(t => `<span class="g"><span class="m mk"><img src="../vocab/${t.icon.slice(t.icon.indexOf(":") + 1)}.png" alt="" style="filter:url(#goldline)"></span><b>${esc(t.value)}</b></span>`).join("<i>×</i>")}${terms && terms.length ? "<i>=</i>" : ""}<span class="r"><b>${esc(value)}</b>${unit ? `<span>${esc(unit)}</span>` : ""}</span></span>`;
 const cargoSum = b => `<div class="sum">${b.text ? `<div class="cap">${esc(b.text)}</div>` : ""}${sumLine(b.items, b.value, b.title)}</div>`;
 const cargoSumRows = b => `<div class="sumrows">${(b.items || []).map(r => `<div class="sumrow k-track">${r.colour ? `<span class="edge" style="background:${r.colour}"></span>` : ""}${r.icon ? pic(r.icon, layoutPx("sum-row-pic")) : ""}<span class="nm">${esc(r.title)}</span>${sumLine(r.items, r.value)}</div>`).join("")}<div class="rule"></div><div class="tot"><span>${esc(b.text)}</span><b>${esc(b.value)}</b><span>${esc(b.title)}</span></div></div>`;
-const hasIcon = icon => icon && (/^(person|title|ui|status):/.test(icon) || GOLDLINE.test(icon));
+const hasIcon = icon => icon && (/^(person|title|ui|status):/.test(icon) || GOLDLINE.test(icon) || FEATSCENE.test(icon));
 const slot = (size) => `<div class="k-slot" style="width:${size}px;height:${size}px"></div>`;
 const tiles = items => `<div class="tiles">${items.map(t => `<div class="tile">${slot(96)}<div class="nm">${esc(t.title)}</div>${t.value ? `<div class="ct">${esc(t.value)}</div>` : ""}</div>`).join("")}</div>`;
 const FADED_KEY = "faded = before install";   // PanelModel.FadedKey: drawn as a small chip where a legend ends (PanelUi.FadedChip)
@@ -683,7 +785,9 @@ const skillWords = s => `<span style="display:flex;flex-direction:column;gap:4px
 const headRowSkills = (b, icon = 22, bottom = 0) => { const sk = (b.items || []).filter(i => i.kind === "skill"); return sk.length ? `<span style="flex:1"></span><span style="display:flex;align-items:flex-end;gap:24px;flex:none;text-transform:none;letter-spacing:0;padding-bottom:${bottom}px">${sk.map(s => `<span style="display:flex;align-items:flex-end;gap:8px">${marker(s.icon, icon)}${skillWords(s)}</span>`).join("")}</span>` : ""; };
 // 0.8 layout D+ (PanelUi.HeroRight): the hero's right side, the growth line over the deed's skill (one column); HeroLines moves it as one. The growth
 // line shows its columns only, its span on hover (and in About these numbers); fitHeroes leaves it out where it would make the hero taller
-const heroSpark = sp => spark({ ...sp, title: "" }, false).replace('<span class="spark', `<span title="${esc(sp.title || "")}" class="hspark spark`).replace(/<span class="cap"><\/span>/, "");
+// 0.9.5 draft (PanelUi.StatSpark, Chapters/DamageHistory.cs): By weapon's one answer carries the damage growth line and the gold History word, as a hero's
+const statSpark = b => { const sp = sparkOf(b); return sp ? `<span style="flex:1"></span>${heroSpark(sp)}` : ""; };
+const heroSpark = sp => spark({ ...sp, title: "" }, false).replace('<span class="spark', `<span title="${esc(sp.title || "")}"${sp.id ? ` data-link="${esc(sp.id)}"` : ""} class="hspark spark`).replace(/<span class="cap"><\/span>/, sp.id ? `<span class="hlink">History</span>` : "");   // 0.9: your line opens the deed's History (RecordedUi.HeroRight)
 const heroRight = b => { const sp = sparkOf(b), sk = (b.items || []).filter(n => n.kind === "skill");
   return sp || sk.length ? `<span class="hrest" style="flex:1"></span><span class="hskill">${sp ? heroSpark(sp) : ""}${sk.map(s => `<span class="hsk">${marker(s.icon, 28)}${skillWords(s)}</span>`).join("")}</span>` : ""; };
 // the About button (RecordedUi.AboutButton); on a plate with a title strip the strip may carry it (PanelModel.StripAbout, fitEarned)
@@ -973,6 +1077,7 @@ const meter = (f, colour) => f > 0 ? `<span class="fillk" style="width:calc(${(f
 const numW = (vals, perChar, min) => Math.max(min, perChar * Math.max(0, ...vals.map(v => (v || "").length)) + 6);
 const head2 = b => (b.title || b.value) ? `<div class="cmp-h">${esc(b.title)}${b.value ? `<span class="tot">${esc(b.value)}</span>` : ""}${since(b.since)}</div>` : "";
 function ranking(b) {   // 0.8 layout D+: in a half island one column (DeedsUi.Ranking)
+  if (b.tone === "levels") return head2(b) + levelRows(b);   // 0.9 Crafting's Upgrades per item (DeedsUi.LevelRows)
   const tight = b.tone === "tight", cols = COLUMN < 500 ? 1 : Math.max(1, Math.min(b.columns || 1, b.items.length)), pics = b.items.some(i => i.icon), per = Math.ceil(b.items.length / cols), lab = b.items.some(i => i.since);
   const gap = tight ? 44 : 28, colW = (COLUMN - gap * (cols - 1)) / cols, nameW = tight ? Math.min(cols < 3 ? 170 : 110, Math.max(64, colW * 0.4)) : Math.min(220, Math.max(120, colW * 0.5)), valueW = numW(b.items.map(i => i.value), 10.5, tight ? 30 : 56);
   const row = i => `<div class="rk-row"${tight ? ' style="height:30px"' : ""}>${pics ? (pic(i.icon, 28) || "<span></span>") : ""}<span class="rk-nm" style="width:${nameW}px">${esc(i.title)}</span>
@@ -985,6 +1090,37 @@ function ranking(b) {   // 0.8 layout D+: in a half island one column (DeedsUi.R
     return `<div class="rk-col side" style="width:${colW}px;grid-template-columns:${pics ? "28px " : ""}${nw}px ${bw}px ${vw}px${lab ? " 84px" : ""};grid-auto-rows:${tight ? 30 : 34}px">${part.map(row).join("")}</div>`; };
   let cols_ = ""; for (let c = 0; c < cols; c++) { const part = b.items.slice(c * per, (c + 1) * per); cols_ += cols > 1 ? side(part) : `<div class="rk-col">${part.map(row).join("")}</div>`; }
   return head2(b) + `<div class="rk${cols > 1 ? " two" : ""}"${tight ? ` style="gap:${cols > 1 ? gap : 2}px"` : ""}>${cols_}</div>`;
+}
+// 0.9 level rows (DeedsUi.LevelRows, Chapters/CraftingHistory.cs): picture, name, the weakness meter as a level meter (four parts, filled to the level
+// out of the item's max quality), "now level 3 of 4", the count right
+const LVL = { part: layoutPx("level-part-w"), gap: layoutPx("level-gap"), words: layoutPx("level-words") }, LV_PIC = 28;
+// the level meter (DeedsUi.LevelMeter, PanelModel.LevelMeterOf): a part per level of the item's max quality, the level's filled; a max not known or above
+// ten: four parts by the level's share. Crafting's level rows (lv-meter) and the deed feed's upgrade lines (bt-meter) both draw it
+function levelMeterOf(level, max) { if (max > 0 && max <= 10) return [max, Math.max(0, Math.min(level, max))]; return [4, (level <= 0 ? 0 : Math.min(1, level / (max > 0 ? max : Math.max(4, level)))) * 4]; }
+const levelMeter = (level, max, cls) => { const [parts, filled] = levelMeterOf(level, max); return `<span class="${cls}" data-parts="${parts}">${Array.from({ length: parts }, (_, i) => `<i><b style="width:${(Math.max(0, Math.min(1, filled - i)) * 100).toFixed(1)}%"></b></i>`).join("")}</span>`; };
+function levelRows(b) {
+  const pics = b.items.some(i => i.icon), valueW = numW(b.items.map(i => i.value), 10.5, 56), nameW = Math.min(220, Math.max(120, COLUMN * 0.32));
+  return `<div class="lv">${b.items.map(i => `<div class="lv-row">${pics ? (i.icon ? pic(i.icon, LV_PIC) : `<span style="width:${LV_PIC}px;flex:none"></span>`) : ""}<span class="lv-nm" style="width:${nameW}px">${esc(i.title)}</span>${i.text ? levelMeter(i.level || 0, i.count || 0, "lv-meter") : `<span style="width:${LVL.part * 4 + LVL.gap * 3}px;flex:none"></span>`}<span class="lv-w" style="width:${LVL.words}px">${esc(i.text || "")}</span><span style="flex:1"></span><span class="lv-v" style="width:${valueW}px">${esc(i.value)}</span></div>`).join("")}</div>`;
+}
+// 0.9 History (GrowthLinesUi.SparkLarge, Chapters/DeedHistory.cs): the growth line drawn large: a column per day as wide as the room allows, stacked by
+// kind in the page's By kind colours, a flat mark for an empty day, a gold tick over a day with a first or a feat, the dates under it; a column says its
+// day on hover (title) and opens that day's page (data-link)
+const HIST = Object.fromEntries(["chart-h", "column-gap", "max-column", "least", "flat", "tick", "tick-gap", "axis"].map(k => [k, layoutPx("history-" + k)]));
+function sparkLarge(b) {
+  const days = b.items || []; if (!days.length) return "";
+  const gap = HIST["column-gap"], top = HIST.tick + HIST["tick-gap"], room = HIST["chart-h"];
+  const w = Math.floor(Math.min(HIST["max-column"], (COLUMN - gap * (days.length - 1)) / days.length));
+  let html = "";
+  days.forEach((d, k) => {
+    const x = k * (w + gap), zero = d.tone === "zero", h = zero ? HIST.flat : Math.max(HIST.least, Math.round(Math.min(1, Math.max(0, d.fraction || 0)) * room)), parts = zero ? null : d.items;
+    if (d.tone === "none") {}   // 0.9.5 draft: no number to draw (Chapters/DamageHistory.cs), its hover says why
+    else if (!parts || !parts.length) html += `<i class="${zero ? "z" : ""}" data-col="${k}" style="left:${x}px;top:${top + room - h}px;width:${w}px;height:${h}px"></i>`;
+    else { let y = top + room; parts.forEach((p, i) => { const ph = i === parts.length - 1 ? y - (top + room - h) : Math.round(h * Math.min(1, Math.max(0, p.fraction || 0))); if (ph <= 0) return; html += `<i data-col="${k}" style="left:${x}px;top:${y - ph}px;width:${w}px;height:${ph}px;background:${p.colour}"></i>`; y -= ph; }); }
+    if (d.count > 0) html += `<i class="t" style="left:${x + (w - HIST.tick) / 2}px;top:${top + room - h - HIST["tick-gap"] - HIST.tick}px;width:${HIST.tick}px;height:${HIST.tick}px"></i>`;
+    if (d.note) html += `<span class="ax" style="left:${x}px;top:${top + room + HIST["tick-gap"]}px">${esc(d.note)}</span>`;
+    html += `<span class="hit" data-col="${k}" data-v="${esc(d.value || "0")}" title="${esc(d.title || "")}"${b.partLink && d.id ? ` data-link="${esc(b.partLink + d.id)}"` : ""} style="left:${x}px;top:0;width:${w}px;height:${top + room}px"></span>`;
+  });
+  return `<div class="hist">${html}</div>`;
 }
 function counts(b) {
   const framed = b.tone === "framed", pics = b.items.some(i => i.icon), large = b.items.length <= 3, p = large ? 96 : 46, n = large ? 44 : 32, h = (pics ? p + 12 + (framed ? 16 : 0) : 0) + (large ? 112 : 92);
@@ -1000,13 +1136,62 @@ function counts(b) {
 // the plate, two in a half column); picture left, count big and name small (two lines at most) on the right; 0.8.1: a folded grid's last
 // tile is the Show all button (DeedsModel.FoldTiles), its words in gold as PanelUi draws them
 function itemgrid(b) {
+  if (b.tone === "setband") return setband(b);   // 0.9: an armor set (DeedsUi.SetBand)
+  if (b.tone === "mealplan") return planGrid(b);   // 0.9.2: Meals' Plan a meal, its foods (MealPlanUi.PlanGrid)
   const per = Math.max(1, Math.min(6, Math.floor((COLUMN + 8) / 176))), second = b.items.some(i => i.value2), lab = b.items.some(i => i.since);
   const textW = Math.floor((COLUMN - 8 * (per - 1)) / per) - 54, wraps = b.items.some(i => (i.title || "").length * 6.7 > textW);
   const h = 46 + (wraps ? 14 : 0) + (second ? 14 : 0) + (lab ? 14 : 0);
-  return `<div class="ig" style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(i => `<div class="ig-t k-track" style="height:${h}px">
-    ${i.colour ? `<span class="edge" style="background:${i.colour}"></span>` : ""}<span class="ig-p">${pic(i.icon, 32)}</span><span class="ig-x"><span class="ig-n">${esc(i.value)}</span><span class="ig-l"${i.id === "items:showall" ? ' style="color:var(--gold)"' : ""}>${i.tone === "fuel" ? rich("itemgrid", `${esc(i.title)}<span class="fuel">fuel</span>`, T.plain(i.title) + " " + T.size(T.i(T.ink("fuel", INK.faint)), 14)) : esc(i.title)}</span>${i.value2 ? `<span class="ig-s">${layered(i, INK.text, false, "itemgrid") || esc(i.value2)} ${esc(i.text)}</span>` : ""}${i.since ? `<span class="since" style="margin:0;font-size:var(--text-floor)">since install</span>` : ""}</span></div>`).join("")}</div>` + sinceUnder(b.since) + note(b.note);
+  return `<div class="ig" style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(i => i.tone === "notmade"
+    ? `<div class="ig-t k-track notmade" style="height:${h}px"><span class="ig-p">${pic(i.icon, 32)}</span><span class="ig-x"><span class="ig-l">${esc(i.title)}</span><span class="ig-m">${(i.items || []).map(c => `<i>${pic(c.icon, 16)}${esc(c.value)}</i>`).join("")}</span></span></div>`
+    : `<div class="ig-t k-track${i.tone === "person" ? " person" : ""}" style="height:${h}px">
+    ${i.colour ? `<span class="edge" style="background:${(i.colour || "").startsWith("person:") ? personColor(i.colour.slice(7)) : i.colour}"></span>` : ""}<span class="ig-p">${(i.icon || "").startsWith("person:") ? marker(i.icon, 32) : pic(i.icon, 32)}</span><span class="ig-x"><span class="ig-n">${esc(i.value)}</span><span class="ig-l"${i.id === "items:showall" ? ' style="color:var(--gold)"' : ""}>${i.tone === "fuel" ? rich("itemgrid", `${esc(i.title)}<span class="fuel">fuel</span>`, T.plain(i.title) + " " + T.size(T.i(T.ink("fuel", INK.faint)), 14)) : esc(i.title)}</span>${i.value2 ? `<span class="ig-s">${layered(i, INK.text, false, "itemgrid") || esc(i.value2)} ${esc(i.text)}</span>` : ""}${i.since ? `<span class="since" style="margin:0;font-size:var(--text-floor)">since install</span>` : ""}</span></div>`).join("")}</div>` + sinceUnder(b.since) + note(b.note);
 }
-const KEY_APART = 14;   // PanelUi.KeyApart
+// 0.9.2 Meals' Plan a meal (MealPlanUi.PlanGrid, Chapters/MealPlanModel.cs); 0.9.3 compact: five or six to a line (at least MP.tileMin wide), the
+// name across the tile on one line (a grid with a name too long gives every tile a second line: never a cut name), under it the game's picture
+// with the status as a corner mark (the book's round marks: a gold dot made or owned, a gold ring can make; planMarks keys them), the book's damage bar from zero on the planner's one scale (the
+// numbers inside the parts where they fit, drNum; every part's name and number in the page's tag on hover) and how long it lasts; quiet when not
+// known yet, a gold outline in a slot, the keys' cursor in the focus ring; a tile is a click (data-link). MP: MealPlanUi's Mp constants (line:
+// PanelLayout.LineBox of the floor; slot: Your combinations' dish picture; ring: the focus ring's slice)
+const MP = { tileMin: 140, perMax: 6, pad: 6, pic: 20, picGap: 5, mark: 8, markOut: 2, rowGap: 4, timeGap: 5, track: 20, line: 19, slot: 40, ring: 14 };
+// a tile's bar: DamageRowsUi.DamageBar with exact (from zero, no floor) and no true line, its parts the damage bars' rounded parts 3 px apart
+function planBar(parts, fraction, trackW) {
+  const f = barFormOf(parts, true, false); if (!f.rows.length) return "";
+  const barW = trackW * Math.min(1, Math.max(0, fraction || 0)), span = barW + DR.gap, spans = barParts(f.rows.map(x => x.fraction), [], (DR.min + DR.gap) / span);
+  const segs = f.rows.map((x, k) => { const left = spans[k][0] * span, w = Math.max(1, (spans[k][1] - spans[k][0]) * span - DR.gap);
+    return `<span class="dr-seg" data-k="${k}"${x.value ? ` data-num="${esc(x.value)}" data-c="${esc(cssColour(x.colour))}"` : ""}${drTip(x)} style="left:${left.toFixed(2)}px;width:${w.toFixed(2)}px;background:${cssColour(x.colour)}"></span>`; }).join("");
+  return `<div class="bf drl" style="width:${trackW.toFixed(1)}px"><div class="dr-track"><div class="dr-fill" style="width:${barW.toFixed(2)}px">${segs}</div></div></div>`;
+}
+// 0.9.8 the key under Best for (MealPlanUi.PlanMarksKey, Joost: "why not show the actual icons there?"): the tiles' own marks, each with its
+// meaning: the gold dot (made or owned), the ring (can make), a food's picture as quiet as a tile not known yet; KEY_APART between
+function planMarks(b) {
+  return `<div class="mp-key" style="gap:${KEY_APART}px">${(b.items || []).map(m => `<span class="mp-ke" style="gap:${KEY_MARK_GAP}px">${m.tone === "unknown" ? `<span class="mp-p" style="opacity:.5">${pic(m.icon, MP.pic)}</span>`
+    : `<i class="mp-mk${m.note === "can make" ? " ring" : ""}" style="width:${MP.mark}px;height:${MP.mark}px"></i>`}<span>${esc(m.title)}</span></span>`).join("")}</div>`;
+}
+function planGrid(b) {
+  const per = Math.max(1, Math.min(MP.perMax, Math.floor((COLUMN + 8) / (MP.tileMin + 8)))), w = Math.floor((COLUMN - 8 * (per - 1)) / per), nameW = w - 2 * MP.pad;
+  const cx = planGrid.cx || (planGrid.cx = document.createElement("canvas").getContext("2d")); cx.font = `${TX.floor}px "Averia Serif Libre", Georgia, serif`;
+  const wide = t => Math.ceil(cx.measureText(t || "").width * 1.04);
+  const wraps = b.items.some(i => wide(i.title) > nameW), timeW = Math.max(0, ...b.items.map(i => i.text ? wide(i.text) + 2 : 0));
+  const nameH = (wraps ? 2 : 1) * MP.line, top = MP.pad + nameH + MP.rowGap, barX = MP.pad + MP.pic + MP.picGap, trackW = w - barX - MP.pad - (timeW ? MP.timeGap + timeW : 0), h = top + MP.track + MP.pad;
+  return `<div class="ig mp" style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(i => {
+    const mark = !i.note ? "" : `<i class="mp-mk${i.note === "can make" ? " ring" : ""}" style="left:${MP.pad + MP.pic - MP.mark + MP.markOut}px;top:${top + (MP.track + MP.pic) / 2 - MP.mark + MP.markOut}px;width:${MP.mark}px;height:${MP.mark}px"></i>`;
+    return `<div class="ig-t k-track mp-t${i.tone === "unknown" ? " unk" : ""}${i.selected ? " on" : ""}${i.cursor ? " cur" : ""}"${i.link ? ` data-link="${esc(i.link)}"` : ""} style="height:${h}px">`
+      + `<span class="mp-n" style="left:${MP.pad}px;top:${MP.pad}px;width:${nameW}px;height:${nameH}px;line-height:${MP.line}px;white-space:${wraps ? "normal" : "nowrap"}">${esc(i.title)}</span>`
+      + `<span class="mp-p" style="left:${MP.pad}px;top:${top + (MP.track - MP.pic) / 2}px">${pic(i.icon, MP.pic)}</span>${mark}`
+      + `<span class="mp-b" style="left:${barX}px;top:${top}px">${planBar((i.items || []).filter(x => x.kind === "part"), i.fraction2, trackW)}</span>`
+      + (i.text ? `<span class="mp-s" style="right:${MP.pad}px;top:${top}px;width:${timeW}px;height:${MP.track}px;line-height:${MP.track}px">${esc(i.text)}</span>` : "")
+      + `${i.cursor ? `<span class="mp-ring" style="-webkit-mask-box-image:url(../vocab/focus-ring.png) ${MP.ring} / ${MP.ring}px stretch"></span>` : ""}</div>`;
+  }).join("")}</div>`;
+}
+// 0.9 Armor sets (DeedsUi.SetBand): a set as the one-item band, its name, the material small beside a name the book gave, "2 of 3 made" or
+// "made in full" in gold; then its pieces as item tiles, two band paddings narrower than the island
+function setband(b) {
+  const outer = COLUMN; COLUMN = outer - 2 * layoutPx("sets-band-pad-x");
+  const grid = (b.items || []).length ? itemgrid({ kind: "itemgrid", items: b.items }) : "";
+  COLUMN = outer;
+  return `<div class="sbw"><div class="bt-band sb"><div class="sb-h"><b>${esc(b.title)}</b>${b.text ? `<span class="sb-m">${esc(b.text)}</span>` : ""}${b.value ? `<span class="sb-r${b.selected ? " full" : ""}">${esc(b.value)}</span>` : ""}</div>${grid}</div></div>`;
+}
+const KEY_APART = 14, KEY_MARK_GAP = 6;   // PanelUi.KeyApart, KeyMarkGap
 // the filter bar (FacetUi.cs): chip rows with live counts, the chosen chips as tokens + result line + Clear all, linked bars with legends
 function filterbar(b) {
   const its = b.items || [], rows = its.filter(x => x.kind === "facet"), applied = its.find(x => x.kind === "applied"), bars = its.filter(x => x.kind === "facetbar");
@@ -1027,7 +1212,7 @@ function filterbar(b) {
     ? `<div class="fb-app">${lead}${toks.length ? toks.map(tok).join("") : esc(applied.title)}<span style="flex:1"></span>${marks}<span>${esc(applied.text)}</span>${toks.length ? `<span class="fb-clear k-track">Clear all</span>` : ""}</div>`
     : `<div class="fb-app fb-head"><span class="fb-name${open ? " on" : ""}">${esc(b.title || "Filter")}</span>${kc}${toks.length ? toks.map(tok).join("") : esc(applied.value || "all")}<span style="flex:1"></span><span>${esc(applied.text)}</span>${toks.length ? `<span class="fb-clear k-track">Clear all</span>` : ""}<span class="fb-clear k-track">${open ? "Hide filters" : "Show filters"}</span></div>`;
   // a linked bar: its head, then the one bar form (FacetUi.FacetBar); the chosen part outlined and named in gold
-  const bar = f => `<div class="cmp-h">${esc(f.title)}${f.value ? `<span class="tot">${esc(f.value)}</span>` : ""}${f.note ? `<span class="q" style="letter-spacing:0;text-transform:none">${esc(f.note)}</span>` : ""}</div>${barForm(f.items, false, { link: f.partLink })}`;   // 0.8 layout D+: one heading style, each with its total (FacetUi.FacetBar); its parts and legend items choose (0.8.2)
+  const bar = f => `<div class="cmp-h">${esc(f.title)}${f.value ? `<span class="tot">${esc(f.value)}</span>` : ""}${f.note ? `<span class="q" style="letter-spacing:0;text-transform:none">${esc(f.note)}</span>` : ""}</div>${barForm(f.items, false, { link: f.partLink, noBar: f.tone === "single" })}`;   // 0.8 layout D+: one heading style, each with its total (FacetUi.FacetBar); its parts and legend items choose (0.8.2)
   return `<div class="fb">${app}${inline || !open ? "" : rows.map(row).join("")}${bars.filter(f => f.tone !== "hidden").map(f => { const c = its.find(x => x.kind === "comparerows" && x.id === f.id); return c ? compareRows(c) : bar(f); }).join("")}</div>`;   // 0.8 Compare: the bar's compare rows in its place
 }
 // the kitchen ledger (Cooking) adds a source line under the name (text) and the row's total at the right (value, note), as VoyagesHallUi.Ledger
@@ -1045,12 +1230,13 @@ const people = b => b.tone === "island" ? personIsland(b.items[0]) : b.tone === 
 let COLUMN = layoutPx("frame-content-w");
 // as PanelUi.BiomeStrip: tiles at most 150 wide, 4 apart, the sea 12 further apart
 const tileW = items => { const n = items.length, apart = n > 1 && items[n - 1].id === "Ocean" ? 12 : 0; return Math.min(150, (COLUMN - 4 * (n - 1) - apart) / n).toFixed(1); };
-const chip = (label, icon, on, off) => `<span class="chip${on ? " on" : ""}${off ? " off" : ""}${hasIcon(icon) ? " icon" : ""}">${hasIcon(icon) ? marker(icon, 18) : ""}${esc(label)}</span>`;
+const chip = (label, icon, on, off, swatch) => `<span class="chip${on ? " on" : ""}${off ? " off" : ""}${hasIcon(icon) ? " icon" : ""}">${hasIcon(icon) ? marker(icon, 18) : swatch ? `<i class="chip-sw" style="background:${cssColour(swatch)}"></i>` : ""}${esc(label)}</span>`;   // swatch: a part's colour before the word (PanelUi.Chip, 0.9.8 Meal plan's Best for)
 // 0.8 Compare (CompareUi.CompareChip): the window chips' look; greyed, its reason as a tag under it (in game while the pointer is on it; here when tip).
 // 0.8.5 (proto/4-compare A and C): the heading's chip ends in a small down arrow (menu) and its menu hangs under it while open (compareMenu)
 const compareChip = (label, on, off, why, tip, menu, open) => `<span class="cchip">${chip(label, "", on, off).replace('class="chip', `class="chip win${menu && !off ? " menu" : ""}`).replace(/<\/span>$/, menu && !off ? `<svg viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>` : "</span>")}${off && why && tip ? `<span class="ctag">${esc(why)}</span>` : ""}${open ? compareMenu(open) : ""}</span>`;
 // 0.8.5 (PanelModel.HeadingLines): the heading's two lines when one would shrink too far: before " against " and after it, else the name and its window
-const headingLines = (heading, w) => { const at = w.indexOf(" against "); return at > 0 ? [heading + ", " + w.slice(0, at), w.slice(at + 1)] : [heading + ",", w]; };
+const headingLines = (heading, w) => { if (w.startsWith("yesterday, ")) return [heading + ", yesterday,", w.slice(11)];   // 0.9.1: Yesterday's day on the second line (PanelModel.HeadingLines)
+  const at = w.indexOf(" against "); return at > 0 ? [heading + ", " + w.slice(0, at), w.slice(at + 1)] : [heading + ",", w]; };
 // 0.8.5: CompareUi's measures (its constants), so the mirror draws the menu and the strip's legend as the game does
 const CMPUI = { arrowW: 6, arrowH: 10, arrowRoom: 14, menuW: 360, menuRow: 36, menuCap: 26, menuPad: 10, menuDrop: 8, menuCapIn: 4, menuCapLow: 6, menuRuleAt: 5, menuRuleRoom: 11,
   mark: 12, markX: 8, ring: 2, wordsX: 30, gap: 8, datesMax: 140, swatch: 26, solidH: 10, solidR: 4, traceH: 12, traceR: 5, keyGap: 8, between: 18, tagGap: 12, ringSlice: 14 };
@@ -1114,13 +1300,14 @@ const swChips = b => `${b.keyCap ? `<div class="kc" style="position:static;flex:
 const swViews = b => b.items.filter(x => x.selected).map(x => (x.items || []).map(block).join("")).join("");
 // PanelUi.SwitchRow: the caption, the key and chips, and (B38) the About button; the plate's top switch draws this row first, above the hero
 const swRow = (b, about) => `<div class="swtop"><span class="cap">${esc(b.title)}</span>${swChips(b)}${about ? `<span class="swabout">${aboutBoth(about)}</span>` : ""}</div>` + (about ? aboutBox(about) : "");
-const sw = b => b === STRIP_SWITCH ? (b.title ? `<div class="swcap">${esc(b.title)}</div>` : "") + swViews(b)
+const sw = b => b === STRIP_SWITCH ? swViews(b)   // PanelUi.Switch: the strip drew its caption and chips, only its views follow
   : b === TOP_SWITCH ? swViews(b) : swRow(b, null) + swViews(b);
 function cards(b) {
-  const per = Math.max(1, Math.min(4, Math.floor((COLUMN + 12) / 182)));
-  return `<div class="cards" style="grid-template-columns:repeat(${per}, 1fr);${b.items.every(c => c.tone === "unsung") ? "grid-auto-rows:92px" : ""}">${b.items.map(c => { const s = (c.items || [])[0];
+  const say = b.items.every(c => c.tone === "say"), SAY_CARD_H = 110;   // 0.9 What to use (PanelUi.Cards): a title and a sentence each, as many across as there are
+  const per = Math.max(1, Math.min(say ? b.items.length : 4, Math.floor((COLUMN + 12) / 182)));
+  return `<div class="cards" style="grid-template-columns:repeat(${per}, 1fr);${say ? `grid-auto-rows:${SAY_CARD_H}px` : b.items.every(c => c.tone === "unsung") ? "grid-auto-rows:92px" : ""}">${b.items.map(c => { const s = (c.items || [])[0];
     const opens = !!c.id;   // PanelUi.Cards: a card with a page to open is a ClickTarget with the opens mark (its words keep clear of it)
-    if (c.tone === "unsung") return `<div class="card${opens ? " opens" : ""}" style="height:92px"><div class="ct" style="color:var(--muted)">${hasIcon(c.icon) ? `<span style="opacity:.6;display:inline-flex">${marker(c.icon, 24)}</span>` : ""}${esc(c.title)}</div><div style="position:absolute;left:12px;right:${12 + (opens ? OPENS_ROOM : 0)}px;top:42px;font-size:var(--text-small);line-height:1.25;color:var(--text)">${esc(c.text)}</div>${opens ? opensMark(false) : ""}</div>`;
+    if (c.tone === "unsung" || c.tone === "say") return `<div class="card${opens ? " opens" : ""}" style="height:${c.tone === "say" ? SAY_CARD_H : 92}px"><div class="ct" style="color:var(--${c.tone === "say" ? "gold" : "muted"})">${hasIcon(c.icon) ? `<span style="opacity:${c.tone === "say" ? 1 : .6};display:inline-flex">${marker(c.icon, 24)}</span>` : ""}${esc(c.title)}</div><div style="position:absolute;left:12px;right:${12 + (opens ? OPENS_ROOM : 0)}px;top:42px;font-size:var(--text-small);line-height:1.25;color:var(--text)">${esc(c.text)}</div>${opens ? opensMark(false) : ""}</div>`;
     return `<div class="card${opens ? " opens" : ""}"><div class="ct">${hasIcon(c.icon) ? marker(c.icon, 24) : ""}${esc(c.title)}</div><div class="cn">${esc(c.value)}</div>
       <div class="cl"><span class="w">${esc(c.text)}</span>${since(c.since)}</div>${s ? `<div class="cs"><b>${esc(s.value)}</b><span class="w">${esc(s.title)}</span>${since(s.since)}</div>` : ""}${opens ? opensMark(false) : ""}</div>`; }).join("")}</div>`;
 }
@@ -1470,7 +1657,8 @@ function btWhoHit(who) {
   try { return `<div class="bt-cap">${esc(who.title)}${who.text ? `<span class="q">${esc(who.text)}</span>` : ""}</div><div class="isl whohit">${dmgRows(rows, true)}</div>`; }
   finally { COLUMN = outer; }
 }
-function btRanking(rk) {
+// 0.9 (Best arrows, BestArrows.cs): own = the ranking on its own (BestArrowsKind, BattleUi.BattleRanking(own)): no band padding, the plate's column
+function btRanking(rk, own) {
   const groups = r => (r.items || []).filter(g => g.kind === "rankgroup"), rows = (rk.items || []).filter(r => r.kind === "rankrow");
   const who = (rk.items || []).find(r => r.kind === "whohit" || r.kind === "yourhits"), whoHtml = who ? btWhoHit(who) : "";   // 0.8.5: your own book's "Your hits on it"
   if (!rows.length) return `<div class="bt-rank">${whoHtml}</div>`;
@@ -1480,9 +1668,9 @@ function btRanking(rk) {
   const line = (it, gw) => `<div class="ln${it.tone === "unknown" ? " unk" : ""}"><div class="r1"><span class="nm">${esc(it.title)}</span><span class="st">${esc(it.text || "")}</span></div>`
     + `<div class="r2"><span class="ex" style="width:${numW}px">${esc(it.value)}</span>${feedBar(it, gw - numW - 8, "part", true)}</div></div>`;
   const island = (g, gw) => `<div class="isl${g.tone === "worst" ? " worst" : ""}"><div class="gh">${esc(g.title)}<small>${esc(g.text || "")}</small></div>${(g.items || []).map(it => line(it, gw)).join("")}${g.note ? `<div class="sh">${esc(g.note)}</div>` : ""}</div>`;   // BattleUi.RankIsland
-  const out = rows.map(r => { const gs = groups(r), gw = (COLUMN - 2 * 12 - 14 * (gs.length - 1)) / gs.length - 2 * 14;
+  const out = rows.map(r => { const gs = groups(r), gw = (COLUMN - (own ? 0 : 2 * 12) - 14 * (gs.length - 1)) / gs.length - 2 * 14;
     return `<div class="bt-cap">${esc(r.title)}${r.text ? `<span class="q">${esc(r.text)}</span>` : ""}</div><div class="bt-rrow" style="grid-template-columns:repeat(${gs.length}, minmax(0, 1fr))">${gs.map(g => island(g, gw)).join("")}</div>`; });
-  return `<div class="bt-rank">${whoHtml}${out.join("")}<div class="small">${esc(rk.note || "")}</div></div>`;
+  return `<div class="bt-rank${own ? " own" : ""}">${whoHtml}${out.join("")}<div class="small">${esc(rk.note || "")}</div></div>`;
 }
 // 0.8.2 (Joost in game: The Queen's "12 6…"): the Dealt column, its bar at most BT_FOE_BAR and a 6-digit number with its space whole after it
 // (BattleUi.BtFoeDealt, BtFoeBar, BtFoeDealtH, BtFoeNumGap; render-check measures "123 456" in the room left)
@@ -1518,10 +1706,48 @@ function btFoes(b) {
   const rows = b.items.map(r => { const a = r.items.find(i => i.kind === "arrow"), mods = r.items.filter(i => i.kind === "mod"), rk = r.items.find(i => i.kind === "ranking");
     const row = `<div class="bt-row bt-foerow${r.tone === "opens" ? " opens" : ""}${r.note === "cursor" ? " cur" : ""}" style="height:40px">${c(BT_FOE_NAME, btSlot(r.icon, 22) + `<span class="fn" style="font-size:var(--text-body);max-width:${BT_FOE_NAME_ROOM}px;overflow:hidden;text-overflow:ellipsis">${esc(r.title)}</span>`)}
       ${c(BT_FOE_DEALT, btDealtBar(r) + `<b style="font-size:var(--text-body)">${esc(r.value)}</b>`, r.items.some(i => i.kind === "part") || r.text ? "overflow:visible;position:relative;z-index:2" : "", "dl")}
-      ${arrows ? c(166, a ? btSlot(a.icon, 18) + `<span style="font-size:var(--text-floor)">${esc(a.title)}</span>` : "") : ""}
+      ${arrows ? c(166, a ? `<span class="bt-arrow${a.tone === "tie" ? " tie" : ""}"${a.tone === "tie" && a.text ? ` title="${esc(a.text)}"` : ""} style="display:contents">` + (a.tone === "tie" ? "" : btSlot(a.icon, 18)) + `<span style="font-size:var(--text-floor)${a.tone === "tie" ? ";white-space:normal;line-height:1.1" : ""}">${esc(a.title)}</span></span>` : "") : ""}
       ${mods.map(m => c(tw, btMeterCell(m), "justify-content:center;overflow:visible")).join("")}${r.tone === "opens" ? opensMark(r.selected, BT_OPENS_RIGHT) : ""}</div>`;
     return r.selected && rk ? `<div class="bt-open">${row}${btRanking(rk)}</div>` : row; }).join("");
   return `<div>${head}${rows}</div>` + btSince(b);
+}
+// 0.9 What to use (WhatToUseUi.UseTable, its constants): the foes as columns, a row per item, each cell its number over a small bar split by
+// damage type (one length scale for the table), the column's highest with a gold edge, a quiet one under two thirds of it
+const UT = { name: 236, colMax: 84, head: 104, icon: 40, iconTop: 4, nameTop: 48, swatch: 12, line: 18, pad: 4, gap: 6, numH: 20, barH: 7, barGap: 1, barMax: 64, cellPadX: 6, cellPadY: 5, cellMin: 56, cellIn: 4, radius: 5, partRadius: 2, edge: 1.5 };
+function useTable(b) {
+  const cols = (b.items || []).filter(i => i.kind === "usefoe"), rows = (b.items || []).filter(i => i.kind === "userow");
+  if (!cols.length || !rows.length) return "";
+  const colW = Math.min(UT.colMax, (COLUMN - UT.name) / cols.length), x0 = COLUMN - colW * cols.length, room = x0 - UT.gap;
+  const barMax = Math.min(UT.barMax, colW - 2 * UT.cellPadX - UT.pad);   // one length scale for the table (WhatToUseUi)
+  const cx = useTable.cx || (useTable.cx = document.createElement("canvas").getContext("2d"));
+  const wide = (t, size, style) => { cx.font = `${style || ""} ${size}px "Averia Serif Libre", Georgia, serif`; return Math.ceil(cx.measureText(t || "").width * 1.04) + 1; };
+  const head = `<div class="ut-row" style="height:${UT.head}px;border-bottom:1px solid var(--rule)"><span class="ut-h" style="left:0;top:${UT.head - UT.line - UT.pad}px;width:${x0}px;height:${UT.line}px">${esc(b.title)}</span>`
+    + cols.map((c, k) => { const weak = (c.items || []).filter(i => i.kind === "weak"), sw = weak.length * (UT.swatch + UT.pad / 2);
+      return `<span class="ut-foe" data-link="${esc("view:" + b.id + "=" + (c.selected ? "" : c.id))}" style="left:${x0 + k * colW}px;width:${colW}px;height:${UT.head}px">`
+        + `<span style="position:absolute;left:${(colW - UT.icon) / 2}px;top:${UT.iconTop}px">${btSlot(c.icon, UT.icon)}</span>`
+        + `<span class="ut-fn${c.selected ? " open" : ""}" style="left:${UT.pad / 2}px;top:${UT.nameTop}px;width:${colW - UT.pad}px;height:${UT.head - UT.nameTop - UT.swatch - UT.pad}px">${esc(c.title)}</span>`
+        + weak.map((w, i) => `<i class="ut-sw" title="${esc(w.title)}" style="left:${(colW - sw) / 2 + i * (UT.swatch + UT.pad / 2)}px;top:${UT.head - UT.swatch - UT.pad}px;width:${UT.swatch}px;height:${UT.swatch}px;background:${w.colour};border-radius:${UT.partRadius}px"></i>`).join("")
+        + (c.selected ? `<i class="ut-open" style="left:${UT.pad}px;top:${UT.head - UT.pad / 2}px;width:${colW - 2 * UT.pad}px;height:${UT.pad / 2}px"></i>` : "") + `</span>`; }).join("") + `</div>`;
+  const body = rows.map(r => { const parts = (r.items || []).filter(i => i.kind === "part"), cells = (r.items || []).filter(i => i.kind === "usecell");
+    // the name never cut (WhatToUseUi): the status beside it where both fit, else the name on up to two lines and the status under it
+    const status = r.text || "", nameW = wide(r.title, TX.small, "700"), statusW = status ? wide(status, TX.floor, "italic") : 0;
+    const one = nameW + UT.gap + statusW <= room, nameLines = nameW <= room ? 1 : 2, lines = one ? 1 : nameLines + (status ? 1 : 0), rowH = 2 * UT.pad + (lines + 2) * UT.line, y = UT.pad + lines * UT.line;
+    const types = parts.map(p => `<span style="color:${p.colour}">${esc(p.value + " " + p.title)}</span>`).join(`<span style="color:var(--muted)"> + </span>`);
+    const cut = r.note && wide(r.note, TX.floor) > room;   // cut as TMP's ellipsis does: the words that fit and "…", the whole list on hover
+    let shown = r.note || ""; if (cut) { while (shown.length > 1 && wide(shown + "…", TX.floor) > room) shown = shown.slice(0, -1); shown = shown.trimEnd() + "…"; }
+    return `<div class="ut-row ut-item${r.tone === "unknown" ? " unk" : ""}" style="height:${rowH}px">`
+      + `<span class="ut-nm" style="left:0;top:${UT.pad}px;width:${one ? nameW : room}px;height:${nameLines * UT.line}px;line-height:${UT.line}px"><b>${esc(r.title)}</b></span>`
+      + (status ? `<span class="ut-st" style="left:${one ? nameW + UT.gap : 0}px;top:${UT.pad + (one ? 0 : nameLines * UT.line)}px;width:${one ? room - nameW - UT.gap : room}px;height:${UT.line}px;line-height:${UT.line}px">${esc(status)}</span>` : "")
+      + `<span class="ut-ty" style="left:0;top:${y}px;width:${room}px;height:${UT.line}px;line-height:${UT.line}px">${types}</span>`
+      + (r.note ? `<span class="ut-mt"${cut ? ` title="${esc(r.note)}"` : ""} style="left:0;top:${y + UT.line}px;width:${room}px;height:${UT.line}px;line-height:${UT.line}px">${esc(shown)}</span>` : "")
+      + cells.slice(0, cols.length).map((c, k) => { const barW = barMax * Math.max(0, Math.min(1, c.fraction || 0)), cw = Math.min(colW - UT.pad, Math.max(UT.cellMin, barW + 2 * UT.cellPadX)), ch = 2 * UT.cellPadY + UT.numH + UT.cellIn + UT.barH;
+        // the bar: the damage-row parts (barParts' shares), rounded, 1 px apart, centred under the number
+        const ps = (c.items || []).filter(i => i.kind === "part"), span = barW + UT.barGap, spans = ps.length ? barParts(ps.map(p => p.fraction), [], Math.min(0.5, (1 + UT.barGap) / span)) : [];
+        const segs = barW > 0 ? ps.map((p, i) => `<i title="${esc(p.title + " " + p.value)}" style="left:${(spans[i][0] * span).toFixed(2)}px;width:${Math.max(1, (spans[i][1] - spans[i][0]) * span - UT.barGap).toFixed(2)}px;height:${UT.barH}px;background:${p.colour};border-radius:${UT.partRadius}px"></i>`).join("") : "";
+        return `<span class="ut-cell ${c.tone || ""}" style="left:${x0 + k * colW + (colW - cw) / 2}px;top:${(rowH - ch) / 2}px;width:${cw}px;height:${ch}px;border-radius:${UT.radius}px${c.tone === "best" ? `;box-shadow:inset 0 0 0 ${UT.edge}px var(--gold)` : ""}"><b style="top:${UT.cellPadY}px;height:${UT.numH}px;line-height:${UT.numH}px">${esc(c.value)}</b>`
+          + `<span class="ut-bar" style="left:${(cw - barW) / 2}px;top:${UT.cellPadY + UT.numH + UT.cellIn}px;width:${barW}px;height:${UT.barH}px">${segs}</span></span>`; }).join("")
+      + `</div>`; }).join("");
+  return `<div class="ut">${head}${body}</div>` + [b.text, b.note].filter(Boolean).map(l => `<div class="ut-say">${esc(l)}</div>`).join("");
 }
 function btFoeTypes(b) {
   const c = (w, html, st = "") => `<span class="bt-c" style="width:${w}px;${st}">${html}</span>`;
@@ -1562,6 +1788,7 @@ function btTypeKey(parts, boxed) {
 // Defence, Received from (BattleUi.BattleSources, ISC-22): per source its trophy, name and total, then the shared bar with its list
 // (composition: the amount per damage type); the page passes the parts only
 function btSources(b) {   // BattleUi.BattleSources: the caption (By foe: the marks' key at its right end), then the damage rows (0.8, DamageRowsUi.cs)
+  if (b.id === "mealplan") return `<div class="dr-wrap">${dmgRows(b.items.filter(r => r.kind === "source"), false)}</div>`;   // 0.9.6 Meal plan's pinned meal: no caption line
   const key = b.items.find(i => i.kind === "pipkey");
   return `<div class="bt-cap" style="margin-top:2px">${esc(b.title)}${b.text ? `<span class="q">${esc(b.text)}</span>` : ""}${key ? `<span style="flex:1"></span>${btPipKey(key)}` : ""}</div>
     <div class="dr-wrap" style="margin-top:6px">${dmgRows(b.items.filter(r => r.kind === "source"), b.kind === "dealtfoes")}</div>` + btSince(b);
@@ -1583,7 +1810,7 @@ function drNumW(texts, least = DR.num) {
 function drWhoW(rows, least = DR.who) {
   const cx = drWhoW.cx || (drWhoW.cx = document.createElement("canvas").getContext("2d"));
   const w = t => Math.ceil(cx.measureText(t).width * 1.04);
-  return Math.min(DR.whoMax, Math.max(least, ...rows.map(r => { cx.font = `${TX.name}px "Averia Serif Libre", Georgia, serif`; const nm = 30 + w(r.title || "") + 2;
+  return Math.min(DR.whoMax, Math.max(least, ...rows.map(r => { cx.font = `${TX.name}px "Averia Serif Libre", Georgia, serif`; const nm = 30 + w(r.title || "") + 2 + (r.opens && r.tone === "kind" ? 14 : 0);
     if (!r.value2) return nm; cx.font = `700 ${TX.floor}px "Averia Serif Libre", Georgia, serif`; return nm + 8 + w(r.value2) + 16; })));
 }
 // PanelModel.DamageStoppedTone (What your armor stopped): the part's line says its share stopped (Text, "Poison 20 %"); on hover the numbers it holds
@@ -1610,25 +1837,52 @@ function drStoppedInside(x, w) {
 }
 // fixed: the columns a weapons run keeps ({ num, who }, DR_RUN), else the list's own; While away's (AwayUi) also { you, right, aw }: a column
 // you px wide right of the track, right(row) its html; aw: a part pointed at lights its total (.awt) too
+// 0.9.2 Meals by dish, what one serving gives (PanelUi.ServingCell, PanelModel.ServingOf): a column right of the track, the small bar in the
+// boosts' colours on the list's one scale (90 px the longest), its numbers and how long it lasts at the 14 px floor; a dish with no food value: empty
+const DS = { bar: 90, h: 10, gap: 2, toText: 8, min: 2, fillMin: 3, radius: 2 };
+const drServing = r => (r.items || []).find(i => i.kind === "serving");
+function drServW(rows) {
+  const cx = drServW.cx || (drServW.cx = document.createElement("canvas").getContext("2d")); cx.font = `${TX.floor}px "Averia Serif Libre", Georgia, serif`;
+  return DS.bar + DS.toText + Math.max(0, ...rows.map(drServing).filter(Boolean).map(s => Math.ceil(cx.measureText(s.text || "").width * 1.04) + 2));
+}
+function drServCell(r) {
+  const s = drServing(r); if (!s) return "";
+  const parts = (s.items || []).filter(p => p.fraction > 0), barW = Math.max(parts.length * DS.fillMin, DS.bar * Math.min(1, Math.max(0, s.fraction2 || 0))), room = barW - DS.gap * Math.max(0, parts.length - 1);
+  return `<span class="dr-serv" style="gap:${DS.toText}px"><span class="sb" style="width:${DS.bar}px;gap:${DS.gap}px;height:${DS.h}px">${parts.map(p => `<i style="height:${DS.h}px;border-radius:${DS.radius}px;width:${Math.max(DS.min, room * p.fraction).toFixed(2)}px;background:${cssColour(p.colour)}"></i>`).join("")}</span><span class="st">${esc(s.text || "")}</span></span>`;
+}
 function dmgRows(rows, dealt, fixed) {
   if (!rows.length) return "";
-  const numW = fixed ? fixed.num : drNumW(rows.map(r => r.value)), whoW = fixed ? fixed.who : drWhoW(rows), youW = fixed && fixed.you || 0;
-  const trackW = Math.max(80, COLUMN - (whoW + DR.col + numW + DR.col) - (youW ? DR.col + youW : 0));
+  if (!fixed && rows.some(drServing)) fixed = { num: drNumW(rows.map(r => r.value)), who: drWhoW(rows), you: drServW(rows), right: drServCell, serv: true };
+  const plan = rows.length === 1 && drPlan(rows[0]);   // 0.9.6 Meal plan's pinned meal: the slots alone, no number column (DamageRowsUi.PlanSlotsWidth)
+  const numW = plan ? 0 : fixed ? fixed.num : drNumW(rows.map(r => r.value)), whoW = plan ? drPlanW(rows[0]) : fixed ? fixed.who : drWhoW(rows), youW = fixed && fixed.you || 0;
+  const trackW0 = Math.max(80, COLUMN - (whoW + DR.col + numW + DR.col) - (youW ? DR.col + youW : 0));
   const weapon = ic => /^vocab:weapon-/.test(ic || "");
   const pic = r => (r.icon || "").startsWith("person:") ? `<span class="pic">${marker(r.icon, 22)}</span>` : weapon(r.icon) ? `<span class="pic">${btIc(r.icon, "#e8c27a", 22)}</span>` : r.tone === "type" ? `<span class="pic" style="background:${r.colour}">${btIc(r.icon, "#16110b", 16)}</span>`
     : `<span class="pic">${(r.icon || "").startsWith("vocab:") ? btIc(r.icon, "#ffffff", 22) : btSlot(r.icon, 22)}</span>`;
   return `<div class="dr-list">${rows.map(r => {
+    const trackW = trackW0;   // 0.9.5: a kind row's opens mark stands after its name, its bar keeps the whole track (DamageRowsUi.DamageRunRow)
     const pips = (r.items || []).find(i => i.kind === "pips"), f = barFormOf((r.items || []).filter(i => i.kind === "part"), true, false);
     let bar = "";
-    if (f.rows.length) bar = drBar(f, r.fraction, trackW, dealt, r.tone === "player" ? barFormOf((r.items || []).filter(i => i.kind === "mix"), true, false) : null, true, r, fixed);   // a player's line: their damage by type, keyed to no part
+    if (f.rows.length) bar = drBar(f, r.fraction, trackW, dealt, r.tone === "player" ? barFormOf((r.items || []).filter(i => i.kind === "mix"), true, false) : null, !plan, r, fixed);   // a player's line: their damage by type, keyed to no part; the pinned meal: no true line
+    if (!bar && plan) bar = `<div><div class="dr-track"></div><div class="dr-pcs"><span class="dr-e dr-plan-hint">${esc(r.text || "")}</span></div></div>`;   // 0.9.6 nothing picked: the empty track, the hint in the legend's place
     if (!bar && r.text) bar = `<div class="dr-quiet">${esc(r.text)}</div>`;   // a player with no number: their words where the bar would be
-    return `<div class="bf dr" style="grid-template-columns:${whoW}px ${numW}px minmax(0, 1fr)${youW ? ` ${youW}px` : ""}"><div class="dr-who" style="--room:${whoW - 30}px"><div class="dr-name">${pic(r)}<span class="nm">${esc(r.title)}</span>${btBadge(r.value2)}</div>${pips ? btPips(pips) : r.note ? `<div class="dr-note">${esc(r.note)}</div>` : ""}</div><div class="dr-num${dealt ? " dealt" : ""}">${esc(r.value || "")}</div>${bar || "<div></div>"}${youW ? `<div class="dr-you">${fixed.right(r)}</div>` : ""}</div>`;
+    // 0.9.5 DamageRowsUi.KindOpens: a weapon kind's row that shuts or opens its weapon lines: the whole row a click, lit while shut, the opens mark after its name, the cursor's ring
+    return `<div class="bf dr${plan ? " plan" : ""}${r.opens ? ` kind${r.selected ? "" : " shut"}` : ""}"${r.link ? ` data-link="${esc(r.link)}"` : ""} style="grid-template-columns:${whoW}px ${numW}px minmax(0, 1fr)${youW ? ` ${youW}px` : ""}${r.opens ? ";position:relative" : ""}">${r.opens ? `${r.cursor ? `<span class="mp-ring kr-ring" style="-webkit-mask-box-image:url(../vocab/focus-ring.png) ${MP.ring} / ${MP.ring}px stretch"></span>` : ""}` : ""}<div class="dr-who" style="--room:${whoW - 30}px">${r.tone === "combo" ? drCombo(r) : `<div class="dr-name">${pic(r)}<span class="nm">${esc(r.title)}</span>${r.opens ? opensMark(r.selected, 0) : ""}${btBadge(r.value2)}</div>${pips ? btPips(pips) : r.note ? `<div class="dr-note">${esc(r.note)}</div>` : ""}`}</div><div class="dr-num${dealt ? " dealt" : ""}">${esc(r.value || "")}</div>${bar || "<div></div>"}${youW ? `<div class="dr-you">${fixed.right(r)}</div>` : ""}</div>`;
   }).join("")}</div>`;
 }
+// 0.9 Meals' Your combinations (PanelModel.ComboTone, DamageRowsUi.DamageRow): the dishes' pictures side by side (22 px, 4 apart), their names on the line under them
+// 0.9.2 Plan a meal (MealPlanModel): an empty slot dashed as a piece not made yet (Tone planempty), a filled slot a click that empties it (data-link)
+// 0.9.6 Meal plan's pinned meal (DamageRowsUi.PlanMealBar): the slots as pictures only, a filled one's food named on hover (SlotNameTag; here its title)
+const drPlan = r => r.tone === "combo" && r.id === "mealplan";
+const drPlanW = r => { const n = (r.items || []).filter(i => i.kind === "dish").length; return n ? n * MP.slot + (n - 1) * 4 : 0; };
+const drCombo = r => `<div class="dr-name dr-combo">${(r.items || []).filter(i => i.kind === "dish").map(d => d.tone === "planempty" ? `<span class="pic"><span class="dr-slot" style="width:${MP.slot}px;height:${MP.slot}px"></span></span>`
+  : `<span class="pic"${d.link ? ` data-link="${esc(d.link)}"` : ""}${drPlan(r) && d.title ? ` title="${esc(d.title)}"` : ""}>${btSlot(d.icon, 40)}</span>`).join("")}</div>${drPlan(r) ? "" : `<div class="dr-note dr-combo-n">${esc(r.title)}</div>`}`;
 // PanelUi.DamageBar: the track, the bar with its parts, the true line (trueLine false: none, 0.8.5's one row) and the share line
 function drBar(f, fraction, trackW, dealt, mix, trueLine = true, r = {}, fixed = null) {
   const weapon = ic => /^vocab:weapon-/.test(ic || ""), share = x => x.percent === 0 && x.fraction > 0 ? "<1 %" : x.percent + " %";
-  const barW = trackW * drWidth(fraction), span = barW + DR.gap, spans = barParts(f.rows.map(x => x.fraction), [], (DR.min + DR.gap) / span);
+  // 0.9.2 Meals' Your combinations (PanelUi.DamageBar exact, trueFraction): the bar its food values from zero on the list's one scale, the thin line its meals
+  const combo = r.tone === "combo", trueF = combo ? r.fraction2 : fraction;
+  const barW = trackW * (combo ? drTrue(fraction) : drWidth(fraction)), span = barW + DR.gap, spans = barParts(f.rows.map(x => x.fraction), [], (DR.min + DR.gap) / span);
   // 0.8.2: pointing at any part shows its name and number: its entry's words swap to them (.swap, data-on), or, a player's row (no entry
   // keys the part), the page's one tag says them over the bar (PanelUi.DamageBar)
   // 0.8.5: a row of damage dealt with its after (a part with Whole) says its parts' words on the tag too, so its entries keep their own width
@@ -1636,12 +1890,12 @@ function drBar(f, fraction, trackW, dealt, mix, trueLine = true, r = {}, fixed =
   const tagged = !!mix || noLine || f.rows.some(x => x.part && x.part.whole);
   const segs = f.rows.map((x, k) => { const w = Math.max(1, (spans[k][1] - spans[k][0]) * span - DR.gap), at = `left:${(spans[k][0] * span).toFixed(2)}px;width:${w.toFixed(2)}px`;
     return drStopped(x) ? `<span class="dr-seg stop" data-k="${k}"${tagged ? drTip(x) : ""} style="${at};--c:${cssColour(x.colour)}">${drStoppedInside(x, w)}</span>`
-      : `<span class="dr-seg" data-k="${k}"${x.value && !x.other ? ` data-num="${esc(x.value)}" data-c="${esc(cssColour(x.colour))}"` : ""}${tagged ? drTip(x) : ""}${fixed && fixed.aw ? ` data-aw="${esc(x.part.id)}"` : ""} style="${at};background:${cssColour(x.colour)}"></span>`; }).join("");
+      : `<span class="dr-seg" data-k="${k}"${x.value && !x.other && !(x.part && x.part.tone === "combo") ? ` data-num="${esc(x.value)}" data-c="${esc(cssColour(x.colour))}"` : ""}${tagged ? drTip(x) : ""}${fixed && fixed.aw ? ` data-aw="${esc(x.part.id)}"` : ""} style="${at};background:${cssColour(x.colour)}"></span>`; }).join("");
   const key = x => weapon(x.part.icon) ? btIc(x.part.icon, cssColour(x.colour), 14) : `<i style="background:${cssColour(x.colour)}"></i>`;   // a weapon kind's icon in its colour (By type), else the swatch
   // PanelModel.DamageLineWords (drLine): a part with share words of its own says those (Text); 0.8.5 a part of damage dealt with its after (no Text) its share of the row
   const pcs = (mix ? mix.rows.map(x => `<span class="dr-e">${key(x)}<span class="w">${esc(x.title + " " + share(x))}</span></span>`).join("") : f.rows.map((x, k) => `<span class="dr-e swap" data-k="${k}">${key(x)}<span class="w"${tagged ? "" : ` data-on="${esc(drHover(x))}"`}>${esc(drLine(x))}</span></span>`).join(""))
     + (!mix && r.text ? `<span class="dr-e dr-close">${esc(r.text)}</span>` : "");   // 0.8.5: the line's closing words (PanelUi.DamageBar's closing, "73 % got through")
-  return `<div><div class="dr-track"><div class="dr-fill" style="width:${barW.toFixed(2)}px">${segs}</div></div>${trueLine ? `<div class="dr-true${dealt ? "" : " recv"}" style="width:${Math.max(2, trackW * drTrue(fraction)).toFixed(2)}px"></div>` : ""}${noLine ? "" : `<div class="dr-pcs">${pcs}</div>`}</div>`;
+  return `<div><div class="dr-track"><div class="dr-fill" style="width:${barW.toFixed(2)}px">${segs}</div></div>${trueLine ? `<div class="dr-true${dealt ? "" : " recv"}" style="width:${Math.max(2, trackW * drTrue(trueF)).toFixed(2)}px"></div>` : ""}${noLine ? "" : `<div class="dr-pcs">${pcs}</div>`}</div>`;
 }
 // PanelModel.DamageTypeRows: the grid's types as rows on one scale, each split by the grid's columns (weapon kinds, or players) in the head's colours
 function dmgTypeRows(g) {
@@ -1698,18 +1952,13 @@ const cssColour = c => c && c.startsWith("person:") ? personColor(c.slice(7)) : 
 // a line breaks only between items, at " · ": the word, the type and the amount held together by no-break spaces (PanelModel.NoBreak; 0.8.1, in game
 // "received blunt less than 1" wrapped as "less than" / "1")
 const noBreak = s => String(s ?? "").replace(/ /g, "\u00A0");
-function btFeedLine(e) {   // BattleFeedUi.FeedLine: "dealt fire 26 · blunt 18  ·  received blunt 12", each type in its colour (lifted to read), the amounts bold
-  const side = (word, kind) => { const ps = (e.items || []).filter(p => p.kind === kind); if (!ps.length) return null;
-    return { html: `<span style="color:var(--muted)">${noBreak(word + " ")}</span>` + ps.map(p => `<span style="color:${legible(p.colour)}">${esc(noBreak(p.title + " "))}</span><b>${esc(noBreak(p.value))}</b>`).join(`<span style="color:var(--faint)"> · </span>`),
-             markup: T.ink(T.plain(noBreak(word + " ")), INK.muted) + ps.map(p => T.ink(T.plain(noBreak(p.title + " ")), legible(p.colour)) + T.b(T.plain(noBreak(p.value)))).join(T.ink(T.plain(" · "), INK.faint)) }; };
-  const parts = [side("dealt", "dealt"), side("received", "received")].filter(Boolean);
-  return rich("feed", `<span class="fdl">${parts.map(p => p.html).join(`<span style="color:var(--faint)">&nbsp; · &nbsp;</span>`)}</span>`, parts.map(p => p.markup).join(T.ink(T.plain("  ·  "), INK.faint)));
-}
-const btFightHead = f => `<div class="bt-fh"><b>${esc(f.title)}</b><span class="r1">${esc("· " + f.text + (f.note ? " · " + f.note : ""))}</span><span class="r2">${esc([f.value ? "dealt " + f.value : null, f.value2 ? "received " + f.value2 : null, f.rate || null].filter(Boolean).join(" · "))}</span></div>`;   // 0.8.6: your pace beside dealt and received
+const btFightHead = f => f.noteLink   // 0.9 all-feed: a fight line of the mixed deed feed: its note is the link that opens the Battle feed, in dealt's place, ending in the opens mark (BattleFeedUi.FightHead)
+  ? `<div class="bt-fh" style="position:relative"><b>${esc(f.title)}</b><span class="r1">${esc("· " + f.text)}</span><span class="r2" data-link="${esc(f.noteLink)}" style="padding-right:${OPENS_RIGHT + OPENS_ROOM}px">${esc(f.note)}</span>${opensMark(false)}</div>`
+  : `<div class="bt-fh"><b>${esc(f.title)}</b><span class="r1">${esc("· " + f.text + (f.note ? " · " + f.note : ""))}</span><span class="r2">${esc([f.value ? "dealt " + f.value : null, f.value2 ? "received " + f.value2 : null, f.rate || null].filter(Boolean).join(" · "))}</span></div>`;   // 0.8.6: your pace beside dealt and received
 // 0.8.1 the Log (BattleFeedUi.FeedLog): time, the foe, what became of it, then the dealt damage as a damage bar on one track for the whole page (its zero
 // at a quarter, the true-length line, the numbers inside the parts, no share line; each part's name and number in a tag over the bar on
 // hover), and what you received after it as quiet words in a column as wide as the page's widest (170 at most, then it wraps)
-const FD = { name: 150, nameMax: 200, out: 196, outLeast: "defeated by you", rest: 78 + 8 + 8, recvMax: 150, recvGap: 12 };
+const FD = { name: 150, nameMax: 200, out: 212, outLeast: "defeated by you", rest: 78 + 8 + 8, recvMax: 150, recvGap: 12, tlX: 88 + 16, tlRecvRoom: 120 };   // tlX, tlRecvRoom: the Timeline's text x (FdAxis + 16) and the room its received words keep (FdTlRecvRoom)
 // the outcome column: the page's widest outcome words, "defeated by you" at least, 196 at most (PanelUi.FeedColumns)
 function feedOutW(es) {
   const cx = feedOutW.cx || (feedOutW.cx = document.createElement("canvas").getContext("2d")); cx.font = `${TX.small}px "Averia Serif Libre", Georgia, serif`;
@@ -1718,7 +1967,7 @@ function feedOutW(es) {
 // the name column: the page's widest picture and name, 150 to 200 px, then it gives way (PanelUi.FeedColumns)
 function feedNameW(es) {
   const cx = feedNameW.cx || (feedNameW.cx = document.createElement("canvas").getContext("2d")); cx.font = `700 ${TX.body}px "Averia Serif Libre", Georgia, serif`;
-  return Math.min(FD.nameMax, Math.max(FD.name, ...es.map(e => 28 + Math.ceil(cx.measureText(e.title || "").width * 1.04) + 2)));
+  return Math.min(es.length && es.every(isDeed) ? DF.nameMax : FD.nameMax, Math.max(FD.name, ...es.map(e => 28 + Math.ceil(cx.measureText(e.title || "").width * 1.04) + 2)));   // 0.9: a deed feed's names have the room its lines leave
 }
 const feedRecv = e => { const ps = (e.items || []).filter(p => p.kind === "received"); return ps.length ? noBreak("received ") + ps.map(p => noBreak(p.title + " " + p.value)).join(" · ") : null; };   // a line breaks only between items (BattleFeedUi.FeedReceived)
 function feedRecvW(es) {
@@ -1734,14 +1983,26 @@ function feedBar(e, trackW, kind = "dealt", quiet = false) {
     return `<span class="dr-seg" data-k="${k}"${x.value ? ` data-num="${esc(x.value)}" data-c="${esc(cssColour(x.colour))}"` : ""}${drTip(x)} style="left:${left.toFixed(2)}px;width:${w.toFixed(2)}px;background:${cssColour(x.colour)}"></span>`; }).join("");   // 0.8.2: every part's name and number in the page's tag on hover
   return `<div class="bf drl" style="width:${trackW}px"><div class="dr-track"><div class="dr-fill" style="width:${barW.toFixed(2)}px">${segs}</div></div><div class="dr-true${quiet ? " recv" : ""}" style="width:${Math.max(2, trackW * drTrue(e.fraction)).toFixed(2)}px"></div></div>`;
 }
+// 0.9 deed feeds (DeedFeedUi.cs): a deed line has, in the dealt bar's place, an upgrade's level meter (the weakness meter, btMeter, filled to the level out of
+// the item's highest one; four parts when not known) and its words, or a made line's count; under a stretch's lines its counts by kind, each over its strip
+const DF = { gap: 8, countsGap: 6, parts: 4, nameMax: 280 };
+const isDeed = e => e.tone === "made" || e.tone === "upgraded";
+const deedValue = e => e.tone === "upgraded" ? `<span class="df-v up" style="gap:${DF.gap}px">${levelMeter(e.level || 0, e.count || 0, "bt-meter")}<span>${esc(e.value || "")}</span></span>`
+  : `<span class="df-v"><b>${esc(e.value || "")}</b></span>`;
+const deedCounts = f => (f.items || []).filter(c => c.kind === "counts" && (c.items || []).length).map(c => `<div style="margin-top:${DF.countsGap}px"><div class="df-ch">${esc(c.title)}${c.note ? `<span>${esc(c.note)}</span>` : ""}</div>${strip(c)}</div>`).join("");
 const btLogRow = (e, trackW, recvW, nameW, outW) => { const rcv = feedRecv(e);
-  return `<div class="bt-fl"><span class="t">${esc(e.text)}</span><span class="n" style="width:${nameW}px">${btSlot(e.icon, 22)}<b>${esc(e.title)}</b></span><span class="o" style="width:${outW}px">${btMark(e.tone)}<span>${esc(e.note)}</span></span><span class="d fl">${feedBar(e, trackW)}${recvW ? `<span class="rcv" style="width:${recvW}px">${rcv ? esc(rcv) : ""}</span>` : ""}</span></div>`; };
+  return `<div class="bt-fl"><span class="t">${esc(e.text)}</span><span class="n" style="width:${nameW}px">${btSlot(e.icon, 22)}<b>${esc(e.title)}</b></span><span class="o" style="width:${outW}px">${btMark(e.tone)}<span>${esc(e.note)}</span></span><span class="d fl">${isDeed(e) && !(e.items || []).some(p => p.kind === "dealt") ? deedValue(e) : feedBar(e, trackW)}${recvW ? `<span class="rcv" style="width:${recvW}px">${rcv ? esc(rcv) : ""}</span>` : ""}</span></div>`; };
 function btCards(es) {   // BattleFeedUi.FeedCards: three to a row, each foe its own item band; 0.8.1 the dealt damage as the damage bar at the card's inner width (the Log's feedBar: one scale for the page), received in quiet words under it
   const w = (COLUMN - 2 * 14) / 3, inner = w - 24;
   return `<div class="bt-cards" style="grid-template-columns:repeat(3, ${w.toFixed(1)}px)">${es.map(e => { const d = (e.items || []).filter(p => p.kind === "dealt"), rcv = feedRecv(e);
-    return `<div class="bt-card"><div class="h">${btSlot(e.icon, 20)}<b>${esc(e.title)}</b><span>${esc(e.text)}</span></div><div class="o">${btMark(e.tone)}<span>${esc(e.note)}</span></div>${d.length ? feedBar(e, inner) : ""}${rcv ? `<div class="rcv">${esc(rcv)}</div>` : ""}</div>`; }).join("")}</div>`;
+    return `<div class="bt-card"><div class="h">${btSlot(e.icon, 20)}<b>${esc(e.title)}</b><span>${esc(e.text)}</span></div><div class="o">${btMark(e.tone)}<span>${esc(e.note)}</span></div>${d.length ? feedBar(e, inner) : isDeed(e) ? `<div class="bf">${deedValue(e)}</div>` : ""}${rcv ? `<div class="rcv">${esc(rcv)}</div>` : ""}</div>`; }).join("")}</div>`;
 }
-const btTimeline = (es, gap) => es.map((e, k) => `<div class="bt-tl${k === 0 ? " first" : ""}${k === es.length - 1 && !gap ? " last" : ""}"><span class="t">${esc(e.text)}</span><span class="ax"></span><span class="mk">${btMark(e.tone)}</span><div class="l1"><b>${esc(e.title)}</b><span>${esc(e.note)}</span></div><div class="d">${btFeedLine(e)}</div></div>`).join("")
+// BattleFeedUi.FeedTimeline: 0.9 (Joost: "the same kind of little damage bar graph as we do on the log card") the dealt damage as the Log's bar on
+// the Log's track (trackW: as long as in the Log), the received words to its right; a foe you never hit: the received words alone where the bar starts
+const btTimelineD = (e, trackW) => { const rcv = feedRecv(e);
+  if ((e.items || []).some(p => p.kind === "dealt")) return `<div class="d fl">${feedBar(e, trackW)}${rcv ? `<span class="rcv">${esc(rcv)}</span>` : ""}</div>`;
+  return isDeed(e) ? `<div class="d">${deedValue(e)}</div>` : rcv ? `<div class="d"><span class="rcv">${esc(rcv)}</span></div>` : ""; };
+const btTimeline = (es, gap, trackW) => (trackW = Math.min(trackW, COLUMN - FD.tlX - FD.tlRecvRoom), es.map((e, k) => `<div class="bt-tl${k === 0 ? " first" : ""}${k === es.length - 1 && !gap ? " last" : ""}"><span class="t">${esc(e.text)}</span><span class="ax"></span><span class="mk">${btMark(e.tone)}</span><div class="l1"><b>${esc(e.title)}</b><span>${esc(e.note)}</span></div>${btTimelineD(e, trackW)}</div>`).join(""))
   + (gap ? `<div class="bt-tg"><span class="ax"></span>${esc(gap.text)}</div>` : "");
 // REVIEW-081 0.8.2 pass: every fight is its own feed block (FeedBlocks), so the Log's columns are measured over every fight of the page, once
 // (PanelModel.FeedPageEntries, PanelUi.FeedPageColumns): one x and one track for every bar of the feed, never a fight island's own
@@ -1756,8 +2017,8 @@ function btFeed(b) {   // BattleFeedUi.BattleFeed: the fights newest first, Log 
   const fights = b.items.filter(f => f.kind === "fight");
   const page = feedPageEntries(), all = page.length ? page : fights.flatMap(f => f.items.filter(x => x.kind === "entry")), recvW = feedRecvW(all), nameW = feedNameW(all), outW = feedOutW(all), trackW = Math.max(80, COLUMN - FD.rest - nameW - outW - (recvW ? recvW + FD.recvGap : 0));   // one track for the page
   return fights.map((f, i) => { const es = f.items.filter(x => x.kind === "entry"), gap = f.items.find(x => x.kind === "gap");
-    const body = b.tone === "cards" ? btCards(es) : b.tone === "timeline" ? btTimeline(es, i + 1 < fights.length ? gap : null) : es.map(e => btLogRow(e, trackW, recvW, nameW, outW)).join("");
-    return `<div style="margin-top:${i ? (b.tone === "timeline" ? 6 : 22) : 0}px">${btFightHead(f)}${body}</div>`; }).join("") + note(b.note);
+    const body = b.tone === "cards" ? btCards(es) : b.tone === "timeline" ? btTimeline(es, i + 1 < fights.length ? gap : null, trackW) : es.map(e => btLogRow(e, trackW, recvW, nameW, outW)).join("");
+    return `<div style="margin-top:${i ? (b.tone === "timeline" ? 6 : 22) : 0}px">${btFightHead(f)}${body}${deedCounts(f)}</div>`; }).join("") + note(b.note);
 }
 function btFightFoes(b) {   // BattleFeedUi.FightFoes: the caption (the count, "your damage to each" with fellow players, the marks' key), then the damage rows
   const key = b.items.find(i => i.kind === "pipkey");
@@ -1772,7 +2033,8 @@ function btArmour(b) {
   const rows = b.items.filter(r => r.kind === "armourrow"), bar = b.items.find(r => r.kind === "armorbar");
   const trackX = drWhoW(rows) + DR.col + drNumW(rows.map(r => r.value)) + DR.col, w = Math.max(80, COLUMN - trackX);
   const sw = (fill, outline) => `<span style="position:relative;width:22px;height:14px;flex:none;${outline ? "box-shadow:inset 0 0 0 2px var(--muted)" : ""}">${fill ? `<span style="position:absolute;left:0;top:0;bottom:0;width:${fill}px;background:var(--muted)"></span>` : ""}</span>`;
-  const key = b.tone === "key" ? `<div class="bt-key" style="margin-top:6px;padding-left:${trackX}px"><span class="k">${sw(9, true)}reached your armor</span><span class="k">${sw(22, false)}got through</span><span class="k">${sw(0, true)}stopped by your armor</span></div>` : "";   // PanelModel.ArmourKeyWhole, ArmourKeyThrough, ArmourKeyStopped
+  const who = b.tone === "keytheir" ? "their" : "your";   // 0.9 (armor-share): a friend's book says "their" (PanelModel.FellowArmourKeyTone, FellowArmourKeyWhole, FellowArmourKeyStopped)
+  const key = b.tone === "key" || b.tone === "keytheir" ? `<div class="bt-key" style="margin-top:6px;padding-left:${trackX}px"><span class="k">${sw(9, true)}reached ${who} armor</span><span class="k">${sw(22, false)}got through</span><span class="k">${sw(0, true)}stopped by ${who} armor</span></div>` : "";   // PanelModel.ArmourKeyWhole, ArmourKeyThrough, ArmourKeyStopped
   const part = bar && barFormOf((bar.items || []).filter(i => i.kind === "part"), true).rows[0];
   const one = part ? `<div style="display:flex;align-items:center;height:20px;margin-top:6px"><span style="width:${trackX}px;flex:none;display:flex;align-items:baseline;gap:6px;white-space:nowrap"><b style="font-size:var(--text-lead)">${esc(bar.value)}</b><span style="font-size:var(--text-name);color:var(--muted)">${esc(bar.text)}</span></span>
       <div class="bf dr-track" style="width:${w}px;flex:none"><div class="dr-fill" style="width:${w}px"><span class="dr-seg stop" data-k="0"${drTip(part)} style="left:0;width:${w}px;--c:${cssColour(part.colour)}">${drStoppedInside(part, w)}</span></div></div></div>` : "";   // 0.8.2: its numbers in the page's tag on hover
@@ -1823,10 +2085,17 @@ function btDeaths(b) {
 }
 // ---------- feats (Chapters/FeatsUi.cs): card grid, the one fixed detail area, Known for, the owner-page band ----------
 const TIERS = ["", "#c27a4a", "#c9d2da", "#f0c862"], tierColour = (l, c) => l <= 0 ? "" : c <= 1 || l >= 3 ? TIERS[3] : TIERS[l];   // PanelModel.TierColour
+// 0.9.2 FeatSearchUi.FeatSearchRow: the field at the plate's top right, the query typed (or its placeholder) and the search key's cap; its tags wait for the grid (below)
+function featSearch(b) {
+  window.FEAT_SEARCH_TAGS = b.items || [];
+  const read = b.link === "Feats/markread" && b.value ? `<span class="chip fread" data-full="${esc(b.value)}">${esc(b.value)}</span>` : "";   // 0.9.5 Mark read, left of the field (PanelModel.FeatsReadTarget)
+  return `<div class="fsearch">${read}<div class="fsf k-track${b.text ? "" : " empty"}">${esc(b.text || "Search feats")}<div class="kc">/</div></div></div>`;
+}
 function feats(b) {
   window.FEAT_CARDS = b.items;   // the page's cards, for the detail area's height (featdetail)
   const per = Math.max(1, Math.min(b.tone === "titles" ? 3 : 4, Math.floor((COLUMN + 8) / 188)));   // the Titles page: three across (FeatsUi.FeatsBlock, B18)
-  return `<div class="fgrid"><div class="feats"${b.tone === "titles" ? ' data-per="3"' : ""} style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(c => {
+  if (b.look) return `<div class="fgrid"><div class="feats lk" data-per="3" style="grid-template-columns:repeat(${Math.min(3, per)}, 1fr)">${b.items.map(lookCard).join("")}</div></div>`;   // 0.9 feat looks (FeatLookUi.cs)
+  return `<div class="fgrid"><div class="feats${b.tone === "titles" ? " ti" : ""}"${b.tone === "titles" ? ' data-per="3"' : ""} style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(c => {
     const earned = c.tone === "earned";
     // FeatsUi.FeatNotches: 10 x 10 squares, all corners rounded, 14 apart from x 8 under the emblem (placed one by one: a flex row drifted below the card)
     // B30: a mark for every tier the feat has, earned or not: the tiers reached in their colours, the ones ahead as outlines
@@ -1834,8 +2103,29 @@ function feats(b) {
     const waiting = c.tone === "waiting";
     const tierWord = earned && c.count > 1 && c.level > 0 ? ` <span class="tierw" style="color:${c.colour}">${["", "I", "II", "III"][c.level]}</span>` : "";   // FeatsUi.FeatCard: "Drover II", the numeral in its tier's colour
     const tierTags = tierWord ? " " + T.b(T.ink(T.plain(["", "I", "II", "III"][c.level]), c.colour || INK.gold)) : "";
-    return `<div class="fcard k-track${earned ? " earned" : ""}${waiting ? " waiting" : ""}${c.selected ? " sel" : ""}${c.count > 1 ? " n" + c.count : ""}" style="--nt:${featLay(52, c.count > 1).nt}px${c.colour ? ";--tier:" + c.colour : ""}">${featMark(c.icon, 52, c.count > 1)}<div class="ft"><div class="fn${c.note ? " one" : ""}">${rich("feats", esc(c.title) + tierWord, T.plain(c.title) + tierTags)}</div>${c.text ? `<div class="fm">${esc(c.text)}</div>` : ""}${c.note ? `<div class="fw"${c.value ? ` data-short="${esc(c.value)}"` : ""}>${esc(c.note)}</div>` : ""}</div>${notches}</div>`;
+    return `<div class="fcard k-track${earned ? " earned" : ""}${waiting ? " waiting" : ""}${c.selected ? " sel" : ""}${c.new ? " isnew" : ""}${c.count > 1 ? " n" + c.count : ""}" style="--nt:${featLay(52, c.count > 1).nt}px${c.colour ? ";--tier:" + c.colour : ""}">${c.selected ? `<i class="fsel"></i>` : ""}${featMark(c.icon, 52, c.count > 1)}${c.new ? `<span class="fnew"><i></i>New</span>` : ""}<div class="ft"><div class="fn${c.note ? " one" : ""}">${rich("feats", esc(c.title) + tierWord, T.plain(c.title) + tierTags)}</div>${c.text ? `<div class="fm">${esc(c.text)}</div>` : ""}${c.note ? `<div class="fw"${c.value ? ` data-short="${esc(c.value)}"` : ""}>${esc(c.note)}</div>` : ""}</div>${notches}${c.selected ? `<i class="fframe"></i>` : ""}</div>`;
   }).join("")}</div></div>`;
+}
+// 0.9 feat look (FeatLookUi.cs): the family's ground (its hatch through an SVG filter that multiplies it by the family's colour, as the game's tint),
+// the large icon, edge and tier bar; the detail area's ground, edge and family line
+const lkRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const lkFilters = new Set();
+// 0.9.1 Feats.PatternStrength (FeatLookShape: the default 100, the tile's own 0.31 laid three times): a hatch line at 1 - (1 - 0.31 s)³ of the family's colour
+const LK_STRENGTH = 100, LK_TILE = 0.31, lkLine = s => 1 - Math.pow(1 - LK_TILE * s / 100, 3);
+function lkFilter(hex) {   // one filter per family colour: the tile's colour times the family's (feColorMatrix), as Image.color multiplies in game; its alpha raised to the pattern's line (lkLine)
+  const id = "lkf-" + hex.slice(1);
+  if (!lkFilters.has(id)) { lkFilters.add(id); const [r, g, b] = lkRgb(hex).map(v => (v / 255).toFixed(4));
+    document.body.insertAdjacentHTML("beforeend", `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="${id}" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="${r} 0 0 0 0  0 ${g} 0 0 0  0 0 ${b} 0 0  0 0 0 ${(lkLine(LK_STRENGTH) / LK_TILE).toFixed(2)} 0"/></filter></svg>`); }
+  return id;
+}
+const lkGround = (c, down) => !c.ground ? "" : `<div class="lkg"><i class="lkw"></i>${c.pattern ? `<i class="lkh" style="background-image:url(../vocab/${c.pattern.slice(c.pattern.indexOf(":") + 1)}.png);filter:url(#${lkFilter(c.ground)})"></i>` : ""}<i class="lkfd"></i>${down ? `<i class="lkfd2"></i>` : ""}</div><i class="lkbk"></i>`;   // 0.9.1: the whole card (down: the detail's left part, fading toward its foot too), the band under the text
+const lkStyle = c => c.ground ? `--fam:${c.ground};--wash:rgba(${lkRgb(c.ground).join(",")},.14)` : "";
+function lookCard(c) {
+  const earned = c.tone === "earned", waiting = c.tone === "waiting", n = Math.max(1, c.count);
+  const tierWord = earned && c.count > 1 && c.level > 0 ? ` <span class="tierw" style="color:${c.colour}">${["", "I", "II", "III"][c.level]}</span>` : "";
+  const tierTags = tierWord ? " " + T.b(T.ink(T.plain(["", "I", "II", "III"][c.level]), c.colour || INK.gold)) : "";
+  const bar = `<div class="lkbar">${Array.from({ length: n }, (_, k) => `<i class="${k < c.level ? "on" : ""}" style="--bc:${tierColour(k + 1, n)}">${k === c.level && c.fraction > 0 ? `<b style="width:${(Math.min(1, c.fraction) * 100).toFixed(1)}%"></b>` : ""}</i>`).join("")}</div>`;
+  return `<div class="fcard lk k-track${earned ? " earned" : ""}${waiting ? " waiting" : ""}${c.selected ? " sel" : ""}${c.new ? " isnew" : ""}" style="${lkStyle(c)}${c.colour ? ";--tier:" + c.colour : ""}">${lkGround(c)}${c.selected ? `<i class="fsel"></i>` : ""}<i class="lke"></i><span class="lkdisc"></span>${marker(c.icon, 56)}${c.new ? `<span class="fnew"><i></i>New</span>` : ""}<div class="lkt"><div class="fn">${rich("feats", esc(c.title) + tierWord, T.plain(c.title) + tierTags)}</div>${c.line ? `<div class="lkl">${esc(c.line)}</div>` : ""}${bar}</div>${c.selected ? `<i class="fframe"></i>` : ""}</div>`;
 }
 // FeatsUi.FeatCard: the emblem and its marks as one block in the card's middle; on a 52 px card the emblem steps down to 33 so the 10 px marks fit
 const featLay = (h, notched) => { const s = notched ? Math.min(36, h - 19) : 36, mt = notched ? Math.floor((h - s - 13) / 2) : h <= 52 ? 5 : Math.floor((h - 36) / 2); return { s, mt, nt: mt + s + 3, left: 9 + Math.floor((36 - s) / 2) }; };
@@ -1848,38 +2138,60 @@ function crewHtml(d, at) {
   const ents = cr.items.map(p => `<span class="ce">${p.value ? `<i class="sw" style="background:${personColor(p.title)}"></i>` : `<span class="cmk">${marker(p.icon, 20)}</span>`}<span class="cn">${esc(p.title)}</span>${p.value ? `<span class="cnum">${esc(p.value)}</span>` : ""}${shared && p.note ? `<span class="csh">${esc(p.note)}</span>` : ""}</span>`).join("");
   return `<div class="fcrew" data-rules="${(d.items || []).filter(x => x.kind === "rule").length}" data-bar="${bar ? 1 : 0}" ${at}><span class="fcl">${esc(cr.title)}</span>${cbar}${ents}</div>`;
 }
+// PanelLayout.FeatDetail (0.9.1 compact): the detail's measures, from layout.css
+const FDT = Object.fromEntries(Object.entries({ least: "least", top: "top", pad: "pad", emblemTop: "emblem-top", honoursTop: "honours-top", honoursLine: "honours-line", honoursMost: "honours-most", momentGap: "moment-gap",
+  momentLine: "moment-line", momentMost: "moment-most", rule: "rule-h", pgap: "progress-gap", prow: "progress-row", crow: "counted-row", cav1: "caveat-one", cav2: "caveat-two", linkRow: "link-row" }).map(([k, n]) => [k, layoutPx("feat-detail-" + n)]));
+const cvLines = cv => !cv ? 0 : (r => (r.selectNodeContents(cv), r.getBoundingClientRect().height <= 20 ? 1 : 2))(document.createRange());
+const caveatTop = rules => FDT.top + rules * FDT.rule + FDT.pgap + FDT.prow + FDT.crow;   // PanelLayout.FeatDetail.CaveatTop
+const caveatRoom = n => n <= 0 ? 0 : n === 1 ? FDT.cav1 : FDT.cav2;
+const clampPx = (v, lo, hi) => Math.ceil(Math.min(hi, Math.max(lo, v)));
+// PanelLayout.FeatDetail.RightNeed and LeftNeed: a detail's right column without its crew, its left column (what it honours, its moment)
+const rightNeed = (rules, cav, link) => caveatTop(rules) + caveatRoom(cav) - 2 + (link ? FDT.linkRow : 0) + FDT.pad;
+const leftNeed = (dh, mo) => FDT.honoursTop + clampPx(dh ? dh.scrollHeight : 0, FDT.honoursLine, FDT.honoursMost) + (mo ? FDT.momentGap + clampPx(mo.scrollHeight, FDT.momentLine, FDT.momentMost) : 0) + FDT.pad;
+const FEAT_DETAIL_LEFT = 292;   // FeatsUi.FeatDetailLeft: the right column's left
 function featdetail(b) {
   const earned = b.tone === "earned", it = k => (b.items || []).filter(x => x.kind === k);
-  let y = 12, h = "";
-  for (const r of it("rule")) { h += `<div class="rl${r.selected ? " on" : ""}" style="top:${y}px${r.colour ? ";--rc:" + r.colour : ""}">${r.value ? `<b>${esc(r.value)}</b>` : ""}${esc(r.title)}</div>`; y += 20; }
-  y += 4;
+  let y = FDT.top, h = "";   // PanelLayout.FeatDetail (0.9.1 compact)
+  for (const r of it("rule")) { h += `<div class="rl${r.selected ? " on" : ""}" style="top:${y}px${r.colour ? ";--rc:" + r.colour : ""}">${r.value ? `<b>${esc(r.value)}</b>` : ""}${esc(r.title)}</div>`; y += FDT.rule; }
+  y += FDT.pgap;
   const pg = it("progress")[0];
   if (pg) h += `<div class="pg" style="top:${y}px"><div class="tr k-track"><div class="fl" style="width:calc(${(pg.fraction * 100).toFixed(1)}% - 4px)"></div></div><span class="pt">${esc(pg.title)}</span></div>`;
-  y += 24;
+  y += FDT.prow;
   const cb = it("counted")[0];
   if (cb) h += `<div class="cb" style="top:${y}px"><span>Counted by</span>${esc(cb.text)}</div>`;
-  y += 20;
+  y += FDT.crow;
   const cv = it("caveat")[0];
   if (cv) h += `<div class="cv" style="top:${y}px">${esc(cv.text)}</div>`;
   y += cv ? 38 : 0;   // no caveat (B37: the counting is said in Counted by): no room kept for one
   const cr = it("crew")[0];   // a group feat: who helped with their parts and shares (B37, FeatsUi.FeatCrew), or who carried: shields by name
   if (cr) h += crewHtml(b, `style="top:${y}px"`);
-  // the page's other crews, hidden: the area takes the tallest one's height, so a hover never moves the grid (FeatsUi.FeatDetailPage)
-  const others = (window.FEAT_CARDS || []).map(c => (c.items || [])[0]).filter(d => d && d.kind === "featdetail" && d.id !== b.id && (d.items || []).some(x => x.kind === "crew"));
-  if (others.length) h += `<div class="fghost">${others.map(d => { const c = (d.items || []).find(x => x.kind === "caveat"); return `<div>${c ? `<div class="cv">${esc(c.text)}</div>` : ""}${crewHtml(d, "")}</div>`; }).join("")}</div>`;
+  // the page's other details, hidden: the area takes the tallest one's height, so a hover never moves the grid (FeatsUi.FeatDetailPage; 0.9.1 every detail's lines)
+  const others = (window.FEAT_CARDS || []).map(c => (c.items || [])[0]).filter(d => d && d.kind === "featdetail" && d.id !== b.id);
+  const ghostMo = d => { const m = (d.items || []).find(x => x.kind === "moment"); return m ? `<div class="mo">${esc(m.text)}${m.note ? ` <i>${esc(m.note)}</i>` : ""}</div>` : ""; };
+  if (others.length) h += `<div class="fghost">${others.map(d => { const c = (d.items || []).find(x => x.kind === "caveat"), x = k => (d.items || []).filter(i => i.kind === k);
+    return `<div data-rules="${x("rule").length}" data-link="${x("link").some(l => l.id) ? 1 : 0}">${c ? `<div class="cv">${esc(c.text)}</div>` : ""}${x("crew").length ? crewHtml(d, "") : ""}<div class="gl"><div class="dh">${esc(d.text)}</div>${ghostMo(d)}</div></div>`; }).join("")}</div>`;
+  const ln = it("link")[0];   // 0.9: a feat's link to its page (Clad for Every Land: Open Armor sets), at the foot of the right column (FeatsUi.FeatOpenLink)
+  if (ln) h += `<span class="chip fdlink" style="position:absolute;right:var(--feats-link-inset);bottom:var(--feats-link-bottom)">${esc(ln.title)}<span class="fdlink-mk">›</span></span>`;
   const mo = it("moment")[0];
   const moH = mo ? `<div class="mo">${rich("featdetail", esc(mo.text) + (mo.note ? ` <i>${esc(mo.note)}</i>` : ""), T.plain(mo.text) + (mo.note ? " " + T.i(T.ink(T.plain(mo.note), INK.muted)) : ""))}</div>` : "";   // left column, under what the feat honours (FeatsUi.FeatDetailFill)
-  return `<div class="fdet k-track${earned ? " earned" : ""}${b.tone === "waiting" ? " waiting" : ""}"${b.colour ? ` style="--tier:${b.colour}"` : ""}>${marker(b.icon, 56)}<div class="dn">${esc(b.title)}</div>${b.value ? `<div class="dt">${esc(b.value)}</div>` : ""}<div class="dl"><div class="dh">${esc(b.text)}</div>${moH}</div>${h}</div>`;
+  let pre = "";
+  if (b.look) {   // 0.9 feat look (FeatLookUi.FeatLookDetail): the family's ground behind the left part, its edge, the disc, the family line
+    const halo = layoutPx("feat-look-halo"), disc = 56 + halo;
+    pre = lkGround(b, true) + `<i class="lke"></i>` + `<span class="lkdisc" style="left:${16 + 28 - disc / 2}px;top:${FDT.emblemTop + 28 - disc / 2}px;width:${disc}px;height:${disc}px"></span>` +
+        `<div class="lkfam" style="left:${84}px;width:${FEAT_DETAIL_LEFT - 88}px">${esc(b.family || "")}</div>`;
+  }
+  return `<div class="fdet k-track${b.look ? " lk" : ""}${earned ? " earned" : ""}${b.tone === "waiting" ? " waiting" : ""}" data-rules="${it("rule").length}" data-link="${ln && ln.id ? 1 : 0}" style="${b.look ? lkStyle(b) + ";" : ""}${b.colour ? `--tier:${b.colour}` : ""}">${pre}${marker(b.icon, 56)}<div class="dn">${esc(b.title)}</div>${b.value ? `<div class="dt">${esc(b.value)}</div>` : ""}<div class="dl"><div class="dh">${esc(b.text)}</div>${moH}</div>${h}</div>`;
 }
 const knownfor = b => `<div class="kfor"><span class="kfh">${esc(b.title)}</span>${b.items.map(i => `<span class="kfc k-track"${i.colour ? ` style="--tier:${i.colour}"` : ""}>${marker(i.icon, 26)}${esc(i.title)}${i.value ? ` <b>${esc(i.value)}</b>` : ""}</span>`).join("")}</div>`;
 function featband(b) {   // fix4: the feat and the titles, one flat strip (FeatsUi.FeatBandBlock); B18: each title with its reason, quiet after the name
   const feats = (b.items || []).filter(i => i.kind !== "title"), titles = (b.items || []).filter(i => i.kind === "title"), many = feats.length > 1;
-  const fpart = feats.length ? `<span class="ea-f"><span class="ea-tag gold">${many ? "Feats" : "Feat"}</span>${feats.map(f => `<span class="ea-i">${marker(f.icon, 22)}<span class="ea-n">${rich("featband", esc(f.title) + (f.value ? ` <b style="color:${f.colour || "var(--gold)"}">${esc(f.value)}</b>` : ""), T.plain(f.title) + (f.value ? " " + T.b(T.ink(T.plain(f.value), f.colour || INK.gold)) : ""))}</span></span>`).join("")}${!many && feats[0].text ? `<span class="ea-m">${esc(feats[0].text)}</span>` : ""}</span>` : "";
+  const fpart = feats.length ? `<span class="ea-f" data-link="${esc(b.id || "")}"><span class="ea-tag gold">${many ? "Feats" : "Feat"}</span>${feats.map(f => `<span class="ea-i">${marker(f.icon, 22)}<span class="ea-n">${rich("featband", esc(f.title) + (f.value ? ` <b style="color:${f.colour || "var(--gold)"}">${esc(f.value)}</b>` : ""), T.plain(f.title) + (f.value ? " " + T.b(T.ink(T.plain(f.value), f.colour || INK.gold)) : ""))}</span></span>`).join("")}${!many && feats[0].text ? `<span class="ea-m">${esc(feats[0].text)}</span>` : ""}</span>` : "";
   const tpart = titles.length ? `<span class="ea-t"><span class="ea-tag">${esc(b.text || "Titles")}</span>${titles.map(t => `<span class="ea-i" data-link="${esc(t.id || "")}">${marker(t.icon, 22)}<span class="ea-tn">${esc(t.title)}</span>${t.text ? `<span class="ea-m">${esc(t.text)}</span>` : ""}</span>`).join("")}</span>` : "";
   // 0.8 layout D+ (PageHead.cs): the view switch's caption on the left after the titles; a fellow's book says whose copy and when at the right end
   const cpart = stripCompare(window.CURRENT);   // 0.8.5: Compare's legend, or a greyed chip's reason, leads (CompareUi.StripCompare); the switch's caption is in About then (PageHead.cs)
   const cap = STRIP_SWITCH && STRIP_SWITCH.title ? `${fpart || tpart ? `<span class="ea-rule"></span>` : ""}<span class="ea-cap">${esc(STRIP_SWITCH.title)}</span>` : "", note = window.CURRENT.stripNote;
-  const apart = STRIP_ABOUT || STRIP_SWITCH || note ? `<span class="ea-about">${note ? `<span class="ea-note">${esc(note)}</span>` : ""}${STRIP_SWITCH ? `<span class="ea-sw">${swChips(STRIP_SWITCH)}</span>` : ""}${STRIP_ABOUT ? aboutBoth(STRIP_ABOUT) : ""}</span>` : "";
+  const links = ((window.CURRENT_PLATE || {}).items || []).filter(i => i.kind === "headlink" && i.tone === "strip");   // 0.9: a Deeds page's links (Feed, Sets) before its views and About (TopCluster, PanelModel.StripLinks)
+  const apart = STRIP_ABOUT || STRIP_SWITCH || note || links.length ? `<span class="ea-about">${note ? `<span class="ea-note">${esc(note)}</span>` : ""}${links.map(h => `<span class="chip icon">${marker(h.icon, 18)}${esc(h.title)}</span>`).join("")}${STRIP_SWITCH ? `<span class="ea-sw">${swChips(STRIP_SWITCH)}</span>` : ""}${STRIP_ABOUT ? aboutBoth(STRIP_ABOUT) : ""}</span>` : "";
   // 0.8.6: the Back button leads at the left end (FeatsUi.BackCluster): the opens mark turned back, "Back", its key's cap (PanelView.Back)
   const bpart = window.CURRENT.back ? `<span class="ea-back"><span class="chip"><svg viewBox="0 0 8 14"><polyline points="1.5,1.5 6.5,7 1.5,12.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>${esc(window.CURRENT.back)}</span><span class="kc" style="position:static;width:${keycapW(window.CURRENT.backKey, 22)}px;height:22px;flex:none">${esc(window.CURRENT.backKey)}</span></span>` : "";
   return `<div class="earned${apart || cpart || bpart ? " one" : ""}${fpart || tpart ? "" : " bare"}">${bpart}${cpart}${cpart && (fpart || tpart) ? `<span class="ea-rule ea-crule"></span>` : ""}${fpart}${fpart && tpart ? `<span class="ea-rule"></span>` : ""}${tpart}${cap}${apart}</div>`;
@@ -1889,14 +2201,15 @@ function featband(b) {   // fix4: the feat and the titles, one flat strip (Feats
 const FT = { topH: 48, ring: 44, door: 46, nameX: 58, name: 26, nameLeast: 20, land: 15, num: 43, numLabel: 17, numGap: 14, ruleGap: 24, laneTop: 8, laneH: 20, lanePad: 10, keyLineH: 20,
   who: 190, whoMax: 240, indent: 22, pic: 22, bossPic: 26, numMin: 44, colGap: 10, sep: 18, chev: 18, foeGap: 4, subIndent: 38,
   playerRow: 24, cellNum: 52, cellBarMin: 80, cellBarMax: 110, cellStat: 62, cellStop: 56, cellDeaths: 96, deathBar: 48, deathNum: 24, deathGap: 8, headIcon: 20, cellGap: 10, nameMin: 190,
-  date: 60, listPic: 28, listWho: 236, listLine1: 24, listLine2: 20, listGap: 8, addRow: 26, keyGap: 14, swatch: 10, track: 20, barH: 24 };
+  date: 60, listPic: 28, listWho: 236, listLine1: 24, listLine2: 20, listGap: 8, addRow: 26, keyGap: 14, swatch: 10, track: 20, barH: 24,
+  weakGap: 16, weakName: 12, weakRing: 18, weakNameMax: 0.4, captionGap: 8, chipH: 18, chipPad: 4, chipIn: 3, chipGap: 4, capSpacing: 8, cross: 14, crossLine: 2, crossTurn: 45 };   // 0.9.4 draft: the weakness line, PanelUi.FtWeakLine, FtWeakGroup
 const ftCx = document.createElement("canvas").getContext("2d");
 const ftW = (t, px, bold) => { ftCx.font = `${bold ? "700 " : ""}${px}px "Averia Serif Libre", Georgia, serif`; return Math.ceil(ftCx.measureText(t || "").width * 1.04) + 2; };   // PanelUi.FtWidth: TMP's width plus 2
 const ftBadgeW = t => { ftCx.font = `700 ${TX.floor}px "Averia Serif Libre", Georgia, serif`; return Math.ceil(ftCx.measureText(t || "").width * 1.04) + 16; };   // PanelUi.BadgeWidth
 const ftItems = (b, kind) => (b && b.items || []).filter(i => i.kind === kind);
 const ftAt = (x, top, w, h, html, st = "", cls = "ft-a") => `<div class="${cls}" style="left:${x.toFixed(1)}px;top:${top.toFixed(1)}px;width:${Math.max(0, w).toFixed(1)}px;height:${h}px;${st}">${html}</div>`;
 // BtText: one line, centred in its box (the box grows to the font's line, PanelUi.LineBox), cut with an ellipsis
-const ftText = (x, top, w, h, text, px, colour, o = {}) => !text ? "" : ftAt(x, top, w, h, esc(text), `font-size:${px}px;line-height:${h}px;color:${colour};${o.bold ? "font-weight:700;" : ""}${o.italic ? "font-style:italic;" : ""}${o.right ? "text-align:right;" : ""}${o.caps ? "letter-spacing:.14em;text-transform:uppercase;" : ""}`);
+const ftText = (x, top, w, h, text, px, colour, o = {}) => !text ? "" : ftAt(x, top, w, h, esc(text), `font-size:${px}px;line-height:${h}px;color:${colour};${o.bold ? "font-weight:700;" : ""}${o.italic ? "font-style:italic;" : ""}${o.right ? "text-align:right;" : ""}${o.caps ? "letter-spacing:.14em;text-transform:uppercase;" : ""}${o.strike ? "text-decoration:line-through;" : ""}`);
 // the boss's ring (Codex's ring over the game's trophy; here the boss's initial stands in for the trophy, as on the Battle overview)
 const ftRing = (name, x, top, size) => `<span class="ft-ring" style="left:${x}px;top:${top}px;width:${size}px;height:${size}px"><img src="../vocab/boss-ring.png" alt=""><i style="font-size:${Math.max(TX.floor, Math.round(size * 0.42))}px">${esc((name || "?").replace(/^The /, "")[0])}</i></span>`;
 // PanelUi.FtBar: the book's damage bar (DamageBar, no share line), its parts' numbers inside, its true length under it, hover on its parts
@@ -1910,6 +2223,25 @@ function ftKeyRun(key, x, top) {
   if (key.title) { const cw = ftW(key.title.toUpperCase(), TX.floor) + Math.ceil(key.title.length * 14 * 0.14); h += ftText(x, top, cw + 4, FT.keyLineH, key.title, TX.floor, "var(--muted)", { caps: true }); x += cw + 10; }
   for (const e of ftItems(key, "key")) { h += ftSwatch(x, top + (FT.keyLineH - FT.swatch) / 2, cssColour(e.colour)); x += FT.swatch + 5; const tw = ftW(e.title, TX.floor); h += ftText(x, top, tw, FT.keyLineH, e.title, TX.floor, "var(--muted)"); x += tw + FT.keyGap; }
   return [h, x - FT.keyGap];
+}
+// 0.9.4 draft (PanelUi.FtWeakGroup): one group of a weakness line, its caption (the keys' own), then a chip per type in the group's form: weak to solid
+// (the track's ground, the swatch filled, the name bright, the multiplier gold), resists open (the swatch an outline, quiet), immune struck (the outline
+// crossed, the name struck through, faint); [html, where it ends]
+function ftWeakGroup(g, x, top) {
+  const title = g.title || "", cw = ftW(title.toUpperCase(), TX.floor) + Math.ceil(title.length * 14 * 0.14);
+  let h = ftText(x, top, cw + 4, FT.keyLineH, title, TX.floor, "var(--muted)", { caps: true }); x += cw + FT.captionGap;
+  const weak = g.tone === "weak", immune = g.tone === "immune", es = ftItems(g, "key"), sw = top + (FT.keyLineH - FT.swatch) / 2;
+  es.forEach((e, k) => {
+    const c = cssColour(e.colour), x0 = x; let inner = ""; x += FT.chipPad;
+    inner += `<i class="ft-sw" style="left:${x}px;top:${sw}px;width:${FT.swatch}px;height:${FT.swatch}px;${weak ? `background:${c}` : `border:${FT.crossLine}px solid ${c};box-sizing:border-box`}"></i>`;
+    if (immune) inner += `<i class="ft-sw" style="left:${x + (FT.swatch - FT.cross) / 2}px;top:${sw + (FT.swatch - FT.crossLine) / 2}px;width:${FT.cross}px;height:${FT.crossLine}px;background:var(--faint);border-radius:0;transform:rotate(${-FT.crossTurn}deg)"></i>`;
+    x += FT.swatch + FT.chipIn;
+    const nw = ftW(e.title, TX.floor); inner += ftText(x, top, nw, FT.keyLineH, e.title, TX.floor, weak ? "var(--text)" : immune ? "var(--faint)" : "var(--muted)", { strike: immune }); x += nw + FT.chipIn;
+    const mw = ftW(e.value, TX.floor, weak); inner += ftText(x, top, mw, FT.keyLineH, e.value, TX.floor, weak ? "var(--gold)" : "var(--faint)", { bold: weak }); x += mw + FT.chipPad;
+    h += (weak ? ftTrack(x0, top + (FT.keyLineH - FT.chipH) / 2, x - x0, FT.chipH) : "") + inner;
+    if (k < es.length - 1) x += FT.chipGap;
+  });
+  return [h, x];
 }
 // A, D: the head (PanelUi.FtHead): the boss in its ring or the dungeon's door, its name over its land, the group's dealt and received in the hero's
 // second form on one baseline at the right; under them the boss's lane or the run's line
@@ -2011,6 +2343,19 @@ function fightFoeRows(b) {
       if (x < (dkey ? dEnd : 0) + 24) { y += FT.keyLineH; x = 0; } h += ftKeyRun(rkey, x, y)[0]; }
     y += FT.keyLineH;
   }
+  // 0.9.4 draft (A, PanelUi.FtWeakLine, Chapters/FightWeakness.cs): each kind's weaknesses under the keys, in their grammar: the kinds' names when the
+  // fight has more than one, then per group its caption and its types; a group never split, a next line starting under the first group
+  const weak = ftItems(b, "weakline");
+  if (weak.length) {
+    const names = Math.max(0, ...weak.filter(l => l.title).map(l => Math.min(ftW(l.title, TX.floor, true), COLUMN * FT.weakNameMax)));   // the named lines' groups from one x
+    for (const line of weak) {
+      let x = 0, start = 0;
+      if (line.tone === "boss") { h += ftRing(line.text, 0, y + (FT.keyLineH - FT.weakRing) / 2, FT.weakRing); x = start = FT.weakRing + FT.weakName; }   // a boss with foes around: its ring
+      else if (line.title) { const tw = Math.min(ftW(line.title, TX.floor, true), COLUMN * FT.weakNameMax); h += ftText(0, y, tw, FT.keyLineH, line.title, TX.floor, "var(--text)", { bold: true }); x = start = Math.max(tw, names) + FT.weakName; }
+      for (const g of ftItems(line, "weakkey")) { const gw = ftWeakGroup(g, 0, 0)[1]; if (x > start && x + gw > COLUMN) { y += FT.keyLineH; x = start; } const [gh, end] = ftWeakGroup(g, x, y); h += gh; x = end + FT.weakGap; }
+      y += FT.keyLineH;
+    }
+  }
   return `<div class="ft" style="height:${y}px">${h}</div>`;
 }
 // the players' table (PanelUi.FightPlayers): a fixed width per column, the name column the rest; each column's word right-aligned over its number
@@ -2106,6 +2451,7 @@ function block(b) {
     case "together": return together(b);
     case "madeby": return madeby(b);
     case "ranking": return ranking(b);
+    case "spark": return b.tone === "large" ? sparkLarge(b) : spark(b, false);   // 0.9 a deed's History (GrowthLinesUi.SparkLarge)
     case "counts": return counts(b);
     case "itemgrid": return itemgrid(b);
     case "filterbar": return filterbar(b);
@@ -2121,10 +2467,11 @@ function block(b) {
     case "aboutnumbers": return aboutNumbers(b);   // 0.7 (RecordedUi.AboutNumbersBox)
     case "columns": return columns(b);
     case "switch": return sw(b);
-    case "sort": return `<div class="sortrow"><span class="cap">${esc(b.title)}</span>${b.items.map(x => chip(x.title, "", x.selected, false)).join("")}</div>`;   // SortUi.SortRow
+    case "sort": return `<div class="sortrow"><span class="cap">${esc(b.title)}</span>${b.items.map(x => chip(x.title, "", x.selected, false, x.colour)).join("")}</div>`;   // SortUi.SortRow
     case "cards": return cards(b);
     case "feats": return feats(b);
     case "featdetail": return featdetail(b);
+    case "featsearch": return featSearch(b);   // 0.9.2 (FeatSearchUi.FeatSearchRow)
     case "knownfor": return knownfor(b);
     case "featband": return featband(b);
     case "origins": return origins(b);
@@ -2139,6 +2486,8 @@ function block(b) {
     case "dmgmix": return btMix(b);
     case "wpnlist": return btWeapons(b);
     case "foetable": return btFoes(b);
+    case "usetable": return useTable(b);   // 0.9 What to use (WhatToUseUi.UseTable)
+    case "usedetail": return `<div class="bt-cap">${esc(b.title)}${b.text ? `<span class="q">${esc(b.text)}</span>` : ""}</div>` + btRanking(b, true);   // an open foe's ranking under it
     case "foetypes": return btFoeTypes(b);
     case "guard": return btGuard(b);
     case "sources": case "dealtfoes": return btSources(b);   // dealtfoes: Damage > By foe (0.8)
@@ -2160,10 +2509,10 @@ function block(b) {
     case "crew": return crew(b);
     case "compass": return compass(b);
     case "biometiles": return biometiles(b);
-    case "section": return `<div class="section"${COLUMN < 500 ? ' style="flex-wrap:wrap;row-gap:2px"' : ""}>${b.icon ? marker(b.icon, 22) : ""}${b.colour ? `<i class="swatch" style="background:${b.colour}"></i>` : ""}${esc(b.title)}${b.value ? `<span class="tot">${esc(b.value)}</span>` : ""}${cmpQual(b)}${COLUMN < 500 ? sinceUnder(b.since) : since(b.since)}${b.text && !b.since ? `<span class="since" style="margin-left:6px">${esc(b.text)}</span>` : ""}</div>`;
+    case "section": return `<div class="section${b.link ? " sec-open" : ""}"${b.link ? ` data-link="${esc(b.link)}"` : ""}${COLUMN < 500 ? ' style="flex-wrap:wrap;row-gap:2px"' : ""}>${b.icon ? marker(b.icon, 22) : ""}${b.colour ? `<i class="swatch" style="background:${b.colour}"></i>` : ""}${esc(b.title)}${b.value ? `<span class="tot">${esc(b.value)}</span>` : ""}${cmpQual(b)}${COLUMN < 500 ? sinceUnder(b.since) : since(b.since)}${b.text && !b.since ? `<span class="since" style="margin-left:6px">${esc(b.text)}</span>` : ""}${b.link ? opensMark(b.open, 0) + (b.cursor ? `<span class="mp-ring" style="-webkit-mask-box-image:url(../vocab/focus-ring.png) ${MP.ring} / ${MP.ring}px stretch"></span>` : "") : ""}</div>`;   // 0.9.3: a heading that opens (Plan a meal): PanelUi's section with Link
     case "divider": return `<div class="k-divider"></div>`;
     case "stat": if (b.tone === "compact") return `<div class="stat compact">${b.icon ? marker(b.icon, 28) : ""}<div class="row" style="align-items:baseline;gap:10px">${b.value ? `<span class="v">${esc(b.value)}</span>` : ""}<span class="t">${esc(b.title)}</span>${b.text ? `<span class="s">${esc(b.text)}</span>` : ""}${since(b.since)}</div></div>`;
-      return `<div class="stat">${b.icon ? marker(b.icon, 52) : ""}<div><div class="row" style="align-items:baseline;gap:10px">${b.value ? `<span class="v"${unrec(b, TX.title)}>${esc(b.value)}</span>` : ""}<span class="t">${esc(b.title)}</span>${since(b.since)}</div>
+      return `<div class="stat">${b.icon ? marker(b.icon, 52) : ""}<div${sparkOf(b) ? ' style="flex:1"' : ""}><div class="row" style="align-items:baseline;gap:10px">${b.value ? `<span class="v"${unrec(b, TX.title)}>${esc(b.value)}</span>` : ""}<span class="t">${esc(b.title)}</span>${since(b.since)}${statSpark(b)}</div>
       ${b.text ? `<div class="s">${esc(b.text)}</div>` : ""}${b.note ? `<div class="n">${esc(b.note)}</div>` : ""}</div></div>`;
     case "tiles": return tiles(b.items) + sinceUnder(b.since || b.items.some(i => i.since)) + note(b.note);
     case "bars": return b.items.map(i => `<div class="bar"><span class="ic">${i.icon ? `<i style="background:${TONE[i.tone]}"></i>` : ""}</span>
@@ -2178,7 +2527,7 @@ function block(b) {
         <div style="width:120px;display:flex;justify-content:center">${i === 0 ? marker(b.icon, 112) : ""}</div></div>`).join("") + `</div><div class="k-divider"></div>` + sinceUnder(b.since) + note(b.note);
     case "link": return `<div class="entry k-row button" style="height:${LINK.h}px;font-size:var(--text-body)">${marker(b.icon, LINK.icon)}${esc(b.title)}</div>`;
     case "empty": return `<div class="emptybox"><div class="empty">${esc(b.title)}</div>` + (b.text ? `<div class="emptytext">${esc(b.text)}</div>` : "") + `</div>`;
-    default: return b.kind === "note" && b.tone === "tag" ? "" : b.text === FADED_KEY || b.text === FADED_TWIN ? `<div>${fadedChip(b.text)}</div>` : b.tone === "hint" ? `<div class="hint"><span>${esc(b.text)}</span></div>` : `<div class="plain">${esc(b.text)}</div>`;
+    default: return b.kind === "note" && b.tone === "tag" ? "" : b.tone === "planmarks" ? planMarks(b) : b.text === FADED_KEY || b.text === FADED_TWIN ? `<div>${fadedChip(b.text)}</div>` : b.tone === "hint" ? `<div class="hint"><span>${esc(b.text)}</span></div>` : `<div class="plain">${esc(b.text)}</div>`;
   }
 }
 
@@ -2188,14 +2537,14 @@ const ISLE = { gap: layoutPx("island-pair-gap"), pad: layoutPx("island-pad") }, 
 // PanelLayout.Link; the icon as PanelUi.Entry sizes it for that height
 const LINK = { h: layoutPx("link-height"), icon: 22 };
 const partAt = (plate, p) => p.path.split(".").reduce((b, k) => b.items[+k], plate);
-function islands(plate) {
-  const plan = plate.islands || [{ span: "plain", parts: plate.items.map((_, k) => ({ path: String(k) })).filter(p => plate.items[+p.path].kind !== "featband") }];
+function islands(plate, from = 0, to = Infinity) {   // 0.9.5: from, to: a part of the plan (Meal plan's pinned meal is drawn in the pinhead, PanelModel Island.Pin)
+  const plan = (plate.islands || [{ span: "plain", parts: plate.items.map((_, k) => ({ path: String(k) })).filter(p => plate.items[+p.path].kind !== "featband") }]).slice(from, to);
   const draw = isl => {
     const was = COLUMN; COLUMN = isl.span === "half" ? (PLATE_W - ISLE.gap) / 2 - 2 * ISLE.pad : isl.span === "wide" ? PLATE_W - 2 * ISLE.pad : PLATE_W;
     const parts = isl.parts.map(p => ({ p, b: partAt(plate, p) }));
-    const html = parts.map(({ p, b }) => p.row ? swRow(b, null) : p.only != null ? personIsland(b.items[p.only]) : b.kind === "aboutnumbers" ? aboutBox(b) : block(b)).join("");
+    const html = parts.filter(({ b }) => b.kind !== "featband").map(({ p, b }) => p.row ? swRow(b, null) : p.only != null ? personIsland(b.items[p.only]) : b.kind === "aboutnumbers" ? aboutBox(b) : block(b)).join("");
     COLUMN = was;
-    return !html.trim() ? "" : isl.span === "plain" ? `<div class="isl-plain">${html}</div>` : `<div class="isl ${isl.span}${parts.some(x => x.b.kind === "hero" || x.b.kind === "fighthead") ? " hero-isl" : ""}">${html}</div>`;   // 0.9: a fight's head is its hero (IslandsUi)
+    return !html.trim() ? "" : isl.span === "plain" ? `<div class="isl-plain">${html}</div>` : `<div class="isl ${isl.span}${parts.some(x => x.b.kind === "hero" || x.b.kind === "fighthead") ? " hero-isl" : ""}${isl.pin ? " pin-isl" : ""}">${html}</div>`;   // 0.9: a fight's head is its hero (IslandsUi)
   };
   let out = "";
   for (let i = 0; i < plan.length; i++)
@@ -2222,18 +2571,21 @@ let pageHtml = null;
 const viewed = v.players.findIndex(p => p.selected);
 const bookChip = () => viewed > 0 ? `<span style="flex:none;padding:2px 10px;border:1px solid ${personColor(v.players[viewed].id)};background:color-mix(in srgb, ${personColor(v.players[viewed].id)} 22%, transparent);color:color-mix(in srgb, ${personColor(v.players[viewed].id)} 55%, white);font-size:var(--text-small);font-weight:700;white-space:nowrap">${esc(v.players[viewed].label)}'s book</span>` : "";
 if (plate) {
-  const right = v.hasFilters ? v.windows.map(w => w.disabled && w.why ? windowChip(w) : chip(w.label, "", w.selected, w.disabled).replace('class="chip', 'class="chip win')).join("")   // a window a fellow's copy cannot show: greyed (PanelUi.Chip off), its reason under it on hover (0.8 layout D+)
+  const right = v.hasFilters ? plate.items.filter(b => b.kind === "headlink" && b.tone !== "strip").map(h => `<span class="chip icon" style="margin-right:var(--heading-chip-gap)">${marker(h.icon, 18)}${esc(h.title)}</span>`).join("")   // 0.9: a chip that opens a page, left of the windows (PanelUi.HeadRight)
+                               + v.windows.map(w => w.disabled && w.why ? windowChip(w) : chip(w.label, "", w.selected, w.disabled).replace('class="chip', 'class="chip win')).join("")   // a window a fellow's copy cannot show: greyed (PanelUi.Chip off), its reason under it on hover (0.8 layout D+)
                                + (v.compare ? `<span style="width:0;flex:none"></span>` + compareChip(v.compare.label, v.compare.selected, v.compare.disabled, v.compareNote ? "" : v.compare.why, v.compare.tip, true, v.compareMenu) : "")   // 0.8: Compare, 8 px after; 0.8.5: its menu
                              : headSkills(plate.items).map(skillChip).join("") + (plate.pill ? chip(plate.pill, plate.pillIcon, false).replace('class="chip', 'class="chip pill') : "")
-                               + plate.items.filter(b => b.kind === "headlink").map(h => `<span class="chip icon" style="margin-left:4px">${marker(h.icon, 18)}${esc(h.title)}</span>`).join("");   // 0.8: a chip that opens a page (PanelUi.HeadRight)
+                               + plate.items.filter(b => b.kind === "headlink" && b.tone !== "strip").map(h => `<span class="chip icon" style="margin-left:4px">${marker(h.icon, 18)}${esc(h.title)}</span>`).join("");   // 0.8: a chip that opens a page (PanelUi.HeadRight)
   COLUMN = PLATE_W;
   const band = plate.items.some(b => b.kind === "featband");
+  window.CURRENT_PLATE = plate;   // 0.9: the strip reads its links from the plate (featband, PanelModel.StripLinks)
   HEAD_ABOUT = plate.items.some(b => b.kind === "awaytotals" || b.kind === "together") ? plate.items.find(b => b.kind === "aboutnumbers") || null : null;   // PanelModel.HeadAbout
   STRIP_ABOUT = band && !HEAD_ABOUT ? plate.items.find(b => b.kind === "aboutnumbers") || null : null;   // PanelModel.StripAbout
-  const firstSwitch = plate.items.find(b => b.kind === "switch") || null;   // PanelModel.TopSwitch
+  const firstSwitch = plate.items.find(b => b.kind === "switch" && b.tone !== "inpage") || null;   // PanelModel.TopSwitch (0.9: an in-page switch stays where it stands)
+  const pinIsl = band && PIN(plate) && !!(plate.islands && plate.islands[0] && plate.islands[0].pin);   // 0.9.5: Meal plan's meal rides in the pinhead (StickyHeadUi.PinStrip)
   STRIP_SWITCH = band ? firstSwitch : null; TOP_SWITCH = band ? null : firstSwitch; SWITCH_ABOUT = TOP_SWITCH ? plate.items.find(b => b.kind === "aboutnumbers") || null : null;
   pageHtml = `<div class="hrow">${plate.icon ? hdIcon(plate.icon) : ""}${bookChip()}${v.everyoneOn ? `<span class="ev-tag">Everyone</span>` : ""}<span class="ht"${v.headingWindow ? ` data-l1="${esc(headingLines(v.heading, v.headingWindow)[0])}" data-l2="${esc(headingLines(v.heading, v.headingWindow)[1])}"` : ""}>${esc(v.heading + (v.headingWindow ? ", " + v.headingWindow : ""))}</span>${since(v.headingSince)}<span class="hr">${right}</span></div>
-    <div class="platebg"></div><div class="plate${plate.tone === "full" ? " full" : ""}">${plate.text ? `<div class="plateline">${esc(plate.text)}</div>` : ""}${v.hasFilters && headSkills(plate.items).length ? `<div style="display:flex;gap:4px;margin-bottom:10px">${headSkills(plate.items).map(skillChip).join("")}</div>` : ""}${TOP_SWITCH && !band ? swRow(TOP_SWITCH, SWITCH_ABOUT) : ""}${band ? (PIN(plate) ? `<div class="pinhead">${featband(plate.items.find(b => b.kind === "featband"))}</div>` : featband(plate.items.find(b => b.kind === "featband"))) : ""}${islands(plate)}</div>`;
+    <div class="platebg"></div><div class="plate${plate.tone === "full" ? " full" : ""}">${plate.text ? `<div class="plateline">${esc(plate.text)}</div>` : ""}${v.hasFilters && headSkills(plate.items).length ? `<div style="display:flex;gap:4px;margin-bottom:10px">${headSkills(plate.items).map(skillChip).join("")}</div>` : ""}${TOP_SWITCH && !band ? swRow(TOP_SWITCH, SWITCH_ABOUT) : ""}${band ? (PIN(plate) ? `<div class="pinhead${pinIsl ? " pinisl" : ""}">${featband(plate.items.find(b => b.kind === "featband"))}${pinIsl ? islands(plate, 0, 1) : ""}</div>` : featband(plate.items.find(b => b.kind === "featband"))) : ""}${islands(plate, pinIsl ? 1 : 0)}</div>`;
   COLUMN = layoutPx("frame-content-w"); STRIP_ABOUT = null; HEAD_ABOUT = null; STRIP_SWITCH = null; SWITCH_ABOUT = null; TOP_SWITCH = null;
 }
 if (v.badges.length) inner +=`<div class="badges">${v.badges.map(b => `<div class="row" style="gap:8px">${marker(b.icon, 34)}<span>${esc(b.label)}</span></div>`).join("")}</div>`;
@@ -2258,9 +2610,8 @@ function fitPlates() {
 // FeatsUi.FeatDetailFill: a long feat name steps down from 22 to 16 px (2 at a time) before it would be cut (measured once the font is in)
 // FeatsUi.FeatDetailFill / FeatCrew (0.8.2): a one-line caveat leaves its second line to the crew (PanelModel.FeatCrewTop); every person shows,
 // in as many legend columns as fit beside the label (PanelModel.CrewFit, up to 3), filled top to bottom; the area grows to the page's tallest crew
-function crewLay(cr, cv, place) {
-  const oneLine = cv && (r => (r.selectNodeContents(cv), r.getBoundingClientRect().height <= 20))(document.createRange());
-  const top = 12 + +cr.dataset.rules * 20 + 4 + 24 + 20 + (cv ? (oneLine ? 20 : 38) : 0), rw = cr.clientWidth, bar = cr.dataset.bar === "1";
+function crewLay(cr, cv, place, link) {
+  const top = caveatTop(+cr.dataset.rules) + caveatRoom(cvLines(cv)), rw = cr.clientWidth, bar = cr.dataset.bar === "1";
   const W = el => { if (!el) return 0; el.style.width = ""; return Math.ceil(el.getBoundingClientRect().width) + 2; };
   const lab = cr.querySelector(".fcl"), lw = W(lab), ents = [...cr.querySelectorAll(".ce")];
   const cells = ents.map(e => ({ name: (e.querySelector(".sw") ? 12 + 8 : 20 + 4) + W(e.querySelector(".cn")), num: W(e.querySelector(".cnum")), share: W(e.querySelector(".csh")) }));
@@ -2284,14 +2635,35 @@ function crewLay(cr, cv, place) {
       cx += c.w + 24;
     }
   }
-  return Math.max(184, top + (bar ? 22 : 0) + Math.max(1, per) * 22 + 4);
+  return Math.max(FDT.least, top + (bar ? 22 : 0) + Math.max(1, per) * 22 + 4 + (link ? FDT.linkRow : 0));
 }
-for (const det of document.querySelectorAll(".fdet")) {
-  const real = det.querySelector(":scope > .fcrew"); let H = 184;
-  if (real) H = Math.max(H, crewLay(real, det.querySelector(":scope > .cv"), true));
-  for (const g of det.querySelectorAll(".fghost > div")) H = Math.max(H, crewLay(g.querySelector(".fcrew"), g.querySelector(".cv"), false));
-  det.style.height = H + "px"; const dl = det.querySelector(".dl"); if (dl) dl.style.height = (H - 78) + "px";
+for (const det of document.querySelectorAll(".fdet")) {   // FeatsUi.FeatDetailPage: the tallest detail of the page, at least FDT.least
+  const real = det.querySelector(":scope > .fcrew"), cv = det.querySelector(":scope > .cv"), link = det.dataset.link === "1"; let H = FDT.least;
+  H = Math.max(H, rightNeed(+det.dataset.rules || 0, cvLines(cv), link), leftNeed(det.querySelector(".dl .dh"), det.querySelector(".dl .mo")));
+  if (real) H = Math.max(H, crewLay(real, cv, true, link));
+  for (const g of det.querySelectorAll(".fghost > div")) {
+    const gc = g.querySelector(":scope > .cv"), gl = g.dataset.link === "1", gr = g.querySelector(":scope > .fcrew");
+    H = Math.max(H, rightNeed(+g.dataset.rules || 0, cvLines(gc), gl), leftNeed(g.querySelector(".gl .dh"), g.querySelector(".gl .mo")));
+    if (gr) H = Math.max(H, crewLay(gr, gc, false, gl));
+  }
+  det.style.height = H + "px"; const dl = det.querySelector(".dl"); if (dl) dl.style.height = (H - FDT.honoursTop - 4) + "px";
 }
+// 0.9.2 FeatSearchUi.FeatSearchRow: the field rides at the strip's right end when the page's line leaves it the room; else its own row under the strip
+{ const f = document.querySelector(".fsearch"), about = document.querySelector(".content .earned .ea-about"), cap = document.querySelector(".content .earned .ea-cap");
+  if (f && about && cap) {
+    const root = getComputedStyle(document.documentElement), fsf = f.querySelector(".fsf"), fr = f.querySelector(".fread"), rg = parseFloat(root.getPropertyValue("--feat-search-pad")) || 0;
+    const room = () => about.offsetLeft - cap.offsetLeft - fsf.offsetWidth - (fr ? fr.offsetWidth + rg : 0) - parseFloat(root.getPropertyValue("--strip-about-gap") || "18");
+    let fits = cap.scrollWidth <= room();
+    if (!fits && fr) { fr.textContent = "Mark read"; fits = cap.scrollWidth <= room(); if (!fits) fr.textContent = fr.dataset.full; }   // 0.9.5 Mark read: the short words first (PanelModel.FeatsReadWord), then its own row
+    if (fits) { const r = room(); if (fr) about.appendChild(fr); about.appendChild(fsf); f.remove(); cap.style.maxWidth = r + "px"; }   // Mark read rides with the field, left of it   // the line leaves the room: the field rides in the strip, else its own row stays
+  } }
+// 0.9.2 FeatSearchUi.FeatSearchTags: on the search's grid each card says its page, top right, left of its New mark, above the card's name
+if (document.querySelector(".fsf")) for (const g of document.querySelectorAll(".fgrid .feats")) [...g.children].forEach((el, k) => {
+  const c = (window.FEAT_CARDS || [])[k], t = c && (window.FEAT_SEARCH_TAGS || []).find(x => x.id === c.id); if (!t || el.querySelector(".fstag")) return;
+  const tag = document.createElement("span"); tag.className = "fstag"; tag.textContent = t.title; el.appendChild(tag); el.classList.add("tagged");
+  const root = getComputedStyle(document.documentElement), inset = parseFloat(root.getPropertyValue("--feats-new-inset")) || 0, gap = parseFloat(root.getPropertyValue("--feat-search-tag-gap")) || 0;
+  const nw = el.querySelector(".fnew"), right = inset + (nw ? nw.offsetWidth + gap : 0); tag.style.right = right + "px";
+});
 // FeatsUi.FeatCard (B30): the next tier's words too long for the card: the number and its unit only (one line, never wrapped)
 for (const fw of document.querySelectorAll(".fcard .fw[data-short]")) if (fw.scrollWidth > fw.clientWidth + 1) fw.textContent = fw.dataset.short;
 for (const dn of document.querySelectorAll(".fdet .dn")) { dn.style.fontSize = ""; for (let s = 20; s >= 16 && dn.scrollWidth > dn.clientWidth + 1; s -= 2) dn.style.fontSize = s + "px"; }
@@ -2319,12 +2691,13 @@ for (const box of document.querySelectorAll(".content > .plate, .content .blocks
 function PIN(plate) { return plate.tone !== "full" && !plate.text && !(v.hasFilters && headSkills(plate.items).length); }
 // scrolled down (rows under the strip): the strip's holder sticky and opaque (.under), the shade under it and the scroll area's top fade, as
 // PanelUi.Fades draws them (StripShade, then the fade at the scroll area's top edge, 12 px in from its sides); drawn again on every scroll
+// (0.9.5: under the holder's last child: the strip, or Meal plan's meal pinned under it)
 function pinHead() {
   document.querySelectorAll(".plfade.pinedge").forEach(f => f.remove());
   for (const p of document.querySelectorAll(".content > .plate")) {
     const h = p.querySelector(":scope > .pinhead"); p.classList.toggle("under", !!h && p.scrollTop > 1);
     if (!h || p.scrollTop <= 1) continue;
-    const s = h.firstElementChild, k = p.getBoundingClientRect().height / p.offsetHeight || 1, y = p.offsetTop + (s.getBoundingClientRect().bottom - p.getBoundingClientRect().top) / k;
+    const s = h.lastElementChild, k = p.getBoundingClientRect().height / p.offsetHeight || 1, y = p.offsetTop + (s.getBoundingClientRect().bottom - p.getBoundingClientRect().top) / k;
     const edge = (left, width, height, ink) => { const f = document.createElement("div"); f.className = "plfade pinedge";
       f.style.cssText = `position:absolute;left:${left}px;width:${width}px;top:${y}px;height:${height}px;pointer-events:none;background:linear-gradient(${ink}, transparent)`; p.parentElement.appendChild(f); };
     edge(p.offsetLeft + 12, p.offsetWidth - 24, layoutPx("plate-fade"), "rgba(15,11,8,.9)");
@@ -2337,12 +2710,18 @@ function fitFeatGrids() {
     const f = g.querySelector(".feats"), cards = [...f.children], n = cards.length; if (!n) continue;
     const per = f.dataset.per ? +f.dataset.per : n <= 9 ? 3 : 4, rows = Math.ceil(n / per);   // the Titles page: three across (B18)
     f.style.gridTemplateColumns = `repeat(${per}, 1fr)`;
-    const h = Math.max(52, Math.min(76, Math.floor((g.clientHeight - (rows - 1) * 6) / rows)));
+    if (f.classList.contains("lk")) {   // 0.9 feat looks: the cards between FeatLook.CardMin and CardMax (FeatsUi.FeatsBlock)
+      const lh = Math.max(layoutPx("feat-look-card-min"), Math.min(layoutPx("feat-look-card-max"), Math.floor((g.clientHeight - (rows - 1) * 6) / rows)));
+      for (const c of cards) c.style.setProperty("--fh", lh + "px");
+      continue;
+    }
+    const h = Math.max(f.classList.contains("ti") ? layoutPx("feats-title-card") : 52, Math.min(76, Math.floor((g.clientHeight - (rows - 1) * 6) / rows)));
     for (const c of cards) { const l = featLay(h, !!c.querySelector(".nt")), m = c.querySelector(":scope > .m"); c.style.setProperty("--fh", h + "px"); c.style.setProperty("--nt", l.nt + "px"); if (m) Object.assign(m.style, { left: l.left + "px", top: l.mt + "px", width: l.s + "px", height: l.s + "px" }); }
   }
   for (const g of document.querySelectorAll(".fgrid")) {
-    g.classList.toggle("scrolls", g.scrollHeight > g.clientHeight + 1);   // FeatsUi.FeatsBlock: the cards in a view above the cue's own strip
-    const sel = g.querySelector(".fcard.sel"); if (sel && sel.offsetTop + sel.offsetHeight > g.clientHeight) g.scrollTop = sel.offsetTop + sel.offsetHeight - g.clientHeight;
+    g.classList.toggle("scrolls", g.scrollHeight > g.clientHeight + 1);   // FeatsUi.FeatsBlock: the cards in a view over the area's whole height, the cue over its foot
+    const cueBand = layoutPx("feats-cue-band"), sel = g.querySelector(".fcard.sel");   // the chosen card clear of the cue's band too (GridScroll's row end)
+    if (sel) { const end = sel.offsetTop + sel.offsetHeight + (sel.offsetTop + sel.offsetHeight < g.scrollHeight - 1 ? cueBand : 0); if (end > g.clientHeight) g.scrollTop = end - g.clientHeight; }
     if (g.scrollHeight <= g.clientHeight + 1) continue;
     const kl = document.querySelector(".keys"); if (kl && !kl.dataset.wheel) { kl.dataset.wheel = "1"; kl.insertAdjacentHTML("beforeend", `<span class="wheelkey">[Wheel] Scroll</span>`); }
     const edge = (top) => { const f = document.createElement("div"); f.className = "plfade";
@@ -2350,10 +2729,9 @@ function fitFeatGrids() {
       g.parentElement.appendChild(f); };
     if (g.scrollTop > 1) edge(true);
     if (g.scrollTop + g.clientHeight < g.scrollHeight - 1) {
-      edge(false);
-      // FeatsUi's MoreCue: rows lie below, and how to reach them (PanelModel.FeatsMore), in its own strip under the cards (titles-grid)
+      // FeatsUi.FeatMoreCue: rows lie below, and how to reach them (PanelModel.FeatsMore), a band over the grid's foot (it is the bottom edge's fade too)
       const c = document.createElement("div"); c.className = "plfade fcue"; c.innerHTML = `<span>More below · wheel or A/D</span>`;
-      c.style.cssText = `left:${g.offsetLeft}px;width:${g.offsetWidth}px;top:${g.offsetTop + g.offsetHeight + 2}px`;
+      c.style.cssText = `left:${g.offsetLeft}px;width:${g.offsetWidth}px;top:${g.offsetTop + g.offsetHeight - cueBand}px`;
       g.parentElement.appendChild(c);
     }
   }
@@ -2398,7 +2776,23 @@ function fitEarned() { document.querySelectorAll(".earned").forEach(e => { const
     if (over()) cp.classList.add("notag"); if (over()) cp.classList.add("nowords");
     cp.style.flex = "";
   }
+  if (a && !cp) fitFeats(e, f);
   fitTitles(e, t); }); }
+// 0.9 (armor-share: a friend's Defense, many feats beside the view switch drew under it; FeatsUi.FeatBandBlock): with the switch or About at the strip's
+// end, feats past the room end in "+N more" (PanelModel.MoreTitles), as the titles do
+function fitFeats(e, f) {
+  if (!f) return;
+  f.querySelectorAll(".ea-more").forEach(m => m.remove());
+  const items = [...f.querySelectorAll(".ea-i")]; items.forEach(i => i.style.display = "");
+  const edge = () => e.getBoundingClientRect().right - parseFloat(getComputedStyle(e).paddingRight);
+  if (items.length < 2 || items[items.length - 1].getBoundingClientRect().right <= edge()) return;
+  const more = document.createElement("span"); more.className = "ea-m ea-more"; f.appendChild(more);
+  let shown = items.length;
+  const fits = () => (more.textContent = "+" + (items.length - shown) + " more", more.getBoundingClientRect().right <= edge());
+  while (shown > 1 && items[shown - 1].getBoundingClientRect().right > edge()) items[--shown].style.display = "none";
+  while (shown > 1 && !fits()) items[--shown].style.display = "none";
+  fits(); more.dataset.link = f.dataset.link;   // a click to the Feats page, as the band is
+}
 // FeatsUi.FeatBandBlock: titles past the strip's edge end in "+N more" (PanelModel.MoreTitles), linked to the Titles page like a title (review 0.6.5)
 function fitTitles(e, t) {
   if (!t) return;
@@ -2462,7 +2856,7 @@ function fitKeys() {
   const spans = [...kl.children]; spans.forEach(k => k.style.display = "");
   for (const drop of ["[Wheel] Scroll", "] Book", "[Backspace] Back", "[Enter] Open"]) { if (kl.scrollWidth <= kl.clientWidth + 1) break; const k = spans.find(x => x.textContent === drop || (drop.startsWith("] ") && x.textContent.endsWith(drop))); if (k) k.style.display = "none"; }   // "] Book": the book key (0.8)
 }
-// PanelUi.Fill: a heading longer than its room (nine window chips and Compare beside it) shrinks to fit, down to 17 px, never cut
+// PanelUi.Fill: a heading longer than its room (eleven window chips and Compare beside it) shrinks to fit, down to 17 px, never cut
 // 0.8.5: below --heading-two-at it goes on two lines of --heading-two-size instead, when both fit (headingLines)
 function fitHeading() {
   for (const ht of document.querySelectorAll(".hrow .ht")) {
@@ -2557,7 +2951,8 @@ document.getElementById("caption").textContent = `Preview "${name}": PanelModel 
   const go = () => { const p = document.querySelector(".content > .plate"); if (p && to === "end") { p.scrollTop = p.scrollHeight; return; }   // "end": the plate's end (the feed's Show older foes)
     if (p && typeof to === "number") { p.scrollTop = to; return; }   // 0.8.6: a number: that many px down (the sticky head over the rows)
     const h = p && [...p.querySelectorAll(".section")].find(s => s.textContent.startsWith(to)); if (!h) return;
-    const box = h.closest(".isl") || h; p.scrollTop = box.getBoundingClientRect().top - p.getBoundingClientRect().top + p.scrollTop - ISLE.pad; };
+    const pin = p.querySelector(":scope > .pinhead"), under = pin ? pin.getBoundingClientRect().height : 0;   // the strip pinned at the plate's top: the island starts under it, never behind it
+    const box = h.closest(".isl") || h; p.scrollTop = box.getBoundingClientRect().top - p.getBoundingClientRect().top + p.scrollTop - ISLE.pad - under; };
   if (to) { go(); document.fonts.ready.then(go); }
   pinHead(); document.fonts.ready.then(() => requestAnimationFrame(pinHead));   // after the plates are fitted and scrolled (fitPlates clears every .plfade)
   document.querySelectorAll(".content > .plate").forEach(p => p.addEventListener("scroll", pinHead, { passive: true })); }

@@ -10,7 +10,7 @@ namespace Hearthwoven.Panel
     /// fellow player's shared snapshot (FromSnapshot), so every chapter renders the same way for anyone.
     /// Pure C#: filled by hand in the tests.
     /// </summary>
-    public class PanelInput
+    public partial class PanelInput
     {
         public string PlayerName = "";
         /// <summary>0.8.2 (I): a fellow's copy: the Hearthwoven that sent it ("mod", e.g. "0.6.5"), so a page can say what fills in once they
@@ -92,11 +92,16 @@ namespace Hearthwoven.Panel
         /// <summary>0.8.5: their DayDeeds carry km sailed and cargo per day (PanelModel.SharesVoyageDays); false = not shared (the 0.8.5 test build or older),
         /// so Together leaves them out of Sailed and Cargo carried in a day window instead of reading "sailed nothing".</summary>
         public bool DayVoyages;
+        /// <summary>0.9.1: their DayDeeds carry the foes defeated per day (the game's kill counter, PanelModel.SharesDayKills); false = not shared (before 0.9.1),
+        /// so their Recent days say so instead of "defeated nothing".</summary>
+        public bool DayKills;
         /// <summary>A day window's input (PanelModel.InWindow): the window this copy holds; null = the input as recorded.</summary>
         public PanelModel.DayView Window;
-        /// <summary>Defence's armour view (0.7, ArmourTally.cs), yourself only (never shared; a fellow's copy: all null). This session's ledger, the same
-        /// in one-minute buckets (the short windows), everything recorded on this PC, the book with its day rows, the running session's unsaved part
-        /// (added to today), and when recording began ("Recorded from"); null = not known.</summary>
+        /// <summary>Defence's armour view (0.7, ArmourTally.cs). This session's ledger, the same in one-minute buckets (the short windows), everything
+        /// recorded on this PC, the book with its day rows, the running session's unsaved part (added to today), and when recording began ("Recorded
+        /// from"); null = not known. 0.9 (armor-share): a fellow's copy has ArmourSince (their ledger since it began, per damage type, keys "||type") and
+        /// ArmourFromUtc from its "armorSince"; their short windows read the "armor" minutes of their log (EventLog.Armor); the rest stays null. A copy
+        /// without "armorSince" (a Hearthwoven before 0.9): ArmourSince null.</summary>
         public ArmourTally ArmourSession, ArmourSince, ArmourPending;
         public ArmourLog ArmourMinutes;
         public ArmourBook ArmourBook;
@@ -168,7 +173,33 @@ namespace Hearthwoven.Panel
         /// hosts the chest); null = none (a server before 0.8.5, nothing fed yet, or you do not share).</summary>
         public ServerBook.World World;
         public FeatsLedger Feats;                           // the feats earned and their moments: yourself, the ledger on this PC (counters too); a fellow's, what they shared (no counters); null = none known
-        public List<PanelInput> Fellows;                    // everyone else who shares (and you, when looking at a fellow player)
+
+        // ---------- 0.9, the records (work/hearthwoven-0.9/DESIGN.md sections 1 and 3, TRACK-record.md). null = not recorded on this book
+        // (a fellow's copy, the totals not loaded yet, the sample); every one is yours only and never shared in this form ----------
+        /// <summary>0.9, record 1: your upgrades (UpgradeLog): Recent = {Token, From, To, Station, StationLevel, Utc} newest first (the newest 2 000),
+        /// Folded = the older ones per item {Token, MaxLevel, Count, First, Last}; PerItem() joins both per item.</summary>
+        public UpgradeLog Upgrades;
+        /// <summary>0.9: when upgrades began to be recorded (UTC instant; the panel shows its local day: "Recorded from").</summary>
+        public DateTime? UpgradesFrom;
+        /// <summary>0.9, record 3: token ("$item_axe_bronze", "$piece_woodwall") -> the local day you first made or placed it, from FirstsFrom on.</summary>
+        public IDictionary<string, DateTime> Firsts;
+        /// <summary>0.9: when firsts began to be recorded (UTC instant).</summary>
+        public DateTime? FirstsFrom;
+        /// <summary>0.9 (Meals' Your combinations): the foods you had on together at each meal (Hearthwoven.MealCombos: per combination its count,
+        /// first and last local day, the game's food values summed, the meals per local day of the last 40 days), from its FromUtc on. Yours only.</summary>
+        public MealCombos MealCombos;
+        /// <summary>0.9, record 4: the earned feat tiers you opened, "featId:tier" (FeatsLedger.SeenTiers, the same set: FeatsLedger.MarkTierSeen adds
+        /// to it). A tier not in it is New.</summary>
+        public ISet<string> FeatsSeen;
+        /// <summary>0.9, record 2: your deed stretches per session in this world (DeedSession {World, Id, FromUtc, ToUtc, Live, Stretches}; a stretch
+        /// DeedStretch {Family, FromUtc, ToUtc, Counts "deedfamily|token" -> n, Moments, MomentsLeft}; a moment DeedMoment {Kind made | upgraded |
+        /// feast | first, Token, Utc, Count, From, To, Station, StationLevel}): this session first (Live) when it has one, then the earlier sessions
+        /// kept on this PC (KeptDeeds, 30 days), newest first.</summary>
+        public List<DeedSession> DeedStretches;
+        /// <summary>0.9 (crafting-history, Crafting's Upgrades per item): an item token's highest quality the game allows (ItemData.SharedData.m_maxQuality,
+        /// GameData.MaxQuality: 4 for most gear); null or 0 = not known.</summary>
+        public Func<string, int> MaxQuality;
+        public List<PanelInput> Fellows;                   // everyone else who shares (and you, when looking at a fellow player)
         public IDictionary<long, string> PlayerNames;       // player id -> name, for feast creators (players nearby)
         public Func<string, string> DisplayName;            // prefab or $token -> localized name; null = prettified
         public Func<DateTime, DateTime> ToLocal;            // null = the PC's own time zone
@@ -189,8 +220,15 @@ namespace Hearthwoven.Panel
         public Func<string, string> PieceMaterial;          // piece token -> its main material ("Fine wood"), from the build resources in the game's data (PanelModel.PieceMainMaterial); null = not known
         public Func<string, string> DishType;               // food token -> "meal" | "grilled" | "baked" | "feast" | "uncooked" | "meadbase", from the game's data (PanelModel.DishTypeOf); null = not known (Cooking's filter: Other)
         public Func<string, string> DishBoost;              // food token -> "health" | "stamina" | "eitr" | "balanced", its biggest food value (PanelModel.DishBoostOf); null = no food value or not known
+        public Func<IList<PanelModel.FoodData>> Foods;      // 0.9.2 Meals' Plan a meal: every food of the game's data with its values, feast mark and what it is made from (GameData.Foods); null = not known
+        public Func<string, PanelModel.FoodStats> DishStats; // 0.9.2 food token (or prefab) -> one serving's health, stamina, eitr and seconds from the game's data (GameData.DishStats); null = not known
         public Func<string, string> ItemToken;              // item prefab ("CookedMeat") -> its token ("$item_cookedmeat"), as fellows record food they ate; null = not known
         public Func<string, int> RecipeYield;               // item token -> how many one craft puts in the bag (Recipe.m_amount: 4 sausages), from this PC's game data; null or 0 = not known (one)
+        /// <summary>0.9 (Armor sets, Chapters/ArmorSets.cs): every armor piece of this PC's game data, with its recipe and set name (GameData.ArmorPieces); null = not read.</summary>
+        public Func<IList<ArmorPiece>> ArmorPieces;
+        /// <summary>0.9: a fellow's copy: the armor pieces they made, yes or no per item token (their snapshot's "armorMade"); null = not shared (a Hearthwoven
+        /// before 0.9) or your own book (your own counts are in ItemsCrafted).</summary>
+        public ICollection<string> ArmorMade;
 
         /// <summary>
         /// A fellow player's shared snapshot (Snapshot.Build output, received through GroupShare). Rebuilds the mod's own
@@ -238,11 +276,16 @@ namespace Hearthwoven.Panel
                                                                  .Take(40).ToDictionary(kv => kv.Key, kv => WeaponCells.Read((Dictionary<string, object>)kv.Value, 60));
             input.DayDeeds = PanelModel.ReadDayDeeds(Obj(root, PanelModel.DayDeedsKey));   // 0.8.5: their Deeds per day (an older copy has none: null); only real days, bounded
             input.DayVoyages = PanelModel.SharesVoyageDays(Obj(root, PanelModel.DayDeedsKey));   // 0.8.5: km sailed and cargo among them
+            input.DayKills = PanelModel.SharesDayKills(Obj(root, PanelModel.DayDeedsKey));   // 0.9.1: the foes defeated per day among them
             var foes = FoeShare.ReadFrom(Obj(root, "foes"));   // 0.8: the foes they fought per kind (an older copy has none: null)
             if (foes != null) { input.FoesSession = foes.Session; input.FoesSince = foes.Since; input.FoesFromUtc = foes.FromUtc; }
             input.SharedFeed = FeedShare.ReadFrom(Obj(root, "battleFeed"));   // 0.8.2: their battle feed (an older copy has none: null)
             // the biomes they found (0.7 on; an older copy has none: null, and the group feats' gate falls back on the evidence the copy carries)
             if (root.TryGetValue("knownBiomes", out var kb) && kb is List<object> biomes) input.KnownBiomes = biomes.OfType<string>().Where(b => b.Length > 0).Take(16).ToList();
+            // 0.9: which armor pieces they made, yes or no (Armor sets on Everyone); at most 300 tokens, an older copy has none (null)
+            if (root.TryGetValue(PanelModel.ArmorMadeKey, out var am) && am is List<object> armor) input.ArmorMade = new HashSet<string>(armor.OfType<string>().Where(t => t.Length > 0 && t.Length < 120).Take(300), StringComparer.Ordinal);
+            // 0.9 (armor-share): their armour ledger since it began, per damage type (an older copy has none: null, "Their version doesn't share this yet")
+            input.ArmourSince = ArmourTally.ReadShared(Obj(root, ArmourTally.SharedKey), out var armourFrom); if (input.ArmourSince != null) input.ArmourFromUtc = armourFrom;
             if (Obj(root, "feats") != null) input.Feats = FeatsLedger.ReadShared(Obj(root, "feats"));   // the feats they earned (Feats page, their book)
             if (Obj(root, "featBests") != null) { input.Feats = input.Feats ?? new FeatsLedger(); input.Feats.ReadSharedBests(Obj(root, "featBests")); }   // the bests behind Heavy Keel and Long Lead
             var damageSince = Obj(root, "damageSinceInstall");

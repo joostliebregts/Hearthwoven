@@ -58,7 +58,9 @@ namespace Hearthwoven.Panel
             public static readonly float Inset = 32;
             public static readonly float ListW = 190;
             /// <summary>The page heading and the list title stand here; the list starts at ListTop; the list and content end Foot above the bottom.</summary>
-            public static readonly float HeadTop = 144, ListTop = 180, Foot = 72;
+            /// 0.9.1 (Joost: "where it now says all those key binds ... we can probably take a little bit more vertical space"): Foot 72 -> 52 with the
+            /// slimmer key line (Keys), 20 px more for every page's content.
+            public static readonly float HeadTop = 144, ListTop = 180, Foot = 52;
             /// <summary>The tabs: TabTop down, TabH high, TabInset in from each side (room for the Q and E keys), TabGap apart; in a tab its icon
             /// (TabIcon square) and its name TabIconGap apart, centred.</summary>
             public static readonly float TabTop = 77, TabH = 52, TabInset = 70, TabGap = 8, TabIcon = 26, TabIconGap = 8;
@@ -108,6 +110,47 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>An island: a plain rounded rectangle on the plate around one group of blocks.</summary>
+        /// <summary>0.9 Armor sets (DeedsUi.SetBand): a set's band (its padding and the gap between its head line and its tiles), and a piece not made
+        /// yet: the gap between its materials, between a material's picture and its amount, the picture's size.</summary>
+        public static class Sets
+        {
+            public static readonly float BandPadX = 12, BandPadTop = 10, BandPadBottom = 12, BandGap = 8, CostGap = 6, CostPicGap = 2, CostPic = 16;
+        }
+
+        /// <summary>
+        /// 0.9 an item tile (DeedsUi.ItemGrid): its padding above and below the count and the name, the least it is high and what a wrapped name, a second
+        /// number or a since line adds. Fault (Joost in game on Crafting, 18 Oct: three tiles without names): a tile whose names all fit one line was 46 px,
+        /// so its 40 px inside held less than the count's line box (25) and the name's (19): the layout squeezed the name below one line and TMP's ellipsis
+        /// then drew none of it. Least is the two line boxes and the padding, so a tile never holds less than one line of its name.
+        /// </summary>
+        public static class Tile
+        {
+            public static readonly float Pad = 3, Base = 46, Line = 14;
+            /// <summary>The count's and one name line's line boxes with the padding: the least a tile is high.</summary>
+            public static float Least => 2 * Pad + LineBox(Text.Count) + LineBox(Text.Floor);
+            /// <summary>A tile's height: at least Least; a wrapped name adds a name line, a second number or a since line a line each.</summary>
+            public static float Height(bool wraps, int extraLines) => System.Math.Max(Base, Least) + (wraps ? LineBox(Text.Floor) : 0) + extraLines * Line;
+        }
+
+        /// <summary>0.9 the level meter (Crafting's Upgrades per item, DeedsUi.Ranking's level rows): the weakness meter of Battle > Foes (BattleUi.BattleMeter)
+        /// at a row's size: four parts PartW wide and H high, Gap apart; the words "now level 3 of 4" after it in a column Words wide; a row Row high, its
+        /// picture, name, meter, words and count RowGap apart.</summary>
+        public static class Level
+        {
+            public static readonly float PartW = 28, H = 12, Gap = 2, Words = 132, Row = 34, RowGap = 10;
+            public static float MeterW => 4 * PartW + 3 * Gap;
+        }
+
+        /// <summary>
+        /// 0.9 History (a Deeds page's growth line drawn large, GrowthLinesUi.SparkLarge): the columns' room (ChartH), the gap between two columns, the widest a
+        /// column grows, the least height of a day with something, an empty day's flat mark, the gold tick over a day with a first or a feat (its size and
+        /// its gap above the column), the date line under the columns.
+        /// </summary>
+        public static class History
+        {
+            public static readonly float ChartH = 150, ColumnGap = 5, MaxColumn = 30, Least = 2, Flat = 2, Tick = 6, TickGap = 3, Axis = 20;
+        }
+
         public static class Island
         {
             /// <summary>Pad: inside it; Inner: between its blocks (a heading and its list); PairGap: between two half islands side by side.</summary>
@@ -154,8 +197,10 @@ namespace Hearthwoven.Panel
         /// <summary>A small chip: the heading row's pill, a view switch, the window choices.</summary>
         public static class Chip
         {
-            /// <summary>Pad: each side; Icon: its picture, IconLeft in from the left, the label IconRoom in; WindowPad: the window chips' tighter sides.</summary>
-            public static readonly float Height = 26, Pad = 11, Icon = 18, IconLeft = 9, IconRoom = 32, WindowPad = 8;
+            /// <summary>Pad: each side; Icon: its picture, IconLeft in from the left, the label IconRoom in; WindowPad: the window chips' tighter sides
+            /// (0.9.1: 4, was 8: eleven window chips with Yesterday and 3 days, and the heading beside them still whole). Swatch: a part's colour
+            /// before the word (0.9.8 Meal plan's Best for: Health, Stamina, Eitr; the bars' legends' 10 px square), SwatchGap to the word.</summary>
+            public static readonly float Height = 26, Pad = 11, Icon = 18, IconLeft = 9, IconRoom = 32, WindowPad = 4, Swatch = 10, SwatchGap = 7;
             public static readonly float Text = PanelLayout.Text.Floor;
         }
 
@@ -171,10 +216,10 @@ namespace Hearthwoven.Panel
             public static readonly float Gap = 34, Stack = 12;
         }
 
-        /// <summary>The key line at the frame's foot.</summary>
+        /// <summary>The key line at the frame's foot. 0.9.1: slimmer (30 -> 24 high, 22 -> 18 from the frame's foot), so the content ends 20 px lower.</summary>
         public static class Keys
         {
-            public static readonly float Side = 64, Bottom = 22, Height = 30;
+            public static readonly float Side = 64, Bottom = 18, Height = 24;
             public static readonly float Text = PanelLayout.Text.Small;
         }
 
@@ -236,6 +281,13 @@ namespace Hearthwoven.Panel
             public static readonly float Text = PanelLayout.Text.Body, Caption = PanelLayout.Text.Floor, Name = PanelLayout.Text.Name, Total = PanelLayout.Text.Lead;
         }
 
+        /// <summary>0.9.2 feat search (Chapters/FeatSearchUi.cs): the search field at the Feats pages' top right (its width, height, inner pad and key
+        /// cap), and the page tag on a card of the search's grid (its height, its inset from the card's top, inner pad and the gap to the New mark).</summary>
+        public static class FeatSearch
+        {
+            public static readonly float W = 200, H = 28, Pad = 8, Cap = 20, TagH = 16, TagTop = 3, TagPad = 6, TagGap = 6;
+        }
+
         /// <summary>The kitchen ledger (Deeds > Cooking): a row's name and its source line under it, each in a box of its font's line (LineBox).</summary>
         public static class Ledger
         {
@@ -251,7 +303,61 @@ namespace Hearthwoven.Panel
         public static class Feats
         {
             public static readonly float Card = 52, RowGap = 6, ColumnGap = 8;
+            /// <summary>0.9.1: a Titles card's least height: its name and a reason on two lines (Hallwright's "Raise your first piece with the hammer." was cut
+            /// once the slimmer key line gave the grid the room to show it).</summary>
+            public static readonly float TitleCard = 58;
             public static float GridRoom => 4 * Card + 3 * RowGap;
+            /// <summary>0.9 New feats: the New mark on a card, top right: the gold dot's size, the gap to the word, and its inset from the card's top and right edge.</summary>
+            public static readonly float NewDot = 9, NewGap = 5, NewInset = 6;
+            /// <summary>0.9.3 the chosen card (FeatsUi.FeatChosen): its gold frame, the 2 px rim and 5 px corners of PanelLook.RoundedEdge drawn at its own scale.</summary>
+            public static readonly float ChosenRim = 2, ChosenRound = 5;
+            /// <summary>0.9: a feat's link to its page in the detail area (Open Armor sets): its inset from the area's right and bottom edge, and the
+            /// room between its word and the opens mark after it.</summary>
+            public static readonly float LinkInset = 16, LinkBottom = 12, LinkMarkGap = 6;
+            /// <summary>0.9.2 the More below cue over the grid's foot (FeatsUi.FeatMoreCue): the band's height, and its words' line this far above the
+            /// band's bottom edge.</summary>
+            public static readonly float CueBand = 44, CueTextBottom = 4;
+        }
+
+        /// <summary>0.9 feat look (Chapters/FeatLookUi.cs): a card's least and most height; the large icon, its left inset, the gap to the text and the
+        /// soft disc's reach around it; the text's right inset; the thin rim the band under the text keeps clear of; the tier bar (height, most width, gap
+        /// between parts, room above) and family edge; the detail area's family line, name and tier line tops and its ground's zone (behind the emblem,
+        /// left of the name, above the line under it). 0.9.2: look 1's small icon, badges, frames and knots went with it.</summary>
+        public static class FeatLook
+        {
+            public static readonly float CardMin = 68, CardMax = 84, IconLarge = 56, IconLeftLarge = 8, IconGap = 12, Halo = 22, TextRight = 8;
+            public static readonly float RimThin = 1;
+            public static readonly float BarH = 6, BarW = 156, BarGap = 2, BarTop = 4, Edge = 4;
+            public static readonly float DetailFamilyTop = 3, DetailNameTop = 17, DetailTierTop = 45;
+            /// <summary>0.9.1 (Joost: "I really did like all the cards when the pattern was on the background of the full card"): the family's ground
+            /// across the whole card again (board 9), strongest at the left and fading right (FeatLookShape.GroundStops over the card's width); in the
+            /// detail area over GroundW from its left and fading down by GroundH (its left column's text under the emblem). Under the text a soft band of
+            /// the card's own ground (Feats.TextBacking "Fade"): it rises over BackingIn px before the text column's left edge.</summary>
+            public static readonly float DetailGroundW = 420, DetailGroundH = 96, BackingIn = 20;
+        }
+
+        /// <summary>
+        /// 0.9.1 the feat detail area, compact (Joost: "the bottom one takes a little bit too much space ... taking away from the achievements list"): it is as
+        /// high as its page's tallest detail needs (FeatsUi.FeatDetailPage; at least Least), no empty band kept for text that is not there. The left column:
+        /// the emblem from EmblemTop, the name and tier line (NameTop, TierTop without a look; a look's from FeatLook), what the feat honours from HonoursTop
+        /// (one to three lines of HonoursLine), the moment MomentGap under it (one or two lines of MomentLine). The right column: the rules RuleH apart
+        /// from Top, ProgressGap more to the progress line (ProgressRow), Counted by (CountedRow), the caveat (one line CaveatOne, two CaveatTwo), the crew;
+        /// a link chip at its foot takes LinkRow. Pad under the lowest line.
+        /// </summary>
+        public static class FeatDetail
+        {
+            public static readonly float Least = 116, Top = 8, Pad = 6, EmblemTop = 8, NameTop = 6, TierTop = 38;
+            public static readonly float HonoursTop = 68, HonoursLine = 19, HonoursMost = 60, MomentGap = 3, MomentLine = 20, MomentMost = 40;
+            public static readonly float RuleH = 19, ProgressGap = 2, ProgressRow = 22, CountedRow = 20, CaveatOne = 20, CaveatTwo = 38, LinkRow = 30;
+            /// <summary>Where the caveat starts after <paramref name="rules"/> rules (the crew's top adds the caveat's lines).</summary>
+            public static float CaveatTop(int rules) => Top + rules * RuleH + ProgressGap + ProgressRow + CountedRow;
+            public static float CaveatRoom(int lines) => lines <= 0 ? 0 : lines == 1 ? CaveatOne : CaveatTwo;
+            /// <summary>The right column's need without a crew: its lines (the last row's 2 px gap off), the link's row if any, the pad.</summary>
+            public static float RightNeed(int rules, int caveatLines, bool link) => CaveatTop(rules) + CaveatRoom(caveatLines) - 2 + (link ? LinkRow : 0) + Pad;
+            /// <summary>The left column's need for what the feat honours and its moment as measured (px, clamped to their lines).</summary>
+            public static float LeftNeed(float honours, float moment) =>
+                HonoursTop + Clamp(honours, HonoursLine, HonoursMost) + (moment > 0 ? MomentGap + Clamp(moment, MomentLine, MomentMost) : 0) + Pad;
+            public static float Clamp(float v, float lo, float hi) => (float)System.Math.Ceiling(System.Math.Min(hi, System.Math.Max(lo, v)));
         }
     }
 }

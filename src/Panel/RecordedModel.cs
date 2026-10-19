@@ -371,7 +371,9 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>The page's view switch that shares the top row (B38): the plate's first switch; null = none.</summary>
-        public static Block TopSwitch(Block plate) => (plate?.Items ?? new List<Block>()).FirstOrDefault(b => b.Kind == "switch");
+        public static Block TopSwitch(Block plate) => (plate?.Items ?? new List<Block>()).FirstOrDefault(b => b.Kind == "switch" && b.Tone != InPageTone);
+        /// <summary>0.9: a switch that belongs to a part lower on the page (What to use on Last fight): never the page's top switch, it stays where it stands.</summary>
+        public const string InPageTone = "inpage";
 
         /// <summary>The About button's short label when the top row is full (the key line already says "[Y] Numbers").</summary>
         public const string AboutShort = "Numbers";

@@ -13,7 +13,7 @@ static partial class CoherenceTests
 {
     static int fails;
     static void Check(bool ok, string what) { System.Console.WriteLine((ok ? "PASS " : "FAIL ") + what); if (!ok) fails++; }
-    static double Num(string s) => string.IsNullOrWhiteSpace(s) ? 0 : double.Parse(s.Replace(" ", "").Replace(",", "").Replace(" ", ""), CultureInfo.InvariantCulture);
+    static double Num(string s) => string.IsNullOrWhiteSpace(s) ? 0 : double.TryParse(s.Replace(" ", "").Replace(",", "").Replace(" ", ""), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : double.NaN;   // 0.9: a strip numeral ("I") is no number
 
     static PanelView Page(PanelInput who, Chapter c, string page, Action<PanelState> more = null)
     {
@@ -167,9 +167,9 @@ static partial class CoherenceTests
             Check(ringEntry.Success && System.IO.File.Exists(System.IO.Path.Combine(src, "src", "Panel", "vocab", "focus-ring.png")) &&
                   System.Text.RegularExpressions.Regex.Matches(all, @"\bFocusRing\(").Count >= 4 && !Has(all, @"\bBrackets\(") && !Has(all, @"\bRing\([^;]*PanelLook\.Focus\)") &&
                   System.Text.RegularExpressions.Regex.Matches(all, @"\bSetKeyFocus\(\s*false\s*\)").Count >= 3 && Has(all, @"\bKeyFocus\s*=\s*false\b") &&
-                  new[] { @"\.fcard\.sel::after", @"\.fb-chip\.cur::after", @"\.b2-tile::after" }.All(sel => Has(html, @"body\.kbd [^{]*" + sel)) &&
+                  new[] { @"\.fb-chip\.cur::after", @"\.b2-tile::after" }.All(sel => Has(html, @"body\.kbd [^{]*" + sel)) && !Has(html, @"body\.kbd [^{]*\.fcard\.sel::after") &&
                   Has(html, @"mask-box-image:\s*url\([^)]*focus-ring\.png\)\s*14\b") && !Has(html, @"\.fb-chip\.cur\s*\{\s*box-shadow"),
-                  "focus: one soft rounded ring (vocab focus-ring, sliced 14) on chips, biome tiles and feat cards, shown only after a key press, in the panel and the bridge");
+                  "focus: one soft rounded ring (vocab focus-ring, sliced 14) on chips and biome tiles, shown only after a key press, in the panel and the bridge (0.9.3: a feat card shows its choice by the chosen look, mouse or keys alike: FeatLookTests)");
             // 0.8.1 (Joost sailing: the rudder, the wind, the hotbar and another mod's clock drew over the book): the book's canvas is on top, every
             // canvas of its own (the reason tags) sits relative to it, never at a fixed order the book would cover, and the game's own windows close it
             var fixedOrders = chapterSrc.SelectMany(s => System.Text.RegularExpressions.Regex.Matches(s, @"sortingOrder\s*=\s*\d+").Cast<System.Text.RegularExpressions.Match>().Select(m => m.Value)).ToList();
@@ -208,12 +208,19 @@ static partial class CoherenceTests
             var htmlOpeners = System.Text.RegularExpressions.Regex.Matches(html, @"\bopensMark\(").Count;   // its uses (the definition reads "opensMark = (")
             int Px(string text, string pattern) { var m = System.Text.RegularExpressions.Regex.Match(text, pattern); return m.Success ? int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) : -1; }
             var csArrow = Px(battleUi, @"BtFoeArrow = (\d+),"); var htmlArrow = Px(html, @"\(arrows \? (\d+) : 0\)");
-            Check(opensDrawn == 6 && ui.Contains("if (opens) OpensMark(target.rectTransform);") && battleUi.Contains("OpensMark(r, row.Selected, BtOpensRight);") &&
+            Check(opensDrawn == 8 && ui.Contains("if (opens) OpensMark(target.rectTransform);") && battleUi.Contains("OpensMark(r, row.Selected, BtOpensRight);") &&
                   look.Contains("new Vector2(1.5f, 1.5f), new Vector2(6.5f, 7f), new Vector2(1.5f, 12.5f)") && look.Contains("ChevronW = 8, ChevronH = 14, ChevronStroke = 1.8f") &&
                   html.Contains(@"viewBox=""0 0 8 14""><polyline points=""1.5,1.5 6.5,7 1.5,12.5"" fill=""none"" stroke=""currentColor"" stroke-width=""1.8""") && html.Contains(".opens-mk { position:absolute; top:50%; width:8px; height:14px;") &&
                   csOpeners >= 4 && csOpeners == htmlOpeners && csArrow >= 166 && csArrow == htmlArrow,
                   "opens: one mark on every row, card or tile that opens, drawn by PanelUi.OpensMark (" + opensDrawn + " uses) and the preview's opensMark alike (openers " + csOpeners + " in the panel, " + htmlOpeners +
                   " in the preview); the Foes arrow column " + csArrow + " px in both (" + htmlArrow + ")");
+            // 0.9.5 (Joost, 19 Oct: "on the actual name ... closer"): a weapon kind's row on By weapon wears its opens mark right after its name, before its
+            // DPS chip, never at the row's end; the name column measures it, the bar keeps the whole track (no end gutter), in the panel and the preview alike
+            var dmgUi = Read("src", "Panel", "Chapters", "DamageRowsUi.cs");
+            Check(dmgUi.Contains("KindOpens(r, row, load, markX);") && dmgUi.Contains("markX = DrNameX + nw + DrKindMarkGap;") && dmgUi.Contains("Badge(r, row.Value2, DrNameX + nw + mark + 8,") &&
+                  dmgUi.Contains("(KindMarks(r) ? DrKindMark : 0)") && !dmgUi.Contains("PanelModel.KindTone ? BtOpensW") &&
+                  html.Contains("<span class=\"nm\">${esc(r.title)}</span>${r.opens ? opensMark(r.selected, 0) : \"\"}${btBadge(r.value2)}") && !html.Contains("const KW ="),
+                  "opens: a weapon kind's row wears its opens mark right after its name, before its DPS chip (panel and preview alike); its bar keeps the whole track");
             Check(lowBoxes.Count == 0 && chapterSrc.Any(s => s.Contains("static float LineBox(")), "text: no one-line label sits in a box lower than its font's line (TMP's ellipsis would drop it whole)" + (lowBoxes.Count > 0 ? ": " + string.Join(" | ", lowBoxes) : ""));
         }
         return fails;

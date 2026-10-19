@@ -1783,5 +1783,1775 @@
     "ppu": 100,
     "type": "simple",
     "tint": "Pure white mask; multiply by list/hero text or selection colour."
+  },
+  "feat-scene-altar.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/altar.svg)."
+  },
+  "feat-scene-armorsets.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/armorsets.svg)."
+  },
+  "feat-scene-arms.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/arms.svg)."
+  },
+  "feat-scene-arrowsforall.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/arrowsforall.svg)."
+  },
+  "feat-scene-ballista.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/ballista.svg)."
+  },
+  "feat-scene-blackmetal.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/blackmetal.svg)."
+  },
+  "feat-scene-bogiron.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/bogiron.svg)."
+  },
+  "feat-scene-born.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/born.svg)."
+  },
+  "feat-scene-braced.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/braced.svg)."
+  },
+  "feat-scene-cameback.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/cameback.svg)."
+  },
+  "feat-scene-cartroad.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/cartroad.svg)."
+  },
+  "feat-scene-charcoal.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/charcoal.svg)."
+  },
+  "feat-scene-clad.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/clad.svg)."
+  },
+  "feat-scene-coldiron.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/coldiron.svg)."
+  },
+  "feat-scene-copperwed.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/copperwed.svg)."
+  },
+  "feat-scene-deephalls.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/deephalls.svg)."
+  },
+  "feat-scene-deepore.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/deepore.svg)."
+  },
+  "feat-scene-drover.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/drover.svg)."
+  },
+  "feat-scene-eitr.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/eitr.svg)."
+  },
+  "feat-scene-eitrunbound.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/eitrunbound.svg)."
+  },
+  "feat-scene-everyedge.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/everyedge.svg)."
+  },
+  "feat-scene-everyfield.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/everyfield.svg)."
+  },
+  "feat-scene-everywater.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/everywater.svg)."
+  },
+  "feat-scene-facedtogether.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/facedtogether.svg)."
+  },
+  "feat-scene-feastgiver.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/feastgiver.svg)."
+  },
+  "feat-scene-ferryman.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/ferryman.svg)."
+  },
+  "feat-scene-fishhall.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/fishhall.svg)."
+  },
+  "feat-scene-flametal.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/flametal.svg)."
+  },
+  "feat-scene-fletchings.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/fletchings.svg)."
+  },
+  "feat-scene-forsaken.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/forsaken.svg)."
+  },
+  "feat-scene-fulltable.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/fulltable.svg)."
+  },
+  "feat-scene-groundbreaker.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/groundbreaker.svg)."
+  },
+  "feat-scene-hallsbelow.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/hallsbelow.svg)."
+  },
+  "feat-scene-heavykeel.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/heavykeel.svg)."
+  },
+  "feat-scene-heldtheline.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/heldtheline.svg)."
+  },
+  "feat-scene-herdgrows.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/herdgrows.svg)."
+  },
+  "feat-scene-honed.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/honed.svg)."
+  },
+  "feat-scene-intodark.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/intodark.svg)."
+  },
+  "feat-scene-ironforge.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/ironforge.svg)."
+  },
+  "feat-scene-ironhide.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/ironhide.svg)."
+  },
+  "feat-scene-keptfires.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/keptfires.svg)."
+  },
+  "feat-scene-keptstanding.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/keptstanding.svg)."
+  },
+  "feat-scene-longlead.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/longlead.svg)."
+  },
+  "feat-scene-longreach.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/longreach.svg)."
+  },
+  "feat-scene-loosed.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/loosed.svg)."
+  },
+  "feat-scene-manycrafts.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/manycrafts.svg)."
+  },
+  "feat-scene-manylands.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/manylands.svg)."
+  },
+  "feat-scene-mapgiver.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/mapgiver.svg)."
+  },
+  "feat-scene-meadhall.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/meadhall.svg)."
+  },
+  "feat-scene-menderothers.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/menderothers.svg)."
+  },
+  "feat-scene-notonefell.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/notonefell.svg)."
+  },
+  "feat-scene-onehearth.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/onehearth.svg)."
+  },
+  "feat-scene-oreroad.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/oreroad.svg)."
+  },
+  "feat-scene-portalraiser.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/portalraiser.svg)."
+  },
+  "feat-scene-raidbreaker.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/raidbreaker.svg)."
+  },
+  "feat-scene-rightspell.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/rightspell.svg)."
+  },
+  "feat-scene-secondhelping.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/secondhelping.svg)."
+  },
+  "feat-scene-seedsower.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/seedsower.svg)."
+  },
+  "feat-scene-shieldwall.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/shieldwall.svg)."
+  },
+  "feat-scene-shoulder.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/shoulder.svg)."
+  },
+  "feat-scene-sidebyside.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/sidebyside.svg)."
+  },
+  "feat-scene-silvervein.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/silvervein.svg)."
+  },
+  "feat-scene-spiritdead.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/spiritdead.svg)."
+  },
+  "feat-scene-steadygrill.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/steadygrill.svg)."
+  },
+  "feat-scene-stoodfast.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/stoodfast.svg)."
+  },
+  "feat-scene-tappedroot.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/tappedroot.svg)."
+  },
+  "feat-scene-threestorms.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/threestorms.svg)."
+  },
+  "feat-scene-timber.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/timber.svg)."
+  },
+  "feat-scene-trustededge.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/trustededge.svg)."
+  },
+  "feat-scene-turnedblades.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/turnedblades.svg)."
+  },
+  "feat-scene-unbroken.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/unbroken.svg)."
+  },
+  "feat-scene-waymate.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/waymate.svg)."
+  },
+  "feat-scene-weakspot.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/weakspot.svg)."
+  },
+  "feat-scene-wellfed.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/wellfed.svg)."
+  },
+  "feat-scene-wholecrew.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/wholecrew.svg)."
+  },
+  "feat-scene-workshop.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/workshop.svg)."
+  },
+  "feat-scene-axes.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/axes.svg)."
+  },
+  "feat-scene-beforeforsaken.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/beforeforsaken.svg)."
+  },
+  "feat-scene-crewmate.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/crewmate.svg)."
+  },
+  "feat-scene-dayfirsts.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/dayfirsts.svg)."
+  },
+  "feat-scene-doorways.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/doorways.svg)."
+  },
+  "feat-scene-everydraught.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/everydraught.svg)."
+  },
+  "feat-scene-everyfeast.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/everyfeast.svg)."
+  },
+  "feat-scene-everygrove.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/everygrove.svg)."
+  },
+  "feat-scene-everyland.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/everyland.svg)."
+  },
+  "feat-scene-farhorizon.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/farhorizon.svg)."
+  },
+  "feat-scene-fedbymany.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/fedbymany.svg)."
+  },
+  "feat-scene-felledtogether.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/felledtogether.svg)."
+  },
+  "feat-scene-festive.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/festive.svg)."
+  },
+  "feat-scene-fishtotell.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/fishtotell.svg)."
+  },
+  "feat-scene-fists.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/fists.svg)."
+  },
+  "feat-scene-fleet.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/fleet.svg)."
+  },
+  "feat-scene-forsakengifts.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/forsakengifts.svg)."
+  },
+  "feat-scene-garden.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/garden.svg)."
+  },
+  "feat-scene-handtohand.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/handtohand.svg)."
+  },
+  "feat-scene-heavybolt.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/heavybolt.svg)."
+  },
+  "feat-scene-knives.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/knives.svg)."
+  },
+  "feat-scene-longroad.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/longroad.svg)."
+  },
+  "feat-scene-longtable.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/longtable.svg)."
+  },
+  "feat-scene-maces.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/maces.svg)."
+  },
+  "feat-scene-oldcompanion.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/oldcompanion.svg)."
+  },
+  "feat-scene-oldpowers.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/oldpowers.svg)."
+  },
+  "feat-scene-onecrew.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/onecrew.svg)."
+  },
+  "feat-scene-onemap.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/onemap.svg)."
+  },
+  "feat-scene-polearms.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/polearms.svg)."
+  },
+  "feat-scene-quarry.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/quarry.svg)."
+  },
+  "feat-scene-raisedead.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/raisedead.svg)."
+  },
+  "feat-scene-saddled.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/saddled.svg)."
+  },
+  "feat-scene-sharedtable.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/sharedtable.svg)."
+  },
+  "feat-scene-shipwright.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/shipwright.svg)."
+  },
+  "feat-scene-snare.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/snare.svg)."
+  },
+  "feat-scene-spears.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/spears.svg)."
+  },
+  "feat-scene-stonewalls.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/stonewalls.svg)."
+  },
+  "feat-scene-swords.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/swords.svg)."
+  },
+  "feat-scene-throughstorm.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/throughstorm.svg)."
+  },
+  "feat-scene-wholehall.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/wholehall.svg)."
+  },
+  "feat-scene-woodpile.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/woodpile.svg)."
+  },
+  "feat-scene-wornwork.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/wornwork.svg)."
   }
 }

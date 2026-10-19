@@ -383,6 +383,9 @@ namespace Hearthwoven.Panel
                 if (plan.Rest.Count > 0)
                     fb.Items.Add(new Block { Kind = "part", Id = plan.Folded ? FoldId : plan.Rest[0].Id, Title = plan.Folded ? FoldLabel(plan.Rest.Count) : plan.Rest[0].Label, Value = N(rest), Colour = BarOtherColour,
                                              Fraction = sum > 0 ? (float)(rest / sum) : 0, Selected = plan.Rest.Any(o => chosen.Contains(o.Id)), Tone = rest <= 0 ? "zero" : null });
+                // 0.9 (Joost in game on Crafting: an unlabelled grey By kind bar): one part with a share is drawn as its one legend row under the heading
+                // ("By kind 6" over "Armor 6"), never as a bar of one colour with no name (Chapters/CraftingHistory.cs FacetSingleTone)
+                if (fb.Tone == null && fb.Items.Count(p => p.Fraction > 0) == 1) fb.Tone = FacetSingleTone;
                 bar.Items.Add(fb);
             }
             return new FacetResult { Bar = bar, Shown = shown, Pass = it => Passes(it, null), Except = id => items.Where(it => Passes(it, defs.FirstOrDefault(d => d.Id == id))).ToList() };

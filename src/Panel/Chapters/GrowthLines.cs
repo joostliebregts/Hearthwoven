@@ -161,6 +161,7 @@ namespace Hearthwoven.Panel
                 if (hero == null || SparkOf(hero) != null) return;
                 // a fellow's: from the Deeds days their copy shares (0.8.5, SharedGrowth); an older copy shares none, its place greyed
                 var spark = input.IsSelf ? DeedsGrowth(input, view.Page, m) : input.DayDeeds != null ? SharedGrowth(input, view.Page, m.of) : new Block { Kind = SparkKind, Tone = OffTone, Title = NoDaysShared };
+                if (spark != null && input.IsSelf && spark.Tone != OffTone) spark.Id = "Deeds/" + HistoryPageOf(view.Page);   // 0.9: a click on your line opens the deed's History (Chapters/DeedHistory.cs)
                 if (spark != null) (hero.Items ?? (hero.Items = new List<Block>())).Add(spark);
                 return;
             }
@@ -172,6 +173,7 @@ namespace Hearthwoven.Panel
                 var spark = DealtGrowth(input);
                 if (spark != null) (strip.Items ?? (strip.Items = new List<Block>())).Add(spark);
             }
+            if (view.Active == Chapter.Battle && view.Page == "damage") DamageHistoryHook(input, view);   // 0.9.5 draft: By weapon's one answer opens Damage history (Chapters/DamageHistory.cs)
         }
     }
 }

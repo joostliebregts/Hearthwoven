@@ -115,9 +115,9 @@ static partial class Program
                   new[] { "wood", "ore", "built", "cooked", "sailed", "cargo" }.All(c => Of(Page(input, "together", s => s.View[key] = c), "together").Items.Count(i => i.Kind == "switch" && i.Items.Single(v => v.Selected).Id == "SinceInstall") == 1),
                   "together windows (0.8.5, Joost in game: \"why no time filters on the other tabs?\"): every category has the window chips; the default is the total since install");
             var sw = DealtOf(null).Items.Single(c => c.Kind == "switch");
-            Check(sw.Id == wkey && sw.Items.Select(v => v.Id).SequenceEqual(Enum.GetNames(typeof(TimeWindow))) && sw.Items.Select(v => v.Title).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "7 days", "30 days", "All" }) &&
+            Check(sw.Id == wkey && sw.Items.Select(v => v.Id).SequenceEqual(Enum.GetNames(typeof(TimeWindow))) && sw.Items.Select(v => v.Title).SequenceEqual(new[] { "10 min", "30 min", "1 h", "3 h", "Session", "Today", "Yesterday", "3 days", "7 days", "30 days", "All" }) &&
                   sw.Items.Single(v => v.Selected).Id == "SinceInstall" && sw.Title == null && DealtOf(null).Items.Single(c => c.Id == "dealt").Value2 == "Recorded from " + install1,
-                  "together windows: Battle's nine windows as the same short chips, All (since install) the default; Damage dealt says since when under its bar, as every category (0.8.5)");
+                  "together windows: Battle's eleven windows as the same short chips, All (since install) the default; Damage dealt says since when under its bar, as every category (0.8.5)");
             Check(Shares(DealtOf("LastHour")) == "Rowan=434,Edda=200,Finch=80,Tor=" && DealtOf("LastHour").Items.Single(c => c.Id == "dealt").Value == "714" &&
                   DealtOf("LastHour").Items.Single(c => c.Id == "dealt").Text.Contains(PanelModel.WindowLabel(TimeWindow.LastHour).ToLowerInvariant()) && DealtOf("LastHour").Tone == PanelModel.WindowedTone,
                   "together windows: last hour = each player's own log of it (you 434, Edda 200, Finch 80), the hero names the window in full");

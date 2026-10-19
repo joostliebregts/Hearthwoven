@@ -12,7 +12,12 @@ namespace Hearthwoven.Panel
     /// grammar): a damage row per type, then per foe, on one scale for the page; a type's part is as wide as what reached your armor, filled in its
     /// colour = what got through, the rest an outline in its colour = what your armor stopped (PanelModel.DamageStoppedTone). The outline is not
     /// faded: faded means "the game's count from before install".
-    /// Yourself only in 0.7 (a fellow shares no armour numbers): on a fellow's book the switch is absent and the page is as before.
+    /// Yourself only in 0.7 to 0.8.6 (a fellow shared no armour numbers). 0.9 (armor-share; Joost, 18 Oct: "Yes, add friends' armour view (What hurt
+    /// you / What your armor stopped on a friend's Defense page) to 0.9"): a fellow's copy shares their ledger per damage type since it began
+    /// ("armorSince") and per minute in their log (EventLog.Armor), so their Defense gets the same switch, drawn by the same drawer, worded as their
+    /// PC's record ("What their armor stopped", "Recorded from 6 October · their PC", their own About lines); All is their whole ledger, Session and
+    /// 10 min .. 3 h are cut at your session's start as their blocks are (SessionFrom). Types only: their foes stay on their PC, so no By foe. A copy
+    /// from before 0.9 shares none: the view says so in one line (FellowArmourOlder), never an empty or zero bar.
     /// </summary>
     public static partial class PanelModel
     {
@@ -40,25 +45,76 @@ namespace Hearthwoven.Panel
             ("Complete for you", "Your armor always works on your own PC, so this is complete for your character in every world and group."),
         };
 
-        /// <summary>The armour ledger in a window, yourself only (null: a fellow's book). All: everything recorded on this PC; Session: this
-        /// session; a day: the book's day rows plus the running session's unsaved part; 10 min .. 3 h: this session's minute buckets (no source).</summary>
+        // 0.9 (armor-share): the same view on a fellow's book, in their words (Received from already says "after their armor" there)
+        public const string FellowReceivedView = "What hurt them", FellowArmourViewLabel = "What their armor stopped";
+        public const string FellowArmourStopped = "stopped by their armor", FellowArmourByType = "Before and after their armor";
+        public const string FellowArmourKeyWhole = "reached their armor", FellowArmourKeyStopped = "stopped by their armor";
+        /// <summary>The type block's Tone on a fellow's book: the key under the bar in their words (BattleUi.ArmourKey; "key" on your own).</summary>
+        public const string ArmourKeyTone = "key", FellowArmourKeyTone = "keytheir";
+        /// <summary>A fellow's copy from before 0.9 shares no armor: the view's one line (never an empty or zero bar).</summary>
+        public const string FellowArmourOlder = "Their version doesn't share this yet.";
+        /// <summary>A fellow's log reached EventLog.MaxArmorKeys and dropped its oldest armor minutes (a day-long session).</summary>
+        public const string FellowArmourClipped = "A very long session kept only its newest armor minutes: the oldest are missing here.";
+
+        /// <summary>0.9 (armor-share): "About these numbers" for the view on a fellow's book: what their PC recorded and shared, never "Complete for you".</summary>
+        public static readonly (string title, string text)[] FellowArmourAbout =
+        {
+            ("From", "Recorded on their PC from the day their Hearthwoven first recorded armor. Hits before that were never measured."),
+            ("What it is", "Each hit as it reached their armor (after a block, their ward and their resistances) and as it left it. Only the armor step."),
+            ("Not here", "Falls, drowning, cold and smoke never meet armor. A hit their ward or a block stopped completely is not here either."),
+            ("Burning and poison", "Counted as the hit sets them. Their ticks can come to less, so after armor here can be more than in What hurt them."),
+            (FellowReceivedView, "Everything that hurt them, counted later: falls, drowning, cold and smoke too, after the world's damage setting and with the ticks. This view is only the armor step."),
+            ("Windows", "All is everything their PC recorded. This session and 10 min to 3 h count from when you started playing this time, as the rest of their page."),
+            ("Shared", "Their PC shares the totals per damage type, not which foe hit them or where: By foe is on their own book."),
+            ("Gaps", "Sessions they played with an older Hearthwoven are missing here: it did not record their armor."),
+        };
+
+        /// <summary>The armour ledger in a window (null: not known). Yourself: All: everything recorded on this PC; Session: this session; a day: the
+        /// book's day rows plus the running session's unsaved part; 10 min .. 3 h: this session's minute buckets (no source). 0.9, a fellow's book: All
+        /// their shared ledger (ArmourSince); Session and 10 min .. 3 h their log's armor minutes from your session's start (FellowArmourIn); no days
+        /// (their copy shares none); null too for a copy from before 0.9.</summary>
         public static ArmourTally ArmourIn(PanelInput input, TimeWindow w)
         {
-            if (input == null || !input.IsSelf) return null;
+            if (input == null) return null;
+            if (!input.IsSelf)
+            {
+                if (input.ArmourSince == null || IsDayWindow(w)) return null;
+                return w == TimeWindow.SinceInstall ? input.ArmourSince : FellowArmourIn(input.Log, w, input.NowUtc, SessionFrom(input));
+            }
             if (w == TimeWindow.SinceInstall) return input.ArmourSince ?? input.ArmourSession;
             if (w == TimeWindow.Session) return input.ArmourSession;
             if (IsDayWindow(w))
             {
-                var t = input.ArmourBook != null ? input.ArmourBook.Sum(DayFrom(input, w), LocalToday(input)) : new ArmourTally();
-                t.AddAll(input.ArmourBook != null ? input.ArmourPending : input.ArmourSession);
+                var t = input.ArmourBook != null ? input.ArmourBook.Sum(DayFrom(input, w), DayTo(input, w)) : new ArmourTally();
+                if (HoldsToday(w)) t.AddAll(input.ArmourBook != null ? input.ArmourPending : input.ArmourSession);   // 0.9.1: never in Yesterday
                 return t;
             }
             return input.ArmourMinutes?.Since(Cutoff(w, input.NowUtc));
         }
 
-        /// <summary>"Recorded from 9 October · this PC" (RecordedFromLine, the same words as every 0.7 label): the armour ledger's own start (not the install); before the totals load, the session's start.</summary>
+        /// <summary>0.9 (armor-share): a fellow's armor minutes in a window (EventLog.Armor, a minute each), cut as their blocks are (GuardIn): a minute
+        /// counts when any part of it lies in the window, Session from <paramref name="sessionFrom"/> (your session's start). A tally keyed "||type".
+        /// Null when the log keeps no armor minutes (a copy from before 0.9).</summary>
+        public static ArmourTally FellowArmourIn(EventLog log, TimeWindow w, DateTime nowUtc, DateTime? sessionFrom)
+        {
+            if (log == null || !log.ArmorKept) return null;
+            var t = new ArmourTally();
+            foreach (var kv in log.Armor)
+            {
+                var p = LogKeys.Of(kv.Key).P;   // minute|b|type or minute|a|type
+                if (p.Length < 3 || !(kv.Value > 0) || !InFilter(p[0], "", w, "", nowUtc, log.Span, sessionFrom)) continue;
+                var into = p[1] == EventLog.ArmorReached ? t.Before : p[1] == EventLog.ArmorThrough ? t.After : null;
+                if (into == null) continue;
+                var key = "||" + p[2]; into.TryGetValue(key, out var o); into[key] = o + kv.Value;
+            }
+            return t;
+        }
+
+        /// <summary>"Recorded from 9 October · this PC" (RecordedFromLine, the same words as every 0.7 label): the armour ledger's own start (not the install); before the totals load, the session's start.
+        /// 0.9, a fellow's book: their ledger's start on their PC, "Recorded from 6 October · their PC" ("Recorded on their PC" when their copy names none).</summary>
         public static string ArmourFromLine(PanelInput input)
         {
+            if (input != null && !input.IsSelf) return input.ArmourFromUtc.HasValue ? "Recorded from " + RecordDate(input, input.ArmourFromUtc.Value) + " · their PC" : "Recorded on their PC";
             var from = input.ArmourFromUtc ?? input.SessionStartUtc ?? input.NowUtc;
             return RecordedFromLine(input, from);
         }
@@ -82,7 +138,7 @@ namespace Hearthwoven.Panel
             var all = Shown(new List<double> { after, stopped });   // got through, stopped: they add up to what reached your armor
             var bar = new Block
             {
-                Kind = "armorbar", Title = ArmourStopped, Value = StoppedShare(all[1], all[0]), Text = ArmourStoppedWord, Src = SrcPc, Source = TagMeasured,
+                Kind = "armorbar", Title = input.IsSelf ? ArmourStopped : FellowArmourStopped, Value = StoppedShare(all[1], all[0]), Text = ArmourStoppedWord, Src = SrcPc, Source = TagMeasured,
                 Items = new List<Block> { new Block { Kind = "part", Id = "all", Title = "", Colour = ArmourTotalColour, Tone = DamageStoppedTone, Value = all[0], Value2 = all[1],
                                                       Fraction = 1, Fraction2 = (float)(after / before), Text = StoppedShare(all[1], all[0]) } },
             };
@@ -99,7 +155,7 @@ namespace Hearthwoven.Panel
             var max = byType.Select(x => x.b).Concat(foes.Select(x => x.types.Sum(y => Math.Max(y.before, y.after)))).Max();
             blocks.Add(new Block
             {
-                Kind = "armour", Title = ArmourByType, Text = from, Tone = "key", Src = SrcPc, Source = TagMeasured,
+                Kind = "armour", Title = input.IsSelf ? ArmourByType : FellowArmourByType, Text = from, Tone = input.IsSelf ? ArmourKeyTone : FellowArmourKeyTone, Src = SrcPc, Source = TagMeasured,
                 Items = new[] { bar }.Concat(byType.Select(x => ArmourRow(x.ty, DamageIcon(x.ty), TypeName(x.ty), DamageColour(x.ty), "type", max, new List<(string, double, double)> { (x.ty, x.b, x.a) }))).ToList(),
             });
             if (foes.Count > 0)
@@ -108,9 +164,10 @@ namespace Hearthwoven.Panel
                     Kind = "armour", Title = ArmourByFoe, Src = SrcPc, Source = TagMeasured,
                     Items = foes.Select(x => ArmourRow(x.s, FoeIcon(input, x.s), Who(input, x.s), null, null, max, x.types)).ToList(),
                 });
-            else if (IsShortWindow(w) && w != TimeWindow.Session) blocks.Add(new Block { Kind = "note", Text = ArmourPerFoe });
+            else if (input.IsSelf && IsShortWindow(w) && w != TimeWindow.Session) blocks.Add(new Block { Kind = "note", Text = ArmourPerFoe });   // a fellow shares no foes: their About says so
+            if (!input.IsSelf && w != TimeWindow.SinceInstall && input.Log != null && input.Log.ArmorClipped) blocks.Add(new Block { Kind = "note", Text = FellowArmourClipped });
             // All: these numbers are the armour ledger's, which starts at its own date (not the install): the label says that date (rule A/C, DateFrom)
-            if (w == TimeWindow.SinceInstall) foreach (var b in blocks) DateFrom(b, input.ArmourFromUtc ?? input.SessionStartUtc ?? input.NowUtc);
+            if (w == TimeWindow.SinceInstall) foreach (var b in blocks) DateFrom(b, input.IsSelf ? input.ArmourFromUtc ?? input.SessionStartUtc ?? input.NowUtc : input.ArmourFromUtc);
             return blocks;
         }
 
@@ -119,7 +176,10 @@ namespace Hearthwoven.Panel
         /// Hearthwoven first ran. A foe's hit on your armour shows up here."</summary>
         public static Block ArmourEmpty(PanelInput input, TimeWindow w)
         {
-            var when = w == TimeWindow.SinceInstall ? " yet" : w == TimeWindow.Today ? " today" : w == TimeWindow.Session ? " this session" : " in the " + WindowLabel(w).ToLowerInvariant();
+            var when = w == TimeWindow.SinceInstall ? " yet" : w == TimeWindow.Session ? " this session" : " " + InWindowWords(w);
+            if (!input.IsSelf)   // 0.9 (armor-share): their PC's record, in their words
+                return Empty("Their armor has stopped nothing" + when,
+                             (input.ArmourFromUtc.HasValue ? "Counted on their PC from " + RecordDate(input, input.ArmourFromUtc.Value) : "Counted on their PC") + ". A foe's hit on their armor shows up here.");
             var from = input.ArmourFromUtc ?? input.SessionStartUtc ?? input.NowUtc;
             return Empty("Your armor has stopped nothing" + when,
                          "Counted from " + RecordDate(input, from) + (input.ArmourFromUtc.HasValue ? ", when this version of Hearthwoven first ran" : "") + ". A foe's hit on your armor shows up here.");
@@ -170,11 +230,14 @@ namespace Hearthwoven.Panel
 
         /// <summary>
         /// Defence's received block becomes a view switch (Battle calls this after BattleDefense): Received = the "Received from" block exactly as
-        /// it was, Your armour = ArmourView. Nothing changes when the page has no Received from (nothing received in the window) or on a fellow's book.
+        /// it was, Your armour = ArmourView. Nothing changes when the page has no Received from (nothing received in the window). 0.9 (armor-share): on a
+        /// fellow's book too, with their chips ("What hurt them" / "What their armor stopped"); a copy from before 0.9 (or a log without armor minutes)
+        /// shows the one line FellowArmourOlder in the view, never an empty or zero bar; a day window (their copy shares no armor days) keeps the page as it was.
         /// </summary>
         static void ArmourSwitch(PanelInput input, PanelView view, PanelState state, string page, TimeWindow w)
         {
-            if (input == null || !input.IsSelf || state == null) return;
+            if (input == null || state == null) return;
+            if (!input.IsSelf && IsDayWindow(w)) return;
             List<Block> holder = null; int at = -1;
             void Find(List<Block> list)
             {
@@ -186,27 +249,31 @@ namespace Hearthwoven.Panel
             Find(view.Blocks);
             if (holder == null) return;
             var armour = ArmourView(input, w);
-            if (armour == null) return;
+            if (armour == null && input.IsSelf) return;
+            var shared = armour != null;
+            if (!shared) armour = new List<Block> { new Block { Kind = "note", Text = FellowArmourOlder } };   // 0.9: an older friend's copy, said once
             var tmp = new PanelView();
-            Switch(tmp, state, page, "view", null, (ReceivedId, ReceivedView, new List<Block> { holder[at] }), (ArmourId, ArmourViewLabel, armour));
+            Switch(tmp, state, page, "view", null, (ReceivedId, input.IsSelf ? ReceivedView : FellowReceivedView, new List<Block> { holder[at] }),
+                                                   (ArmourId, input.IsSelf ? ArmourViewLabel : FellowArmourViewLabel, armour));
             holder.RemoveAt(at); holder.InsertRange(at, tmp.Blocks);
             // Your armour has its own "About these numbers" in every window (G5: the chapter's box, All only, speaks of other numbers; review fix:
-            // the lines that say how it relates to Received are in reach wherever the view is)
-            if (tmp.Blocks.FirstOrDefault(b => b.Kind == "switch")?.Items?.FirstOrDefault(x => x.Selected)?.Id == ArmourId) ArmourNumbers(input, view);
+            // the lines that say how it relates to Received are in reach wherever the view is); a fellow's view that shares none keeps the page's box
+            if (shared && tmp.Blocks.FirstOrDefault(b => b.Kind == "switch")?.Items?.FirstOrDefault(x => x.Selected)?.Id == ArmourId) ArmourNumbers(input, view);
         }
 
         /// <summary>The switch's view ids (state.View["Battle/defense/view"]).</summary>
         public const string ReceivedId = "received", ArmourId = "armour";
 
         /// <summary>The Your armour view's "About these numbers": the ArmourAbout lines, the first one under the ledger's own date ("From 9 October").
-        /// Own book only (a fellow's book has no armour view).</summary>
+        /// 0.9, a fellow's book: FellowArmourAbout (what their PC recorded and shares; never "Complete for you"), under their ledger's date.</summary>
         static void ArmourNumbers(PanelInput input, PanelView view)
         {
-            var from = input.ArmourFromUtc ?? input.SessionStartUtc;
+            var from = input.IsSelf ? input.ArmourFromUtc ?? input.SessionStartUtc : input.ArmourFromUtc;
             view.AboutNumbers = new Block
             {
                 Kind = "aboutnumbers", Id = NumbersTarget, Title = AboutNumbersTitle,
-                Items = ArmourAbout.Select((l, k) => new Block { Kind = "aboutline", Title = k == 0 && from.HasValue ? FromLabel(input, from.Value) : l.title, Text = l.text }).ToList(),
+                // a fellow's box stays undated, as every box on their book (their ledger's date is on the view's own line, "Recorded from 6 October · their PC")
+                Items = (input.IsSelf ? ArmourAbout : FellowArmourAbout).Select((l, k) => new Block { Kind = "aboutline", Title = k == 0 && from.HasValue && input.IsSelf ? FromLabel(input, from.Value) : l.title, Text = l.text }).ToList(),
             };
         }
     }

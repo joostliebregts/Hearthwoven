@@ -6,7 +6,7 @@ namespace Hearthwoven.Panel
 {
     /// <summary>
     /// One window set for the whole panel (HISTORY-06.md): the event log's short windows (10 min, 30 min, 1 h, 3 h, Session), the day
-    /// history's day windows (Today, 7 days, 30 days) and All (the since-install totals with your character's own counters). One chosen
+    /// history's day windows (Today, Yesterday, 3 days, 7 days, 30 days; 0.9.1: Yesterday and 3 days) and All (the since-install totals with your character's own counters). One chosen
     /// window (PanelState.Window) for every page; each page offers only the windows its data has (WindowsOf), and a page that does not
     /// offer the chosen one shows All while the choice stays for the pages that do. A day window that begins before the history did is
     /// greyed; pressing it chooses it, the page shows All and one line says from when it works (WaitLine).
@@ -24,7 +24,7 @@ namespace Hearthwoven.Panel
         public class DayView { public TimeWindow Window; public DateTime From, To; public bool Clipped; public Dictionary<string, Dictionary<string, double>> Shared; public PanelInput Whole; public bool Short => IsShortWindow(Window); }
 
         public static readonly TimeWindow[] ShortWindows = { TimeWindow.LastTenMinutes, TimeWindow.LastThirtyMinutes, TimeWindow.LastHour, TimeWindow.LastThreeHours, TimeWindow.Session };
-        public static readonly TimeWindow[] DayWindows = { TimeWindow.Today, TimeWindow.SevenDays, TimeWindow.ThirtyDays };
+        public static readonly TimeWindow[] DayWindows = { TimeWindow.Today, TimeWindow.Yesterday, TimeWindow.ThreeDays, TimeWindow.SevenDays, TimeWindow.ThirtyDays };
         /// <summary>Every window, in chip order.</summary>
         public static readonly TimeWindow[] AllWindows = ShortWindows.Concat(DayWindows).Concat(new[] { TimeWindow.SinceInstall }).ToArray();
         /// <summary>The pages with only day windows and All (their data has days, not minutes).</summary>
@@ -33,9 +33,17 @@ namespace Hearthwoven.Panel
         /// <summary>The Tone of a view in a switch that cannot be chosen (Together's day window before the history): drawn greyed, inert, skipped by the keys.</summary>
         public const string OffTone = "off";
 
-        public static bool IsDayWindow(TimeWindow w) => w == TimeWindow.Today || w == TimeWindow.SevenDays || w == TimeWindow.ThirtyDays;
+        public static bool IsDayWindow(TimeWindow w) => w == TimeWindow.Today || w == TimeWindow.Yesterday || w == TimeWindow.ThreeDays || w == TimeWindow.SevenDays || w == TimeWindow.ThirtyDays;
         public static bool IsShortWindow(TimeWindow w) => !IsDayWindow(w) && w != TimeWindow.SinceInstall;
-        public static int DaysOf(TimeWindow w) => w == TimeWindow.Today ? 1 : w == TimeWindow.SevenDays ? 7 : w == TimeWindow.ThirtyDays ? 30 : 0;
+        public static int DaysOf(TimeWindow w) => w == TimeWindow.Today || w == TimeWindow.Yesterday ? 1 : w == TimeWindow.ThreeDays ? 3 : w == TimeWindow.SevenDays ? 7 : w == TimeWindow.ThirtyDays ? 30 : 0;
+        /// <summary>0.9.1: a day window of one whole day (Today, Yesterday): said as the day ("today", "yesterday"), not "in the last ...".</summary>
+        public static bool IsOneDay(TimeWindow w) => w == TimeWindow.Today || w == TimeWindow.Yesterday;
+        /// <summary>0.9.1: the day window ends today (every one but Yesterday), so the running session's unsaved part belongs in it.</summary>
+        public static bool HoldsToday(TimeWindow w) => IsDayWindow(w) && w != TimeWindow.Yesterday;
+        /// <summary>A window in words after "Nothing": "today", "yesterday", "in the last 3 days".</summary>
+        public static string InWindowWords(TimeWindow w) => w == TimeWindow.Today ? "today" : w == TimeWindow.Yesterday ? "yesterday" : "in the " + WindowLabel(w).ToLowerInvariant();
+        /// <summary>0.9.1: Yesterday in the heading, with its day in the reader's own calendar: "yesterday, Sunday 18 Oct".</summary>
+        public static string YesterdayWords(PanelInput input) => YesterdayHead + LocalToday(input).AddDays(-1).ToString("dddd d MMM", Inv);
 
         /// <summary>
         /// The Deeds pages whose main numbers this session's DeedLog holds per minute, so they also offer the short windows (10 min .. Session,
@@ -48,17 +56,21 @@ namespace Hearthwoven.Panel
         {
             if (chapter == Chapter.Battle && (page == "overview" || page == "damage" || page == "deaths" || page == "foes" || page == "defense")) return AllWindows;
             if (chapter == Chapter.Voyages && (page == "sailing" || page == "cargo")) return DayAndAll;
+            if (chapter == Chapter.Deeds && IsDeedFeedPage(page)) return AllWindows;   // 0.9: a deed feed, as Battle's (Chapters/DeedFeedModel.cs)
+            if (chapter == Chapter.Deeds && DeedSubParent(page) != null) return null;   // 0.9: a deed's History (its own Days, Weeks, Months) and one day of it (the day is the page): no window chips
             if (chapter == Chapter.Deeds && page == RecentPageId) return RecentWindows;   // Deeds > Recent: Battle's whole set (B33, RecentPage.cs)
             if (chapter == Chapter.Deeds && Array.IndexOf(DeedsShortPages, page) >= 0) return AllWindows;   // 0.7: the short windows too, from this session's DeedLog (DeedsShort)
-            if (chapter == Chapter.Deeds && page != "overview") return DayAndAll;   // 0.7: every Deeds page but the Overview, whose cards are the titles (earned by lifetime counts)
+            if (chapter == Chapter.Deeds && page != "overview" && page != SetsPageId && page != MealPlanPageId) return DayAndAll;   // 0.9.5: Meal plan is the game's food data, no count (Chapters/MealPlanModel.cs)   // 0.9: Armor sets counts the character's whole life (Chapters/ArmorSets.cs)   // 0.7: every Deeds page but the Overview, whose cards are the titles (earned by lifetime counts)
             return null;
         }
 
         /// <summary>Today as the player's calendar says it (the day history's rows are local days).</summary>
         public static DateTime LocalToday(PanelInput input) => Local(input, input.NowUtc).Date;
 
-        /// <summary>The first local day of a day window: today for Today, six days back for 7 days.</summary>
-        public static DateTime DayFrom(PanelInput input, TimeWindow w) => LocalToday(input).AddDays(1 - Math.Max(1, DaysOf(w)));
+        /// <summary>The first local day of a day window: today for Today, yesterday for Yesterday, two days back for 3 days, six for 7 days.</summary>
+        public static DateTime DayFrom(PanelInput input, TimeWindow w) => DayTo(input, w).AddDays(1 - Math.Max(1, DaysOf(w)));
+        /// <summary>0.9.1: the last local day of a day window: yesterday for Yesterday (midnight to midnight, the reader's own clock), else today.</summary>
+        public static DateTime DayTo(PanelInput input, TimeWindow w) => w == TimeWindow.Yesterday ? LocalToday(input).AddDays(-1) : LocalToday(input);
 
         /// <summary>A day window can be shown: your own book with a day history that reaches back to its first day (a fellow's copy carries no rows).</summary>
         public static bool DayOpen(PanelInput input, TimeWindow w) =>
@@ -72,7 +84,7 @@ namespace Hearthwoven.Panel
         public static DateTime? DayOpensOn(PanelInput input, TimeWindow w)
         {
             if (!IsDayWindow(w) || input == null || !input.IsSelf || input.History == null || DayOpen(input, w)) return null;
-            return input.History.FirstDay(LocalToday(input)).AddDays(DaysOf(w) - 1);
+            return input.History.FirstDay(LocalToday(input)).AddDays((LocalToday(input) - DayFrom(input, w)).Days);   // 7 days: six days after; Yesterday: the day after
         }
 
         /// <summary>
@@ -153,7 +165,7 @@ namespace Hearthwoven.Panel
             var parts = new List<string>();
             var offered = page == null ? AllWindows : WindowsOf(Chapter.Deeds, page) ?? DayAndAll;
             if (offered.Any(w => IsShortWindow(w) && w != TimeWindow.Session)) parts.Add(FellowShortWhy(input));
-            if (input.DayDeeds == null) parts.Add(OlderThan(input, NeedsDayDeeds) ? OlderLine(input, "Today, 7 days and 30 days fill in") : Name(input) + "'s days are not shared.");
+            if (input.DayDeeds == null) parts.Add(OlderThan(input, NeedsDayDeeds) ? OlderLine(input, "their days fill in") : Name(input) + "'s days are not shared.");
             if (!input.SharedSinceInstall) parts.Add(Name(input) + "'s totals are not shared.");
             var line = string.Join(" ", parts.Where(p => p != null).ToArray());
             return line.Length == 0 ? null : line;
@@ -172,7 +184,7 @@ namespace Hearthwoven.Panel
             if (input == null || input.IsSelf) return null;
             var parts = new List<string>();
             if (!VoyagesWindowOpen(input, TimeWindow.Today))
-                parts.Add(input.DayDeeds != null || OlderThan(input, NeedsDayDeeds) ? OlderLine(input, "Today, 7 days and 30 days fill in") : Name(input) + "'s days are not shared.");
+                parts.Add(input.DayDeeds != null || OlderThan(input, NeedsDayDeeds) ? OlderLine(input, "their days fill in") : Name(input) + "'s days are not shared.");
             if (!input.SharedSinceInstall) parts.Add(Name(input) + "'s totals are not shared.");
             return parts.Count == 0 ? null : string.Join(" ", parts.ToArray());
         }
@@ -185,9 +197,9 @@ namespace Hearthwoven.Panel
         public static PanelInput InWindow(PanelInput input, TimeWindow w)
         {
             if (!IsDayWindow(w) || !DayOpen(input, w)) return null;
-            var today = LocalToday(input); var from = DayFrom(input, w);
-            var row = input.History.Sum(from, today);
-            if (input.Pending != null) row.AddAll(input.Pending);   // the running session since the last save: always today
+            var from = DayFrom(input, w); var to = DayTo(input, w);
+            var row = input.History.Sum(from, to);
+            if (input.Pending != null && HoldsToday(w)) row.AddAll(input.Pending);   // the running session since the last save: always today (never Yesterday)
             var c = input.ShallowCopy();
             c.Events = row.Events; c.DamageSinceInstall = row.Damage; c.BiomeSinceInstall = row.Biome; c.BiomeFromUtc = null;
             c.Character = row.Game.Where(kv => !kv.Key.Contains("|")).ToDictionary(kv => kv.Key, kv => kv.Value);
@@ -195,7 +207,7 @@ namespace Hearthwoven.Panel
             c.EnemyKills = null;   // the kills per foe (the bosses on the strip) have no days: only the game's kill counter's growth is kept
             c.ItemsPickedUp = new Dictionary<string, float>(row.Events.PickedUp);
             c.Baseline = null; c.ExactAtBaseline = null; c.BaselineAt = null; c.Book = null;
-            c.Window = new DayView { Window = w, From = from, To = today, Clipped = row.Clipped, Whole = input };
+            c.Window = new DayView { Window = w, From = from, To = to, Clipped = row.Clipped, Whole = input };
             c.DealtArmourSince = DealtLedgerIn(input, w);   // 0.8.5: the dealt ledger's same days (DamageSinceInstallRows reads it beside the day's damage)
             return c;
         }
@@ -209,7 +221,7 @@ namespace Hearthwoven.Panel
         public static List<DamageRow> FellowDayRows(PanelInput p, TimeWindow w, PanelInput viewer)
         {
             if (p?.DayDealt == null || !IsDayWindow(w)) return null;
-            DateTime from = DayFrom(viewer, w), to = LocalToday(viewer);
+            DateTime from = DayFrom(viewer, w), to = DayTo(viewer, w);
             var sum = new Dictionary<string, double>();
             foreach (var day in p.DayDealt)
                 if (DateTime.TryParseExact(day.Key, "yyyy-MM-dd", Inv, System.Globalization.DateTimeStyles.None, out var d) && d >= from && d <= to)
@@ -233,7 +245,7 @@ namespace Hearthwoven.Panel
             foreach (var r in rows) t.Dealt["|" + r.Cause + "|" + r.Type] = r.Amount;
             var c = input.ShallowCopy();
             c.DamageSinceInstall = t; c.BiomeSinceInstall = null; c.BiomeFromUtc = null;
-            c.Window = new DayView { Window = w, From = DayFrom(input, w), To = LocalToday(input) };
+            c.Window = new DayView { Window = w, From = DayFrom(input, w), To = DayTo(input, w) };
             return c;
         }
 
@@ -249,6 +261,7 @@ namespace Hearthwoven.Panel
         {
             var whose = who == null ? "each player's" : who + "'s";
             return w == TimeWindow.Today ? "Today counts " + whose + " whole day, also before you came online."
+                 : w == TimeWindow.Yesterday ? "Yesterday counts " + whose + " whole day, also when you were not online."
                  : WindowShort(w) + " counts " + whose + " whole days, also when you were not online.";
         }
         /// <summary>The version that first shares days by weapon kind and type (OlderLine names it when a copy has only the day totals).</summary>
@@ -262,6 +275,16 @@ namespace Hearthwoven.Panel
             var offset = Local(input, input.NowUtc) - input.NowUtc;   // the player's offset now (a day window is about calendar days, not exact hours)
             return DateTime.SpecifyKind(localMidnight - offset, DateTimeKind.Utc);
         }
+
+        /// <summary>0.9.1: where a day window ends in UTC: Yesterday at this morning's local midnight; null for the windows that run to now.</summary>
+        public static DateTime? WindowEndUtc(PanelInput input, TimeWindow w)
+        {
+            if (w != TimeWindow.Yesterday || input == null) return null;
+            var offset = Local(input, input.NowUtc) - input.NowUtc;
+            return DateTime.SpecifyKind(LocalToday(input) - offset, DateTimeKind.Utc);
+        }
+        /// <summary>0.9.1: a moment lies before the window's end (always, but for Yesterday).</summary>
+        public static bool BeforeEnd(PanelInput input, TimeWindow w, DateTime utc) => !(WindowEndUtc(input, w) is DateTime end) || utc < end;
 
         /// <summary>Your hits in a window of this session's log, dealt or received (the log counts hits per bucket, without the type).</summary>
         public static double HitsIn(EventLog log, TimeWindow w, DateTime nowUtc, bool dealt, DateTime? sessionFrom = null)
@@ -297,7 +320,7 @@ namespace Hearthwoven.Panel
 
         /// <summary>A window with nothing in it on a page that counts days (Voyages, Deeds): says the window and where more is.</summary>
         static Block DayEmpty(PanelInput input, TimeWindow w) =>
-            Empty(w == TimeWindow.Session ? NothingYet + " this session" : "Nothing " + (w == TimeWindow.Today ? "today" : "in the " + WindowLabel(w).ToLowerInvariant()), DayEmptyLine);
+            Empty(w == TimeWindow.Session ? NothingYet + " this session" : "Nothing " + InWindowWords(w), DayEmptyLine);
         public const string DayEmptyLine = "Choose a longer window, or All for everything.";
 
         /// <summary>The line of a page that leaves something out in a day window, because that thing has no days.</summary>

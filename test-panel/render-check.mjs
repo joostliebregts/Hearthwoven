@@ -144,12 +144,13 @@ const dealtBox = csConst("BtFoeDealt") - csConst("BtFoeBar") - csConst("BtFoeNum
 // name box, BattleUi.BtFoeName - BtFoeNamePad; and every foe name the previews draw is whole in it
 const LONG_FOES = ["Greydwarf Shaman", "Charred Marksman", "Bonemaw Serpent"];   // the game's own: the Black Forest's shaman, the Ashlands' archer and serpent
 const nameBox = csConst("BtFoeName") - csConst("BtFoeNamePad");
+const MEAL_PIN_MAX = 60;   // 0.9.6 the pinned meal's island: a slot (40) and the book's least island padding (8) above and below, a little slack
 
 // one preview: shot to its PNG and checked; everything it finds comes back in r (the runs on the report fold the pages in their order)
 async function shoot(page, n) {
-  const r = { overlaps: [], datesCut: [], feedSplit: [], feedTracks: [], fightTall: [], overviewTall: [], fellOff: [], overviewPages: 0, fellStrips: 0, awayTall: [], togetherTall: [], voyagesTall: [], smeltersTall: [], heroGrowth: [], heroLines: [], crewOff: [], deadMore: [], bareIslands: [], pastIsland: [], fireHeadsOff: [], fireCrossed: [], giftRowHits: [], british: [], hoverless: [], hoverHeavy: [], hoverCovers: [], foeNamesCut: [], dealtCut: [],
+  const r = { histOff: [], histCharts: 0, histVaried: 0, overlaps: [], datesCut: [], feedSplit: [], feedTracks: [], fightTall: [], overviewTall: [], fellOff: [], overviewPages: 0, fellStrips: 0, awayTall: [], togetherTall: [], voyagesTall: [], smeltersTall: [], heroGrowth: [], heroLines: [], crewOff: [], deadMore: [], bareIslands: [], pastIsland: [], fireHeadsOff: [], fireCrossed: [], giftRowHits: [], british: [], hoverless: [], hoverHeavy: [], hoverCovers: [], foeNamesCut: [], dealtCut: [],
               rows: [], cuts: [], sides: [], heroCompact: false, fireDrawn: 0, fireHeads: 0, giftRows: 0, feedLogs: 0, pickPages: 0, fightPages: 0, awayPages: 0, togetherPages: 0, voyagesPages: 0, smeltersPages: 0, crewsDrawn: 0, crewPeople: 0, moreLinks: 0, barsDrawn: 0, dealtDrawn: 0, damageParts: 0, hoverPages: 0,
-              arrowWidths: null, foeNameWidths: null, dealtWidths: null, pinOff: [], pinPages: 0 };
+              arrowWidths: null, foeNameWidths: null, dealtWidths: null, pinOff: [], pinPages: 0, mealPinOff: [], mealPinPages: 0, mealPinH: [] };
   const over = (rule, what) => r.overlaps.push({ rule, page: n, what });
   await page.goto(`file://${dir}/panel-preview.html?view=${n}`);
   await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(400);
@@ -182,6 +183,28 @@ async function shoot(page, n) {
     return "";
   });
   if (pinned !== null) { r.pinPages++; if (pinned) r.pinOff.push({ page: n, what: pinned }); }
+  // 0.9.6 Meal plan's pinned meal (Joost: "Icons only would be good. And then the bar all at one row height"): the island one row, the slots' height and the
+  // book's least island padding (MEAL_PIN_MAX px at most); three slots, no food name under them, every filled slot naming its food on hover; one row whose
+  // bar and legend stand within the slots' height
+  const mealPin = await page.evaluate((max) => {
+    const isl = document.querySelector(".pinhead .isl.pin-isl"); if (!isl) return null;
+    const h = isl.getBoundingClientRect().height, off = [];
+    if (h > max) off.push(`the pinned meal ${h.toFixed(1)} px tall (at most ${max})`);
+    if (isl.querySelector(".dr-combo-n")) off.push("food names under the slots");
+    const slots = [...isl.querySelectorAll(".dr-combo > .pic")];
+    if (slots.length !== 3) off.push(`${slots.length} slots`);
+    for (const s of slots) if (!s.querySelector(".dr-slot") && !(s.getAttribute("title") || "").trim()) off.push("a filled slot with no name on hover");
+    const rows = isl.querySelectorAll(".bf.dr"); if (rows.length !== 1) off.push(`${rows.length} rows`);
+    const combo = isl.querySelector(".dr-combo"), track = isl.querySelector(".bf.dr .dr-track"), legend = isl.querySelector(".bf.dr .dr-pcs");
+    if (!combo || !track || !legend) off.push("no slots, track or legend");
+    else {
+      const S = combo.getBoundingClientRect();
+      for (const [what, e] of [["the bar", track], ["the legend", legend]]) { const B = e.getBoundingClientRect(); if (B.top < S.top - 0.5 || B.bottom > S.bottom + 0.5) off.push(`${what} outside the slots' height`); }
+      if (legend.getBoundingClientRect().height > 19) off.push("the legend on more than one line");
+    }
+    return { h, off: off.join("; ") };
+  }, MEAL_PIN_MAX);
+  if (mealPin) { r.mealPinPages++; r.mealPinH.push(`${n} ${mealPin.h.toFixed(0)} px`); if (mealPin.off) r.mealPinOff.push({ page: n, what: mealPin.off }); }
   // the key line never runs past its room (PanelModel.KeyLine leaves keys out instead; Cooking and Company > Together ran past it, MERGE-NOTES G2/G6)
   // 0.8 hover (BarHover, PICKS 4 B): every bar with a list pairs each part with its row (the same data-k on both), so pointing at either lights the other
   const unpaired = await page.evaluate(() => [...document.querySelectorAll(".bf")].filter(bf => { const ks = sel => [...bf.querySelectorAll(sel)].map(e => e.dataset.k).sort().join(","); return ks(".bf-seg[data-k]") !== ks(".bf-tab .r[data-k]"); }).length);
@@ -232,6 +255,15 @@ async function shoot(page, n) {
   for (const tiles of fell) {
     r.fellStrips++;
     for (const [a, ha, na] of tiles) for (const [b, hb, nb] of tiles) if (a < b && !(ha < hb - 0.5)) r.fellOff.push({ page: n, what: `${na} (${a} falls) ${ha.toFixed(1)} px, ${nb} (${b}) ${hb.toFixed(1)} px` }); else if (a === b && Math.abs(ha - hb) > 0.5) r.fellOff.push({ page: n, what: `${na} and ${nb} (${a} falls each) ${ha.toFixed(1)} and ${hb.toFixed(1)} px` });
+  }
+  // 0.9 History (Joost: "shouldn't those bars be different heights?"): a day with more is a taller column, as tall for as many (the drawn stacks, against each day's value)
+  const hist = await page.evaluate(() => [...document.querySelectorAll(".hist")].map(c => [...c.querySelectorAll(".hit[data-col]")].map(hit => { const k = hit.dataset.col;
+    const h = [...c.querySelectorAll(`i[data-col="${k}"]`)].filter(i => !i.classList.contains("z")).reduce((a, i) => a + i.getBoundingClientRect().height, 0); return [parseFloat(hit.dataset.v) || 0, h, hit.title.split(" · ")[0]]; })));
+  for (const cols of hist) {
+    r.histCharts++; if (new Set(cols.filter(([v]) => v > 0).map(([, h]) => Math.round(h))).size > 1) r.histVaried++;
+    // 0.9.5 (Damage history, thousands a day): two days closer than the chart's pixel (2197 and 2200 on a 4 000 scale) may stand as tall
+    const vmax = Math.max(0, ...cols.map(([v]) => v)), hmax = Math.max(0, ...cols.map(([, h]) => h)), apart = (a, b) => vmax <= 0 || (b - a) * hmax / vmax >= 1.5;
+    for (const [a, ha, na] of cols) for (const [b, hb, nb] of cols) if (a < b && apart(a, b) && !(ha < hb - 0.5)) r.histOff.push({ page: n, what: `${na} (${a}) ${ha.toFixed(1)} px, ${nb} (${b}) ${hb.toFixed(1)} px` }); else if (a === b && Math.abs(ha - hb) > 0.5) r.histOff.push({ page: n, what: `${na} and ${nb} (${a} each) ${ha.toFixed(1)} and ${hb.toFixed(1)} px` });
   }
   // 0.8.5 (Joost: Company > While away on one screen): the page fits the plate without scrolling with up to five fellows (a sixth scrolls), About shut
   const away = await page.evaluate(() => { const find = bs => { for (const b of bs || []) { if (b.kind === "awayrows") return b; const f = find(b.items); if (f) return f; } return null; };
@@ -479,7 +511,10 @@ rule("Voyages > Sailing and Cargo fit one screen: Everyone with four players in 
 rule("Company > Together fits one screen with three fellows (About shut, no Compare)", !all("togetherTall").length && (sum("togetherPages") > 0 || !whole), `${sum("togetherPages")} pages, ` + (all("togetherTall").length ? all("togetherTall").length + " taller" : sum("togetherPages") ? "all fit" : "none drawn"), all("togetherTall"));
 rule("a fight's page fits one screen (no row open, About shut)", !all("fightTall").length && (sum("fightPages") > 0 || !whole), `${sum("fightPages")} pages, ` + (all("fightTall").length ? all("fightTall").length + " taller" : sum("fightPages") ? "all fit" : "none drawn"), all("fightTall"));
 rule("Battle > Overview fits one screen in every window (nine lands found, a fellow's copy; About shut)", !all("overviewTall").length && (sum("overviewPages") > 0 || !whole), `${sum("overviewPages")} pages, ` + (all("overviewTall").length ? all("overviewTall").length + " taller" : sum("overviewPages") ? "all fit" : "none drawn"), all("overviewTall"));
+rule(`Meal plan's pinned meal is one row (at most ${MEAL_PIN_MAX} px): three slots as pictures only, each filled one named on hover, the bar and its one-line legend within the slots' height`,
+  !all("mealPinOff").length && (sum("mealPinPages") > 0 || !whole), `${sum("mealPinPages")} pages (${all("mealPinH").join(", ")}), ` + count(all("mealPinOff"), "all one row"), all("mealPinOff"));
 rule("the sticky head: on a scrolled plate the strip stays at its top and no row is drawn over it", !all("pinOff").length && (sum("pinPages") > 0 || !whole), `${sum("pinPages")} scrolled pages, ` + count(all("pinOff"), "the strip pinned on each"), all("pinOff"));
+rule("History: a day with more is a taller column, as tall for as many; the history sample has days of different heights", !all("histOff").length && (sum("histVaried") > 0 || !whole), `${sum("histCharts")} charts, ${sum("histVaried")} with varied days, ` + count(all("histOff"), "every column follows its count"), all("histOff"));
 rule("Where you fell: taller where more fell, as tall for as many", !all("fellOff").length && (sum("fellStrips") > 0 || !whole), `${sum("fellStrips")} strips, ` + count(all("fellOff"), "every height follows its count"), all("fellOff"));
 rule("a feat's crew: every person whole inside its detail area, none over another", !all("crewOff").length && (sum("crewsDrawn") > 0 || !whole), `${sum("crewsDrawn")} crews, ${sum("crewPeople")} people, ` + count(all("crewOff"), "none off"), all("crewOff"));
 rule("every \"+N more\" is a click that shows the rest", !all("deadMore").length, `${sum("moreLinks")} clicks, ` + count(all("deadMore"), "none dead"), all("deadMore"));
