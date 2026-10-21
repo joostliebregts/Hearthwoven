@@ -142,7 +142,7 @@ namespace Hearthwoven.Panel
                 {
                     if (src.HasProperty(ShaderUtilities.ID_UnderlayColor))
                     {
-                        m = new Material(src) { name = src.name + " (Hearthwoven shade)" };
+                        m = PanelLook.Own(new Material(src) { name = src.name + " (Hearthwoven shade)" });
                         m.EnableKeyword(ShaderUtilities.Keyword_Underlay);
                         m.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0f, 0f, 0f, LkShadeInk));
                         m.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, LkShadeOffset); m.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -LkShadeOffset);

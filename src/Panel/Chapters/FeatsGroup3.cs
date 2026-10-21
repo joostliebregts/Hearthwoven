@@ -55,7 +55,7 @@ namespace Hearthwoven.Panel
         static double? WithTwo(PanelInput i, Func<PanelInput, double> f) => GroupMembers(i).Count >= 2 ? f(i) : 0;
         /// <summary>The batch's feats (WithTwo): alone, the card's hint says no fellow shares yet rather than "none yet".</summary>
         public static readonly HashSet<string> NeedsTwo = new HashSet<string>(StringComparer.Ordinal)
-            { "quarry", "woodpile", "fleet", "doorways", "garden", "everyland", "oldpowers", "felledtogether", "sharedtable", "longtable", "handtohand", "onemap" };
+            { "quarry", "woodpile", "fleet", "doorways", "garden", "everyland", "oldpowers", "felledtogether", "sharedtable", "longtable", "handtohand", "onemap", "cladasone" };
 
         static IEnumerable<FeatDef> GroupFeatDefs3() => new[]
         {

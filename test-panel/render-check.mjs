@@ -72,6 +72,10 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXE
 // runs in the page: every visible text run with its rendered size (computed font-size x the transform scale of its ancestors)
 const measure = (MIN) => {
   const out = [];
+  // 0.9.10 the rows whose texts stand side by side and must never cover each other: a page's hero (its numbers, words and dates), a fight's head
+  // (the boss or the land, its name over its land, the numbers; PanelUi.FtHead) and the away totals, Battle's hero-form row; every other text
+  // is held to the same within its block
+  const HEAD_ROWS = ".hero, .ft, .awt";
   const cssPath = (el) => { const parts = []; for (let e = el; e && e !== document.body && parts.length < 4; e = e.parentElement) {
     let s = e.tagName.toLowerCase(); if (e.id) s += "#" + e.id; const c = (e.getAttribute("class") || "").trim().split(/\s+/).filter(Boolean).slice(0, 2); if (c.length) s += "." + c.join("."); parts.unshift(s); } return parts.join(" > "); };
   const clipRects = (el) => { const rs = []; for (let e = el; e && e !== document.documentElement; e = e.parentElement) { const cs = getComputedStyle(e);
@@ -105,7 +109,16 @@ const measure = (MIN) => {
     let blk = -1; for (let e = el; e && e.parentElement; e = e.parentElement) { const p = e.parentElement; if (p.matches(".content > .plate, .content .blocks")) { blk = e.classList.contains("plfade") || e.classList.contains("page-tip") ? -1 : [...p.children].indexOf(e); break; } }   // .plfade: the fade and the "More below" cue lie over the grid on purpose; the page's hover tag over a bar (PanelUi.PageTag) too
     // the one exception: a number inside a damage-bar part (.dr-seg .num), digits only, bold (PanelUi.BarDigits)
     const bar = el.classList.contains("num") && !!el.closest(".dr-seg") && /^[\d\s   ]+$/.test(txt) && /\d/.test(txt) && parseInt(cs.fontWeight) >= 600;
-    out.push({ text: txt.slice(0, 40), fs, bar, eff: Math.round(eff * 100) / 100, h: Math.round(r.height * 10) / 10, sel: cssPath(el), x: Math.round(r.left), y: Math.round(r.top), cut, side, blk, box: [r.left, Math.max(r.top + 0.2 * eff, pin ? pin.bottom : -Infinity), r.right, r.bottom - 0.2 * eff] });   // the ink, not the line box: a big number's line box reaches into the label under it
+    // 0.9.10 (Joost in game: a boss fight's "Fader" and "Ashlands" drawn over 58 118): the ink as drawn, cut by every box that clips it (a name cut
+    // with an ellipsis covers only its box), and the hero or stat row it stands in (HEAD_ROWS), where no two texts may cover each other
+    const ink = [r.left, Math.max(r.top + 0.2 * eff, pin ? pin.bottom : -Infinity), r.right, r.bottom - 0.2 * eff];
+    for (const c of clipRects(el)) { ink[0] = Math.max(ink[0], c.left); ink[1] = Math.max(ink[1], c.top); ink[2] = Math.min(ink[2], c.right); ink[3] = Math.min(ink[3], c.bottom); }
+    const head = el.closest(HEAD_ROWS); if (head && !head.dataset.rcRow) head.dataset.rcRow = String(document.querySelectorAll("[data-rc-row]").length + 1);
+    // what may lie over other text on purpose: the plate's fade with its "More below" cue, the page's hover tag; and a turned column head (Foes'
+    // damage types), whose upright box is wider than its ink
+    const overlay = !!el.closest(".plfade, .page-tip, .dr-tip");
+    let turned = false; for (let e = el; e && e !== document.documentElement; e = e.parentElement) { const t = getComputedStyle(e).transform; if (t && t !== "none") { const m = new DOMMatrix(t); if (Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3) { turned = true; break; } } }
+    out.push({ ink, overlay, turned, row: head ? head.dataset.rcRow : null, rowKind: head ? (head.getAttribute("class") || "").split(/\s+/)[0] : null, text: txt.slice(0, 40), fs, bar, eff: Math.round(eff * 100) / 100, h: Math.round(r.height * 10) / 10, sel: cssPath(el), x: Math.round(r.left), y: Math.round(r.top), cut, side, blk, box: [r.left, Math.max(r.top + 0.2 * eff, pin ? pin.bottom : -Infinity), r.right, r.bottom - 0.2 * eff] });   // the ink, not the line box: a big number's line box reaches into the label under it
   }
   return out;
 };
@@ -148,7 +161,7 @@ const MEAL_PIN_MAX = 60;   // 0.9.6 the pinned meal's island: a slot (40) and th
 
 // one preview: shot to its PNG and checked; everything it finds comes back in r (the runs on the report fold the pages in their order)
 async function shoot(page, n) {
-  const r = { histOff: [], histCharts: 0, histVaried: 0, overlaps: [], datesCut: [], feedSplit: [], feedTracks: [], fightTall: [], overviewTall: [], fellOff: [], overviewPages: 0, fellStrips: 0, awayTall: [], togetherTall: [], voyagesTall: [], smeltersTall: [], heroGrowth: [], heroLines: [], crewOff: [], deadMore: [], bareIslands: [], pastIsland: [], fireHeadsOff: [], fireCrossed: [], giftRowHits: [], british: [], hoverless: [], hoverHeavy: [], hoverCovers: [], foeNamesCut: [], dealtCut: [],
+  const r = { rowOver: [], rowTexts: 0, histOff: [], histCharts: 0, histVaried: 0, overlaps: [], datesCut: [], feedSplit: [], feedTracks: [], fightTall: [], overviewTall: [], fellOff: [], overviewPages: 0, fellStrips: 0, awayTall: [], togetherTall: [], voyagesTall: [], smeltersTall: [], heroGrowth: [], heroLines: [], crewOff: [], deadMore: [], bareIslands: [], pastIsland: [], fireHeadsOff: [], fireCrossed: [], giftRowHits: [], british: [], hoverless: [], hoverHeavy: [], hoverCovers: [], foeNamesCut: [], dealtCut: [],
               rows: [], cuts: [], sides: [], heroCompact: false, fireDrawn: 0, fireHeads: 0, giftRows: 0, feedLogs: 0, pickPages: 0, fightPages: 0, awayPages: 0, togetherPages: 0, voyagesPages: 0, smeltersPages: 0, crewsDrawn: 0, crewPeople: 0, moreLinks: 0, barsDrawn: 0, dealtDrawn: 0, damageParts: 0, hoverPages: 0,
               arrowWidths: null, foeNameWidths: null, dealtWidths: null, pinOff: [], pinPages: 0, mealPinOff: [], mealPinPages: 0, mealPinH: [] };
   const over = (rule, what) => r.overlaps.push({ rule, page: n, what });
@@ -423,6 +436,15 @@ async function shoot(page, n) {
     const w = Math.min(a.box[2], b.box[2]) - Math.max(a.box[0], b.box[0]), h = Math.min(a.box[3], b.box[3]) - Math.max(a.box[1], b.box[1]);
     if (w > 1 && h > 1) over("blocks", `text "${a.text}" x text "${b.text}" (two blocks)`);
   }
+  // 0.9.10: two texts of one hero or stat row never cover each other (the name over its land drawn on the first big number)
+  // (a hero or stat row, else the block the text stands in; the fade's cue, the hover tag and turned column heads aside)
+  const inRow = runs.filter(x => (x.row || x.blk >= 0) && !x.overlay && !x.turned).map(x => ({ ...x, key: x.row ? "r" + x.row : "b" + x.blk, rowKind: x.rowKind || "block" }));
+  for (let i = 0; i < inRow.length; i++) for (let j = i + 1; j < inRow.length; j++) {
+    const a = inRow[i], b = inRow[j]; if (a.key !== b.key) continue;
+    const w = Math.min(a.ink[2], b.ink[2]) - Math.max(a.ink[0], b.ink[0]), h = Math.min(a.ink[3], b.ink[3]) - Math.max(a.ink[1], b.ink[1]);
+    if (w > 1 && h > 1) r.rowOver.push({ page: n, what: `${a.rowKind}: "${a.text}" x "${b.text}" (${Math.round(w)} x ${Math.round(h)} px)` });
+  }
+  r.rowTexts += inRow.length;
   for (const b of bad) r.rows.push({ page: n, ...b });
   // 0.8.1 US spelling: every word the page draws (innerText skips what is hidden), the preview's own footnote (#caption) left out
   const drawn = await page.evaluate(() => { const c = document.getElementById("caption"); return document.body.innerText.replace(c ? c.innerText : "\u0000", " "); });
@@ -526,6 +548,7 @@ rule("every bar's parts and list rows pair up for the hover", !ofRule("pair").le
 rule("one legend grid per page", !ofRule("grid").length, count(ofRule("grid"), "one each"), ofRule("grid"));
 rule("the key line fits its room", !ofRule("keys").length, count(ofRule("keys"), "fits everywhere"), ofRule("keys"));
 rule("the Fireside's counts, shields, names and hearth never touch", !ofRule("fire").length, count(ofRule("fire"), "none touch"), ofRule("fire"));
+rule("no two texts of one row drawn over each other: a hero or stat row (a fight's head, a page's hero, the away totals), else one block", !all("rowOver").length, `${sum("rowTexts")} texts in rows, ` + count(all("rowOver"), "none over another"), all("rowOver"));
 rule("no text of two blocks drawn over each other", !ofRule("blocks").length, count(ofRule("blocks"), "none"), ofRule("blocks"));
 rule("the Fireside's arrows: every thread of the game's plan drawn, each tip on its receiver's rim (2 px), the head along its line's end", !all("fireHeadsOff").length && (sum("fireHeads") > 0 || !whole),
      `${sum("fireDrawn")} drawings, ${sum("fireHeads")} heads, ` + count(all("fireHeadsOff"), "every one on its rim"), all("fireHeadsOff"));

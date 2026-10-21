@@ -454,7 +454,7 @@ namespace Hearthwoven.Panel
             if (mips) tex.mipMapBias = FeatSceneBias;
             if (!(bool)LoadImage.Invoke(null, new object[] { tex, bytes })) return null;
             if (repeatX) { tex.wrapModeU = TextureWrapMode.Repeat; tex.wrapModeV = TextureWrapMode.Clamp; }
-            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, border);
+            return Own(Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, border));
         }
 
         const string FeatSceneTexture = "feat-scene-";
@@ -516,7 +516,24 @@ namespace Hearthwoven.Panel
 
         public static readonly Color Selected = Hex("#ffcf80");   // chapter icons multiply to amber when chosen (kit.json)
 
-        static Sprite Drawn(Texture2D t) => Sprite.Create(t, new Rect(0, 0, t.width, t.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+        /// <summary>Every sprite (each with a texture of its own) and material the book makes itself, never the game's: Dev.LiveReload destroys
+        /// them when this copy goes (Unload); a player's game keeps them for the whole run, as before.</summary>
+        static readonly List<UnityEngine.Object> owned = new List<UnityEngine.Object>();
+        internal static T Own<T>(T made) where T : UnityEngine.Object { if (made) owned.Add(made); return made; }
+
+        /// <summary>Dev.LiveReload, the old copy (PanelUi.Leave): what Own kept, destroyed with the sprites' textures.</summary>
+        internal static void Unload()
+        {
+            foreach (var o in owned)
+            {
+                if (!o) continue;
+                if (o is Sprite s && s.texture) UnityEngine.Object.Destroy(s.texture);
+                UnityEngine.Object.Destroy(o);
+            }
+            owned.Clear();
+        }
+
+        static Sprite Drawn(Texture2D t) => Own(Sprite.Create(t, new Rect(0, 0, t.width, t.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect));
 
         // a rounded rectangle 16 x 16, radius 5 (anti-aliased), border 6 so it slices to any size; edge: only its rim (2 px, or rim)
         static Sprite RoundedSprite(bool edge, float rim = 2f)
@@ -527,7 +544,7 @@ namespace Hearthwoven.Panel
             for (int y = 0; y < s; y++)
                 for (int x = 0; x < s; x++) px[y * s + x] = new Color(1, 1, 1, RoundedShape.Alpha(x, y, edge, rim));
             t.SetPixels32(px); t.Apply(false, true);
-            return Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
+            return Own(Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(b, b, b, b)));
         }
 
         // an island's ground: 24 px square, radius 10 (anti-aliased), border 11 so it slices to any size
@@ -543,7 +560,7 @@ namespace Hearthwoven.Panel
                     px[y * s + x] = new Color(1, 1, 1, Mathf.Clamp01(r + 0.5f - Mathf.Sqrt((fx - cx) * (fx - cx) + (fy - cy) * (fy - cy))));
                 }
             t.SetPixels32(px); t.Apply(false, true);
-            return Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(11, 11, 11, 11));
+            return Own(Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(11, 11, 11, 11)));
         }
 
         // a pill's outline: 22 px square, radius 10, rim 1.25 px (anti-aliased), border 10 so it slices to any width at a 20 px height
@@ -561,7 +578,7 @@ namespace Hearthwoven.Panel
                     px[y * s + x] = new Color(1, 1, 1, Mathf.Clamp01(outer - inner));
                 }
             t.SetPixels32(px); t.Apply(false, true);
-            return Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(10, 10, 10, 10));
+            return Own(Sprite.Create(t, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(10, 10, 10, 10)));
         }
 
         // a ring 26 px across with a 3 px rim (anti-aliased); half: its left half filled too (a foe defeated with fellow players)

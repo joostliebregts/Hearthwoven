@@ -16,13 +16,7 @@ namespace Hearthwoven.Panel
         {
             static void Postfix(Hud __instance)
             {
-                try
-                {
-                    if (Application.isBatchMode || SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null) return;
-                    if (!BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue(Plugin.Guid, out var info) || info.Instance == null) return;
-                    PanelUi.BindConfig(info.Instance.Config);
-                    if (!__instance.GetComponent<PanelUi>()) __instance.gameObject.AddComponent<PanelUi>();   // goes away with the HUD
-                }
+                try { PanelUi.Attach(__instance, Plugin.Settings); }
                 catch (Exception e) { HookGuard.Fail(e, "PanelHooks.AttachToHud.Postfix"); }   // the panel stays off
             }
         }
@@ -108,9 +102,12 @@ namespace Hearthwoven.Panel
             static void Postfix(Player __instance) => HookGuard.Run(() =>
             {
                 if (__instance != Player.m_localPlayer || ReferenceEquals(seen, Plugin.Events)) return;
-                seen = Plugin.Events;
-                PanelUi.SessionStart = DateTime.UtcNow;
+                Began();
             });
+            internal static void Began() { seen = Plugin.Events; PanelUi.SessionStart = DateTime.UtcNow; }
         }
+
+        /// <summary>Dev.LiveReload took over a running game (Plugin.JoinRunning): This session starts now, and a respawn later does not start it again.</summary>
+        internal static void SessionBegan() => SessionStart.Began();
     }
 }

@@ -337,6 +337,14 @@ namespace Hearthwoven
         readonly Dictionary<int, float[]> swing = new Dictionary<int, float[]>();   // 0.8.6: fight -> [your fighting seconds, the damage swung in them] (at most MaxFeed fights)
         DateTime swingLast;
         int fight, seq; bool fightOn; DateTime fightLast;
+        /// <summary>Dev.LiveReload: the last fight, foe, boss fight and run numbers given; the next copy goes on after them (ContinueAfter), so the pieces
+        /// of one connection join into one feed without two fights under one number (Uploads.JoinPieces).</summary>
+        public int[] Numbers => new[] { fight, seq, bossSeq, runSeq };
+        public void ContinueAfter(int[] last)
+        {
+            if (last == null || last.Length < 4) return;
+            fight = Math.Max(fight, last[0]); seq = Math.Max(seq, last[1]); bossSeq = Math.Max(bossSeq, last[2]); runSeq = Math.Max(runSeq, last[3]);
+        }
         // 0.9: boss fights (oldest first) and, for the open ones, their foes and each boss's last place and health; dungeon runs (oldest first),
         // the open or latest one and its foes. Places stay here: nothing below is ever in a FoeEncounter, the feed or the book.
         readonly List<BossFight> bossFights = new List<BossFight>();

@@ -467,13 +467,16 @@ namespace Hearthwoven
             return null;
         }
 
-        // Gear: whose crafted weapon, tool or armour did you put on?
+        // Gear: whose crafted weapon, tool or armour did you put on? 0.9 Armor sets, made or worn: and every armor piece you put on, whoever made it
+        // (its token once, ArmorWornBook)
         [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.EquipItem))]
         static class Equip
         {
             static void Postfix(Humanoid __instance, ItemDrop.ItemData item, bool __result) => Safe(() =>
             {
-                if (!__result || !Local(__instance) || item == null || string.IsNullOrEmpty(item.m_crafterName)) return;
+                if (!__result || !Local(__instance) || item == null) return;
+                if (item.m_shared != null && Panel.PanelModel.IsArmorSlot(item.m_shared.m_itemType.ToString())) Plugin.Wore(item.m_shared.m_name);
+                if (string.IsNullOrEmpty(item.m_crafterName)) return;
                 SessionEvents.Add(Plugin.Events.EquippedGearMadeBy, item.m_crafterName + "|" + (item.m_dropPrefab ? item.m_dropPrefab.name : item.m_shared.m_name));
             });
         }

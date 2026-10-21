@@ -229,6 +229,11 @@ namespace Hearthwoven.Panel
         /// <summary>0.9: a fellow's copy: the armor pieces they made, yes or no per item token (their snapshot's "armorMade"); null = not shared (a Hearthwoven
         /// before 0.9) or your own book (your own counts are in ItemsCrafted).</summary>
         public ICollection<string> ArmorMade;
+        /// <summary>0.9 Armor sets, made or worn: the armor pieces this character put on, yes or no per item token (your own: ArmorWornBook on this PC; a
+        /// fellow's: their copy's "armorWorn", only the pieces their armorMade does not say); null = not recorded (a fellow on an older Hearthwoven).</summary>
+        public ICollection<string> ArmorWorn;
+        /// <summary>When counting what they put on began; earlier wear is not known (the page says from when). null with ArmorWorn.</summary>
+        public DateTime? ArmorWornFrom;
 
         /// <summary>
         /// A fellow player's shared snapshot (Snapshot.Build output, received through GroupShare). Rebuilds the mod's own
@@ -284,6 +289,8 @@ namespace Hearthwoven.Panel
             if (root.TryGetValue("knownBiomes", out var kb) && kb is List<object> biomes) input.KnownBiomes = biomes.OfType<string>().Where(b => b.Length > 0).Take(16).ToList();
             // 0.9: which armor pieces they made, yes or no (Armor sets on Everyone); at most 300 tokens, an older copy has none (null)
             if (root.TryGetValue(PanelModel.ArmorMadeKey, out var am) && am is List<object> armor) input.ArmorMade = new HashSet<string>(armor.OfType<string>().Where(t => t.Length > 0 && t.Length < 120).Take(300), StringComparer.Ordinal);
+            // 0.9 Armor sets, made or worn: the armor pieces they put on that armorMade does not say, and from when (an older copy has none: null)
+            input.ArmorWorn = ArmorWornBook.ReadShared(Obj(root, ArmorWornBook.Key), out var wornFrom); input.ArmorWornFrom = input.ArmorWorn != null ? wornFrom : null;
             // 0.9 (armor-share): their armour ledger since it began, per damage type (an older copy has none: null, "Their version doesn't share this yet")
             input.ArmourSince = ArmourTally.ReadShared(Obj(root, ArmourTally.SharedKey), out var armourFrom); if (input.ArmourSince != null) input.ArmourFromUtc = armourFrom;
             if (Obj(root, "feats") != null) input.Feats = FeatsLedger.ReadShared(Obj(root, "feats"));   // the feats they earned (Feats page, their book)

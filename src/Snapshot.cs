@@ -18,7 +18,8 @@ namespace Hearthwoven
                                    IDictionary<string, Dictionary<string, float>> dayDealt = null, string logBefore = null,
                                    IDictionary<string, Dictionary<string, Dictionary<string, float>>> dayDeeds = null, IDictionary<string, WeaponCells> dayWeapons = null,
                                    IEnumerable<string> armorMade = null,
-                                   ArmourTally armorSince = null, System.DateTime? armorFromUtc = null)
+                                   ArmourTally armorSince = null, System.DateTime? armorFromUtc = null,
+                                   IEnumerable<string> armorWorn = null, System.DateTime? armorWornFrom = null)
         {
             // Absolute values only: a resend after a reconnect or crash replaces, never adds.
             var j = new Json().Open()
@@ -105,6 +106,9 @@ namespace Hearthwoven
             // older Hearthwoven. An older reader ignores the key
             var armor = armorMade?.Where(t => !string.IsNullOrEmpty(t)).Distinct().Take(300).ToList();
             if (armor != null) j.Raw(Panel.PanelModel.ArmorMadeKey, "[" + string.Join(",", armor.Select(Json.Q).ToArray()) + "]");
+            // 0.9 Armor sets, made or worn: the armor pieces you put on (ArmorWornBook), only those armorMade does not already say, and the day counting
+            // began (a day, no time); nothing before it began. At most 300 tokens. An older reader ignores the key
+            ArmorWornBook.WriteShared(j, armorWorn, armorWornFrom, armor);
             // 0.9 (armor-share; Joost: a friend's Defense shows What their armor stopped): your armour ledger since it began, per damage type only (what
             // reached your armor, what got through, the hits, its start date: at most 17 numbers, no foe, no place). The short windows travel as the log's
             // "armor" minutes (EventLog.Armor), beside the blocks. Written whenever the ledger is loaded, also empty; an older reader ignores the key

@@ -184,7 +184,7 @@ static class MoreFeatsTests
                            "intodark", "deephalls", "hallsbelow", "cameback", "manylands", "portalraiser", "mapgiver", "groundbreaker", "keptstanding", "menderothers", "ballista", "raidbreaker",
                            "timber", "deepore", "seedsower", "everyfield", "tappedroot", "fishhall", "everywater" };
         var groupNews = new[] { "silvervein", "blackmetal", "eitr", "flametal", "onehearth", "herdgrows" };
-        Check(news.All(id => PanelModel.FeatById(id) is FeatDef d && !d.Group) && groupNews.All(id => PanelModel.FeatById(id)?.Group == true) && PanelModel.FeatDefs.Length == 26 + news.Length + groupNews.Length + FeatsBatch2Tests.Personal.Length + FeatsBatch2Tests.GroupIds.Length + TogetherBatch3Tests.Ids.Length &&
+        Check(news.All(id => PanelModel.FeatById(id) is FeatDef d && !d.Group) && groupNews.All(id => PanelModel.FeatById(id)?.Group == true) && PanelModel.FeatDefs.Length == 26 + news.Length + groupNews.Length + FeatsBatch2Tests.Personal.Length + FeatsBatch2Tests.GroupIds.Length + TogetherBatch3Tests.Ids.Length + 1 &&   // + 1: Clad as One (ArmorWornTests)
               Personal.Select(p => p.id).OrderBy(x => x).SequenceEqual(news.OrderBy(x => x)),
               "more feats: " + news.Length + " personal and " + groupNews.Length + " group feats added (" + PanelModel.FeatDefs.Length + " in all), each tested above");
         Check(PanelModel.FeatDefs.Length <= FeatsLedger.MaxFeats, "more feats: the ledger has room for every feat (" + PanelModel.FeatDefs.Length + " of " + FeatsLedger.MaxFeats + ")");

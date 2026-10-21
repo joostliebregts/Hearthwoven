@@ -91,6 +91,66 @@ namespace Hearthwoven.Panel
         void Awake() => Instance = this;
         void OnDestroy() { if (Instance == this) Instance = null; if (root) Destroy(root); }
 
+        /// <summary>The book on the HUD, once per HUD (PanelHooks.AttachToHud), only on a PC with a screen. Dev.LiveReload's new copy in a running
+        /// game too (Plugin.JoinRunning), with the old copy's note: the book opens where it was.</summary>
+        internal static void Attach(Hud hud, ConfigFile config, LiveReload.Note note = null)
+        {
+            if (Application.isBatchMode || SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null || !hud || config == null) return;
+            BindConfig(config);
+            var ui = hud.GetComponent<PanelUi>();
+            if (!ui) ui = hud.gameObject.AddComponent<PanelUi>();   // goes away with the HUD
+            if (note != null) ui.reopen = note;
+        }
+
+        /// <summary>Dev.LiveReload, the old copy (Plugin.Leave): the book's place into the note, the book closed (the cursor given back, its
+        /// choices saved) and destroyed with everything drawn on it, the settings watcher stopped, the sprites, textures and materials it made gone.</summary>
+        internal static void Leave(LiveReload.Note note)
+        {
+            var ui = Instance;
+            if (ui)
+            {
+                note?.Keep(ui.state, ui.open);
+                if (note != null && ui.open) ui.ScrollsInto(note);
+                ui.Close();
+                Destroy(ui);   // its OnDestroy takes the root (the canvas, kept across scenes) with it
+            }
+            if (configWatcher != null) { configWatcher.EnableRaisingEvents = false; configWatcher.Dispose(); configWatcher = null; }
+            PanelLook.Unload();
+        }
+
+        /// <summary>Dev.LiveReload: where the old copy's book was; opened there on the first frame it can be (Frame).</summary>
+        LiveReload.Note reopen;
+        /// <summary>Dev.LiveReload: the old copy's scroll offsets. The areas inside the page go back as the page is drawn (Render, as B31 keeps them
+        /// across a redraw); the column and the list one frame later, once the new page's layout stands (PlaceScrolls), clamped to its room.</summary>
+        Dictionary<string, float> restoreScroll; int restoreFrame;
+
+        /// <summary>Dev.LiveReload, the old copy: how far each scroll area of the open book stands, into the note.</summary>
+        void ScrollsInto(LiveReload.Note note)
+        {
+            foreach (var s in scrollers)
+            {
+                if (!s.Rect || !s.Rect.content) continue;
+                var key = s.Rect.content == content ? LiveReload.Note.PageScroll : s.ByRow ? LiveReload.Note.ListScroll : s.Key;
+                if (key != null) note.Scrolls[key] = ScrollAt(s);
+            }
+        }
+
+        /// <summary>Dev.LiveReload, the new copy, the frame after the book opened again: the column and the list where the old copy left them.</summary>
+        void PlaceScrolls()
+        {
+            var at = restoreScroll; restoreScroll = null;
+            if (at == null || !open) return;
+            Canvas.ForceUpdateCanvases();   // once: the new page's layout as drawn, so the room is the new content's
+            foreach (var s in scrollers)
+            {
+                if (!s.Rect || !s.Rect.content) continue;
+                var key = s.Rect.content == content ? LiveReload.Note.PageScroll : s.ByRow ? LiveReload.Note.ListScroll : null;
+                if (key == null || !at.TryGetValue(key, out var y)) continue;
+                s.Easing = false; s.Velocity = 0f; s.Rect.StopMovement();
+                s.Rect.content.anchoredPosition = new Vector2(s.Rect.content.anchoredPosition.x, LiveReload.Note.ClampScroll(y, Room(s)));
+            }
+        }
+
         // ---------- keys ----------
 
         // a key or pad button the panel reads also turns the focus ring on (focus-visible: the ring shows after a key press, KeyFocus)
@@ -171,6 +231,16 @@ namespace Hearthwoven.Panel
             try
             {
                 LiveConfig();   // a changed .cfg (Gale): reload and apply (ConfigWatch.cs)
+                if (restoreScroll != null && Time.frameCount > restoreFrame) PlaceScrolls();   // Dev.LiveReload: the column and the list, once the reopened page's layout stands
+                if (reopen != null)   // Dev.LiveReload: as the old copy left it
+                {
+                    var note = reopen; reopen = null; note.Into(state);
+                    if (note.BookOpen && Enabled.Value && CanOpen())
+                    {
+                        restoreScroll = note.Scrolls.Count > 0 ? new Dictionary<string, float>(note.Scrolls) : null; restoreFrame = Time.frameCount;
+                        Open(); note.AfterOpen(state); Render(true);
+                    }
+                }
                 if (SnapshotTick()) return;   // Dev: a panel snapshot run owns the panel (PanelSnapshot.cs)
                 BenchTick();                  // Dev.Bench: the bench key starts a run (PanelBench.cs); nothing when off
                 CheckTick();                  // Dev.SelfCheck: the report key and the filter-key watch (PanelCheck.cs); nothing when off
@@ -640,6 +710,7 @@ namespace Hearthwoven.Panel
             input.Upgrades = Plugin.Upgrades; input.UpgradesFrom = Plugin.UpgradesFrom; input.MaxQuality = GameData.MaxQuality;   // 0.9: Crafting's Upgrades per item (Chapters/CraftingHistory.cs)
             input.Firsts = Plugin.FirstsDays(); input.FirstsFrom = Plugin.FirstsFrom;
             input.MealCombos = Plugin.MealCombos;   // 0.9: Meals' Your combinations (Chapters/MealCombosModel.cs)
+            var worn = Plugin.ArmorWorn; input.ArmorWorn = worn?.Tokens; input.ArmorWornFrom = worn?.FromUtc;   // 0.9 Armor sets, made or worn (Chapters/ArmorSets.cs)
             input.FeatsSeen = Plugin.FeatsLedger?.SeenTiers;
             try { input.DeedStretches = Plugin.DeedStretchesNow(); } catch (Exception e) { input.DeedStretches = null; HookGuard.Fail(e, "PanelUi.Gather.DeedStretches"); }
             return input;
@@ -1004,7 +1075,7 @@ namespace Hearthwoven.Panel
                     t.SetPixel(x, y, new Color(1, 1, 1, edge * edge * side));    // quadratic: only the very edge is strongest
                 }
             t.Apply(false, true);
-            var sprite = Sprite.Create(t, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f);
+            var sprite = PanelLook.Own(Sprite.Create(t, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f));
             if (top) fadeTop = sprite; else fadeBottom = sprite;
             return sprite;
         }
@@ -1150,6 +1221,7 @@ namespace Hearthwoven.Panel
             // as the page is cleared (they are destroyed only at the frame's end)
             keptScroll.Clear();
             if (!newPage) KeepScroll(content);
+            if (restoreScroll != null) foreach (var kv in restoreScroll) if (!kv.Key.StartsWith("~")) keptScroll[kv.Key] = kv.Value;   // Dev.LiveReload: the areas inside the page where the old copy left them
             featFollow = newPage || followChoice; followChoice = false;   // the chosen feat must be on screen: a new page, or A/D moved it (FeatsUi.FeatsBlock)
             scrollers.RemoveAll(x => !x.Rect || x.Rect.transform.IsChildOf(content));   // the grids of the page just left, or of this page's last drawing
             featCards.Clear(); featDetail = null; featsArea = null;   // 0.8.1: nothing outlives the page it points into (Clear may keep a plain object for reuse: PanelReuse.cs)

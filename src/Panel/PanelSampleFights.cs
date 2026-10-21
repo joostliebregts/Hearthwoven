@@ -100,6 +100,31 @@ namespace Hearthwoven.Panel
         }
 
         /// <summary>
+        /// 0.9.10 (Joost in game on 0.9.9, Last fight: "This is bugged on the last fight / boss fight": the boss's name and land drawn over the first
+        /// big number): a boss fight won 2 minutes ago after 9 min 3 s by Rowan, Edda, Tor and Finch, with the numbers of his screenshot: 58 118 dealt
+        /// together, 2 092 received together, 144 DPS together. <paramref name="prefab"/>, <paramref name="name"/> and <paramref name="biome"/> name
+        /// the boss: Fader in the Ashlands as he saw it (the sample's own name for Fader is Lord Reto), or The Queen, Moder and a long modded name
+        /// for the long-name cases (a boss without a trophy shows the foe mark).
+        /// </summary>
+        public static PanelInput WithBigBoss(PanelInput book, string prefab = "Fader", string name = "Fader", string biome = "AshLands")
+        {
+            var now = book.NowUtc;
+            var f = new FightView { Id = "bighead-1", Kind = FightKind.Boss, Outcome = FightOutcome.Won, Boss = prefab, Biome = biome, StartUtc = now.AddSeconds(-663), EndUtc = now.AddSeconds(-120), Health = 0f, SwingSeconds = 403.6f };
+            var you = Player(f, Rowan, true); you.Blocks = 9; you.Stopped = 410; you.HitsReceived = 24;
+            var edda = Player(f, Edda); edda.Blocks = 4; edda.Stopped = 160;
+            var tor = Player(f, Tor); tor.Blocks = 12; tor.Parries = 3; tor.Stopped = 690;
+            var finch = Player(f, Finch); finch.Blocks = 2; finch.Stopped = 60;
+            var x = Foe(f, prefab, defeated: 1, boss: true);
+            Hit(x, Rowan, "blunt 9000 frost 7240", "fire 400 blunt 120");
+            Hit(x, Edda, "pierce 8905 frost 5000", "fire 610");
+            Hit(x, Tor, "slash 18512", "fire 500 blunt 234");
+            Hit(x, Finch, "spirit 9461", "fire 228");
+            book.Fights.Fights.Insert(0, f);
+            var names = book.DisplayName; book.DisplayName = t => t == prefab ? name : names?.Invoke(t);
+            return book;
+        }
+
+        /// <summary>
         /// 0.9.4 draft (weaknesses): a newer group fight in the Swamp with two kinds of foe the game treats differently, Draugr (resists fire,
         /// immune to poison) and Blob (weak to blunt, frost and lightning; resists the rest; immune to poison): a weakness line each, named.
         /// </summary>

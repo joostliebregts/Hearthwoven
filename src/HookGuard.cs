@@ -27,6 +27,7 @@ namespace Hearthwoven
         /// <summary>Runs a hook's body; an exception is counted and logged once, never passed on.</summary>
         public static void Run(Action body)
         {
+            if (LiveReload.Retired) return;   // Dev.LiveReload: a copy that handed over runs no hook of its own (LiveReload.cs)
             var start = DevCheck.On ? DevCheck.HookStart() : 0L;   // Dev.SelfCheck: the hook cost per frame (PerfMeter); nothing when off
             try { body(); }
             catch (Exception e) { Fail(e, NameOf(body)); }
@@ -36,6 +37,7 @@ namespace Hearthwoven
         /// <summary>Runs a hook's body that returns a value (a prefix's "run the game's method?"); on an exception: the fallback.</summary>
         public static T Run<T>(Func<T> body, T fallback)
         {
+            if (LiveReload.Retired) return fallback;
             var start = DevCheck.On ? DevCheck.HookStart() : 0L;
             try { return body(); }
             catch (Exception e) { Fail(e, NameOf(body)); return fallback; }

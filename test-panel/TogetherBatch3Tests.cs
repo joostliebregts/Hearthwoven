@@ -150,7 +150,7 @@ static class TogetherBatch3Tests
             Check(bad.Count == 0, "together batch 3: " + d.Name + " sums everyone who shares, each once (Edda's stale second copy adds nothing), tiers " +
                   string.Join(" / ", d.Tiers.Select(PanelModel.Number)) + " at their lines, the same on a fellow's book" + (bad.Count > 0 ? ": " + string.Join("; ", bad) : ""));
         }
-        Check(Ids.All(id => PanelModel.FeatById(id)?.Group == true) && Feats.Select(f => f.id).OrderBy(x => x).SequenceEqual(Ids.OrderBy(x => x)) && PanelModel.FeatDefs.Count(d => d.Group) == 16 + Ids.Length,
+        Check(Ids.All(id => PanelModel.FeatById(id)?.Group == true) && Feats.Select(f => f.id).OrderBy(x => x).SequenceEqual(Ids.OrderBy(x => x)) && PanelModel.FeatDefs.Count(d => d.Group) == 16 + Ids.Length + 1,   // + 1: Clad as One (ArmorWornTests)
               "together batch 3: " + Ids.Length + " group feats added, each tested here (" + PanelModel.FeatDefs.Count(d => d.Group) + " Together, " + PanelModel.FeatDefs.Length + " feats in all)");
 
         // ---------- the room: the ledger keeps every feat, 16 or more spare ----------

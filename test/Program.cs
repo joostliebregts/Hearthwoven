@@ -962,6 +962,7 @@ fails += ArmorShareTests.Run();   // 0.9 armor-share: the armour ledger in the s
 fails += RecordTests.Run();   // 0.9, the record track: upgrade moments, firsts, deed stretches and their 30-day store, feats seen per tier, a busy evening's size (test/RecordTests.cs)
 fails += LandMinutesTests.Run();   // 0.9, the arrows track: the land per minute beside the deed log, its fold, bounds, pickups by land, kept across a restart, never shared (test/LandMinutesTests.cs)
 fails += DeedBlockTests.Run();   // 0.9 deed feeds: a friend's deed stretches in their session blocks: round trip, what the server keeps, bounds, the deeds tag, the upload plan, size, the friend's rows (test/DeedBlockTests.cs)
+fails += LiveReloadTests.Run();   // 0.10 Dev.LiveReload: five reloads in one evening through the real file: nothing lost, nothing twice; the note; a retired copy's hooks (test/LiveReloadTests.cs)
 
 System.Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
 return fails;

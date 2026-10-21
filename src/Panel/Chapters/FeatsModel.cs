@@ -220,11 +220,13 @@ namespace Hearthwoven.Panel
                 i => DistinctFellows(i, e => e.EquippedGearMadeBy.Any(kv => kv.Value > 0 && SameName(Split2(kv.Key)[0], i.PlayerName))),
                 CountedFellows, "Only fellow players who share are seen. It counts putting gear on, not wearing it.", exact: false, derived: true,
                 brief: t => N(t) + " fellows wear it", unit: "fellow players"),
-            // 0.9 (Armor sets, Chapters/ArmorSets.cs; Joost, 18 Oct: "One feat with tiers yeah"): I the sets of one land, II half the lands, III every land
-            new FeatDef("armorsets", "Clad for Every Land", "smith", Chapter.Deeds, SetsPageId, "Every armor set of a land, made in full.", ArmorFeatTiers,
-                t => t <= 1 ? "Make every armor set of one land." : t >= ArmorLands.Length ? "Make every armor set of every land." : "Make every armor set of " + N(t) + " lands, half of them.",
+            // 0.9 (Armor sets, Chapters/ArmorSets.cs; Joost, 18 Oct: "One feat with tiers yeah"): I the sets of one land, II half the lands, III every land;
+            // a piece made or worn by you (Joost, 20 Oct: "this achievement has to be about collecting all of them"; "it's about being worn by you")
+            new FeatDef("armorsets", "Clad for Every Land", "smith", Chapter.Deeds, SetsPageId, "Every armor set of a land, each piece made or worn by {them}.", ArmorFeatTiers,
+                t => t <= 1 ? "Make or wear every piece of every armor set of one land." : t >= ArmorLands.Length ? "Make or wear every piece of every armor set of every land."
+                   : "Make or wear every piece of every armor set of " + N(t) + " lands, half of them.",
                 LandsArmored,
-                CountedCharacter, "Sets as the book groups them, a mod's armor too. A piece counts once {you} made it.", retro: true,
+                CountedCharacter, ArmorSetsCaveat, retro: true,
                 brief: t => t <= 1 ? "every set of 1 land" : t >= ArmorLands.Length ? "every set, every land" : "every set of " + N(t) + " lands", unit: "land|lands"),
             new FeatDef("keptfires", "Kept the Fires", "smith", Chapter.Stores, "smelters", "The smelters never went cold.", new[] { 1000.0, 5000.0, 20000.0 },
                 t => "Put " + N(t) + " ore and fuel into smelters, kilns and furnaces.",
@@ -305,7 +307,7 @@ namespace Hearthwoven.Panel
                         Rule = t => "Together, move " + N(t) + " item-km of ore and metal by ship or cart.", Brief = t => N(t) + " item-km moved", Unit = "item-km",
                     },
                 },
-        }.Concat(MoreFeatDefs()).Concat(MoreFeatDefs2())).Concat(GroupFeatDefs()).Concat(MoreGroupFeatDefs()).Concat(MoreGroupFeatDefs2()).Concat(GroupFeatDefs3()).ToArray();   // 0.9.2 Together, batch 3 (FeatsGroup3.cs)   // 0.9.1 batch 2 (FeatsMore2.cs)   // 0.9 more feats (FeatsMore.cs), the group's (FeatsGroup.cs, FeatsMore.cs)
+        }.Concat(MoreFeatDefs()).Concat(MoreFeatDefs2())).Concat(GroupFeatDefs()).Concat(MoreGroupFeatDefs()).Concat(MoreGroupFeatDefs2()).Concat(GroupFeatDefs3()).Concat(ArmorGroupFeatDefs()).ToArray();   // 0.9.2 Together, batch 3 (FeatsGroup3.cs)   // 0.9.1 batch 2 (FeatsMore2.cs)   // 0.9 more feats (FeatsMore.cs), the group's (FeatsGroup.cs, FeatsMore.cs)
 
         /// <summary>The group's ore and metal moved by ship or cart (item-km): what the server's book booked as unloaded, summed over you and every fellow player who shares
         /// (each haul once: from where it was loaded to where it came off). null when no one's book is there (a server before 0.6): the feat waits.</summary>

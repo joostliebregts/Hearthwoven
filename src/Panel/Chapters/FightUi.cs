@@ -19,7 +19,9 @@ namespace Hearthwoven.Panel
     public partial class PanelUi
     {
         // the head: picture, name over land on the left, the numbers on the right on one baseline; under them the lane or the run's line
-        const float FtTopH = 48, FtRing = 44, FtDoor = 46, FtNameX = 58, FtName = 26, FtNameLeast = 20, FtLand = 15, FtNum = 43, FtNumLabel = 17, FtNumGap = 14, FtRuleGap = 24,
+        // 0.9.10: FtNumLess, the numbers' step down when the name needs the room (the book's next number size, PanelLayout.Text.Card); FtNameGap,
+        // the least air between the name and the first number
+        const float FtTopH = 48, FtRing = 44, FtDoor = 46, FtNameX = 58, FtName = 26, FtNameLeast = 20, FtLand = 15, FtNum = 43, FtNumLess = 38, FtNameGap = 16, FtNumLabel = 17, FtNumGap = 14, FtRuleGap = 24,
                     FtLaneTop = 8, FtLaneH = 20, FtLanePad = 10, FtKeyLineH = 20;
         // the foe rows: the name column (picture, name, ×N), each column's number, its bar; the boss first, the foes around it indented
         const float FtWho = 190, FtWhoMax = 240, FtIndent = 22, FtPic = 22, FtBossPic = 26, FtNumMin = 44, FtColGap = 10, FtSep = 18, FtChev = 18, FtFoeGap = 4, FtSubIndent = 38;
@@ -84,39 +86,52 @@ namespace Hearthwoven.Panel
             }
             else FtBossRing(r, b.Icon, 0, (FtTopH - FtRing) / 2, FtRing);
             // the numbers from the right: each its number in gold and its words on one baseline, a rule between two
-            float numTop = FtTopH - LineBox(FtNum), labelTop = FtTopH - LineBox(FtNumLabel) - Mathf.Round((FtNum - FtNumLabel) * Descent);
             var nums = FtItems(b, "number");
             var placed = new List<(TextMeshProUGUI words, TextMeshProUGUI num, Image rule)>();
             for (int k = 0; k < nums.Count; k++)
-                placed.Add((BtText(r, nums[k].Title, 0, labelTop, 400, LineBox(FtNumLabel), FtNumLabel, PanelLook.Text, TextAlignmentOptions.BottomLeft),
-                            BtText(r, nums[k].Value, 0, numTop, 400, LineBox(FtNum), FtNum, PanelLook.Gold, TextAlignmentOptions.BottomLeft, FontStyles.Bold),
+                placed.Add((BtText(r, nums[k].Title, 0, 0, 400, LineBox(FtNumLabel), FtNumLabel, PanelLook.Text, TextAlignmentOptions.BottomLeft),
+                            BtText(r, nums[k].Value, 0, 0, 400, LineBox(FtNum), FtNum, PanelLook.Gold, TextAlignmentOptions.BottomLeft, FontStyles.Bold),
                             k > 0 ? BtRect(r, "Rule", PanelLook.Rule, 0, FtTopH - 34, 1, 30) : null));
-            float Place(bool brief)   // right to left; brief: each number's short words ("dealt" for "dealt together"); returns where they start
+            // right to left on a row's foot (dy: the row under the name's when they stand apart); brief: each number's short words ("dealt" for
+            // "dealt together"); size: the numbers' (FtNum, or FtNumLess a step down); returns where they start
+            float Place(bool brief, float size, float dy)
             {
-                float right = Column;
+                float right = Column, numTop = dy + FtTopH - LineBox(size), labelTop = dy + FtTopH - LineBox(FtNumLabel) - Mathf.Round((size - FtNumLabel) * Descent);
                 for (int k = nums.Count - 1; k >= 0; k--)
                 {
                     var (words, num, rule) = placed[k];
                     words.text = brief && !string.IsNullOrEmpty(nums[k].Text) ? nums[k].Text : nums[k].Title;
+                    num.fontSize = size;
                     var ww = FtWidth(words); right -= ww; words.rectTransform.Box(right, labelTop, ww, LineBox(FtNumLabel));
-                    var nw = FtWidth(num); right -= FtNumGap + nw; num.rectTransform.Box(right, numTop, nw, LineBox(FtNum));
-                    if (rule) { right -= FtRuleGap; rule.rectTransform.Box(right, FtTopH - 34, 1, 30); right -= FtRuleGap + 1; }
+                    var nw = FtWidth(num); right -= FtNumGap + nw; num.rectTransform.Box(right, numTop, nw, LineBox(size));
+                    if (rule) { right -= FtRuleGap; rule.rectTransform.Box(right, dy + FtTopH - 34, 1, 30); right -= FtRuleGap + 1; }
                 }
                 return right;
             }
-            // the name over its land, given the room the numbers leave: a long name steps down (26 to 20); still too long, the numbers say their
-            // words short, and only then is the name cut
-            var room = Mathf.Max(60f, Place(false) - FtNameX - 16);
-            var title = BtText(r, b.Title, FtNameX, string.IsNullOrEmpty(b.Text) ? (FtTopH - 30) / 2 : 0, room, 30, FtName, PanelLook.Text, style: FontStyles.Bold);   // no land known: the name alone, in the row's middle
-            void Fit() { title.fontSize = FtName; for (var size = FtName - 2; size >= FtNameLeast && FtWidth(title) > room; size -= 2) title.fontSize = size; }
-            Fit();
-            var sub = string.IsNullOrEmpty(b.Text) ? null : BtText(r, b.Text, FtNameX, 28, room, 20, FtLand, PanelLook.Muted);
-            // 0.8.6: the land's line too (a third number, the pace, takes room): when it does not fit either, the numbers say their short words
-            if ((FtWidth(title) > room || (sub != null && FtWidth(sub) > room)) && nums.Any(n => !string.IsNullOrEmpty(n.Text)))
+            // the name over its land beside the numbers while the room they leave holds both, measured: a long name steps down (26 to 20); still too
+            // wide, the numbers say their words short; then (0.9.10, Joost in game: "Fader" and "Ashlands" drawn over 58 118) the numbers step down
+            // to the book's next size; still too wide, the name and its land keep the row and the numbers take a row of their own under it. Never
+            // one over the other, and the name is cut only past the whole row.
+            var title = BtText(r, b.Title, FtNameX, string.IsNullOrEmpty(b.Text) ? (FtTopH - 30) / 2 : 0, 100, 30, FtName, PanelLook.Text, style: FontStyles.Bold);   // no land known: the name alone, in the row's middle
+            var sub = string.IsNullOrEmpty(b.Text) ? null : BtText(r, b.Text, FtNameX, 28, 100, 20, FtLand, PanelLook.Muted);
+            float room = 0;
+            bool Fits(float edge)   // the name, stepped down as far as it needs, and its land in the room left of edge
             {
-                room = Mathf.Max(60f, Place(true) - FtNameX - 16); title.rectTransform.sizeDelta = new Vector2(room, title.rectTransform.sizeDelta.y); Fit();
-                if (sub != null) sub.rectTransform.sizeDelta = new Vector2(room, sub.rectTransform.sizeDelta.y);
+                room = Mathf.Max(0f, edge - FtNameX - FtNameGap);
+                title.fontSize = FtName; for (var size = FtName - 2; size >= FtNameLeast && FtWidth(title) > room; size -= 2) title.fontSize = size;
+                return FtWidth(title) <= room && (sub == null || FtWidth(sub) <= room);
             }
+            var hasBrief = nums.Any(n => !string.IsNullOrEmpty(n.Text));
+            var beside = nums.Count == 0 ? Fits(Column) || true
+                       : Fits(Place(false, FtNum, 0)) || (hasBrief && Fits(Place(true, FtNum, 0))) || Fits(Place(hasBrief, FtNumLess, 0));
+            if (!beside)
+            {
+                Size(r, -1, 2 * FtTopH);
+                Fits(Column + FtNameGap);   // the name's row to its end
+                if (Place(false, FtNum, FtTopH) < 0 && (!hasBrief || Place(true, FtNum, FtTopH) < 0)) Place(hasBrief, FtNumLess, FtTopH);
+            }
+            title.rectTransform.sizeDelta = new Vector2(room, title.rectTransform.sizeDelta.y);
+            if (sub != null) sub.rectTransform.sizeDelta = new Vector2(room, sub.rectTransform.sizeDelta.y);
             if (lane != null) FightLane(col, lane);
             if (line != null) FightRunLine(col, line);
         }

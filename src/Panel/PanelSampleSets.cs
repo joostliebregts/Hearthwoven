@@ -95,10 +95,12 @@ namespace Hearthwoven.Panel
 
         /// <summary>
         /// The Armor sets previews (KsPanelTest --dump preview-deeds-crafting-sets*): the sample world with Rowan's armor made as each state asks.
-        ///   "yours"    the Leather set in full, Bronze two of three, Troll leather two of four, the Rag set begun, Iron known and not begun;
-        ///   "land"     every set of the Meadows in full ("MEADOWS · every set made");
-        ///   "new"      a new character: the Meadows' recipes known, nothing made yet (every tile dashed);
-        ///   "everyone" "yours", with Edda's and Tor's armor as their copies share it and Finch's copy from 0.8.6 (it does not say).
+        ///   "yours"    the Leather set complete (the legs worn, the rest made), Bronze complete with the leggings worn (made by a friend), Troll
+        ///              leather two of four, the Rag set begun, Iron one of three (the helmet worn), wearing counted from three days ago;
+        ///   "land"     every set of the Meadows complete ("MEADOWS · every set complete");
+        ///   "new"      a new character: the Meadows' recipes known, nothing made or worn yet (every tile dashed);
+        ///   "everyone" "yours", with Edda's armor as her copy shares it (made, and the troll legs and cape worn: the Troll set complete together),
+        ///              Tor's from a copy that shares only what he made, and Finch's copy from 0.8.6 (it says neither).
         /// </summary>
         public static PanelInput World(DateTime now, string state)
         {
@@ -114,10 +116,14 @@ namespace Hearthwoven.Panel
                 case "new":
                     crafted = new Dictionary<string, float>(crafted.Where(kv => TypeOf(kv.Key) == null).ToDictionary(kv => kv.Key, kv => kv.Value));
                     known = new HashSet<string>(Pieces.Where(p => p.Token.Contains("rags") || p.Token.Contains("_leather") || p.Token.Contains("deerhide")).Select(p => p.Token));
+                    w.ArmorWorn = new HashSet<string>(StringComparer.Ordinal); w.ArmorWornFrom = now.AddHours(-1);   // counting began, nothing worn yet
                     break;
                 default:
-                    Made(("$item_chest_rags", 1), ("$item_helmet_leather", 2), ("$item_chest_leather", 2), ("$item_legs_leather", 1), ("$item_cape_deerhide", 1),
+                    Made(("$item_chest_rags", 1), ("$item_helmet_leather", 2), ("$item_chest_leather", 2), ("$item_cape_deerhide", 1),
                          ("$item_helmet_bronze", 1), ("$item_chest_bronze", 1), ("$item_helmet_trollleather", 1), ("$item_chest_trollleather", 1));
+                    // worn, not made: the leather legs, the bronze leggings a friend made, the iron helmet; the leather tunic made and worn (made shows)
+                    w.ArmorWorn = new HashSet<string>(StringComparer.Ordinal) { "$item_legs_leather", "$item_legs_bronze", "$item_helmet_iron", "$item_chest_leather" };
+                    w.ArmorWornFrom = now.AddDays(-3);
                     break;
             }
             w.ItemsCrafted = crafted;
@@ -126,9 +132,17 @@ namespace Hearthwoven.Panel
             if (state == "everyone")
                 foreach (var f in w.Fellows ?? new List<PanelInput>())
                 {
-                    if (f.PlayerName == SampleWorld.Edda) f.ArmorMade = new HashSet<string> { "$item_helmet_leather", "$item_chest_leather", "$item_legs_leather", "$item_cape_deerhide", "$item_helmet_bronze", "$item_chest_bronze", "$item_legs_bronze" };
-                    else if (f.PlayerName == SampleWorld.Tor) f.ArmorMade = new HashSet<string> { "$item_chest_rags", "$item_legs_rags", "$item_helmet_leather", "$item_chest_leather", "$item_legs_leather", "$item_cape_deerhide", "$item_helmet_iron", "$item_chest_iron" };
-                    else { f.ArmorMade = null; f.ModVersion = "0.8.6"; }
+                    if (f.PlayerName == SampleWorld.Edda)
+                    {
+                        f.ArmorMade = new HashSet<string> { "$item_helmet_leather", "$item_chest_leather", "$item_legs_leather", "$item_cape_deerhide", "$item_helmet_bronze", "$item_chest_bronze", "$item_legs_bronze" };
+                        f.ArmorWorn = new HashSet<string> { "$item_legs_trollleather", "$item_cape_trollhide" }; f.ArmorWornFrom = now.AddDays(-2);   // worn, not made
+                    }
+                    else if (f.PlayerName == SampleWorld.Tor)   // a copy that shares what he made, not yet what he wore
+                    {
+                        f.ArmorMade = new HashSet<string> { "$item_chest_rags", "$item_legs_rags", "$item_helmet_leather", "$item_chest_leather", "$item_legs_leather", "$item_cape_deerhide", "$item_helmet_iron", "$item_chest_iron" };
+                        f.ArmorWorn = null; f.ArmorWornFrom = null; f.ModVersion = "0.9.9";
+                    }
+                    else { f.ArmorMade = null; f.ArmorWorn = null; f.ArmorWornFrom = null; f.ModVersion = "0.8.6"; }
                 }
             return w;
         }

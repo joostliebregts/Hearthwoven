@@ -928,6 +928,7 @@ fails += MealsTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc)); 
 fails += MealCombosTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));
 fails += MealPlanTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.9.2 Meals' Plan a meal: three foods of the lands you explore together (test-panel/MealPlanTests.cs)   // 0.9 Meals' Your combinations: the foods you had on together (test-panel/MealCombosTests.cs)
 fails += ArmorSetsTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.9 Deeds > Crafting > Armor sets: grouping, lands, names, the page's states, Everyone, the copy's yes/no, the feat, the dump (test-panel/ArmorSetsTests.cs)
+fails += ArmorWornTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.9 Armor sets, made or worn: the record, made or worn, the marks and the start date, the copy, Clad as One (test-panel/ArmorWornTests.cs)
 fails += ArrowsTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.9 arrows track: the Best arrow tie (Joost's Fallen Valkyrie), the Best arrows island on Foes and Last fight, its states (test-panel/ArrowsTests.cs)
 fails += WhatToUseTests.Run(new DateTime(2026, 10, 8, 20, 0, 0, DateTimeKind.Utc));   // 0.9 What to use: the third view on Foes and Last fight, tabs, sets, the table, the cards, a foe's detail (test-panel/WhatToUseTests.cs)
 fails += DamageHistoryTests.Run(now);   // 0.9.5 draft: Battle > Damage's History, the Deeds History form on damage per weapon kind (test-panel/DamageHistoryTests.cs)
@@ -1222,6 +1223,11 @@ if (dump >= 0 && dump + 1 < args.Length)
     var weakTwoS = Scenario("battle-lastfight-weak-twokinds", "case (0.9.4 draft): Last fight is a Swamp fight with Draugr and Blob: each kind its own named line (Blob's wraps)", FightsSample.WithTwoKinds(FightsSample.With(PanelSample.Full(now), false)));
     var weakNoneS = Scenario("edda-battle-lastfight-weak-none", "case (0.9.4 draft): Edda's Last fight on a PC whose foe data carries no modifiers: the Moder fight with no weakness line (nothing guessed)", FightsSample.WithoutModifiers(FightsSample.Friend(FightsSample.WithSoloBoss(FightsSample.With(PanelSample.Full(now), false)), "Edda")));
     var weakRetoS = Scenario("battle-lastfight-weak-reto", "case (0.9.4 draft): Joost's Last fight retold with the sample cast: Lord Reto (prefab Fader, SAMPLE modifiers) in the Ashlands, fought now, 13 032 dealt, 337 received, your DPS 107", FightsSample.WithReto(FightsSample.With(PanelSample.Full(now), false)));
+    // 0.9.10 (Joost in game on 0.9.9: "This is bugged on the last fight / boss fight"): a boss fight's head with big numbers, the name and land never over them
+    var bigFaderS = Scenario("battle-lastfight-bosshead", "case (0.9.10): Joost's boss fight retold with the sample cast: Fader in the Ashlands, won after 9 min 3 s by four, 58 118 dealt together, 2 092 received together, 144 DPS together: the name and land beside the numbers, never over them", FightsSample.WithBigBoss(FightsSample.With(PanelSample.Full(now), false)));
+    var bigQueenS = Scenario("battle-lastfight-bosshead-queen", "case (0.9.10): the same numbers against The Queen in the Mistlands", FightsSample.WithBigBoss(FightsSample.With(PanelSample.Full(now), false), "SeekerQueen", "The Queen", "Mistlands"));
+    var bigModerS = Scenario("battle-lastfight-bosshead-moder", "case (0.9.10): the same numbers against Moder in the Mountains", FightsSample.WithBigBoss(FightsSample.With(PanelSample.Full(now), false), "Dragon", "Moder", "Mountain"));
+    var bigLongS = Scenario("battle-lastfight-bosshead-long", "case (0.9.10): the same numbers against a modded boss with a long name, Gorr the Ancient Elder in the Mistlands: the name and land on their own row, the numbers under them", FightsSample.WithBigBoss(FightsSample.With(PanelSample.Full(now), false), "GorrElder", "Gorr the Ancient Elder", "Mistlands"));
     var brennaS = Scenario("battle-bossfight-brenna", "case (0.8.5): Brenna, Hildir's miniboss the game does not flag a boss, won with her five Skeletons around her (three with a bow, two without: one row)", FightsSample.WithBrenna(PanelSample.Full(now), FoeNamesTests.TaggedBrenna));
     // 0.8.5 (Joost in game, after a restart: "last fight should show your last fight, but indicate that it was x hours/days ago. Same for the feed."):
     // the sample evening kept as an earlier session (KeptFights), Edda and Tor beside you in its last fight, two hours on
@@ -1565,6 +1571,10 @@ if (dump >= 0 && dump + 1 < args.Length)
         ("battle-damage-byfoe", kinS, Page(Chapter.Battle, "damage", s => s.View["Battle/damage/view"] = "foe"), true),   // 0.8.5: Draugr and the ranged Draugr, one row
         ("battle-bossfight-low", fightsLowS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.8.6: the lane with little left: the time at this pace after its note
         ("battle-bossfight-brenna", brennaS, Page(Chapter.Battle, PanelModel.LastFightPage), true),
+        ("battle-lastfight-bosshead", bigFaderS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.9.10: Joost's Fader head, sample cast
+        ("battle-lastfight-bosshead-queen", bigQueenS, Page(Chapter.Battle, PanelModel.LastFightPage), true),
+        ("battle-lastfight-bosshead-moder", bigModerS, Page(Chapter.Battle, PanelModel.LastFightPage), true),
+        ("battle-lastfight-bosshead-long", bigLongS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // the name on its own row
         ("battle-lastfight-weak-reto", weakRetoS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.9.4 draft: Joost's fight, sample cast
         ("battle-lastfight-weak-boss", weakBossS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.9.4 draft: the three forms
         ("battle-lastfight-weak-twokinds", weakTwoS, Page(Chapter.Battle, PanelModel.LastFightPage), true),   // 0.9.4 draft: a line per kind

@@ -21,7 +21,7 @@ namespace Hearthwoven
     [BepInPlugin(Guid, "Hearthwoven", Version)]
     public class Plugin : BaseUnityPlugin
     {
-        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.9.9", RpcName = "Hearthwoven_Profile";
+        public const string Guid = "com.joostliebregts.hearthwoven", Version = "0.10.0", RpcName = "Hearthwoven_Profile";
         static ConfigEntry<bool> sendStats, logRouted, shareWithGroup;
         static ConfigEntry<float> intervalMinutes;
         static ConfigEntry<int> compressAfterDays, intervalLayout;
@@ -152,6 +152,22 @@ namespace Hearthwoven
             Totals.Combos.Add(foods, health, stamina, eitr, DateTime.Now.Date);
         }
         internal static MealCombos MealCombos => Totals != null && Totals.Combos.Begun ? Totals.Combos : null;
+        /// <summary>0.9 Armor sets, made or worn: an armor piece you put on (ClientHooks.Equip), its token once into the local totals' ArmorWornBook;
+        /// dropped while the totals are not loaded or before counting began.</summary>
+        internal static void Wore(string token)
+        {
+            if (Totals == null) return;
+            Totals.Worn.Note(token);
+        }
+        /// <summary>The armor pieces you put on and the day counting began; null until the totals load.</summary>
+        internal static ArmorWornBook ArmorWorn => Totals != null && Totals.Worn.Begun ? Totals.Worn : null;
+        /// <summary>The armor you have on now (its tokens), noted on the first spawn: you wear it, whenever you put it on.</summary>
+        static void NoteArmorOn(Player p)
+        {
+            var bag = p ? p.GetInventory() : null; if (bag == null) return;
+            foreach (var item in bag.GetEquippedItems())
+                if (item?.m_shared != null && Panel.PanelModel.IsArmorSlot(item.m_shared.m_itemType.ToString())) Totals.Worn.Note(item.m_shared.m_name);
+        }
         internal static DateTime? UpgradesFrom => Totals != null && Totals.Upgrades.FromUtc > DateTime.MinValue ? Totals.Upgrades.FromUtc : (DateTime?)null;
         /// <summary>0.9, record 3: token -> first local day made or placed; null until the totals load.</summary>
         internal static System.Collections.Generic.Dictionary<string, DateTime> FirstsDays() => Totals != null && Totals.Firsts.Begun ? Totals.Firsts.Days() : null;
@@ -172,8 +188,10 @@ namespace Hearthwoven
         {
             var deeds = DeedsNow();
             Totals.Firsts.Note(deeds.Buckets);   // the firsts of the minutes so far, before they become moments
-            return DeedStretches.Build(keptWorld, SessionId, ConnectedUtc, now, deeds.Buckets, Totals.Upgrades.Between(ConnectedUtc, now.AddSeconds(1)), Totals.Firsts,
-                                       Panel.GameData.ItemKind, Panel.GameData.PieceKind, Panel.GameData.GatherKind);
+            var s = DeedStretches.Build(keptWorld, SessionId, ConnectedUtc, now, deeds.Buckets, Totals.Upgrades.Between(ConnectedUtc, now.AddSeconds(1)), Totals.Firsts,
+                                        Panel.GameData.ItemKind, Panel.GameData.PieceKind, Panel.GameData.GatherKind);
+            if (feedFrom != null) s.Of = feedFrom;   // Dev.LiveReload: a piece of the connection (FeedId)
+            return s;
         }
 
         /// <summary>0.9, record 2 for the panel (PanelInput.DeedStretches): this session's stretches (Live; built again when the minute, the number
@@ -317,6 +335,11 @@ namespace Hearthwoven
         public const float FirstSendDelay = 10f, MinSendGap = (float)ServerIntake.RateGate.MinGap + 1f;
         public static float FirstSendAt(float now, float lastSend) => Math.Max(now + FirstSendDelay, lastSend + MinSendGap);
         static string SessionId = NewSessionId();
+        /// <summary>Dev.LiveReload: the connection this session continues after a reload (the first copy's session id); null: a connection of its own.</summary>
+        static string feedFrom;
+        /// <summary>The connection this session belongs to, as the server's feeds know it: the session itself, or after a live reload the first copy's
+        /// session (its pieces go up as one block, Uploads.JoinPieces).</summary>
+        static string FeedId => feedFrom ?? SessionId;
         // Live updates (0.7, SYNC-DESIGN.md item 4): the last full copy sent (its shared form and copyId: the base), the last update's
         // seq, and the one diff in work on a worker thread (parse, diff and gzip off the main thread; the snapshot itself is built here)
         static int copyCount;
@@ -338,9 +361,12 @@ namespace Hearthwoven
         static BepInEx.Logging.ManualLogSource log;
         internal static int HooksOk, HooksFailed;   // for the self-check report (DevCheck)
 
+        /// <summary>This copy's settings (the book binds its own on them, PanelUi.Attach).</summary>
+        internal static ConfigFile Settings;
+
         void Awake()
         {
-            log = Logger;
+            log = Logger; Settings = Config;
             sendStats = Config.Bind("Client", "SendStats", true, "Send your character statistics, skills and damage to the server you play on.");
             intervalMinutes = Config.Bind("Client", "IntervalMinutes", 2f, "How often (minutes) to send your stats while playing, at least 1; also 10 s after you spawn and when you log out.");
             intervalLayout = Config.Bind("Client", "IntervalLayout", 0, "Internal: which send interval default this config was moved to (1: 2 minutes, the old default 5 moved once). Do not edit.");
@@ -351,20 +377,27 @@ namespace Hearthwoven
             if (!shareWithGroup.Value) GroupShare.ForgetCache(Path.Combine(Paths.BepInExRootPath, "Hearthwoven"));   // switched off in the file while the game was closed: keep nobody's copy (B23)
             shareWithGroup.SettingChanged += (_, __) => { if (!shareWithGroup.Value) { GroupShare.Clear(); GroupShare.ForgetCache(Path.Combine(Paths.BepInExRootPath, "Hearthwoven")); if (Marks != null) Marks = new FellowMarks(); ForgetKeptFellows(); } GroupShare.SendShareState(); SendNow("share-changed"); };   // not sharing: no fellow's copy stays on this PC (B23)
             DevCheck.Bind(Config, Logger);   // Dev.SelfCheck: the in-game self-check, off for players (DevCheck.cs)
+            LiveReload.Bind(Config);         // Dev.LiveReload: reloaded in the running game by ScriptEngine, off for players (LiveReload.cs)
             BattleHooks.Bind(Config);        // Battle.DealtAfterArmour (dev, off): read before the hooks are patched
             logRouted = Config.Bind("Server", "LogRoutedDamage", false, "Server: log routed damage (cross-owner hits) to damage-routed-<day>.jsonl, a fallback for players without the mod. Off by default (Joost, 2026-10-09).");
             compressAfterDays = Config.Bind("Server", "CompressLogsAfterDays", 30, "Server: daily logs (chests, births, routed damage, received) older than this many days are gzipped in place (<name>.jsonl.gz), never deleted. 0 = never; at least 2.");
-            // Patch each hook on its own: if a future game update breaks one, only that measurement stops.
-            var harmony = patcher = new Harmony(Guid);
+            patcher = new Harmony(LiveReload.HarmonyId(Guid));
+            if (LiveReload.Arrive(Time.realtimeSinceStartup)) { Logger.LogInfo($"Hearthwoven {Version} loaded (Dev.LiveReload): the hooks wait until the copy before it has saved and handed over"); return; }
+            PatchHooks();
+        }
+
+        // Patch each hook on its own: if a future game update breaks one, only that measurement stops.
+        static void PatchHooks()
+        {
             int ok = 0, failed = 0;
             foreach (var type in AccessTools.GetTypesFromAssembly(typeof(Plugin).Assembly))
             {
                 if (type.GetCustomAttributes(typeof(HarmonyPatch), false).Length == 0 || StokerHooks.Later(type)) continue;
-                try { harmony.CreateClassProcessor(type).Patch(); ok++; }
-                catch (Exception e) { failed++; Logger.LogWarning("hook " + type.Name + " skipped: " + (e.InnerException ?? e).Message); }
+                try { patcher.CreateClassProcessor(type).Patch(); ok++; }
+                catch (Exception e) { failed++; log.LogWarning("hook " + type.Name + " skipped: " + (e.InnerException ?? e).Message); }
             }
-            HooksOk = ok; HooksFailed = failed;
-            Logger.LogInfo($"Hearthwoven {Version} loaded: {ok} hooks active, {failed} skipped");
+            HooksOk = ok; HooksFailed = failed; patched = true;
+            log.LogInfo($"Hearthwoven {Version} loaded: {ok} hooks active, {failed} skipped");
         }
 
         /// <summary>
@@ -379,10 +412,12 @@ namespace Hearthwoven
         }
 
         static Harmony patcher;
-        static bool laterPatched;
+        static bool laterPatched, patched, joinChecked, quitting;
 
         void Update()
         {
+            if (!LiveReload.Settled) { if (!LiveReload.Settle(Time.realtimeSinceStartup, out var note)) return; JoinRunning(note); }   // Dev.LiveReload: the old copy has handed over
+            else if (LiveReload.On && !joinChecked) { joinChecked = true; var note = LiveReload.TakeNote(); if (ZNet.instance != null) JoinRunning(note); }   // loaded in a running game without an older copy waiting on it (the first live copy, or the old one went first): no hook saw the connection or the spawn
             if (!laterPatched) { laterPatched = true; StokerHooks.Patch(patcher, Logger); }   // every plugin has loaded by the first frame (another mod's hooks)
             var now = Time.realtimeSinceStartup;
             if (routedWriter != null && now - lastFlush > 10f) { routedWriter.Flush(); lastFlush = now; }
@@ -410,15 +445,67 @@ namespace Hearthwoven
             if (Outbox.Count > 0 && now >= nextFragment && ZRoutedRpc.instance != null && !Panel.SampleMode.On) { ZRoutedRpc.instance.InvokeRoutedRPC(RpcName, Outbox.Dequeue()); nextFragment = now + 0.25f; }
             // 0.8.6: your closed sessions go to the server as blocks (a friend's older feed), after your own snapshot
             if (nextSend > 0f && GroupShare.BlocksOn)
-                try { GroupShare.UploadTick(now, Outbox.Count > 0, sendStats.Value, () => keptFights?.Earlier(keptWorld, SessionId, DateTime.UtcNow) ?? new System.Collections.Generic.List<KeptSession>(), SessionId,
-                                                 () => keptDeeds != null ? keptDeeds.Earlier(keptWorld, SessionId, DateTime.UtcNow) : Totals == null ? null : new System.Collections.Generic.List<DeedSession>()); }   // 0.9: and their deed stretches, once the totals (and so the kept deeds) are loaded (TRACK-feeds.md)
+                try { GroupShare.UploadTick(now, Outbox.Count > 0, sendStats.Value, () => Uploads.JoinPieces(keptFights?.Earlier(keptWorld, SessionId, DateTime.UtcNow), FeedId), FeedId,
+                                                 () => keptDeeds != null ? Uploads.JoinPieces(keptDeeds.Earlier(keptWorld, SessionId, DateTime.UtcNow), FeedId) : Totals == null ? null : new System.Collections.Generic.List<DeedSession>()); }   // 0.9: and their deed stretches, once the totals (and so the kept deeds) are loaded (TRACK-feeds.md); Dev.LiveReload: a connection's pieces as one session, none of the running one
                 catch (Exception e) { LogOnce("feed blocks not sent: " + e.Message); }
         }
 
-        void OnDestroy() { routedWriter?.Flush(); routedWriter?.Dispose(); routedWriter = null; }
+        void OnDestroy()
+        {
+            if (LiveReload.On && !quitting) Leave();   // Dev.LiveReload: ScriptEngine destroys this copy once the new one is loaded
+            routedWriter?.Flush(); routedWriter?.Dispose(); routedWriter = null;
+        }
         // Closing the game window without logging out: the local totals, and the session's last snapshot if the game's own
         // shutdown (OnShutdown, which runs first) has not already sent it.
-        void OnApplicationQuit() { SaveLocal(); SendNow("quit"); }
+        void OnApplicationQuit() { quitting = true; SaveLocal(); SendNow("quit"); }
+
+        // ---------- Dev.LiveReload (LiveReload.cs): off for players, nothing below runs then ----------
+
+        /// <summary>
+        /// The old copy (OnDestroy; the new one is loaded and waits): every store saved on this PC as at a logout, the book closed (its choices
+        /// saved) and everything it drew destroyed, its routed RPCs out of the game's table, its hooks unpatched, then the note. Nothing goes to
+        /// the server: no last copy (the connection goes on and the new copy's copies follow), and the session it ends goes up only with the
+        /// connection's other pieces, once the connection is over (FeedId, Uploads.JoinPieces). A copy that never started (still waiting) has
+        /// nothing to save, and the note it waited for stays for the next copy.
+        /// </summary>
+        void Leave()
+        {
+            var note = LiveReload.Settled ? new LiveReload.Note { Session = SessionId, Connection = FeedId, Numbers = Battle.Numbers } : null;
+            if (note != null)
+            {
+                if (ZNet.instance != null) SaveLocal();
+                note.LastSend = lastFullSend;
+                try { Panel.PanelUi.Leave(note); } catch (Exception e) { log?.LogWarning("Dev.LiveReload: the book not taken down: " + e.Message); }
+                try { if (LiveReload.TakeBack(ZRoutedRpc.instance, GroupShare.RpcNames.Concat(new[] { RpcName })) < 0) log?.LogWarning("Dev.LiveReload: the RPCs could not be taken back (they stay, retired); the new copy shares again after a rejoin"); }
+                catch (Exception e) { log?.LogWarning("Dev.LiveReload: RPCs not taken back: " + e.Message); }
+            }
+            try { patcher?.UnpatchSelf(); } catch (Exception e) { log?.LogWarning("Dev.LiveReload: hooks not unpatched: " + e.Message); }
+            LiveReload.HandOver(note);
+            log?.LogInfo(note != null ? $"Dev.LiveReload: session {SessionId} saved on this PC and handed over (connection {FeedId}; nothing sent)" : "Dev.LiveReload: replaced before it started; nothing to hand over");
+        }
+
+        /// <summary>
+        /// The new copy in a running game (Update, once): the hooks patched now that the old copy's are gone, the RPCs on the game's ZRoutedRpc,
+        /// and what the connection and spawn hooks would have done: a session from now in the same connection (the minutes before it come back as kept ones), the
+        /// totals and records read back, the first copy after the server's gap, and the book on the HUD where it was.
+        /// </summary>
+        void JoinRunning(LiveReload.Note note)
+        {
+            joinChecked = true;
+            if (!patched) PatchHooks();
+            if (note != null) log.LogInfo($"Dev.LiveReload: taking over from session {note.Session}");
+            if (ZRoutedRpc.instance != null) HookGuard.Run(() => RegisterOn(ZRoutedRpc.instance));
+            if (ZNet.instance == null) return;   // at the menu: the next connection starts as always
+            ConnectedUtc = DateTime.UtcNow; FeatsCounters.NewSession();
+            if (note != null)
+            {
+                lastFullSend = note.LastSend;
+                if (!string.IsNullOrEmpty(note.Connection)) feedFrom = note.Connection;   // the same connection: its pieces go up as one session once it is over
+                Battle.ContinueAfter(note.Numbers);   // fight and foe numbers go on, so the pieces join without a clash
+            }
+            if (Player.m_localPlayer != null) HookGuard.Run(() => { Spawned(); Panel.PanelHooks.SessionBegan(); });
+            if (Hud.instance != null) Panel.PanelUi.Attach(Hud.instance, Config, note);
+        }
 
         // ---------- client ----------
 
@@ -510,6 +597,9 @@ namespace Hearthwoven
             var skills = player.GetSkills()?.GetSkillList()?.Select(s => new Snapshot.SkillInfo
                 { Name = s.m_info.m_skill.ToString(), Level = s.m_level, Accumulator = s.m_accumulator }) ?? Enumerable.Empty<Snapshot.SkillInfo>();
             var history = Totals?.History; var today = DateTime.Now; var pending = history != null ? PendingDay() : null;
+            var armorMade = Panel.GameData.Warm() && profile.m_playerStats != null && profile.m_playerStats.Length > 0 && profile.m_playerStats[0] != null
+                ? Panel.PanelModel.ArmorMadeOf(profile.m_playerStats[0].m_itemCraftStats, Panel.GameData.ItemType) : null;   // 0.9: which armor pieces you made, yes or no (Armor sets)
+            var worn = ArmorWorn;   // 0.9 Armor sets, made or worn: the pieces you put on that armorMade does not already say
             return Snapshot.Build(Version, profile.GetPlayerID(), profile.GetName(), profile.m_playerStats, skills,
                                   ZNet.instance.GetWorldName(), Session, SessionId, Events, Log, shareWithGroup.Value,
                                   EventsSinceInstall, DamageSinceInstall, BiomeSinceInstall, BiomeFromUtc, FeatsLedger,
@@ -521,9 +611,9 @@ namespace Hearthwoven
                                   keptShared,              // 0.8.2: your kept minutes of earlier connections here, beside this connection's log
                                   Panel.PanelModel.DayDeeds(history, today, 30, pending, DeedKinds),   // 0.8.5: your Deeds per day, for fellows' Deeds pages on Today to 30 days
                                   Totals?.DealtAfter.DayWeapons(today, 30, DealtArmourPending()),   // 0.8.6: your weapons per day by upgrade level, for fellows' By weapon on Today to 30 days
-                                  Panel.GameData.Warm() && profile.m_playerStats != null && profile.m_playerStats.Length > 0 && profile.m_playerStats[0] != null
-                                      ? Panel.PanelModel.ArmorMadeOf(profile.m_playerStats[0].m_itemCraftStats, Panel.GameData.ItemType) : null,   // 0.9: which armor pieces you made, yes or no (Armor sets)
-                                  armorSince: Totals != null ? ArmourSince : null, armorFromUtc: ArmourFromUtc);   // 0.9 (armor-share): your armour ledger per damage type, for a friend's Defense
+                                  armorMade,
+                                  armorSince: Totals != null ? ArmourSince : null, armorFromUtc: ArmourFromUtc,   // 0.9 (armor-share): your armour ledger per damage type, for a friend's Defense
+                                  armorWorn: worn?.Tokens, armorWornFrom: worn?.FromUtc);   // 0.9 Armor sets: the armor you put on, from the day counting began
         }
 
         /// <summary>
@@ -620,6 +710,8 @@ namespace Hearthwoven
                 {
                     if (Totals.Upgrades.FromUtc == DateTime.MinValue) { Totals.Upgrades.FromUtc = DateTime.UtcNow; took = true; }
                     if (Totals.Combos.FromUtc == DateTime.MinValue) { Totals.Combos.FromUtc = DateTime.UtcNow; took = true; }   // Meals' Your combinations
+                    if (Totals.Worn.Begin(DateTime.UtcNow)) took = true;   // Armor sets, made or worn: what you put on from now
+                    var wornBefore = Totals.Worn.Tokens.Count; NoteArmorOn(Player.m_localPlayer); if (Totals.Worn.Tokens.Count != wornBefore) took = true;   // and what you have on
                     gameNow.TryGetValue("itemsCrafted", out var crafted); gameNow.TryGetValue("piecesPlaced", out var placed);
                     if (Totals.Firsts.Begin(DateTime.UtcNow, crafted, placed, EventsSinceInstall.Made)) took = true;
                     if (Totals.Feats.MigrateSeen(Panel.PanelModel.IsGroupFeat)) took = true;
@@ -755,7 +847,9 @@ namespace Hearthwoven
         {
             if (keptFights == null || keptFightsPath == null || Battle.Fights().Count == 0) return;
             var now = DateTime.UtcNow;
-            keptFights.Record(KeptFights.Take(keptWorld, SessionId, ConnectedUtc, now, Battle, keptName, SharesNow(), FightSides().Skip(1)), now);
+            var s = KeptFights.Take(keptWorld, SessionId, ConnectedUtc, now, Battle, keptName, SharesNow(), FightSides().Skip(1));
+            if (feedFrom != null) s.Of = feedFrom;   // Dev.LiveReload: a piece of the connection (FeedId)
+            keptFights.Record(s, now);
             keptFights.Save(keptFightsPath, now);
         }
 
@@ -818,8 +912,9 @@ namespace Hearthwoven
         [HarmonyPatch(typeof(ZRoutedRpc), MethodType.Constructor, typeof(bool))]
         static class RegisterRpc
         {
-            static void Postfix(ZRoutedRpc __instance) => HookGuard.Run(() => { __instance.Register<ZPackage>(RpcName, OnProfile); GroupShare.Register(__instance); });
+            static void Postfix(ZRoutedRpc __instance) => HookGuard.Run(() => RegisterOn(__instance));
         }
+        static void RegisterOn(ZRoutedRpc r) { r.Register<ZPackage>(RpcName, LiveReload.Guard<ZPackage>(OnProfile)); GroupShare.Register(r); }
 
         // A session = one connection: every new connection (another server, a reconnect after a lost link) starts from
         // zero under a new session id, so nothing carries over twice. Hooked on the connection, not on Logout, which can be
@@ -829,7 +924,7 @@ namespace Hearthwoven
         {
             static void Postfix() => HookGuard.Run(() =>
             {
-                Session = new DamageTally(); Events = new SessionEvents(); Log = new EventLog(); SessionId = NewSessionId();
+                Session = new DamageTally(); Events = new SessionEvents(); Log = new EventLog(); SessionId = NewSessionId(); feedFrom = null;
                 ConnectedUtc = DateTime.UtcNow; Kept = null; keptShared = null; keptPath = keptWorld = keptName = null; joinedLog = joinedOf = null;   // 0.8.2: the kept minutes load again on spawn (LoadKept)
                 keptFights = null; keptFightsPath = null; EarlierFights = new System.Collections.Generic.List<KeptSession>();   // 0.8.5: the kept fights too (LoadKeptFights)
                 Totals = null; totalsPath = totalsFor = null; EventsBefore = new SessionEvents(); DamageBefore = new DamageTally(); BiomeBefore = new BiomeTally();   // loaded again on spawn (P7)
@@ -844,16 +939,18 @@ namespace Hearthwoven
         [HarmonyPatch(typeof(Player), "OnSpawned")]
         static class OnSpawn
         {
-            static void Postfix(Player __instance) => HookGuard.Run(() =>
-            {
-                if (__instance != Player.m_localPlayer) return;
-                LoadLocal();                                   // since-install totals of this character (P7)
-                try { RecentOnSpawn(); } catch (Exception e) { LogOnce("recent (since last time) not loaded: " + e.Message); }
-                nextSend = FirstSendAt(Time.realtimeSinceStartup, lastFullSend);   // first snapshot 10 s after spawning (0.7; was 30 s)
-                GroupShare.LoadCached(Path.Combine(Paths.BepInExRootPath, "Hearthwoven"));   // B23: the fellows as they last shared them, until the server's fresh copies come
-                AskGroup();                                    // fellows' copies for Recent and Since you were away, the book open or not
-                GroupShare.SendShareState();                   // tell the server whether you share, even if SendStats is off
-            });
+            static void Postfix(Player __instance) => HookGuard.Run(() => { if (__instance == Player.m_localPlayer) Spawned(); });
+        }
+
+        /// <summary>The local player spawned (OnSpawn), or a live reload took over a running game (JoinRunning).</summary>
+        static void Spawned()
+        {
+            LoadLocal();                                   // since-install totals of this character (P7)
+            try { RecentOnSpawn(); } catch (Exception e) { LogOnce("recent (since last time) not loaded: " + e.Message); }
+            nextSend = FirstSendAt(Time.realtimeSinceStartup, lastFullSend);   // first snapshot 10 s after spawning (0.7; was 30 s)
+            GroupShare.LoadCached(Path.Combine(Paths.BepInExRootPath, "Hearthwoven"));   // B23: the fellows as they last shared them, until the server's fresh copies come
+            AskGroup();                                    // fellows' copies for Recent and Since you were away, the book open or not
+            GroupShare.SendShareState();                   // tell the server whether you share, even if SendStats is off
         }
 
         [HarmonyPatch(typeof(Game), "Logout")]

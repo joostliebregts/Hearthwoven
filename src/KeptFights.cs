@@ -15,6 +15,9 @@ namespace Hearthwoven
     public sealed class KeptSession
     {
         public string World = "", Id = "";
+        /// <summary>Dev.LiveReload: the connection this session is a piece of (its first session id); "": a whole connection. Uploads.JoinPieces
+        /// sends a connection's pieces as one block.</summary>
+        public string Of = "";
         public DateTime FromUtc, ToUtc;
         public readonly List<FightSide> Sides = new List<FightSide>();
         public FightSide Mine => Sides.FirstOrDefault(s => s.Self);
@@ -167,6 +170,7 @@ namespace Hearthwoven
             foreach (var s in Sessions)
             {
                 j.Open().Str("world", s.World).Str("id", s.Id).Str("from", s.FromUtc.ToString("o", Inv)).Str("to", s.ToUtc.ToString("o", Inv));
+                if (!string.IsNullOrEmpty(s.Of)) j.Str("of", s.Of);   // Dev.LiveReload's pieces only: an older reader leaves it
                 j.Key("sides").OpenArr();
                 foreach (var side in s.Sides.Where(x => x.Fights.Count > 0))
                 {
@@ -194,7 +198,7 @@ namespace Hearthwoven
             if (!(root.TryGetValue("sessions", out var ss) && ss is List<object> list)) return k;
             foreach (var x in list.OfType<Dictionary<string, object>>())
             {
-                var s = new KeptSession { World = MiniJson.Str(x, "world"), Id = MiniJson.Str(x, "id"), FromUtc = Time(MiniJson.Str(x, "from")), ToUtc = Time(MiniJson.Str(x, "to")) };
+                var s = new KeptSession { World = MiniJson.Str(x, "world"), Id = MiniJson.Str(x, "id"), Of = MiniJson.Str(x, "of"), FromUtc = Time(MiniJson.Str(x, "from")), ToUtc = Time(MiniJson.Str(x, "to")) };
                 if (x.TryGetValue("sides", out var sd) && sd is List<object> sides)
                     foreach (var o in sides.OfType<Dictionary<string, object>>())
                     {

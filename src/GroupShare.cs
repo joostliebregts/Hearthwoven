@@ -92,18 +92,22 @@ namespace Hearthwoven
         static readonly Regex DeathPos = new Regex(",\"x\":[-0-9.eE]+,\"z\":[-0-9.eE]+", RegexOptions.Compiled);
         static readonly Regex Worlds = new Regex(",\"secondsPerWorld\":\\{[^{}]*\\}", RegexOptions.Compiled);
 
+        /// <summary>Every routed RPC Register puts in the game's table (Dev.LiveReload takes them back on a reload, LiveReload.TakeBack).</summary>
+        internal static readonly string[] RpcNames = { RequestRpc, ReplyRpc, StateRpc, ListRpc, LiveRpc, LiveRequestRpc, LiveDeltaRpc, BlockUpRpc, BlockAskRpc, BlockRpc };
+
         internal static void Register(ZRoutedRpc r)
         {
-            r.Register<ZPackage>(RequestRpc, OnRequest);
-            r.Register<ZPackage>(ReplyRpc, OnReply);
-            r.Register<bool>(StateRpc, OnState);
-            r.Register<ZPackage>(ListRpc, OnList);
-            r.Register<ZPackage>(LiveRpc, OnLive);
-            r.Register<ZPackage>(LiveRequestRpc, OnLiveRequest);
-            r.Register<ZPackage>(LiveDeltaRpc, OnLiveDelta);
-            r.Register<ZPackage>(BlockUpRpc, OnBlockUp);
-            r.Register<ZPackage>(BlockAskRpc, OnBlockAsk);
-            r.Register<ZPackage>(BlockRpc, OnBlock);
+            // LiveReload.Guard: with Dev.LiveReload on, a handler of a copy that handed over does nothing; off, the handler itself
+            r.Register<ZPackage>(RequestRpc, LiveReload.Guard<ZPackage>(OnRequest));
+            r.Register<ZPackage>(ReplyRpc, LiveReload.Guard<ZPackage>(OnReply));
+            r.Register<bool>(StateRpc, LiveReload.Guard<bool>(OnState));
+            r.Register<ZPackage>(ListRpc, LiveReload.Guard<ZPackage>(OnList));
+            r.Register<ZPackage>(LiveRpc, LiveReload.Guard<ZPackage>(OnLive));
+            r.Register<ZPackage>(LiveRequestRpc, LiveReload.Guard<ZPackage>(OnLiveRequest));
+            r.Register<ZPackage>(LiveDeltaRpc, LiveReload.Guard<ZPackage>(OnLiveDelta));
+            r.Register<ZPackage>(BlockUpRpc, LiveReload.Guard<ZPackage>(OnBlockUp));
+            r.Register<ZPackage>(BlockAskRpc, LiveReload.Guard<ZPackage>(OnBlockAsk));
+            r.Register<ZPackage>(BlockRpc, LiveReload.Guard<ZPackage>(OnBlock));
         }
 
         static string Dir => Path.Combine(Paths.BepInExRootPath, "Hearthwoven", "players");

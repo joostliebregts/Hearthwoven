@@ -80,7 +80,7 @@ namespace Hearthwoven.Panel
         // What to use's status as a corner mark on the picture: made or owned a gold dot, can make a gold ring; the book's round marks (MarkImg:
         // PanelLook.Circle and PanelLook.Ring, as the deed feed's made and upgraded), so the key under the chips (PlanMarksKey) draws the very same
         static void PlanMark(RectTransform parent, string status, float x, float top) =>
-            MarkImg(parent, status == PanelModel.PlanCanMake ? PanelModel.PipOpen : "made", x, top, MpMark);
+            MarkImg(parent, PanelModel.RingMark(status) ? PanelModel.PipOpen : "made", x, top, MpMark);   // 0.9 Armor sets: worn is the ring too
 
         // the key under the chips (PanelModel.PlanMarksTone, Joost in game 0.9.8: "why not show the actual icons there?"): each mark as a tile draws
         // it, then its meaning: the gold dot, the ring (PlanMark), a food's picture as quiet as a tile not known yet (UtQuiet); KeyApart between

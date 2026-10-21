@@ -52,7 +52,7 @@ namespace Hearthwoven.Panel
 
         /// <summary>The Together page's order: journey order (Black Forest, Swamp), the cross-cutting ones after, the variety feat last; never by size.</summary>
         static readonly string[] TogetherOrder = { "copperwed", "bogiron", "ironforge", "silvervein", "blackmetal", "eitr", "flametal", "charcoal", "workshop", "wellfed", "meadhall",
-                                                   "onehearth", "onecrew", "herdgrows", "clad",
+                                                   "onehearth", "onecrew", "herdgrows", "clad", "cladasone",
                                                    "quarry", "woodpile", "fleet", "doorways", "garden", "everyland", "oldpowers", "felledtogether", "sharedtable", "longtable", "handtohand", "onemap",   // 0.9.2 batch 3
                                                    "manycrafts" };
 
@@ -288,7 +288,7 @@ namespace Hearthwoven.Panel
 
         // what a card and its detail say, veiled or not
         public static string FeatTitle(FeatDef d, PanelInput i) => FeatVeiled(d, i) ? d.Veil.Name : d.Name;
-        static string FeatHonours(FeatDef d, PanelInput i) => FeatVeiled(d, i) ? d.Veil.Honours : d.Honours;
+        static string FeatHonours(FeatDef d, PanelInput i) => FeatVeiled(d, i) ? d.Veil.Honours : FeatWords(i, d.Honours);   // 0.9: "{them}" said for whose book it is (Clad for Every Land)
         static string FeatPicture(FeatDef d, PanelInput i) => FeatVeiled(d, i) ? BiomeEmblem(d.Biome) : FeatIcon(d);
         static Func<double, string> FeatRule(FeatDef d, PanelInput i) => FeatVeiled(d, i) ? d.Veil.Rule : d.Rule;
         static Func<double, string> FeatBriefOf(FeatDef d, PanelInput i) => FeatVeiled(d, i) ? d.Veil.Brief : d.Brief;

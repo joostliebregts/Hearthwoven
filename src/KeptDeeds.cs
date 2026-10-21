@@ -47,6 +47,8 @@ namespace Hearthwoven
     public sealed class DeedSession
     {
         public string World = "", Id = "";
+        /// <summary>Dev.LiveReload: the connection this session is a piece of (KeptSession.Of); "": a whole connection.</summary>
+        public string Of = "";
         public DateTime FromUtc, ToUtc;
         public readonly List<DeedStretch> Stretches = new List<DeedStretch>();
         public bool Live;
@@ -61,6 +63,7 @@ namespace Hearthwoven
         public void WriteTo(Json j)
         {
             j.Open().Str("world", World).Str("id", Id).Str("from", FromUtc.ToString("o", Inv)).Str("to", ToUtc.ToString("o", Inv));
+            if (!string.IsNullOrEmpty(Of)) j.Str("of", Of);   // Dev.LiveReload's pieces only (a block's part is cleaned without it, DeedBlockPart.Clean)
             j.Key("s").OpenArr();
             foreach (var s in Stretches.Take(DeedStretches.MaxStretches))
             {
@@ -91,7 +94,7 @@ namespace Hearthwoven
         public static DeedSession ReadFrom(Dictionary<string, object> o)
         {
             if (o == null) return null;
-            var s = new DeedSession { World = MiniJson.Str(o, "world"), Id = MiniJson.Str(o, "id"), FromUtc = UpgradeLog.Time(MiniJson.Str(o, "from")), ToUtc = UpgradeLog.Time(MiniJson.Str(o, "to")) };
+            var s = new DeedSession { World = MiniJson.Str(o, "world"), Id = MiniJson.Str(o, "id"), Of = MiniJson.Str(o, "of"), FromUtc = UpgradeLog.Time(MiniJson.Str(o, "from")), ToUtc = UpgradeLog.Time(MiniJson.Str(o, "to")) };
             if (s.Id.Length == 0 || s.FromUtc == DateTime.MinValue || s.ToUtc < s.FromUtc) return null;
             DateTime At(Dictionary<string, object> d, string k) { var v = MiniJson.Num(d, k); return v >= 0 && v < 3e7 ? s.FromUtc.AddSeconds(v) : s.FromUtc; }
             if (o.TryGetValue("s", out var so) && so is List<object> list)

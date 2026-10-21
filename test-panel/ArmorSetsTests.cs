@@ -65,18 +65,20 @@ static class ArmorSetsTests
         var yours = SetsSample.World(now, "yours");
         var v = PanelModel.Build(yours, Sets());
         var hero = PanelModel.Content(v).First(b => b.Kind == "hero");
-        Check(v.Heading == PanelModel.SetsLabel && hero.Value == "1" && hero.Title == "set made in full" && hero.Items?.FirstOrDefault()?.Value == "3" && hero.Items[0].Title == "begun",
-              "page: \"1 set made in full\" (the leather), \"3 begun\" (rags, bronze, troll) (" + hero.Value + " " + hero.Title + " / " + hero.Items?.FirstOrDefault()?.Value + ")");
-        var leather = Band(v, "Deerstalker's Garb"); var iron = Band(v, "Cryptbreaker's Mail"); var bronze = Band(v, "Bronze-Clad");
+        Check(v.Heading == PanelModel.SetsLabel && hero.Value == "2" && hero.Title == "sets complete" && hero.Items?.FirstOrDefault()?.Value == "3" && hero.Items[0].Title == "begun",
+              "page: \"2 sets complete\" (the leather, the bronze with its leggings worn), \"3 begun\" (rags, troll, iron) (" + hero.Value + " " + hero.Title + " / " + hero.Items?.FirstOrDefault()?.Value + ")");
+        var leather = Band(v, "Deerstalker's Garb"); var iron = Band(v, "Cryptbreaker's Mail"); var bronze = Band(v, "Bronze-Clad"); var troll = Band(v, "Troll");
         Check(leather != null && leather.Selected && leather.Value == PanelModel.SetFull && leather.Text == "deer hide" && leather.Items.Count == 4 && leather.Items.All(t => t.Tone == null && t.Value != null),
-              "page: Deerstalker's Garb made in full, four tiles each with the game's count");
+              "page: Deerstalker's Garb complete, four tiles each with the game's count or \"worn\"");
         Check(leather.Items.First(t => t.Id == "$item_helmet_leather").Value == "2", "page: a tile's number is the game's own count of that piece made (Leather Helmet 2)");
-        Check(bronze != null && bronze.Value == "2 of 3 made" && !bronze.Selected && bronze.Items.Count(t => t.Tone == PanelModel.NotMadeTone) == 1,
-              "page: Bronze-Clad \"2 of 3 made\", one dashed tile (" + bronze?.Value + ")");
-        var leggings = bronze.Items.First(t => t.Tone == PanelModel.NotMadeTone);
-        Check(leggings.Title == "Bronze Plate Leggings" && leggings.Value == null && leggings.Items.Select(c => c.Title + " " + c.Value).SequenceEqual(new[] { "Bronze 5", "Deer Hide 2" }) && leggings.Items.All(c => c.Icon.StartsWith("item:$item_")),
-              "page: a piece not made shows its recipe's materials under its name, pictures and amounts, no number of its own");
-        Check(iron != null && iron.Value == "0 of 3 made" && iron.Items.All(t => t.Tone == PanelModel.NotMadeTone), "page: a known set not begun: every tile dashed, \"0 of 3 made\"");
+        Check(bronze != null && bronze.Value == PanelModel.SetFull && bronze.Selected && bronze.Items.First(t => t.Id == "$item_legs_bronze").Value == PanelModel.SetWornNote,
+              "page: Bronze-Clad complete with the leggings worn, not made (" + bronze?.Value + ")");
+        Check(troll != null && troll.Value == "2 of 4 made or worn" && !troll.Selected && troll.Items.Count(t => t.Tone == PanelModel.NotMadeTone) == 2,
+              "page: Troll \"2 of 4 made or worn\", two dashed tiles (" + troll?.Value + ")");
+        var leggings = troll.Items.First(t => t.Tone == PanelModel.NotMadeTone);
+        Check(leggings.Title == "Troll Leather Trousers" && leggings.Value == null && leggings.Items.Select(c => c.Title + " " + c.Value).SequenceEqual(new[] { "Troll Hide 5", "Bone Fragments 3" }) && leggings.Items.All(c => c.Icon.StartsWith("item:$item_")),
+              "page: a piece neither made nor worn shows its recipe's materials under its name, pictures and amounts, no number of its own");
+        Check(iron != null && iron.Value == "1 of 3 made or worn" && iron.Items.Count(t => t.Tone == PanelModel.NotMadeTone) == 2, "page: a set begun by wearing: the worn helmet, two tiles dashed, \"1 of 3 made or worn\"");
         Check(Band(v, "Frostfang") == null && Band(v, "Protector") == null && Band(v, "Mithril") == null, "page: sets whose recipes you do not know stay hidden");
         var waitLine = PanelModel.Content(v).FirstOrDefault(b => b.Kind == "note" && (b.Text ?? "").Contains("wait in lands further on"));
         var hidden = sets.Count - Bands(v).Count;
@@ -93,7 +95,7 @@ static class ArmorSetsTests
         // ---- one land in full: the land label; nothing made yet: the hero gives way, every tile dashed ----
         var land = PanelModel.Build(SetsSample.World(now, "land"), Sets());
         Check(PanelModel.Content(land).Any(b => b.Kind == "section" && b.Title == "Meadows" && b.Value == PanelModel.LandFull) && PanelModel.Content(land).Any(b => b.Kind == "section" && b.Title == "Black Forest" && b.Value == null),
-              "land: \"MEADOWS · every set made\" when both its sets are made in full, the Black Forest says nothing");
+              "land: \"MEADOWS · every set complete\" when both its sets are complete, the Black Forest says nothing");
         var fresh = PanelModel.Build(SetsSample.World(now, "new"), Sets());
         Check(!PanelModel.Content(fresh).Any(b => b.Kind == "hero") && Bands(fresh).Count == 2 && Bands(fresh).SelectMany(b => b.Items).All(t => t.Tone == PanelModel.NotMadeTone),
               "new: nothing made: no hero number (never a 0), the two Meadows sets with every tile dashed");
@@ -112,20 +114,22 @@ static class ArmorSetsTests
         Check(PanelModel.PlateOf(PanelModel.Build(eddaBook, new PanelState { Chapter = Chapter.Deeds, Player = SampleWorld.Edda, Page = { [Chapter.Deeds] = "crafting" } }))?.Items?.Any(b => b.Kind == "headlink" && b.Id == "Deeds/" + PanelModel.SetsPageId) != true,
               "crafting: no chip on a fellow's book (the recipes known are yours)");
 
-        // ---- Everyone: per set who made it in full, in the fixed order; a copy that does not say is named once ----
+        // ---- Everyone: per set who made or wore a piece of it, in the fixed order, and whether the group completed it; a copy that does not say is named once ----
         var ev = SetsSample.World(now, "everyone");
         var gv = PanelModel.Build(ev, Sets(true));
-        string Who(string set) { var b = Band(gv, set); return b == null ? null : string.Join(",", b.Items.Select(i => i.Value)) + (b.Value != null ? "|" + b.Value : ""); }
-        Check(gv.EveryoneOn && Who("Deerstalker's Garb") == "You,Edda,Tor" && Who("Bronze-Clad") == "Edda" && Who("Leather Scraps") == "Tor" && Who("Cryptbreaker's Mail") == "|" + PanelModel.SetsGroupNobody,
-              "everyone: who made each set in full, you first then by name (Leather: " + Who("Deerstalker's Garb") + "; Bronze: " + Who("Bronze-Clad") + "; Iron: " + Who("Cryptbreaker's Mail") + ")");
+        string Who(string set) { var b = Band(gv, set); return b == null ? null : string.Join(",", b.Items.Select(i => i.Value + (i.Note == PanelModel.SetWornNote ? "(worn)" : ""))) + (b.Value != null ? "|" + b.Value : ""); }
+        Check(gv.EveryoneOn && Who("Deerstalker's Garb") == "You,Edda,Tor|complete" && Who("Bronze-Clad") == "You,Edda|complete" && Who("Leather Scraps") == "You,Tor|complete"
+              && Who("Troll") == "You,Edda(worn)|complete" && Who("Cryptbreaker's Mail") == "You(worn),Tor|2 of 3 made or worn",
+              "everyone: who made or wore a piece of each set, you first then by name, a ring for only worn (Troll: " + Who("Troll") + "; Iron: " + Who("Cryptbreaker's Mail") + ")");
+        Check(PanelModel.Content(gv).First(b => b.Kind == "hero").Value == "4", "everyone: 4 sets complete in the group (Troll by Edda's worn legs and cape)");
         Check(Bands(gv).SelectMany(b => b.Items).All(i => i.Tone == PanelModel.PersonTileTone && i.Icon.StartsWith("person:") && !i.Value.Any(char.IsDigit)), "everyone: a person tile names the player, never a count");
-        Check(PanelModel.Content(gv).Any(b => b.Kind == "note" && b.Text == "Finch's Hearthwoven is 0.8.6: the sets Finch made fill in once they update."), "everyone: a copy from before 0.9 is named once, what fills in");
+        Check(PanelModel.Content(gv).Any(b => b.Kind == "note" && b.Text == "Finch's Hearthwoven is 0.8.6: the sets Finch made or wore fill in once they update."), "everyone: a copy from before 0.9 is named once, what fills in");
         Check(!PanelModel.Content(gv).Any(b => b.Kind == "hero" && (b.Items?.Count ?? 0) > 0), "everyone: one group number, no number per player");
 
         // ---- a fellow's book: only what they began, and why ----
         var fv = PanelModel.Build(ev.Fellows.First(f => f.PlayerName == SampleWorld.Edda), new PanelState { Chapter = Chapter.Deeds, Player = SampleWorld.Edda, Page = { [Chapter.Deeds] = PanelModel.SetsPageId } });
-        Check(Bands(fv).Select(b => b.Title).SequenceEqual(new[] { "Deerstalker's Garb", "Bronze-Clad" }) && PanelModel.Content(fv).Any(b => b.Kind == "note" && (b.Text ?? "").StartsWith("Only the sets Edda began")),
-              "fellow: Edda's book shows the sets she began, and one line says why the rest is not there");
+        Check(Bands(fv).Select(b => b.Title).SequenceEqual(new[] { "Deerstalker's Garb", "Bronze-Clad", "Troll" }) && PanelModel.Content(fv).Any(b => b.Kind == "note" && (b.Text ?? "").StartsWith("Only the sets Edda began")),
+              "fellow: Edda's book shows the sets she began (the Troll by wearing), and one line says why the rest is not there");
 
         // ---- the copy: which armor pieces were made, yes or no; bounded; an older reader ignores it, an older copy has none ----
         var made = PanelModel.ArmorMadeOf(new Dictionary<string, float> { ["$item_helmet_leather"] = 3, ["$item_axe_bronze"] = 2, ["$item_chest_bronze"] = 0 }, SetsSample.TypeOf);
@@ -143,10 +147,11 @@ static class ArmorSetsTests
 
         // ---- the feat: one feat, three tiers: one land, half the lands, every land ----
         var def = PanelModel.FeatById("armorsets");
-        Check(def != null && def.Tiers.SequenceEqual(new[] { 1.0, 4.0, 8.0 }) && def.Chapter == Chapter.Deeds && def.Page == PanelModel.SetsPageId && def.Rule(1) == "Make every armor set of one land." && def.Rule(4) == "Make every armor set of 4 lands, half of them." && def.Rule(8) == "Make every armor set of every land.",
+        Check(def != null && def.Tiers.SequenceEqual(new[] { 1.0, 4.0, 8.0 }) && def.Chapter == Chapter.Deeds && def.Page == PanelModel.SetsPageId && def.Rule(1) == "Make or wear every piece of every armor set of one land."
+              && def.Rule(4) == "Make or wear every piece of every armor set of 4 lands, half of them." && def.Rule(8) == "Make or wear every piece of every armor set of every land.",
               "feat: Clad for Every Land, tiers I one land, II four (half the eight), III every land");
         Check(PanelModel.LandsArmored(SetsSample.World(now, "land")) == 1 && PanelModel.LandsArmored(yours) == 0 && PanelModel.LandsArmored(new PanelInput()) == null,
-              "feat: the lands made in full: the Meadows = 1, none = 0, no game data = not counted (null)");
+              "feat: the lands complete: the Meadows = 1, none = 0, no game data = not counted (null)");
 
         // ---- the dev dump: every armor item, its set, a piece without a recipe said so ----
         var dump = PanelModel.ArmorDump(SetsSample.Pieces);

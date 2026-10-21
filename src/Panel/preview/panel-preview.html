@@ -336,6 +336,7 @@
   .ig-t.notmade .ig-p { filter:grayscale(1) opacity(.35); } .ig-t.notmade .ig-l { -webkit-line-clamp:1; }
   .ig-m { display:flex; gap:var(--sets-cost-gap); margin-top:var(--sets-cost-pic-gap); } .ig-m i { font-style:normal; display:inline-flex; align-items:center; gap:var(--sets-cost-pic-gap); font-size:var(--text-floor); color:var(--text); white-space:nowrap; }
   .ig-t.person .ig-n { font-size:var(--text-name); } .ig-t.person .ig-l { font-style:italic; }
+  .ig-p { position:relative; } .ig-p > .ig-mk { position:absolute; }   /* 0.9 Armor sets: a piece's mark on its picture's corner, a gold dot made, a ring worn (DeedsUi.ItemGrid's PlanMark) */
   /* 0.9.2 Meals' Plan a meal (MealPlanUi.PlanGrid): its food tiles; a slot of its meal's row (DamageRowsUi: an empty slot dashed as .ig-t.notmade) */
   .mp-t { cursor:pointer; display:block; padding:0; } .mp-t.unk { opacity:.5; } .mp-t.on { outline:1px solid var(--gold); outline-offset:-1px; } .mp-t.on .mp-n { color:var(--gold); }
   .mp-t > .mp-p, .mp-t > .mp-n, .mp-t > .mp-b, .mp-t > .mp-s, .mp-t > .mp-mk { position:absolute; } .mp-p { display:flex; }
@@ -1144,7 +1145,7 @@ function itemgrid(b) {
   return `<div class="ig" style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(i => i.tone === "notmade"
     ? `<div class="ig-t k-track notmade" style="height:${h}px"><span class="ig-p">${pic(i.icon, 32)}</span><span class="ig-x"><span class="ig-l">${esc(i.title)}</span><span class="ig-m">${(i.items || []).map(c => `<i>${pic(c.icon, 16)}${esc(c.value)}</i>`).join("")}</span></span></div>`
     : `<div class="ig-t k-track${i.tone === "person" ? " person" : ""}" style="height:${h}px">
-    ${i.colour ? `<span class="edge" style="background:${(i.colour || "").startsWith("person:") ? personColor(i.colour.slice(7)) : i.colour}"></span>` : ""}<span class="ig-p">${(i.icon || "").startsWith("person:") ? marker(i.icon, 32) : pic(i.icon, 32)}</span><span class="ig-x"><span class="ig-n">${esc(i.value)}</span><span class="ig-l"${i.id === "items:showall" ? ' style="color:var(--gold)"' : ""}>${i.tone === "fuel" ? rich("itemgrid", `${esc(i.title)}<span class="fuel">fuel</span>`, T.plain(i.title) + " " + T.size(T.i(T.ink("fuel", INK.faint)), 14)) : esc(i.title)}</span>${i.value2 ? `<span class="ig-s">${layered(i, INK.text, false, "itemgrid") || esc(i.value2)} ${esc(i.text)}</span>` : ""}${i.since ? `<span class="since" style="margin:0;font-size:var(--text-floor)">since install</span>` : ""}</span></div>`).join("")}</div>` + sinceUnder(b.since) + note(b.note);
+    ${i.colour ? `<span class="edge" style="background:${(i.colour || "").startsWith("person:") ? personColor(i.colour.slice(7)) : i.colour}"></span>` : ""}<span class="ig-p">${(i.icon || "").startsWith("person:") ? marker(i.icon, 32) : pic(i.icon, 32)}${b.id === "setpieces" && i.note ? `<i class="mp-mk ig-mk${ringMark(i.note) ? " ring" : ""}" style="left:${32 - MP.mark + MP.markOut}px;top:${32 - MP.mark + MP.markOut}px;width:${MP.mark}px;height:${MP.mark}px"></i>` : ""}</span><span class="ig-x"><span class="ig-n">${esc(i.value)}</span><span class="ig-l"${i.id === "items:showall" ? ' style="color:var(--gold)"' : ""}>${i.tone === "fuel" ? rich("itemgrid", `${esc(i.title)}<span class="fuel">fuel</span>`, T.plain(i.title) + " " + T.size(T.i(T.ink("fuel", INK.faint)), 14)) : esc(i.title)}</span>${i.value2 ? `<span class="ig-s">${layered(i, INK.text, false, "itemgrid") || esc(i.value2)} ${esc(i.text)}</span>` : ""}${i.since ? `<span class="since" style="margin:0;font-size:var(--text-floor)">since install</span>` : ""}</span></div>`).join("")}</div>` + sinceUnder(b.since) + note(b.note);
 }
 // 0.9.2 Meals' Plan a meal (MealPlanUi.PlanGrid, Chapters/MealPlanModel.cs); 0.9.3 compact: five or six to a line (at least MP.tileMin wide), the
 // name across the tile on one line (a grid with a name too long gives every tile a second line: never a cut name), under it the game's picture
@@ -1163,9 +1164,11 @@ function planBar(parts, fraction, trackW) {
 }
 // 0.9.8 the key under Best for (MealPlanUi.PlanMarksKey, Joost: "why not show the actual icons there?"): the tiles' own marks, each with its
 // meaning: the gold dot (made or owned), the ring (can make), a food's picture as quiet as a tile not known yet; KEY_APART between
+// PanelModel.RingMark: the notes drawn as the ring (Meal plan's can make, 0.9 Armor sets' worn); any other note is the gold dot
+const ringMark = n => n === "can make" || n === "worn";
 function planMarks(b) {
   return `<div class="mp-key" style="gap:${KEY_APART}px">${(b.items || []).map(m => `<span class="mp-ke" style="gap:${KEY_MARK_GAP}px">${m.tone === "unknown" ? `<span class="mp-p" style="opacity:.5">${pic(m.icon, MP.pic)}</span>`
-    : `<i class="mp-mk${m.note === "can make" ? " ring" : ""}" style="width:${MP.mark}px;height:${MP.mark}px"></i>`}<span>${esc(m.title)}</span></span>`).join("")}</div>`;
+    : `<i class="mp-mk${ringMark(m.note) ? " ring" : ""}" style="width:${MP.mark}px;height:${MP.mark}px"></i>`}<span>${esc(m.title)}</span></span>`).join("")}</div>`;
 }
 function planGrid(b) {
   const per = Math.max(1, Math.min(MP.perMax, Math.floor((COLUMN + 8) / (MP.tileMin + 8)))), w = Math.floor((COLUMN - 8 * (per - 1)) / per), nameW = w - 2 * MP.pad;
@@ -1174,7 +1177,7 @@ function planGrid(b) {
   const wraps = b.items.some(i => wide(i.title) > nameW), timeW = Math.max(0, ...b.items.map(i => i.text ? wide(i.text) + 2 : 0));
   const nameH = (wraps ? 2 : 1) * MP.line, top = MP.pad + nameH + MP.rowGap, barX = MP.pad + MP.pic + MP.picGap, trackW = w - barX - MP.pad - (timeW ? MP.timeGap + timeW : 0), h = top + MP.track + MP.pad;
   return `<div class="ig mp" style="grid-template-columns:repeat(${per}, 1fr)">${b.items.map(i => {
-    const mark = !i.note ? "" : `<i class="mp-mk${i.note === "can make" ? " ring" : ""}" style="left:${MP.pad + MP.pic - MP.mark + MP.markOut}px;top:${top + (MP.track + MP.pic) / 2 - MP.mark + MP.markOut}px;width:${MP.mark}px;height:${MP.mark}px"></i>`;
+    const mark = !i.note ? "" : `<i class="mp-mk${ringMark(i.note) ? " ring" : ""}" style="left:${MP.pad + MP.pic - MP.mark + MP.markOut}px;top:${top + (MP.track + MP.pic) / 2 - MP.mark + MP.markOut}px;width:${MP.mark}px;height:${MP.mark}px"></i>`;
     return `<div class="ig-t k-track mp-t${i.tone === "unknown" ? " unk" : ""}${i.selected ? " on" : ""}${i.cursor ? " cur" : ""}"${i.link ? ` data-link="${esc(i.link)}"` : ""} style="height:${h}px">`
       + `<span class="mp-n" style="left:${MP.pad}px;top:${MP.pad}px;width:${nameW}px;height:${nameH}px;line-height:${MP.line}px;white-space:${wraps ? "normal" : "nowrap"}">${esc(i.title)}</span>`
       + `<span class="mp-p" style="left:${MP.pad}px;top:${top + (MP.track - MP.pic) / 2}px">${pic(i.icon, MP.pic)}</span>${mark}`
@@ -1187,7 +1190,7 @@ function planGrid(b) {
 // "made in full" in gold; then its pieces as item tiles, two band paddings narrower than the island
 function setband(b) {
   const outer = COLUMN; COLUMN = outer - 2 * layoutPx("sets-band-pad-x");
-  const grid = (b.items || []).length ? itemgrid({ kind: "itemgrid", items: b.items }) : "";
+  const grid = (b.items || []).length ? itemgrid({ kind: "itemgrid", id: "setpieces", items: b.items }) : "";   // its tiles carry their marks (PanelModel.SetPiecesId)
   COLUMN = outer;
   return `<div class="sbw"><div class="bt-band sb"><div class="sb-h"><b>${esc(b.title)}</b>${b.text ? `<span class="sb-m">${esc(b.text)}</span>` : ""}${b.value ? `<span class="sb-r${b.selected ? " full" : ""}">${esc(b.value)}</span>` : ""}</div>${grid}</div></div>`;
 }
@@ -2198,7 +2201,7 @@ function featband(b) {   // fix4: the feat and the titles, one flat strip (Feats
 }
 // ---------- 0.9 fight pages (Chapters/FightUi.cs, FightPages.cs): the head, the foe rows with two bars, the players' table, Runs and bosses ----------
 // every part placed as PanelUi places it (Box): the same Ft measures, each block one box as tall as its rows, the island's 6 px only round it
-const FT = { topH: 48, ring: 44, door: 46, nameX: 58, name: 26, nameLeast: 20, land: 15, num: 43, numLabel: 17, numGap: 14, ruleGap: 24, laneTop: 8, laneH: 20, lanePad: 10, keyLineH: 20,
+const FT = { topH: 48, ring: 44, door: 46, nameX: 58, name: 26, nameLeast: 20, land: 15, num: 43, numLess: 38, nameGap: 16, numLabel: 17, numGap: 14, ruleGap: 24, laneTop: 8, laneH: 20, lanePad: 10, keyLineH: 20,
   who: 190, whoMax: 240, indent: 22, pic: 22, bossPic: 26, numMin: 44, colGap: 10, sep: 18, chev: 18, foeGap: 4, subIndent: 38,
   playerRow: 24, cellNum: 52, cellBarMin: 80, cellBarMax: 110, cellStat: 62, cellStop: 56, cellDeaths: 96, deathBar: 48, deathNum: 24, deathGap: 8, headIcon: 20, cellGap: 10, nameMin: 190,
   date: 60, listPic: 28, listWho: 236, listLine1: 24, listLine2: 20, listGap: 8, addRow: 26, keyGap: 14, swatch: 10, track: 20, barH: 24,
@@ -2250,15 +2253,21 @@ function fightHead(b) {
   let h = run ? ftAt(0, (FT.topH - FT.door) / 2, FT.door, FT.door, btIc(b.icon, "#e8c27a", FT.door))
     : b.tone === "group" ? ftAt(0, (FT.topH - FT.ring) / 2, FT.ring, FT.ring, `<img src="${vocab(b.icon)}" alt="" style="width:30px;height:30px">`, `background:${b.colour};border-radius:5px;display:flex;align-items:center;justify-content:center`)   // the land's tile and emblem (PanelUi.FtHead)
     : ftRing(b.title, 0, (FT.topH - FT.ring) / 2, FT.ring);
-  // the name over its land, given the room the numbers leave: a long name steps down (26 to 20); still too long, the numbers say their words
-  // short ("dealt" for "dealt together"), and only then is the name cut (PanelUi.FtHead)
-  const numsW = brief => nums.reduce((a, n) => a + ftW(n.value, FT.num, true) + FT.numGap + ftW(brief && n.text ? n.text : n.title, FT.numLabel), 0) + (nums.length - 1) * (FT.ruleGap * 2 + 1);
-  const fit = room => { let s = FT.name; while (s - 2 >= FT.nameLeast && ftW(b.title, s, true) > room) s -= 2; return s; };
-  let room = Math.max(60, W - numsW(false) - FT.nameX - 16), size = fit(room), brief = false;
-  if ((ftW(b.title, size, true) > room || (b.text && ftW(b.text, FT.land) > room)) && nums.some(n => n.text)) { brief = true; room = Math.max(60, W - numsW(true) - FT.nameX - 16); size = fit(room); }   // 0.8.6: the land's line too (PanelUi.FtHead)
-  h += `<div class="ft-nums" style="right:0;top:0;height:${FT.topH}px">${nums.map((n, k) => (k ? `<span class="rule"></span>` : "") + heroNum(brief && n.text ? { ...n, title: n.text } : n, true)).join("")}</div>`;   // the hero's second form, on the head row's foot (not a page hero: fitHeroes leaves it)
+  // the name over its land beside the numbers while the room they leave holds both, measured: a long name steps down (26 to 20); still too wide,
+  // the numbers say their words short ("dealt" for "dealt together"); then (0.9.10, Joost in game: "Fader" and "Ashlands" over 58 118) the
+  // numbers step down to the book's next size (43 to 38); still too wide, the name and its land keep the row and the numbers take a row of
+  // their own under it. Never one over the other; the name cut only past the whole row (PanelUi.FtHead)
+  const numsW = (brief, px) => nums.reduce((a, n) => a + ftW(n.value, px, true) + FT.numGap + ftW(brief && n.text ? n.text : n.title, FT.numLabel), 0) + (nums.length - 1) * (FT.ruleGap * 2 + 1);
+  let room = 0, size = FT.name;
+  const fits = edge => { room = Math.max(0, edge - FT.nameX - FT.nameGap); size = FT.name; while (size - 2 >= FT.nameLeast && ftW(b.title, size, true) > room) size -= 2;
+    return ftW(b.title, size, true) <= room && (!b.text || ftW(b.text, FT.land) <= room); };
+  const hasBrief = nums.some(n => n.text), steps = [[false, FT.num], ...(hasBrief ? [[true, FT.num]] : []), [hasBrief, FT.numLess]];
+  let [brief, px] = steps[0], dy = 0;
+  const beside = !nums.length ? (fits(W), true) : steps.some(([sb, sp]) => { [brief, px] = [sb, sp]; return fits(W - numsW(sb, sp)); });
+  if (!beside) { dy = FT.topH; fits(W + FT.nameGap); [brief, px] = steps.find(([sb, sp]) => numsW(sb, sp) <= W) || steps[steps.length - 1]; }   // the name's row to its end, the numbers on the row under it
+  h += `<div class="ft-nums" style="right:0;top:${dy}px;height:${FT.topH}px;--hero-second:${px}px">${nums.map((n, k) => (k ? `<span class="rule"></span>` : "") + heroNum(brief && n.text ? { ...n, title: n.text } : n, true)).join("")}</div>`;   // the hero's second form, on the head row's foot (not a page hero: fitHeroes leaves it)
   h += ftText(FT.nameX, b.text ? 0 : (FT.topH - 30) / 2, room, 30, b.title, size, "var(--text)", { bold: true }) + ftText(FT.nameX, 28, room, 20, b.text, FT.land, "var(--muted)");   // no land known: the name alone, in the row's middle
-  let y = FT.topH, under = "";
+  let y = FT.topH + dy, under = "";
   if (lane) { y += FT.laneTop; const [lh, extra] = ftLane(lane, 0, W, y, true); under += lh; y += FT.laneH + extra; }
   if (line) { y += FT.laneTop; under += ftRunLine(line, W, y); y += FT.laneH + FT.keyLineH; }
   return `<div class="ft" style="height:${y}px">${h}${under}</div>`;

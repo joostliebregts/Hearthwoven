@@ -1979,6 +1979,21 @@
     "type": "simple",
     "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/clad.svg)."
   },
+  "feat-scene-cladasone.png": {
+    "size": [
+      112,
+      112
+    ],
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ppu": 100,
+    "type": "simple",
+    "tint": "White line mask with grey fills; multiply by feat gold (Unsung: its dimmed ink). Preserve aspect; the feat's card and its detail, drawn at 56 px. A feat's own scene (src/Panel/vocab-src/feats/cladasone.svg)."
+  },
   "feat-scene-coldiron.png": {
     "size": [
       112,

@@ -3,6 +3,12 @@
 Every tweak that reaches a PC or the server gets its own patch version, so the version in the
 log line and in Gale always says which build runs.
 
+## 0.10.0 (2026-10-21, client release)
+- **Boss fights:** a boss fight's head no longer draws the boss's name over the big numbers; with big numbers they step down a size or move to their own line.
+- **Dev: live reload** (`Dev.LiveReload`, off for players): the book can be rebuilt in the running game with ScriptEngine; a reload saves everything on the PC, continues as after a reconnect and reopens the book on its page, scrolled as it was (0.9.12), and sends nothing: the server gets the whole connection as one session after the logout (README "Live reload").
+- **Armor sets count what you wore too.** A piece counts when you made it or put it on yourself, whoever made it. On Armor sets a gold dot marks made, a ring marks worn, and the key under the number says from which day wearing is counted (what you wore before you install this is not known). Clad for Every Land counts the same way.
+- **Clad as One**, a new Together feat: every armor set of a land complete across the group, each piece made or worn by someone who shares (1 land, half the lands, every land). With Everyone on, Armor sets shows who made or wore a piece of each set. A friend on an older version adds only the pieces they made.
+
 ## 0.9.9 (2026-10-20, client release)
 - **Damage history** (Battle > Damage > By weapon, the History link): your damage per day split by Melee, Bow and Magic, and one weapon kind's damage and DPS per day. Days before recording started show no column; a friend's last 30 days come from their copy.
 - **Meal plan:** the key under Best for shows the real marks (the gold dot, the ring, a faded food), the marks are round, and Health, Stamina and Eitr carry their color swatch.

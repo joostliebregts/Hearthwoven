@@ -76,6 +76,8 @@ static class FeatsTests
             ("feats-together", full, Feats("together")),   // none chosen: the full list, the More below cue over the grid's foot
             ("feats-unsung-none", full, Feats("unsung")),   // none chosen, the cue over the grid's foot
             ("feats-together-chosen", full, Feats("together", "meadhall")),   // a card chosen: the detail area under the grid, the cue still over it
+            ("feats-together-cladasone", full, Feats("together", "cladasone")),   // 0.9 Clad as One: every set of a land, each piece made or worn by someone who shares
+            ("feats-unsung-armorsets", full, Feats("unsung", "armorsets")),   // 0.9 Clad for Every Land: each piece made or worn by you, its note and its Armor sets link
             ("feats-together-early", FeatsSample.EarlyGroup(when), Feats("together", "copperwed")),   // 0.7: the Swamp's feats wait, Copper Wed to Tin under its riddle, The Hall Well Fed I
             ("feats-together-wellfed", FeatsSample.EarlyGroup(when), Feats("together", "wellfed")),
             ("feats-together-tor", tor, Feats("together", "bogiron", "Tor")),   // a fellow's book: the same group numbers
@@ -421,7 +423,7 @@ static class FeatsTests
             var together = Page(world, "together", st => st.FeatSel = "ironforge");
             var g = Find(together, "feats"); var gd = Find(together, "featdetail");
             var forge = PanelModel.FeatById("ironforge");
-            Check(g.Items.Select(c => c.Id).SequenceEqual(new[] { "copperwed", "bogiron", "ironforge", "silvervein", "blackmetal", "charcoal", "workshop", "wellfed", "meadhall", "onehearth", "onecrew", "herdgrows", "clad", "quarry", "woodpile", "fleet", "doorways", "garden", "everyland", "oldpowers", "felledtogether", "sharedtable", "longtable", "handtohand", "onemap", "manycrafts" }) && together.Heading == PanelModel.FeatsTogetherHeading && TimesSaid(together, PanelModel.TogetherDefinition) == 1,
+            Check(g.Items.Select(c => c.Id).SequenceEqual(new[] { "copperwed", "bogiron", "ironforge", "silvervein", "blackmetal", "charcoal", "workshop", "wellfed", "meadhall", "onehearth", "onecrew", "herdgrows", "clad", "cladasone", "quarry", "woodpile", "fleet", "doorways", "garden", "everyland", "oldpowers", "felledtogether", "sharedtable", "longtable", "handtohand", "onemap", "manycrafts" }) && together.Heading == PanelModel.FeatsTogetherHeading && TimesSaid(together, PanelModel.TogetherDefinition) == 1,
                   "together: the group's feats on their own page in journey order (the Black Forest's, the Swamp's with Iron for the Forge, the cross-cutting ones, the variety one last), with one line on what a group feat is: " + string.Join(", ", g.Items.Select(c => c.Id)));
             var unload = new[] { world }.Concat(world.Fellows).Where(p => p.Book != null).GroupBy(p => p.PlayerName).Select(x => x.First().Book).Sum(b => b.Delivered.Where(kv => CargoVoyage.MetalOre.Contains(kv.Key)).Sum(kv => kv.Value)) / 1000.0;
             Check(Math.Abs(PanelModel.FeatValue(forge, world) - unload) < 1e-6 && unload > 1000 && gd.Items.Single(x => x.Kind == "progress").Title == PanelModel.FeatProgress(forge, unload, 10000) && gd.Items.Single(x => x.Kind == "counted").Text == PanelModel.CountedServer,

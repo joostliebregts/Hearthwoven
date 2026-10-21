@@ -535,6 +535,59 @@ namespace Hearthwoven
                               .OrderByDescending(s => s.ToUtc).ToList();
         }
 
+        /// <summary>
+        /// Dev.LiveReload: a connection reloaded in the running game is kept on this PC as pieces, each under its own session id (exact for the local
+        /// totals), each marked with the connection's first id (KeptSession.Of). Here they become one session under that id again, as the connection
+        /// was one: the server keeps a player's newest MaxBlocks sessions, and twenty reloads must not push real evenings out or show friends twenty
+        /// short ones. A connection still running (<paramref name="running"/>: Plugin.FeedId) is not closed: none of its pieces goes. Your newest
+        /// whole fights up to KeptFights.PerSession foes, as one session holds; the copies continued the numbers (BattleRecorder.ContinueAfter), and
+        /// a fight whose number or foe is already taken by a newer one stays out (pieces from a copy that did not continue them). A whole
+        /// connection (no Of) comes back as it was.
+        /// </summary>
+        public static List<KeptSession> JoinPieces(IEnumerable<KeptSession> earlier, string running)
+        {
+            var list = new List<KeptSession>();
+            foreach (var g in (earlier ?? Enumerable.Empty<KeptSession>()).Where(s => s != null).GroupBy(s => (s.World, line: Line(s.Of, s.Id))))
+            {
+                if (g.Key.line == running) continue;
+                var pieces = g.ToList();
+                if (pieces.Count == 1 && string.IsNullOrEmpty(pieces[0].Of)) { list.Add(pieces[0]); continue; }
+                var me = new FightSide { Name = pieces.OrderBy(p => p.ToUtc).Last().Mine?.Name ?? "", Self = true };
+                var numbers = new HashSet<int>(); var foes = new HashSet<int>(); int count = 0;
+                foreach (var f in pieces.Where(p => p.Mine != null).SelectMany(p => p.Mine.Fights).OrderByDescending(f => f.EndUtc))
+                {
+                    if (numbers.Contains(f.Number) || f.Entries.Any(e => foes.Contains(e.Seq))) continue;
+                    if (count + f.Foes > KeptFights.PerSession && me.Fights.Count > 0) break;
+                    me.Fights.Add(f); numbers.Add(f.Number); foreach (var e in f.Entries) foes.Add(e.Seq); count += f.Foes;
+                }
+                me.Falls = pieces.Where(p => p.Mine != null).SelectMany(p => p.Mine.Falls ?? new List<Fall>()).Where(x => numbers.Contains(x.Fight))
+                                 .OrderByDescending(x => x.Utc).Take(BattleRecorder.MaxFalls).ToList();
+                var joined = new KeptSession { World = g.Key.World, Id = g.Key.line, FromUtc = pieces.Min(p => p.FromUtc), ToUtc = pieces.Max(p => p.ToUtc) };
+                joined.Sides.Add(me);
+                list.Add(joined);
+            }
+            return list.OrderByDescending(s => s.ToUtc).ToList();
+        }
+
+        /// <summary>The deed stretches of a connection's pieces as one session under its first id, as JoinPieces does for the fights.</summary>
+        public static List<DeedSession> JoinPieces(IEnumerable<DeedSession> earlier, string running)
+        {
+            if (earlier == null) return null;   // not loaded yet: nothing goes (UploadTick)
+            var list = new List<DeedSession>();
+            foreach (var g in earlier.Where(s => s != null && !s.Live).GroupBy(s => (s.World, line: Line(s.Of, s.Id))))
+            {
+                if (g.Key.line == running) continue;
+                var pieces = g.OrderBy(p => p.FromUtc).ToList();
+                if (pieces.Count == 1 && string.IsNullOrEmpty(pieces[0].Of)) { list.Add(pieces[0]); continue; }
+                var joined = new DeedSession { World = g.Key.World, Id = g.Key.line, FromUtc = pieces.Min(p => p.FromUtc), ToUtc = pieces.Max(p => p.ToUtc) };
+                foreach (var p in pieces) joined.Stretches.AddRange(p.Stretches);
+                list.Add(joined);
+            }
+            return list.OrderByDescending(s => s.ToUtc).ToList();
+        }
+
+        static string Line(string of, string id) => string.IsNullOrEmpty(of) ? id ?? "" : of;
+
         /// <summary>The steps a block's deed part shrinks by when the whole block would pack over the bounds: the newest stretches stay, and at the last step the
         /// block goes without them (its fights alone, as 0.8.6).</summary>
         public static readonly int[] DeedSteps = { DeedBlockPart.MaxStretches, 50, 25, 12, 0 };

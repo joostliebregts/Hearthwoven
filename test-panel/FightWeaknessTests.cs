@@ -44,6 +44,15 @@ static class FightWeaknessTests
         var hero = Find(reto, PanelModel.FightHeadKind);
         Check(hero != null && hero.Items.First(i => i.Kind == "number").Value.Replace(" ", " ").Replace(" ", " ").Replace(",", " ") == "13 032", "K Lord Reto: 13 032 dealt together, as on Joost's screenshot");
 
+        // 0.9.10 Joost's boss fight (on 0.9.9 its name and land were drawn over the first number), retold with the sample cast: Fader in the Ashlands,
+        // won, the head's three numbers and their words as on his screenshot (the preview battle-lastfight-bosshead draws it)
+        var fader = Find(PanelModel.Build(FightsSample.WithBigBoss(FightsSample.With(PanelSample.Full(now), false)), At(PanelModel.LastFightPage)), PanelModel.FightHeadKind);
+        string Flat(string t) => t?.Replace(" ", " ").Replace(" ", " ").Replace(" ", " ").Replace(",", " ");
+        var faderNums = fader == null ? "" : string.Join(" | ", fader.Items.Where(i => i.Kind == "number").Select(i => Flat(i.Value) + " " + i.Title));
+        Check(fader != null && fader.Tone == "boss" && fader.Title == "Fader" && fader.Text == "Ashlands" && faderNums == "58 118 dealt together | 2 092 received together | 144 DPS together"
+              && fader.Items.Any(i => i.Kind == "lane" && i.Title == "defeated"),
+              "K Fader (0.9.10): the head says Fader, Ashlands, 58 118 dealt together, 2 092 received together, 144 DPS together, defeated (" + faderNums + ")");
+
         // two kinds: a named line each
         var two = PanelModel.Build(FightsSample.WithTwoKinds(FightsSample.With(PanelSample.Full(now), false)), At(PanelModel.LastFightPage));
         lines = Lines(two);

@@ -56,13 +56,22 @@ namespace Hearthwoven.Panel
     ///   a land  = the latest land among its ingredients (vanilla names), else its material's tier, else its station; Hearthwoven's own name for
     ///             the set of that land's metal (Deerstalker's Garb ... Emberforged) where the game gives none; a mod's set keeps its material's name.
     ///   made    = the game's own count of that item made (m_itemCraftStats: the character's whole life); a cast piece by its cast.
-    /// A set the character knows no recipe of is not shown (Player.IsRecipeKnown); one line counts them. Pure C#: tested in test-panel.
+    ///   worn    = 0.9 made or worn (Joost: "we should collect when people have interacted with it, not just crafted it"): put on by this
+    ///             character, whoever made it (ArmorWornBook, recorded on this PC from the day counting began; earlier wear is not known).
+    /// A piece counts when it is made or worn by you; a set is complete when every piece is. A set the character knows no recipe of is not shown
+    /// (Player.IsRecipeKnown); one line counts them. Pure C#: tested in test-panel (ArmorSetsTests, ArmorWornTests).
     /// </summary>
     public static partial class PanelModel
     {
         public const string SetsPageId = "sets", SetsLabel = "Armor sets", SetsIcon = "title:smith";
         public const string SetBandTone = "setband", NotMadeTone = "notmade", PersonTileTone = "person";
-        public const string SetFull = "made in full", LandFull = "every set made";
+        public const string SetFull = "complete", LandFull = "every set complete";
+        /// <summary>A piece's mark (the book's round marks, as What to use and the Meal plan draw them): a gold dot made, a gold ring worn.</summary>
+        public const string SetWornNote = "worn";
+        /// <summary>The Id of a set band's own grid of tiles (DeedsUi.SetBand, the mirror's setband): only there does a tile's Note draw its mark.</summary>
+        public const string SetPiecesId = "setpieces";
+        /// <summary>A note whose mark is the ring (the Meal plan's can make, the Armor sets' worn); any other note is the gold dot.</summary>
+        public static bool RingMark(string note) => note == PlanCanMake || note == SetWornNote;
         public const string NeedsArmorMade = "0.9.0", ArmorMadeKey = "armorMade";
 
         /// <summary>The lands in journey order (Heightmap.Biome's shown names); a set Hearthwoven cannot place goes after them, as "Other lands".</summary>
@@ -243,6 +252,11 @@ namespace Hearthwoven.Panel
         static bool Made(PanelInput i, ArmorPiece p) =>
             i?.ArmorMade != null && !i.IsSelf ? i.ArmorMade.Contains(p.Token) || (!string.IsNullOrEmpty(p.MadeAs) && i.ArmorMade.Contains(p.MadeAs)) : MadeCount(i?.ItemsCrafted, p) > 0;
 
+        /// <summary>Whether this book's character put the piece on (ArmorWorn: your own record on this PC, a fellow's copy), whoever made it.</summary>
+        static bool Worn(PanelInput i, ArmorPiece p) => i?.ArmorWorn != null && p != null && i.ArmorWorn.Contains(p.Token);
+        /// <summary>A piece that counts: made or worn by this book's character.</summary>
+        static bool Has(PanelInput i, ArmorPiece p) => Made(i, p) || Worn(i, p);
+
         static bool Known(PanelInput i, ArmorPiece p)
         {
             if (i?.RecipeKnown == null) return false;
@@ -264,16 +278,59 @@ namespace Hearthwoven.Panel
             try { return ArmorSetsOf(i.ArmorPieces()); } catch { return null; }
         }
 
-        /// <summary>A set made in full on this book: every piece made.</summary>
-        static bool Full(PanelInput i, ArmorSet s) => s.Pieces.Count > 0 && s.Pieces.All(p => Made(i, p));
+        /// <summary>A set complete on this book: every piece made or worn.</summary>
+        static bool Full(PanelInput i, ArmorSet s) => s.Pieces.Count > 0 && s.Pieces.All(p => Has(i, p));
 
-        /// <summary>The armor feat's number: the lands whose every set this book made in full (a land with no set does not count); null = no game data.</summary>
+        /// <summary>The armor feat's number: the lands whose every set this book's character completed, each piece made or worn by them (a land with no
+        /// set does not count); null = no game data.</summary>
         public static double? LandsArmored(PanelInput i)
         {
             var sets = SetsOf(i);
-            if (sets == null || (!i.IsSelf && i.ArmorMade == null && i.ItemsCrafted == null)) return null;
+            if (sets == null || (!i.IsSelf && i.ArmorMade == null && i.ItemsCrafted == null && i.ArmorWorn == null)) return null;
             return sets.Where(s => s.Land < ArmorLands.Length).GroupBy(s => s.Land).Count(g => g.All(s => Full(i, s)));
         }
+
+        /// <summary>A member's copy says something about their armor: your own book, or a copy with armorMade or armorWorn.</summary>
+        static bool TellsArmor(PanelInput p) => p != null && (p.IsSelf || p.ArmorMade != null || p.ArmorWorn != null);
+
+        /// <summary>Clad as One: the lands whose every set the group completed, each piece made or worn by anyone who shares, each person once
+        /// (GroupMembers); the sets of this book's game data. null = no game data.</summary>
+        public static double? LandsArmoredTogether(PanelInput i)
+        {
+            var sets = SetsOf(i);
+            if (sets == null) return null;
+            var members = GroupMembers(i).Where(TellsArmor).ToList();
+            bool Anyone(ArmorPiece p) => members.Any(m => Has(m, p));
+            return sets.Where(s => s.Land < ArmorLands.Length).GroupBy(s => s.Land).Count(g => g.All(s => s.Pieces.Count > 0 && s.Pieces.All(Anyone)));
+        }
+
+        /// <summary>One member's armor pieces, made or worn, each token once (Clad as One's "Who made or wore them"): your own from the game's counts and
+        /// this PC's record, a fellow's from their copy.</summary>
+        public static double ArmorHad(PanelInput p)
+        {
+            if (p == null) return 0;
+            var made = p.IsSelf ? (p.ItemType != null ? ArmorMadeOf(p.ItemsCrafted, p.ItemType) : null) : p.ArmorMade;
+            return (made ?? Enumerable.Empty<string>()).Concat(p.ArmorWorn ?? Enumerable.Empty<string>()).Where(t => !string.IsNullOrEmpty(t)).Distinct(StringComparer.Ordinal).Count();
+        }
+
+        /// <summary>The Together version of the armor feat (Joost: "made or worn ... and add the Together version for the group"): every set of a land
+        /// complete across everyone who shares, tiers as the personal one.</summary>
+        public const string ArmorTogetherFeatId = "cladasone";
+        static IEnumerable<FeatDef> ArmorGroupFeatDefs() => new[]
+        {
+            new FeatDef(ArmorTogetherFeatId, "Clad as One", "smith", Chapter.Feats, FeatsTogetherId, "Made by one, worn by another, until every set of a land was the hall's.", ArmorFeatTiers,
+                t => t <= 1 ? "Together, complete every armor set of one land."
+                   : t >= ArmorLands.Length ? "Together, complete every armor set of every land." : "Together, complete every armor set of " + N(t) + " lands, half of them.",
+                i => GroupMembers(i).Count >= 2 ? LandsArmoredTogether(i) : 0,
+                CountedGroup, ArmorTogetherCaveat, exact: false, derived: true,
+                brief: t => t <= 1 ? "every set of 1 land" : t >= ArmorLands.Length ? "every set, every land" : "every set of " + N(t) + " lands", unit: "land|lands", group: true)
+            { Part = ArmorHad, Helped = "Who made or wore them", Overlaps = true },
+        };
+        /// <summary>The personal feat's note: what counts, made or worn by whose book it is, and from when wearing is counted.</summary>
+        public const string ArmorSetsCaveat = "Sets as the book groups them, a mod's armor too. A piece counts once {you} made or wore it; " +
+                                              "wearing counts from the day Hearthwoven began recording it.";
+        public const string ArmorTogetherCaveat = "Each piece counts once, made or worn by anyone who shares. Worn counts from when each one's Hearthwoven began " +
+                                                  "recording; older versions add only what was made.";
 
         /// <summary>The tiers of the feat: one land, half the lands, every land (of the eight that have armor in the game).</summary>
         public static readonly double[] ArmorFeatTiers = { 1.0, Math.Ceiling(ArmorLands.Length / 2.0), ArmorLands.Length };
@@ -284,7 +341,21 @@ namespace Hearthwoven.Panel
         static string SetsWait(int n) => n == 1 ? SetsWaitOne : N(n) + " more sets wait in lands further on. Each appears once you know the recipe for one of its pieces.";
         public const string SetsNoneKnown = "No armor set yet";
         public const string SetsNoneKnownLine = "A set appears here once you know the recipe for one of its pieces.";
-        public const string SetsAboutMade = "A piece counts as made once your character has made it, as the game counts it for your whole character, and a set is made in full when every piece is.";
+        /// <summary>About these numbers (your own book): made, worn and from when.</summary>
+        public static string SetsAbout(PanelInput i) =>
+            "A piece counts once you made it, as the game counts it for your whole character, or wore it: put it on yourself, whoever made it. A set is complete when every piece is made or worn by you. " +
+            (i?.ArmorWornFrom.HasValue == true ? "Wearing is recorded on this PC from " + RecordDate(i, i.ArmorWornFrom.Value) + "; what you wore before that is not known, so it never counts against you."
+                                               : "Wearing is recorded on this PC from the day Hearthwoven began counting it; what you wore before is not known.");
+        /// <summary>The marks' key under the hero: a gold dot made, a gold ring worn, by whose book it is, and from when wearing is counted.</summary>
+        public const string SetMarksId = "setmarks";
+        static Block SetMarks(PanelInput input)
+        {
+            var who = input.IsSelf ? "you" : Name(input);
+            var items = new List<Block> { new Block { Kind = "mark", Note = GearMade, Title = "made by " + who } };
+            if (input.ArmorWorn != null)
+                items.Add(new Block { Kind = "mark", Note = SetWornNote, Title = "worn by " + who + (input.ArmorWornFrom.HasValue ? ", counted from " + RecordDate(input, input.ArmorWornFrom.Value) : "") });
+            return new Block { Kind = "note", Id = SetMarksId, Tone = PlanMarksTone, Items = items };
+        }
         public const string SetsAboutGroups = "Where the game names no set, the pieces that share a main material and a crafting station are one, and Hearthwoven names the set of each land's own metal, its material beside the name.";
         public const string SetsFellowLine = "Only the sets {name} began are shown: {their} copy does not say which recipes {they} know.";
 
@@ -297,11 +368,12 @@ namespace Hearthwoven.Panel
             view.Scope = RecordedScope(input);
             var sets = SetsOf(input) ?? new List<ArmorSet>();
             if (state != null && state.Everyone && input.IsSelf && FellowsOf(input).Any()) { ArmorSetsGroup(input, view, sets); return; }
-            bool Shown(ArmorSet s) => input.IsSelf ? s.Pieces.Any(p => Known(input, p) || Made(input, p)) : s.Pieces.Any(p => Made(input, p));
+            bool Shown(ArmorSet s) => input.IsSelf ? s.Pieces.Any(p => Known(input, p) || Has(input, p)) : s.Pieces.Any(p => Has(input, p));
             var shown = sets.Where(Shown).ToList();
-            var full = shown.Count(s => Full(input, s)); var begun = shown.Count(s => !Full(input, s) && s.Pieces.Any(p => Made(input, p)));
-            Add(view, Hero((full > 0 ? N(full) : null, Label1(full, "set made in full", "sets made in full"), SrcCharacter, null),
+            var full = shown.Count(s => Full(input, s)); var begun = shown.Count(s => !Full(input, s) && s.Pieces.Any(p => Has(input, p)));
+            Add(view, Hero((full > 0 ? N(full) : null, Label1(full, "set complete", "sets complete"), SrcCharacter, null),
                            (begun > 0 ? N(begun) : null, "begun", SrcCharacter, null)));
+            if (shown.Count > 0) view.Blocks.Add(SetMarks(input));   // 0.9 made or worn: the marks' key, and from when wearing is counted
             if (shown.Count == 0) view.Blocks.Add(Empty(input.IsSelf ? SetsNoneKnown : "No armor set begun yet", input.IsSelf ? SetsNoneKnownLine : null));
             foreach (var land in shown.GroupBy(s => s.Land).OrderBy(g => g.Key))
             {
@@ -312,19 +384,24 @@ namespace Hearthwoven.Panel
             var waiting = sets.Count - shown.Count;
             if (input.IsSelf && waiting > 0) view.Blocks.Add(new Block { Kind = "note", Text = SetsWait(waiting) });
             if (!input.IsSelf) view.Blocks.Add(new Block { Kind = "note", Text = SetsFellowLine.Replace("{name}", Name(input)).Replace("{their}", "their").Replace("{they}", "they") });
-            AboutNumbers(view, input, null, null, null, SetsAboutMade + " " + SetsAboutGroups);
+            if (!input.IsSelf && input.ArmorWorn == null) view.Blocks.Add(new Block { Kind = "note", Text = OlderLine(input, "the pieces " + Name(input) + " wore fill in") });
+            AboutNumbers(view, input, null, null, null, SetsAbout(input) + " " + SetsAboutGroups);
             Plate(view, SetsIcon, RecordedScope(input));
         }
 
-        /// <summary>One set as a band (the item grid's set variant): its name, the material small beside a name Hearthwoven gave, "2 of 3 made" or
-        /// "made in full"; a tile per piece: made = the game's count, not made = the dashed tile with the recipe's materials under the name.</summary>
+        /// <summary>A set's progress on its band: "complete", else "2 of 3 made or worn".</summary>
+        static string SetProgress(int had, int of) => had == of ? SetFull : N(had) + " of " + N(of) + " made or worn";
+
+        /// <summary>One set as a band (the item grid's set variant): its name, the material small beside a name Hearthwoven gave, "2 of 3 made or worn"
+        /// or "complete"; a tile per piece: made = the game's count and the gold dot, worn = "worn" and the ring, neither = the dashed tile with the
+        /// recipe's materials under the name.</summary>
         static Block SetBand(PanelInput input, ArmorSet s)
         {
-            var made = s.Pieces.Count(p => Made(input, p));
+            var had = s.Pieces.Count(p => Has(input, p));
             return new Block
             {
-                Kind = "itemgrid", Tone = SetBandTone, Id = s.Id, Title = s.Name, Text = s.Material, Selected = made == s.Pieces.Count,
-                Value = made == s.Pieces.Count ? SetFull : N(made) + " of " + N(s.Pieces.Count) + " made", Src = SrcCharacter, Source = TagOfSrc(SrcCharacter),
+                Kind = "itemgrid", Tone = SetBandTone, Id = s.Id, Title = s.Name, Text = s.Material, Selected = had == s.Pieces.Count,
+                Value = SetProgress(had, s.Pieces.Count), Src = SrcCharacter, Source = TagOfSrc(SrcCharacter),
                 Items = s.Pieces.Select(p => PieceTile(input, p)).ToList(),
             };
         }
@@ -332,7 +409,8 @@ namespace Hearthwoven.Panel
         static Block PieceTile(PanelInput input, ArmorPiece p)
         {
             var n = MadeCount(input.ItemsCrafted, p);
-            if (Made(input, p)) return new Block { Kind = "item", Id = p.Token, Icon = "item:" + p.Token, Title = p.Name, Value = n > 0 ? N(n) : SetMadeWord, Src = SrcCharacter, Source = TagOfSrc(SrcCharacter) };
+            if (Made(input, p)) return new Block { Kind = "item", Id = p.Token, Icon = "item:" + p.Token, Title = p.Name, Value = n > 0 ? N(n) : SetMadeWord, Note = GearMade, Src = SrcCharacter, Source = TagOfSrc(SrcCharacter) };
+            if (Worn(input, p)) return new Block { Kind = "item", Id = p.Token, Icon = "item:" + p.Token, Title = p.Name, Value = SetWornNote, Note = SetWornNote };   // recorded on this PC; the key above says from when
             return new Block
             {
                 Kind = "item", Id = p.Token, Icon = "item:" + p.Token, Title = p.Name, Tone = NotMadeTone,
@@ -342,40 +420,54 @@ namespace Hearthwoven.Panel
         /// <summary>A fellow's piece they made where their copy says yes but no count: the tile says so in place of a number.</summary>
         public const string SetMadeWord = "made";
 
-        public const string SetsGroupNobody = "nobody yet";
-        public const string SetsGroupLine = "Each set shows who made every piece of it, in the group's order: you first, then by name.";
+        public const string SetsGroupNobody = "nobody yet", SetGroupMade = "made a piece of it", SetGroupWorn = "only wore";
+        public const string SetsGroupLine = "Each set shows who made or wore a piece of it, in the group's order: you first, then by name; a gold dot made, a ring only worn. " +
+                                            "A set is complete when every piece was made or worn by someone who shares, each person once.";
+        public const string SetsGroupShares = "Each player shares only which armor pieces they made or wore, yes or no; wearing counts from the day their Hearthwoven began recording it.";
 
-        /// <summary>The group's sets (the Everyone chip): per land and set, the players who made that set in full, in the fixed order (you first, then
-        /// by name), never a count per player. A fellow whose copy does not say which armor they made is named once, below.</summary>
+        /// <summary>The group's sets (the Everyone chip): per land and set, whether everyone who shares completed it together (each piece made or worn by
+        /// someone), and the players who made or wore a piece of it, in the fixed order (you first, then by name), a gold dot made, a ring only worn,
+        /// never a count per player. A fellow whose copy does not say which armor they made or wore is named once, below.</summary>
         static void ArmorSetsGroup(PanelInput input, PanelView view, List<ArmorSet> sets)
         {
             view.EveryoneOn = true;
             var people = FiresidePeople(input);
-            bool Tells(PanelInput p) => p.IsSelf || p.ArmorMade != null;
-            var shown = sets.Where(s => s.Pieces.Any(p => Known(input, p)) || people.Any(f => Tells(f.Input) && s.Pieces.Any(x => Made(f.Input, x)))).ToList();
-            var together = shown.Count(s => people.Any(f => Tells(f.Input) && Full(f.Input, s)));
-            Add(view, Hero((together > 0 ? N(together) : null, Label1(together, "set made in full in the group", "sets made in full in the group"), SrcFellows, null)));
+            bool Tells(PanelInput p) => TellsArmor(p);
+            bool Anyone(ArmorPiece x) => people.Any(f => Tells(f.Input) && Has(f.Input, x));
+            var shown = sets.Where(s => s.Pieces.Any(p => Known(input, p)) || s.Pieces.Any(Anyone)).ToList();
+            var together = shown.Count(s => s.Pieces.All(Anyone));
+            Add(view, Hero((together > 0 ? N(together) : null, Label1(together, "set complete in the group", "sets complete in the group"), SrcFellows, null)));
+            if (shown.Count > 0) view.Blocks.Add(new Block   // the marks' key: on a person, a gold dot made a piece of the set, a ring only wore
+            {
+                Kind = "note", Id = SetMarksId, Tone = PlanMarksTone,
+                Items = new List<Block> { new Block { Kind = "mark", Note = GearMade, Title = SetGroupMade }, new Block { Kind = "mark", Note = SetWornNote, Title = SetGroupWorn } },
+            });
             if (shown.Count == 0) view.Blocks.Add(Empty(SetsNoneKnown, SetsNoneKnownLine));
             foreach (var land in shown.GroupBy(s => s.Land).OrderBy(g => g.Key))
             {
                 view.Blocks.Add(new Block { Kind = "section", Title = LandName(land.Key) });
                 foreach (var s in land)
                 {
-                    var who = people.Where(f => Tells(f.Input) && Full(f.Input, s)).ToList();
+                    var who = people.Where(f => Tells(f.Input) && s.Pieces.Any(x => Has(f.Input, x))).ToList();
+                    var had = s.Pieces.Count(Anyone);
                     view.Blocks.Add(new Block
                     {
-                        Kind = "itemgrid", Tone = SetBandTone, Id = s.Id, Title = s.Name, Text = s.Material, Value = who.Count == 0 ? SetsGroupNobody : null, Src = SrcFellows, Source = TagOfSrc(SrcFellows),
-                        Items = who.Select(f => new Block { Kind = "item", Id = f.Name, Icon = "person:" + f.Name, Colour = "person:" + f.Name, Tone = PersonTileTone, Value = f.Label, Title = Freshness(f.Input, input) }).ToList(),
+                        Kind = "itemgrid", Tone = SetBandTone, Id = s.Id, Title = s.Name, Text = s.Material, Selected = had == s.Pieces.Count,
+                        Value = who.Count == 0 ? SetsGroupNobody : SetProgress(had, s.Pieces.Count), Src = SrcFellows, Source = TagOfSrc(SrcFellows),
+                        Items = who.Select(f => new Block { Kind = "item", Id = f.Name, Icon = "person:" + f.Name, Colour = "person:" + f.Name, Tone = PersonTileTone, Value = f.Label, Title = Freshness(f.Input, input),
+                                                            Note = s.Pieces.Any(x => Made(f.Input, x)) ? GearMade : SetWornNote }).ToList(),
                     });
                 }
             }
             var waiting = sets.Count - shown.Count;
             if (waiting > 0) view.Blocks.Add(new Block { Kind = "note", Text = SetsWait(waiting) });
-            foreach (var f in people.Where(f => !Tells(f.Input))) view.Blocks.Add(new Block { Kind = "note", Text = OlderLine(f.Input, "the sets " + f.Name + " made fill in") });
+            foreach (var f in people.Where(f => !Tells(f.Input))) view.Blocks.Add(new Block { Kind = "note", Text = OlderLine(f.Input, "the sets " + f.Name + " made or wore fill in") });
+            foreach (var f in people.Where(f => !f.Input.IsSelf && f.Input.ArmorMade != null && f.Input.ArmorWorn == null))   // 0.9 made only: what they wore waits for their update
+                view.Blocks.Add(new Block { Kind = "note", Text = OlderLine(f.Input, "the pieces " + f.Name + " wore fill in") });
             view.AboutNumbers = new Block
             {
                 Kind = "aboutnumbers", Id = NumbersTarget, Title = AboutNumbersTitle,
-                Items = new List<Block> { new Block { Kind = "aboutline", Title = DetailsLabel, Text = SetsGroupLine + " Each player shares only which armor pieces they made, yes or no." } },
+                Items = new List<Block> { new Block { Kind = "aboutline", Title = DetailsLabel, Text = SetsGroupLine + " " + SetsGroupShares } },
             };
             Plate(view, SetsIcon, null);
         }

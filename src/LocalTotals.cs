@@ -66,7 +66,8 @@ namespace Hearthwoven
     /// Schema 8 (0.9, work/hearthwoven-0.9/DESIGN.md section 1): top-level "upgrades" (UpgradeLog: your upgrades, the newest 2 000 whole, older ones
     /// folded per item), "firsts" (FirstsBook: the first day you made or placed each thing, from 0.9 on) and "featsSeen" (FeatsLedger.SeenTiers: the
     /// earned feat tiers you opened, "id:tier"); at top level, so an older reader keeps them (Extra). Also "mealCombos" (MealCombos: the foods you had
-    /// on together at each meal, from 0.9 on), added within schema 8 the same way.
+    /// on together at each meal, from 0.9 on) and "armorWorn" (ArmorWornBook: the armor pieces you put on, from the version that records it), added
+    /// within schema 8 the same way.
     /// </summary>
     public class LocalTotals
     {
@@ -81,7 +82,7 @@ namespace Hearthwoven
         public readonly Dictionary<string, object> Extra = new Dictionary<string, object>();
         static readonly HashSet<string> KnownKeys = new HashSet<string>
             { "version", "schema", "playerId", "name", "saved", "firstRun", "biomeFrom", "totals", "baseline", "exactAtBaseline", "baselineAt", "feats", "history", "armour", "starts", "foes", "bossFights", "dungeonRuns", "dealtAfter",
-              "historyBegan", "historySaved", "chestFed", "seenGroup", "upgrades", "firsts", "featsSeen", "mealCombos" };   // 0.7's own fields at top level, where an older reader keeps them (REVIEW-07 #4)
+              "historyBegan", "historySaved", "chestFed", "seenGroup", "upgrades", "firsts", "featsSeen", "mealCombos", ArmorWornBook.Key };   // 0.7's own fields at top level, where an older reader keeps them (REVIEW-07 #4)
         public int Sessions;                                     // sessions folded into Previous
         /// <summary>When Hearthwoven first counted for this character on this PC (the zones' "since you installed Hearthwoven on
         /// 8 Oct"): set when the file is first made; a file from before this field takes the file's own creation time once.
@@ -182,6 +183,9 @@ namespace Hearthwoven
         /// <summary>0.9: the foods you had on together at each meal (MealCombos, Meals' Your combinations). JSON: top-level "mealCombos" (schema 8,
         /// additive), left out while empty; its FromUtc is set on the first load of a version that records them (Plugin.LoadLocal).</summary>
         public MealCombos Combos = new MealCombos();
+        /// <summary>0.9 Armor sets, made or worn: the armor pieces you put on (ArmorWornBook). JSON: top-level "armorWorn" (schema 8, additive), left out while
+        /// empty; its FromUtc is set on the first load of a version that records it (Plugin.LoadLocal).</summary>
+        public ArmorWornBook Worn = new ArmorWornBook();
 
         /// <summary>The baseline kind of the game's battle counters (Plugin.LoadLocal), tokens = the game's stat names, the
         /// same keys as SessionEvents.Battle.</summary>
@@ -355,6 +359,7 @@ namespace Hearthwoven
             if (!Upgrades.IsEmpty) Upgrades.WriteTo(j);
             if (!Firsts.IsEmpty) Firsts.WriteTo(j);
             if (!Combos.IsEmpty) Combos.WriteTo(j);
+            if (!Worn.IsEmpty) Worn.WriteTo(j);
             Feats.WriteSeenTiers(j);   // 0.9: at top level, so an older reader keeps it (it rewrites "feats"); nothing while not recorded
             foreach (var kv in Extra) if (!KnownKeys.Contains(kv.Key)) j.Raw(kv.Key, MiniJson.Write(kv.Value));   // a newer version's data, kept as read
             return j.Close().ToString();
@@ -422,6 +427,7 @@ namespace Hearthwoven
             t.Upgrades = UpgradeLog.ReadFrom(MiniJson.Obj(root, "upgrades"));
             t.Firsts = FirstsBook.ReadFrom(MiniJson.Obj(root, "firsts"));
             t.Combos = MealCombos.ReadFrom(MiniJson.Obj(root, "mealCombos"));
+            t.Worn = ArmorWornBook.ReadFrom(MiniJson.Obj(root, ArmorWornBook.Key));
             t.Feats.ReadSeenTiers(root.TryGetValue("featsSeen", out var fs) ? fs : null);
             foreach (var kv in root) if (!KnownKeys.Contains(kv.Key)) t.Extra[kv.Key] = kv.Value;
             return t;

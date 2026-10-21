@@ -249,6 +249,7 @@ namespace Hearthwoven.Panel
                 if (notMade) { tile.GetComponent<Image>().color = Color.clear; dashed.Add(tile); }   // not made (0.9 Armor sets): no ground, a dashed edge, the picture grayed
                 var p = Pic(tile, i.Icon, GridPic); p.anchorMin = p.anchorMax = p.pivot = new Vector2(0, 0.5f); p.anchoredPosition = new Vector2(8, 0);
                 if (notMade) foreach (var img in p.GetComponentsInChildren<Image>()) img.color = new Color(img.color.r * NotMadeDim, img.color.g * NotMadeDim, img.color.b * NotMadeDim, img.color.a * NotMadeFade);
+                else if (b.Id == PanelModel.SetPiecesId && !string.IsNullOrEmpty(i.Note)) PlanMark(p, i.Note, GridPic - MpMark + MpMarkOut, GridPic - MpMark + MpMarkOut);   // 0.9 Armor sets: made a gold dot, worn a ring, on the picture's corner (as Meal plan's tiles)
                 var box = VStack(tile, 0);
                 box.anchorMin = Vector2.zero; box.anchorMax = Vector2.one; box.offsetMin = new Vector2(8 + GridPic + 8, 3); box.offsetMax = new Vector2(-6, -3);
                 box.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.MiddleLeft;
@@ -306,7 +307,7 @@ namespace Hearthwoven.Panel
             if (!string.IsNullOrEmpty(b.Value)) OneLine(Label(head, b.Value, PanelLayout.Text.Floor, b.Selected ? PanelLook.Gold : PanelLook.Muted, style: b.Selected ? FontStyles.Bold : FontStyles.Italic));
             if ((b.Items?.Count ?? 0) == 0) return;
             var outer = Column; Column = outer - 2 * PanelLayout.Sets.BandPadX;
-            try { ItemGrid(band, new Block { Kind = "itemgrid", Items = b.Items, Src = b.Src, Source = b.Source }, link); }
+            try { ItemGrid(band, new Block { Kind = "itemgrid", Id = PanelModel.SetPiecesId, Items = b.Items, Src = b.Src, Source = b.Source }, link); }
             finally { Column = outer; }
         }
 

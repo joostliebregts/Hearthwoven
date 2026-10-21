@@ -229,6 +229,10 @@ namespace Hearthwoven.Panel
             foreach (var kv in owns) BattleSample.Guard(kv.Value);   // 0.8.2: blocks and parries per minute, and the session's tally
             foreach (var kv in owns) DealtAfterLog(kv.Value);   // 0.8.5: each hit after the foe's armor in the log (shared: the copies have it)
             foreach (var kv in owns) SwingLog(kv.Value);   // 0.8.6: each weapon's fighting time in the log (DPS)
+            // 0.9 Armor sets, made or worn: what Rowan and Edda put on, counted from three days ago (Rowan the leather legs and cape, Edda the rags):
+            // with what they made, the group completes the Meadows' sets together (Clad as One)
+            owns[Rowan].ArmorWorn = new HashSet<string>(StringComparer.Ordinal) { "$item_legs_leather", "$item_cape_deerhide", "$item_helmet_leather" }; owns[Rowan].ArmorWornFrom = now.AddDays(-3);
+            owns[Edda].ArmorWorn = new HashSet<string>(StringComparer.Ordinal) { "$item_chest_rags", "$item_legs_rags" }; owns[Edda].ArmorWornFrom = now.AddDays(-2);
             // the feats come from the counters (and from what the others shared), so every book is first sent without them
             Dictionary<string, PanelInput> Copies() => owns.ToDictionary(kv => kv.Key, kv => Share(kv.Value, now));
             var copies = Copies();
@@ -278,6 +282,7 @@ namespace Hearthwoven.Panel
             var old = version == "0.6.5"; var v083 = version == "0.8.3";
             foreach (var k in old ? new[] { "knownBiomes", "copyId", "foes", "battleFeed", "dayDealt", PanelModel.DayDeedsKey, "dayWeapons" } : v083 ? new[] { PanelModel.DayDeedsKey, "dayWeapons" } : new[] { "battleFeed", "dayDealt", PanelModel.DayDeedsKey, "dayWeapons" }) root.Remove(k);
             root.Remove(PanelModel.ArmorMadeKey);   // 0.9: which armor pieces they made (Armor sets): every version before 0.9 lacks it
+            root.Remove(ArmorWornBook.Key);   // 0.9 made or worn: the armor they put on: every version before it lacks it
             root.Remove(ArmourTally.SharedKey);   // 0.9 (armor-share): their armour ledger and its minutes (below): every version before 0.9 lacks them
             foreach (var lk in new[] { "measuredLog", KeptMinutes.SharedKey }) if (root.TryGetValue(lk, out var al) && al is Dictionary<string, object> ad) { ad.Remove("armor"); ad.Remove("armorClipped"); }
             if (old) foreach (var m in new[] { "measuredThisSession", "measuredSinceInstall" })
@@ -313,7 +318,8 @@ namespace Hearthwoven.Panel
                                       dayDeeds: PanelModel.DayDeeds(own.History, PanelModel.LocalToday(own), 30, null, own),   // 0.8.5: their Deeds per day, sorted by their own game data
                                       dayWeapons: own.DealtArmourBook?.DayWeapons(PanelModel.LocalToday(own), 30, own.DealtArmourPending),   // 0.8.6: their weapons per day by upgrade level
                                       armorMade: PanelModel.ArmorMadeOf(own.ItemsCrafted, own.ItemType),   // 0.9: which armor pieces they made, yes or no (Armor sets)
-                                      armorSince: own.ArmourBook != null ? own.ArmourSince : null, armorFromUtc: own.ArmourFromUtc);   // 0.9 (armor-share): their armour ledger per damage type
+                                      armorSince: own.ArmourBook != null ? own.ArmourSince : null, armorFromUtc: own.ArmourFromUtc,   // 0.9 (armor-share): their armour ledger per damage type
+                                      armorWorn: own.ArmorWorn, armorWornFrom: own.ArmorWornFrom);   // 0.9 Armor sets, made or worn: the armor they put on
             return json;
         }
 
